@@ -1,0 +1,15 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-fundo: #0b0e13;
+  --color-superficie: #141922;
+  --color-borda: #232b38;
+  --color-texto: #e6edf3;
+  --color-texto-fraco: #8b98a9;
+  --color-destaque: #f5a623;
+}
+
+body {
+  background-color: var(--color-fundo);
+  color: var(--color-texto);
+}
