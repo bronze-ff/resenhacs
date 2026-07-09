@@ -232,7 +232,7 @@ create table match_players (
   rounds_played  integer not null default 0,
   rating         numeric(4, 2),
   won            boolean,
-  is_tracked     boolean not null default false,  -- true se este Participante é um Jogador
+  is_tracked     boolean not null default false,  -- cache informativo "é Jogador" (o Coletor seta); a Sinergia NÃO depende disto, usa join em players
   primary key (match_id, steam_id64)
 );
 
@@ -266,13 +266,24 @@ create table clips (
   created_at   timestamptz not null default now()
 );
 
+-- Nonces de OpenID já usados, para impedir replay do login Steam (ver Task 3/4).
+create table used_openid_nonces (
+  nonce   text primary key,
+  seen_at timestamptz not null default now()
+);
+
 create index idx_match_players_steam on match_players (steam_id64);
 create index idx_matches_played_at on matches (played_at desc);
 create index idx_highlights_match on highlights (match_id);
 create index idx_clips_match on clips (match_id);
 
--- Sinergia: duplas de Jogadores no mesmo time (a.won = b.won, basta contar pelo lado A)
-create view synergy_pairs as
+-- Sinergia: duplas de Jogadores no mesmo time (a.won = b.won, basta contar pelo lado A).
+-- Fonte de verdade de "é Jogador" é a tabela players (join), NÃO a flag is_tracked:
+-- quem entra na whitelist depois tem o histórico contado retroativamente.
+-- security_invoker é OBRIGATÓRIO: view comum roda com privilégios do dono e ignoraria
+-- o RLS das tabelas base, vazando dados pela API PostgREST pública do Supabase.
+-- REGRA para toda view futura (Fases 3-4): sempre security_invoker + revoke de anon/authenticated.
+create view synergy_pairs with (security_invoker = true) as
 select
   a.steam_id64                    as steam_id_1,
   b.steam_id64                    as steam_id_2,
@@ -283,24 +294,30 @@ join match_players b
   on  a.match_id = b.match_id
   and a.team = b.team
   and a.steam_id64 < b.steam_id64
-where a.is_tracked and b.is_tracked
+join players p1 on p1.steam_id64 = a.steam_id64
+join players p2 on p2.steam_id64 = b.steam_id64
 group by a.steam_id64, b.steam_id64;
 
 -- O site acessa o banco pela conexão direta (role postgres); a API PostgREST pública
--- do Supabase não deve expor nada: RLS ligado em tudo, sem policies = negar por padrão.
+-- do Supabase não deve expor nada: RLS ligado em tudo, sem policies = negar por padrão,
+-- E revogação explícita dos grants default que o Supabase dá a anon/authenticated.
 alter table players enable row level security;
 alter table matches enable row level security;
 alter table match_players enable row level security;
 alter table rounds enable row level security;
 alter table highlights enable row level security;
 alter table clips enable row level security;
+alter table used_openid_nonces enable row level security;
+
+revoke all on all tables in schema public from anon, authenticated;
+revoke all on synergy_pairs from anon, authenticated;
 ```
 
 - [ ] **Step 2: Aplicar a migração no projeto Supabase**
 
-Via MCP do Supabase (`apply_migration` com name `schema_inicial`) no projeto que o dono indicar, OU manualmente: SQL Editor do Supabase → colar o arquivo → Run.
+Via MCP do Supabase (`apply_migration` com name `schema_inicial`) no projeto **resenhacs** (`hrpgbrfqxqjxpsjeymec`), OU manualmente: SQL Editor do Supabase → colar o arquivo → Run.
 
-Verificação: `select count(*) from players;` → `0` (tabela existe, vazia).
+Verificação: `select count(*) from players;` → `0` (tabela existe, vazia). Rodar também o `get_advisors` (security) do MCP e confirmar que NÃO há alerta de "Security Definer View" para `synergy_pairs`.
 
 - [ ] **Step 3: Escrever teste do módulo db (sem banco real)**
 
@@ -382,7 +399,7 @@ git commit -m "feat: schema inicial do banco (partidas, jogadores, highlights, s
 - Create: `site/server/src/steam/openid.js`, `site/server/test/openid.test.js`
 
 **Interfaces:**
-- Produces: `buildSteamRedirectUrl(appUrl)` → string; `extractSteamId(claimedId)` → `'7656...'` | `null`; `verifySteamAssertion(query, fetchImpl?)` → `Promise<steamId | null>`. A Task 4 injeta `verifySteamAssertion` como `verifySteamLogin` no app.
+- Produces: `buildSteamRedirectUrl(appUrl)` → string; `extractSteamId(claimedId)` → `'7656...'` | `null`; `verifySteamAssertion(query, appUrl, fetchImpl?, now?)` → `Promise<{ steamId, nonce } | null>` (valida `openid.mode`, `openid.return_to` e o frescor do `response_nonce` antes de aceitar). A Task 4 injeta `verifySteamAssertion` como `verifySteamLogin` e persiste o `nonce` para impedir replay.
 
 - [ ] **Step 1: Escrever os testes que falham**
 
@@ -426,28 +443,64 @@ describe('extractSteamId', () => {
 })
 
 describe('verifySteamAssertion', () => {
+  const appUrl = 'http://localhost:5173'
+  const now = Date.parse('2024-01-02T03:04:05Z')
   const query = {
     'openid.mode': 'id_res',
+    'openid.return_to': `${appUrl}/api/auth/steam/return`,
+    'openid.response_nonce': '2024-01-02T03:04:05Zabc123',
     'openid.claimed_id': 'https://steamcommunity.com/openid/id/76561198012345678',
     'openid.sig': 'assinatura',
   }
 
-  it('retorna o steamId quando a Steam confirma is_valid:true', async () => {
-    const fakeFetch = vi.fn().mockResolvedValue({
+  function fetchValido() {
+    return vi.fn().mockResolvedValue({
       text: async () => 'ns:http://specs.openid.net/auth/2.0\nis_valid:true\n',
     })
-    const steamId = await verifySteamAssertion(query, fakeFetch)
-    expect(steamId).toBe('76561198012345678')
+  }
+
+  it('retorna steamId e nonce quando tudo confere', async () => {
+    const fakeFetch = fetchValido()
+    const res = await verifySteamAssertion(query, appUrl, fakeFetch, now)
+    expect(res).toEqual({ steamId: '76561198012345678', nonce: '2024-01-02T03:04:05Zabc123' })
     const [url, opts] = fakeFetch.mock.calls[0]
     expect(url).toBe('https://steamcommunity.com/openid/login')
     expect(opts.body).toContain('openid.mode=check_authentication')
   })
 
+  it('rejeita mode diferente de id_res sem nem chamar a Steam', async () => {
+    const fakeFetch = fetchValido()
+    const res = await verifySteamAssertion(
+      { ...query, 'openid.mode': 'cancel' },
+      appUrl,
+      fakeFetch,
+      now,
+    )
+    expect(res).toBeNull()
+    expect(fakeFetch).not.toHaveBeenCalled()
+  })
+
+  it('rejeita return_to de outra origem (forjamento)', async () => {
+    const fakeFetch = fetchValido()
+    const res = await verifySteamAssertion(
+      { ...query, 'openid.return_to': 'https://malicioso.com/api/auth/steam/return' },
+      appUrl,
+      fakeFetch,
+      now,
+    )
+    expect(res).toBeNull()
+    expect(fakeFetch).not.toHaveBeenCalled()
+  })
+
+  it('rejeita nonce fora da janela de 5 minutos (replay antigo)', async () => {
+    const fakeFetch = fetchValido()
+    const quinzeMinDepois = Date.parse('2024-01-02T03:20:00Z')
+    expect(await verifySteamAssertion(query, appUrl, fakeFetch, quinzeMinDepois)).toBeNull()
+  })
+
   it('retorna null quando a Steam responde is_valid:false', async () => {
-    const fakeFetch = vi.fn().mockResolvedValue({
-      text: async () => 'is_valid:false\n',
-    })
-    expect(await verifySteamAssertion(query, fakeFetch)).toBeNull()
+    const fakeFetch = vi.fn().mockResolvedValue({ text: async () => 'is_valid:false\n' })
+    expect(await verifySteamAssertion(query, appUrl, fakeFetch, now)).toBeNull()
   })
 })
 ```
@@ -481,7 +534,26 @@ export function extractSteamId(claimedId) {
   return match ? match[1] : null
 }
 
-export async function verifySteamAssertion(query, fetchImpl = fetch) {
+const NONCE_MAX_AGE_MS = 5 * 60 * 1000
+
+// O response_nonce da Steam começa com um timestamp ISO 8601 (ex.: 2024-01-02T03:04:05Zxyz).
+function nonceEstaFresco(nonce, now) {
+  const match = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z)/.exec(nonce ?? '')
+  if (!match) return false
+  const emitido = Date.parse(match[1])
+  if (Number.isNaN(emitido)) return false
+  const idade = now - emitido
+  return idade >= -NONCE_MAX_AGE_MS && idade <= NONCE_MAX_AGE_MS
+}
+
+export async function verifySteamAssertion(query, appUrl, fetchImpl = fetch, now = Date.now()) {
+  // Verificações da spec OpenID 2.0 exigidas do Relying Party (feitas ANTES de falar com a Steam).
+  if (query?.['openid.mode'] !== 'id_res') return null
+  const returnTo = query['openid.return_to'] ?? ''
+  if (!returnTo.startsWith(`${appUrl}/api/auth/steam/return`)) return null
+  const nonce = query['openid.response_nonce']
+  if (!nonceEstaFresco(nonce, now)) return null
+
   const params = new URLSearchParams({ ...query, 'openid.mode': 'check_authentication' })
   const res = await fetchImpl(STEAM_OPENID_URL, {
     method: 'POST',
@@ -490,9 +562,14 @@ export async function verifySteamAssertion(query, fetchImpl = fetch) {
   })
   const text = await res.text()
   if (!/is_valid\s*:\s*true/.test(text)) return null
-  return extractSteamId(query['openid.claimed_id'])
+
+  const steamId = extractSteamId(query['openid.claimed_id'])
+  if (!steamId) return null
+  return { steamId, nonce }
 }
 ```
+
+A unicidade do nonce (impedir reenvio da mesma URL de retorno dentro da janela) é garantida na rota da Task 4, gravando o nonce em `used_openid_nonces` — o frescor acima limita a janela, a persistência elimina o replay.
 
 - [ ] **Step 4: Rodar e ver passar**
 
@@ -515,8 +592,8 @@ git commit -m "feat: verificação steam openid com funções puras testáveis"
 - Modify: `site/server/src/app.js`
 
 **Interfaces:**
-- Consumes: `buildSteamRedirectUrl`, `verifySteamAssertion` (Task 3); `createApp` (Task 1)
-- Produces: `signToken({ steamId, isAdmin }, secret)`; `verifyToken(token, secret)` → payload | null; `createRequireAuth(jwtSecret)` → middleware que popula `req.player = { steamId, isAdmin }`; `requireAdmin`; `createFetchPersona(apiKey, fetchImpl?)` → `fetchPersona(steamId)` → `{ nick, avatarUrl } | null`; rotas `GET /api/auth/steam`, `GET /api/auth/steam/return`, `GET /api/auth/me`, `POST /api/auth/logout`
+- Consumes: `buildSteamRedirectUrl`, `verifySteamAssertion` (Task 3, agora resolvendo `{ steamId, nonce }`); `createApp` (Task 1)
+- Produces: `signToken({ steamId, isAdmin }, secret)`; `verifyToken(token, secret)` → payload | null; `createRequireAuth(jwtSecret)` → middleware que popula `req.player = { steamId, isAdmin }`; `requireAdmin`; `createFetchPersona(apiKey, fetchImpl?)` → `fetchPersona(steamId)` → `{ nick, avatarUrl } | null`; rotas `GET /api/auth/steam`, `GET /api/auth/steam/return` (grava o nonce em `used_openid_nonces` para bloquear replay), `GET /api/auth/me`, `POST /api/auth/logout`
 
 - [ ] **Step 1: Escrever os testes que falham**
 
@@ -541,16 +618,26 @@ const JOGADOR = {
   is_admin: true,
 }
 
-function fakeDb(rows = []) {
-  return { query: vi.fn().mockResolvedValue({ rows }) }
+// Fake que roteia por SQL: players devolve `rows`; o insert de nonce devolve
+// rowCount 1 (nonce novo) ou 0 (replay); qualquer outra query devolve vazio.
+function fakeDb({ rows = [], nonceReplay = false } = {}) {
+  return {
+    query: vi.fn().mockImplementation((sql) => {
+      if (sql.includes('used_openid_nonces')) {
+        return Promise.resolve({ rows: nonceReplay ? [] : [{ nonce: 'n' }], rowCount: nonceReplay ? 0 : 1 })
+      }
+      if (sql.includes('from players')) return Promise.resolve({ rows })
+      return Promise.resolve({ rows: [] })
+    }),
+  }
 }
 
-function appWith({ rows = [], steamId = JOGADOR.steam_id64 } = {}) {
-  const db = fakeDb(rows)
+function appWith({ rows = [], nonceReplay = false, login = { steamId: JOGADOR.steam_id64, nonce: 'n1' } } = {}) {
+  const db = fakeDb({ rows, nonceReplay })
   const app = createApp({
     config,
     db,
-    verifySteamLogin: vi.fn().mockResolvedValue(steamId),
+    verifySteamLogin: vi.fn().mockResolvedValue(login),
     fetchPersona: vi.fn().mockResolvedValue({ nick: 'fih', avatarUrl: 'https://a/x.jpg' }),
   })
   return { app, db }
@@ -601,10 +688,18 @@ describe('GET /api/auth/steam/return', () => {
   })
 
   it('assinatura inválida: redireciona com erro', async () => {
-    const { app } = appWith({ steamId: null })
+    const { app } = appWith({ login: null })
     const res = await request(app).get('/api/auth/steam/return?openid.mode=id_res')
     expect(res.status).toBe(302)
     expect(res.headers.location).toBe(`${config.appUrl}/?erro=login-invalido`)
+  })
+
+  it('nonce reutilizado (replay): redireciona com erro sem cookie', async () => {
+    const { app } = appWith({ rows: [JOGADOR], nonceReplay: true })
+    const res = await request(app).get('/api/auth/steam/return?openid.mode=id_res')
+    expect(res.status).toBe(302)
+    expect(res.headers.location).toBe(`${config.appUrl}/?erro=login-invalido`)
+    expect(res.headers['set-cookie']).toBeUndefined()
   })
 })
 
@@ -717,8 +812,16 @@ export function createAuthRouter({ config, db, verifySteamLogin, fetchPersona, r
   })
 
   router.get('/steam/return', async (req, res) => {
-    const steamId = await verifySteamLogin(req.query)
-    if (!steamId) return res.redirect(`${config.appUrl}/?erro=login-invalido`)
+    const login = await verifySteamLogin(req.query, config.appUrl)
+    if (!login) return res.redirect(`${config.appUrl}/?erro=login-invalido`)
+    const { steamId, nonce } = login
+
+    // Replay: o nonce só vale uma vez. insert-on-conflict; se já existia, rowCount = 0.
+    const nonceInsert = await db.query(
+      'insert into used_openid_nonces (nonce) values ($1) on conflict (nonce) do nothing returning nonce',
+      [nonce],
+    )
+    if (nonceInsert.rowCount === 0) return res.redirect(`${config.appUrl}/?erro=login-invalido`)
 
     const { rows } = await db.query(
       'select steam_id64, is_admin from players where steam_id64 = $1',
@@ -800,7 +903,7 @@ git commit -m "feat: login steam com whitelist, jwt em cookie httponly e rota /m
 
 ---
 
-### Task 5: Rotas de jogadores (listar + adicionar à whitelist)
+### Task 5: Rotas de jogadores (listar + whitelist + onboarding)
 
 **Files:**
 - Create: `site/server/src/routes/players.js`, `site/server/test/players.test.js`
@@ -808,7 +911,7 @@ git commit -m "feat: login steam com whitelist, jwt em cookie httponly e rota /m
 
 **Interfaces:**
 - Consumes: `createRequireAuth`, `requireAdmin` (Task 4); `createApp` (Task 4)
-- Produces: `GET /api/players` (autenticado) → `[{ steamId, nick, avatarUrl, isAdmin }]`; `POST /api/players` (admin) body `{ steamId }` → 201
+- Produces: `GET /api/players` (autenticado) → `[{ steamId, nick, avatarUrl, isAdmin }]`; `POST /api/players` (admin) body `{ steamId }` → 201; `PUT /api/players/me` (autenticado) body `{ matchAuthCode, lastShareCode }` → grava os próprios códigos de onboarding do Jogador logado (consumidos pelo Coletor na Fase 2)
 
 - [ ] **Step 1: Escrever os testes que falham**
 
@@ -879,6 +982,41 @@ describe('POST /api/players', () => {
     expect(db.query.mock.calls[0][1]).toEqual(['76561198000000003'])
   })
 })
+
+describe('PUT /api/players/me (onboarding)', () => {
+  const shareCode = 'CSGO-aaaaa-bbbbb-ccccc-ddddd-eeeee'
+
+  it('sem login: 401', async () => {
+    const { app } = appWith()
+    const res = await request(app)
+      .put('/api/players/me')
+      .send({ matchAuthCode: 'ABCD-12345-EFGH', lastShareCode: shareCode })
+    expect(res.status).toBe(401)
+  })
+
+  it('share code em formato inválido: 400', async () => {
+    const { app } = appWith()
+    const res = await request(app)
+      .put('/api/players/me')
+      .set('Cookie', memberCookie)
+      .send({ matchAuthCode: 'ABCD-12345-EFGH', lastShareCode: 'não-é-share-code' })
+    expect(res.status).toBe(400)
+  })
+
+  it('grava os próprios códigos do jogador logado', async () => {
+    const { app, db } = appWith()
+    const res = await request(app)
+      .put('/api/players/me')
+      .set('Cookie', memberCookie)
+      .send({ matchAuthCode: 'ABCD-12345-EFGH', lastShareCode: shareCode })
+    expect(res.status).toBe(200)
+    expect(db.query.mock.calls[0][1]).toEqual([
+      '76561198000000002',
+      'ABCD-12345-EFGH',
+      shareCode,
+    ])
+  })
+})
 ```
 
 - [ ] **Step 2: Rodar e ver falhar**
@@ -923,6 +1061,24 @@ export function createPlayersRouter({ db, requireAuth }) {
     res.status(201).json({ ok: true })
   })
 
+  // Onboarding: o próprio Jogador informa seu código de autenticação de histórico e
+  // o último share code, sementes de que o Coletor (Fase 2) precisa para achar Partidas.
+  router.put('/me', requireAuth, async (req, res) => {
+    const matchAuthCode = String(req.body?.matchAuthCode ?? '').trim()
+    const lastShareCode = String(req.body?.lastShareCode ?? '').trim()
+    if (!/^[\w-]{4,32}$/.test(matchAuthCode)) {
+      return res.status(400).json({ erro: 'Código de autenticação inválido' })
+    }
+    if (!/^CSGO(-\S{5}){5}$/.test(lastShareCode)) {
+      return res.status(400).json({ erro: 'Share code inválido (formato CSGO-…-…-…-…-…)' })
+    }
+    await db.query(
+      'update players set match_auth_code = $2, last_share_code = $3 where steam_id64 = $1',
+      [req.player.steamId, matchAuthCode, lastShareCode],
+    )
+    res.json({ ok: true })
+  })
+
   return router
 }
 ```
@@ -952,11 +1108,11 @@ git commit -m "feat: listagem de jogadores e whitelist gerida pelo admin"
 ### Task 6: Client React (shell dark, login, páginas base)
 
 **Files:**
-- Create: `site/client/package.json`, `site/client/vite.config.js`, `site/client/index.html`, `site/client/src/main.jsx`, `site/client/src/index.css`, `site/client/src/App.jsx`, `site/client/src/auth/AuthContext.jsx`, `site/client/src/components/Shell.jsx`, `site/client/src/pages/Entrar.jsx`, `site/client/src/pages/AcessoNegado.jsx`, `site/client/src/pages/Feed.jsx`, `site/client/src/pages/Jogadores.jsx`, `site/client/src/pages/Admin.jsx`, `site/client/src/test/setup.js`, `site/client/src/test/App.test.jsx`
+- Create: `site/client/package.json`, `site/client/vite.config.js`, `site/client/index.html`, `site/client/src/main.jsx`, `site/client/src/index.css`, `site/client/src/App.jsx`, `site/client/src/auth/AuthContext.jsx`, `site/client/src/components/Shell.jsx`, `site/client/src/pages/Entrar.jsx`, `site/client/src/pages/AcessoNegado.jsx`, `site/client/src/pages/Feed.jsx`, `site/client/src/pages/Jogadores.jsx`, `site/client/src/pages/Admin.jsx`, `site/client/src/pages/Perfil.jsx`, `site/client/src/test/setup.js`, `site/client/src/test/App.test.jsx`
 
 **Interfaces:**
-- Consumes: `GET /api/auth/me`, `GET /api/players`, `POST /api/players`, `POST /api/auth/logout` (Tasks 4-5), link `/api/auth/steam`
-- Produces: SPA com rotas `/` (Feed), `/jogadores`, `/admin`, `/entrar`, `/acesso-negado`; `useAuth()` → `{ carregando, jogador }`
+- Consumes: `GET /api/auth/me`, `GET /api/players`, `POST /api/players`, `PUT /api/players/me`, `POST /api/auth/logout` (Tasks 4-5), link `/api/auth/steam`
+- Produces: SPA com rotas `/` (Feed), `/jogadores`, `/perfil`, `/admin`, `/entrar`, `/acesso-negado`; `useAuth()` → `{ carregando, jogador }`
 
 - [ ] **Step 1: Scaffold e dependências**
 
@@ -1074,7 +1230,13 @@ function mockMe(response) {
   )
 }
 
-beforeEach(() => vi.unstubAllGlobals())
+// jsdom compartilha window.history entre testes do mesmo arquivo, e o <Navigate replace>
+// do teste "sem login" deixa a URL em /entrar. Sem resetar, o BrowserRouter do teste
+// seguinte renderiza a página errada e o teste falha por engano.
+beforeEach(() => {
+  vi.unstubAllGlobals()
+  window.history.replaceState(null, '', '/')
+})
 
 describe('App', () => {
   it('sem login: mostra a tela de entrar com link para a Steam', async () => {
@@ -1150,6 +1312,7 @@ import Entrar from './pages/Entrar.jsx'
 import AcessoNegado from './pages/AcessoNegado.jsx'
 import Feed from './pages/Feed.jsx'
 import Jogadores from './pages/Jogadores.jsx'
+import Perfil from './pages/Perfil.jsx'
 import Admin from './pages/Admin.jsx'
 
 function RotaProtegida({ children }) {
@@ -1168,6 +1331,7 @@ export default function App() {
           <Route path="/acesso-negado" element={<AcessoNegado />} />
           <Route path="/" element={<RotaProtegida><Feed /></RotaProtegida>} />
           <Route path="/jogadores" element={<RotaProtegida><Jogadores /></RotaProtegida>} />
+          <Route path="/perfil" element={<RotaProtegida><Perfil /></RotaProtegida>} />
           <Route path="/admin" element={<RotaProtegida><Admin /></RotaProtegida>} />
         </Routes>
       </BrowserRouter>
@@ -1203,6 +1367,7 @@ export default function Shell({ children }) {
         <nav className="space-y-1">
           <NavLink to="/" end className={itemClasse}>Partidas</NavLink>
           <NavLink to="/jogadores" className={itemClasse}>Jogadores</NavLink>
+          <NavLink to="/perfil" className={itemClasse}>Meu perfil</NavLink>
           {jogador?.isAdmin && <NavLink to="/admin" className={itemClasse}>Admin</NavLink>}
         </nav>
       </aside>
@@ -1353,6 +1518,78 @@ export default function Admin() {
 }
 ```
 
+`site/client/src/pages/Perfil.jsx` (onboarding — o Jogador informa os códigos que o Coletor precisa):
+
+```jsx
+import { useState } from 'react'
+
+export default function Perfil() {
+  const [matchAuthCode, setMatchAuthCode] = useState('')
+  const [lastShareCode, setLastShareCode] = useState('')
+  const [mensagem, setMensagem] = useState(null)
+
+  async function salvar(e) {
+    e.preventDefault()
+    const res = await fetch('/api/players/me', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ matchAuthCode, lastShareCode }),
+    })
+    const body = await res.json().catch(() => ({}))
+    setMensagem(res.ok ? 'Códigos salvos. O Coletor vai buscar suas Partidas.' : (body.erro ?? 'Erro ao salvar.'))
+  }
+
+  return (
+    <div className="max-w-lg">
+      <h2 className="mb-2 text-xl font-semibold">Meu perfil</h2>
+      <p className="mb-4 text-sm text-texto-fraco">
+        Para o Resenha achar suas Partidas de matchmaking, cole seu código de autenticação de
+        histórico e o último share code. Pegue os dois em{' '}
+        <a
+          className="text-destaque underline"
+          href="https://help.steampowered.com/en/wizard/HelpWithGameIssue/?appid=730&issueid=128"
+          target="_blank"
+          rel="noreferrer"
+        >
+          Steam → Ajuda → Compartilhar histórico de partidas
+        </a>
+        .
+      </p>
+      <form onSubmit={salvar} className="space-y-3">
+        <div>
+          <label className="block text-sm text-texto-fraco" htmlFor="authCode">
+            Código de autenticação de histórico
+          </label>
+          <input
+            id="authCode"
+            value={matchAuthCode}
+            onChange={(e) => setMatchAuthCode(e.target.value)}
+            className="w-full rounded border border-borda bg-superficie px-3 py-2"
+            placeholder="XXXX-XXXXX-XXXX"
+          />
+        </div>
+        <div>
+          <label className="block text-sm text-texto-fraco" htmlFor="shareCode">
+            Último share code
+          </label>
+          <input
+            id="shareCode"
+            value={lastShareCode}
+            onChange={(e) => setLastShareCode(e.target.value)}
+            className="w-full rounded border border-borda bg-superficie px-3 py-2"
+            placeholder="CSGO-xxxxx-xxxxx-xxxxx-xxxxx-xxxxx"
+          />
+        </div>
+        <button type="submit" className="rounded bg-destaque px-4 py-2 font-medium text-fundo">
+          Salvar
+        </button>
+      </form>
+      {mensagem && <p className="mt-3 text-sm text-texto-fraco">{mensagem}</p>}
+    </div>
+  )
+}
+```
+
 - [ ] **Step 5: Rodar e ver passar**
 
 Run: `npm test` (em `site/client`)
@@ -1461,8 +1698,12 @@ app.listen(config.port, () => {
 `site/server/.env.example`:
 
 ```ini
-# Conexão direta do Supabase (Settings → Database → Connection string → URI)
-DATABASE_URL=postgresql://postgres:SENHA@db.SEU_PROJETO.supabase.co:5432/postgres
+# Conexão com o Postgres do Supabase (Settings → Database → Connection string).
+# USE O "SESSION POOLER" como padrão: a conexão direta (db.SEU_PROJETO.supabase.co)
+# é IPv6-only desde 2024 e falha em redes IPv4 (caso desta máquina) com ENETUNREACH.
+# O Session Pooler é IPv4 e funciona com pg.Pool sem mudança de código.
+DATABASE_URL=postgresql://postgres.SEU_PROJETO:SENHA@aws-0-us-east-1.pooler.supabase.com:5432/postgres
+# (Alternativa, só se sua rede tiver IPv6: postgresql://postgres:SENHA@db.SEU_PROJETO.supabase.co:5432/postgres)
 # Chave da Steam Web API: https://steamcommunity.com/dev/apikey
 STEAM_API_KEY=
 # Qualquer string longa e aleatória
@@ -1481,11 +1722,23 @@ Stats e highlights de CS2 para o grupo. Docs do domínio em [CONTEXT.md](CONTEXT
 
 ## Rodar em dev
 
-1. `cd site/server && npm install && copy .env.example .env` (preencha o .env)
-2. Aplique `supabase/migrations/0001_schema_inicial.sql` no projeto Supabase
+> Comandos em PowerShell — um por linha (o `&&` não é separador válido no Windows PowerShell 5.1).
+
+1. Preparar o server:
+   ```powershell
+   cd site/server
+   npm install
+   copy .env.example .env   # depois preencha o .env
+   ```
+2. Aplique `supabase/migrations/0001_schema_inicial.sql` no projeto Supabase (SQL Editor)
 3. `node --env-file-if-exists=.env scripts/seed-admin.js <seu SteamID64>`
 4. `npm run dev` (API em http://localhost:3001)
-5. Em outro terminal: `cd site/client && npm install && npm run dev` (http://localhost:5173)
+5. Em outro terminal:
+   ```powershell
+   cd site/client
+   npm install
+   npm run dev   # http://localhost:5173
+   ```
 
 ## Testes
 
