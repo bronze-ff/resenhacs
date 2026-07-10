@@ -20,22 +20,22 @@ function SecaoReplay({ replayUrl }) {
 
   if (!replayUrl) {
     return (
-      <p className="text-sm text-texto-fraco">
+      <p className="font-mono text-sm text-texto-fraco">
         Replay 2D indisponível — gerado pelo Coletor quando o demo é processado (Fase 4).
       </p>
     )
   }
-  if (erro) return <p className="text-sm text-rose-400">Não foi possível carregar o replay.</p>
-  if (!replay) return <p className="text-sm text-texto-fraco">Carregando replay…</p>
+  if (erro) return <p className="font-mono text-sm text-perigo">Não foi possível carregar o replay.</p>
+  if (!replay) return <p className="font-mono text-sm text-texto-fraco">Carregando replay…</p>
   return <ReplayViewer replay={replay} />
 }
 
 function Scoreboard({ time, jogadores, podePromover, onPromover, promovendo }) {
   return (
-    <div className="overflow-hidden rounded-xl border border-borda">
+    <div className="panel-cut overflow-hidden border border-borda">
       <table className="w-full text-sm">
         <thead>
-          <tr className="bg-superficie text-left text-xs uppercase text-texto-fraco">
+          <tr className="bg-superficie text-left font-mono text-[10px] uppercase tracking-wider text-texto-fraco">
             <th className="px-3 py-2">Time {time}</th>
             <th className="px-2 py-2 text-right">K</th>
             <th className="px-2 py-2 text-right">D</th>
@@ -50,14 +50,14 @@ function Scoreboard({ time, jogadores, podePromover, onPromover, promovendo }) {
             const adr = p.roundsPlayed ? Math.round((p.damage / p.roundsPlayed) * 10) / 10 : 0
             const hs = p.kills ? Math.round((p.headshotKills / p.kills) * 100) : 0
             const conteudoNome = (
-              <span className="flex items-center gap-2">
+              <span className="flex items-center gap-2 font-mono">
                 {p.nick || p.steamId}
-                {p.isTracked && <span className="text-[10px] uppercase text-destaque">grupo</span>}
+                {p.isTracked && <span className="text-[10px] uppercase tracking-widest text-destaque">grupo</span>}
                 {!p.isTracked && podePromover && (
                   <button
                     onClick={(e) => { e.preventDefault(); onPromover(p.steamId) }}
                     disabled={promovendo === p.steamId}
-                    className="rounded border border-borda px-1.5 py-0.5 text-[10px] text-texto-fraco hover:border-destaque hover:text-destaque disabled:opacity-50"
+                    className="panel-cut-sm border border-borda px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-texto-fraco transition-colors hover:border-destaque hover:text-destaque disabled:opacity-50"
                   >
                     {promovendo === p.steamId ? '…' : '+ grupo'}
                   </button>
@@ -65,7 +65,7 @@ function Scoreboard({ time, jogadores, podePromover, onPromover, promovendo }) {
               </span>
             )
             return (
-              <tr key={p.steamId} className="border-t border-borda">
+              <tr key={p.steamId} className="border-t border-borda transition-colors hover:bg-superficie-alta">
                 <td className="px-3 py-2">
                   {p.isTracked ? (
                     <Link to={`/jogador/${p.steamId}`} className="hover:text-destaque">
@@ -118,11 +118,11 @@ function FormClipe({ matchId, jogadores, onAdicionado }) {
   }
 
   return (
-    <form onSubmit={enviar} className="flex flex-wrap items-end gap-2 rounded-xl border border-borda bg-superficie p-3">
+    <form onSubmit={enviar} className="panel-cut flex flex-wrap items-end gap-2 border border-borda bg-superficie p-3">
       <select
         value={steamId}
         onChange={(e) => setSteamId(e.target.value)}
-        className="rounded border border-borda bg-fundo px-2 py-2 text-sm"
+        className="rounded border border-borda bg-fundo px-2 py-2 font-mono text-sm"
       >
         {doGrupo.map((p) => (
           <option key={p.steamId} value={p.steamId}>{p.nick || p.steamId}</option>
@@ -132,18 +132,21 @@ function FormClipe({ matchId, jogadores, onAdicionado }) {
         value={url}
         onChange={(e) => setUrl(e.target.value)}
         placeholder="Link do Allstar/Medal/YouTube"
-        className="flex-1 rounded border border-borda bg-fundo px-3 py-2 text-sm"
+        className="flex-1 rounded border border-borda bg-fundo px-3 py-2 font-mono text-sm"
       />
       <input
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         placeholder="Título (opcional)"
-        className="w-40 rounded border border-borda bg-fundo px-3 py-2 text-sm"
+        className="w-40 rounded border border-borda bg-fundo px-3 py-2 font-mono text-sm"
       />
-      <button type="submit" className="rounded bg-destaque px-4 py-2 text-sm font-medium text-fundo">
+      <button
+        type="submit"
+        className="panel-cut-sm border border-destaque bg-destaque px-4 py-2 font-display text-sm font-semibold uppercase tracking-wide text-fundo"
+      >
         Anexar clipe
       </button>
-      {erro && <p className="w-full text-sm text-rose-400">{erro}</p>}
+      {erro && <p className="w-full font-mono text-sm text-perigo">{erro}</p>}
     </form>
   )
 }
@@ -181,8 +184,8 @@ export default function Partida() {
 
   useEffect(carregar, [id])
 
-  if (erro) return <p className="text-texto-fraco">Partida não encontrada.</p>
-  if (!m) return <p className="text-texto-fraco">Carregando…</p>
+  if (erro) return <p className="font-mono text-sm text-texto-fraco">Partida não encontrada.</p>
+  if (!m) return <p className="font-mono text-sm text-texto-fraco">Carregando…</p>
 
   const timeA = m.players.filter((p) => p.team === 'A')
   const timeB = m.players.filter((p) => p.team === 'B')
@@ -191,14 +194,14 @@ export default function Partida() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <Link to="/" className="text-sm text-texto-fraco hover:text-texto">← Partidas</Link>
-          <h2 className="mt-1 text-2xl font-bold">{nomeMapa(m.map)}</h2>
-          <p className="text-sm text-texto-fraco">{dataRelativa(m.playedAt)} · {m.source}</p>
+          <Link to="/" className="font-mono text-sm text-texto-fraco hover:text-texto">← Partidas</Link>
+          <h2 className="mt-1 font-display text-2xl font-bold uppercase tracking-wide text-texto">{nomeMapa(m.map)}</h2>
+          <p className="font-mono text-sm text-texto-fraco">{dataRelativa(m.playedAt)} · {m.source}</p>
         </div>
-        <div className="text-3xl font-bold tabular-nums">
-          <span className={m.scoreA > m.scoreB ? 'text-emerald-400' : 'text-rose-400'}>{m.scoreA ?? '–'}</span>
+        <div className="font-mono text-3xl font-bold tabular-nums">
+          <span className={m.scoreA > m.scoreB ? 'text-sucesso' : 'text-perigo'}>{m.scoreA ?? '–'}</span>
           <span className="mx-2 text-texto-fraco">:</span>
-          <span className={m.scoreB > m.scoreA ? 'text-emerald-400' : 'text-rose-400'}>{m.scoreB ?? '–'}</span>
+          <span className={m.scoreB > m.scoreA ? 'text-sucesso' : 'text-perigo'}>{m.scoreB ?? '–'}</span>
         </div>
       </div>
 
@@ -208,18 +211,18 @@ export default function Partida() {
       </div>
 
       <section>
-        <h3 className="mb-2 text-lg font-semibold">Replay 2D</h3>
+        <h3 className="mb-2 font-display text-lg font-semibold uppercase tracking-wide text-texto">Replay 2D</h3>
         <SecaoReplay replayUrl={m.replayUrl} />
       </section>
 
       {m.highlights.length > 0 && (
         <section>
-          <h3 className="mb-2 text-lg font-semibold">Highlights</h3>
+          <h3 className="mb-2 font-display text-lg font-semibold uppercase tracking-wide text-texto">Highlights</h3>
           <div className="flex flex-wrap gap-2">
             {m.highlights.map((h) => (
-              <div key={h.id} className="rounded-lg border border-borda bg-superficie px-3 py-2 text-sm">
-                <span className="font-semibold uppercase text-destaque">{h.kind}</span>{' '}
-                <span>{h.nick || h.steamId}</span>{' '}
+              <div key={h.id} className="panel-cut-sm border border-borda bg-superficie px-3 py-2 font-mono text-sm">
+                <span className="font-display font-semibold uppercase text-destaque">{h.kind}</span>{' '}
+                <span className="text-texto">{h.nick || h.steamId}</span>{' '}
                 <span className="text-texto-fraco">round {h.roundNumber}</span>
               </div>
             ))}
@@ -228,19 +231,19 @@ export default function Partida() {
       )}
 
       <section>
-        <h3 className="mb-2 text-lg font-semibold">Clipes</h3>
+        <h3 className="mb-2 font-display text-lg font-semibold uppercase tracking-wide text-texto">Clipes</h3>
         <div className="mb-3 space-y-2">
-          {m.clips.length === 0 && <p className="text-sm text-texto-fraco">Nenhum clipe anexado ainda.</p>}
+          {m.clips.length === 0 && <p className="font-mono text-sm text-texto-fraco">Nenhum clipe anexado ainda.</p>}
           {m.clips.map((c) => (
             <a
               key={c.id}
               href={c.url}
               target="_blank"
               rel="noreferrer"
-              className="flex items-center gap-3 rounded-lg border border-borda bg-superficie p-3 text-sm hover:border-destaque/60"
+              className="panel-cut-sm flex items-center gap-3 border border-borda bg-superficie p-3 font-mono text-sm transition-colors hover:border-destaque/60"
             >
-              <span className="rounded bg-fundo px-2 py-1 text-xs uppercase text-destaque">{c.provider}</span>
-              <span>{c.title || c.url}</span>
+              <span className="rounded bg-fundo px-2 py-1 text-xs uppercase tracking-wide text-destaque">{c.provider}</span>
+              <span className="text-texto">{c.title || c.url}</span>
             </a>
           ))}
         </div>

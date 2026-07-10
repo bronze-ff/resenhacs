@@ -22,23 +22,26 @@ export default function Admin() {
 
   return (
     <div className="max-w-md">
-      <h2 className="mb-4 text-xl font-semibold">Admin</h2>
+      <h2 className="mb-4 font-display text-xl font-semibold uppercase tracking-wide text-texto">Admin</h2>
       <form onSubmit={adicionar} className="space-y-3">
-        <label className="block text-sm text-texto-fraco" htmlFor="steamId">
+        <label className="block font-mono text-xs uppercase tracking-wide text-texto-fraco" htmlFor="steamId">
           SteamID64 do novo Jogador (17 dígitos)
         </label>
         <input
           id="steamId"
           value={steamId}
           onChange={(e) => setSteamId(e.target.value)}
-          className="w-full rounded border border-borda bg-superficie px-3 py-2"
+          className="w-full rounded border border-borda bg-superficie px-3 py-2 font-mono text-sm"
           placeholder="76561198…"
         />
-        <button type="submit" className="rounded bg-destaque px-4 py-2 font-medium text-fundo">
+        <button
+          type="submit"
+          className="panel-cut-sm border border-destaque bg-destaque px-4 py-2 font-display text-sm font-semibold uppercase tracking-wide text-fundo"
+        >
           Adicionar à whitelist
         </button>
       </form>
-      {mensagem && <p className="mt-3 text-sm text-texto-fraco">{mensagem}</p>}
+      {mensagem && <p className="mt-3 font-mono text-sm text-texto-fraco">{mensagem}</p>}
     </div>
   )
 }

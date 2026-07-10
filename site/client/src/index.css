@@ -1,15 +1,93 @@
 @import 'tailwindcss';
 
+/*
+  Direção: HUD tático / mission control. Painéis com cantos cortados (ecoando os
+  próprios painéis do HUD do CS2), acento âmbar único e decisivo, dados sempre em
+  monoespaçada (leitura tabular rápida), fundo com grid sutil de "radar".
+*/
+
 @theme {
-  --color-fundo: #0b0e13;
-  --color-superficie: #141922;
-  --color-borda: #232b38;
-  --color-texto: #e6edf3;
-  --color-texto-fraco: #8b98a9;
-  --color-destaque: #f5a623;
+  --font-sans: 'IBM Plex Sans', sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+  --font-display: 'Chakra Petch', sans-serif;
+
+  --color-fundo: #0a0d12;
+  --color-superficie: #12161f;
+  --color-superficie-alta: #1a212c;
+  --color-borda: #262f3d;
+  --color-texto: #e9edf3;
+  --color-texto-fraco: #8b96a8;
+
+  --color-destaque: #ff9a1f;
+  --color-destaque-fraco: #7a4a12;
+  --color-time-a: #ff9a1f;
+  --color-time-b: #4fb6ff;
+  --color-sucesso: #35d68a;
+  --color-perigo: #f2495c;
 }
 
 body {
   background-color: var(--color-fundo);
   color: var(--color-texto);
+  font-family: var(--font-sans);
+  background-image:
+    radial-gradient(ellipse 900px 500px at 15% -10%, rgba(255, 154, 31, 0.06), transparent 60%),
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+  background-size: auto, 44px 44px, 44px 44px;
+  background-attachment: fixed;
+}
+
+h1, h2, h3, .font-display {
+  font-family: var(--font-display);
+  letter-spacing: 0.01em;
+}
+
+/* Todo dado numérico tabular vira monoespaçado — sem precisar tocar em cada JSX. */
+.tabular-nums {
+  font-family: var(--font-mono);
+}
+
+::selection {
+  background: var(--color-destaque);
+  color: var(--color-fundo);
+}
+
+* {
+  scrollbar-color: var(--color-borda) var(--color-fundo);
+  scrollbar-width: thin;
+}
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: var(--color-fundo); }
+*::-webkit-scrollbar-thumb {
+  background: var(--color-borda);
+  border-radius: 0;
+  border: 2px solid var(--color-fundo);
+}
+*::-webkit-scrollbar-thumb:hover { background: var(--color-destaque-fraco); }
+
+/* Painel com cantos cortados — a assinatura visual do site (ecoa os HUDs do jogo). */
+@utility panel-cut {
+  clip-path: polygon(
+    14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px
+  );
+}
+@utility panel-cut-sm {
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+}
+
+@keyframes pulso-sinal {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+.animate-pulso-sinal {
+  animation: pulso-sinal 2s ease-in-out infinite;
+}
+
+@keyframes surgir {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-surgir {
+  animation: surgir 0.45s cubic-bezier(0.16, 1, 0.3, 1) backwards;
 }

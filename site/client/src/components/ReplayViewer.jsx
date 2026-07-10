@@ -14,9 +14,9 @@ function desenharFrame(ctx, round, f, radar, replay) {
   if (radar && radar.complete && radar.naturalWidth > 0) {
     ctx.drawImage(radar, 0, 0, TAM, TAM)
   } else {
-    ctx.fillStyle = '#0b0e13'
+    ctx.fillStyle = '#0a0d12'
     ctx.fillRect(0, 0, TAM, TAM)
-    ctx.strokeStyle = '#1a2130'
+    ctx.strokeStyle = '#262f3d'
     ctx.lineWidth = 1
     for (let i = 0; i <= TAM; i += TAM / 16) {
       ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, TAM); ctx.stroke()
@@ -98,7 +98,7 @@ function desenharFrame(ctx, round, f, radar, replay) {
     }
     // portador da bomba: quadradinho laranja ao lado
     if (p.id === carrier && p.alive) {
-      ctx.fillStyle = '#f5a623'
+      ctx.fillStyle = '#ff9a1f'
       ctx.fillRect(cx + 6, cy - 3, 6, 6)
     }
     // nick (+ estrela se clutcher, + hp se baixo)
@@ -197,7 +197,7 @@ export default function ReplayViewer({ replay }) {
   return (
     <div className="space-y-3">
       {!replay.calibrated && (
-        <p className="text-xs text-amber-400">
+        <p className="font-mono text-xs uppercase tracking-wide text-amber-400">
           Mapa sem calibração de radar — posições em coordenadas cruas (adicione a calibração no Coletor).
         </p>
       )}
@@ -205,7 +205,7 @@ export default function ReplayViewer({ replay }) {
         <select
           value={roundIdx}
           onChange={(e) => { setRoundIdx(Number(e.target.value)); setFrameAtual(0); setTocando(false) }}
-          className="rounded border border-borda bg-superficie px-2 py-1 text-sm"
+          className="rounded border border-borda bg-superficie px-2 py-1 font-mono text-sm"
         >
           {replay.rounds.map((r, i) => (
             <option key={r.round} value={i}>Round {r.round}</option>
@@ -213,14 +213,14 @@ export default function ReplayViewer({ replay }) {
         </select>
         <button
           onClick={() => setTocando((t) => !t)}
-          className="rounded bg-destaque px-4 py-1 text-sm font-medium text-fundo"
+          className="panel-cut-sm border border-destaque bg-destaque px-4 py-1 font-display text-sm font-semibold uppercase tracking-wide text-fundo"
         >
           {tocando ? 'Pausar' : 'Play'}
         </button>
         <select
           value={velocidade}
           onChange={(e) => setVelocidade(Number(e.target.value))}
-          className="rounded border border-borda bg-superficie px-2 py-1 text-sm"
+          className="rounded border border-borda bg-superficie px-2 py-1 font-mono text-sm"
         >
           {[0.5, 1, 2, 4].map((v) => <option key={v} value={v}>{v}x</option>)}
         </select>
@@ -232,7 +232,7 @@ export default function ReplayViewer({ replay }) {
           onChange={(e) => { setFrameAtual(Number(e.target.value)); setTocando(false) }}
           className="flex-1 accent-[color:var(--color-destaque)]"
         />
-        <span className="w-24 text-right text-xs tabular-nums text-texto-fraco">
+        <span className="w-24 text-right font-mono text-xs tabular-nums text-texto-fraco">
           {(frameAtual / replay.tickRate).toFixed(1)}s / {dur.toFixed(1)}s
         </span>
       </div>
@@ -241,20 +241,20 @@ export default function ReplayViewer({ replay }) {
           ref={canvasRef}
           width={TAM}
           height={TAM}
-          className="block w-full rounded-xl border border-borda"
+          className="panel-cut block w-full border border-borda"
           aria-label={`Replay 2D de ${nomeMapa(replay.map)}`}
         />
         <div className="pointer-events-none absolute right-2 top-2 flex flex-col items-end gap-1">
           {feed.map((k, i) => (
             <div
               key={`${k.t}-${i}`}
-              className="flex items-center gap-1.5 rounded bg-black/70 px-2 py-1 text-xs"
+              className="flex items-center gap-1.5 border border-borda/60 bg-black/75 px-2 py-1 font-mono text-xs"
             >
               <span className="font-semibold" style={{ color: COR_TIME[replay.teams?.[k.killer]] ?? '#e6edf3' }}>
                 {replay.names?.[k.killer] ?? k.killer}
               </span>
               <span className="text-texto-fraco">{k.weapon}</span>
-              {k.headshot && <span className="font-semibold text-rose-400">hs</span>}
+              {k.headshot && <span className="font-semibold text-perigo">hs</span>}
               <span className="text-texto-fraco">→</span>
               <span className="font-semibold" style={{ color: COR_TIME[replay.teams?.[k.victim]] ?? '#e6edf3' }}>
                 {replay.names?.[k.victim] ?? k.victim}

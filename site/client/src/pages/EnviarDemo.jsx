@@ -36,25 +36,27 @@ export default function EnviarDemo() {
 
   return (
     <div className="max-w-lg">
-      <h2 className="mb-2 text-xl font-semibold">Enviar demo</h2>
-      <p className="mb-4 text-sm text-texto-fraco">
+      <h2 className="mb-2 font-display text-xl font-semibold uppercase tracking-wide text-texto">Enviar demo</h2>
+      <p className="mb-4 font-mono text-sm leading-relaxed text-texto-fraco">
         Baixe o .dem em CS2 → Assistir → Suas Partidas (ou do Faceit/GC) e envie aqui.
         O processamento roda no Coletor local e pode levar até um minuto.
       </p>
 
       <form onSubmit={enviar} className="space-y-3">
         <div>
-          <label className="block text-sm text-texto-fraco" htmlFor="arquivo">Arquivo .dem</label>
+          <label className="block font-mono text-xs uppercase tracking-wide text-texto-fraco" htmlFor="arquivo">
+            Arquivo .dem
+          </label>
           <input
             id="arquivo"
             type="file"
             accept=".dem"
             onChange={(e) => setArquivo(e.target.files?.[0] ?? null)}
-            className="w-full rounded border border-borda bg-superficie px-3 py-2 text-sm"
+            className="w-full rounded border border-borda bg-superficie px-3 py-2 font-mono text-sm"
           />
         </div>
         <div>
-          <label className="block text-sm text-texto-fraco" htmlFor="shareCode">
+          <label className="block font-mono text-xs uppercase tracking-wide text-texto-fraco" htmlFor="shareCode">
             Share code (opcional, evita duplicar se descoberto automaticamente)
           </label>
           <input
@@ -62,11 +64,11 @@ export default function EnviarDemo() {
             value={shareCode}
             onChange={(e) => setShareCode(e.target.value)}
             placeholder="CSGO-xxxxx-xxxxx-xxxxx-xxxxx-xxxxx"
-            className="w-full rounded border border-borda bg-superficie px-3 py-2 text-sm"
+            className="w-full rounded border border-borda bg-superficie px-3 py-2 font-mono text-sm"
           />
         </div>
         <div>
-          <label className="block text-sm text-texto-fraco" htmlFor="playedAt">
+          <label className="block font-mono text-xs uppercase tracking-wide text-texto-fraco" htmlFor="playedAt">
             Quando foi jogada (opcional — sem isso, a data pode sair aproximada)
           </label>
           <input
@@ -74,21 +76,21 @@ export default function EnviarDemo() {
             type="datetime-local"
             value={playedAt}
             onChange={(e) => setPlayedAt(e.target.value)}
-            className="w-full rounded border border-borda bg-superficie px-3 py-2 text-sm"
+            className="w-full rounded border border-borda bg-superficie px-3 py-2 font-mono text-sm"
           />
         </div>
         <button
           type="submit"
           disabled={!arquivo || enviando}
-          className="rounded bg-destaque px-4 py-2 font-medium text-fundo disabled:opacity-50"
+          className="panel-cut-sm border border-destaque bg-destaque px-4 py-2 font-display text-sm font-semibold uppercase tracking-wide text-fundo transition-opacity disabled:opacity-40"
         >
           {enviando ? 'Processando… (pode levar até 1 min)' : 'Enviar'}
         </button>
       </form>
 
-      {erro && <p className="mt-4 text-sm text-rose-400">{erro}</p>}
+      {erro && <p className="mt-4 font-mono text-sm text-perigo">{erro}</p>}
       {resultado && (
-        <p className="mt-4 text-sm text-emerald-400">
+        <p className="mt-4 font-mono text-sm text-sucesso">
           Partida gravada!{' '}
           {resultado.matchId && (
             <Link to={`/partida/${resultado.matchId}`} className="underline">
