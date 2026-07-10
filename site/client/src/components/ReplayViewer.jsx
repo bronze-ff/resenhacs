@@ -4,7 +4,7 @@ import { nomeMapa } from '../lib/format.js'
 
 const TAM = 640 // lado do canvas em px
 
-function desenharFrame(ctx, frame, radar) {
+function desenharFrame(ctx, frame, radar, names = {}) {
   ctx.clearRect(0, 0, TAM, TAM)
   // Fundo: imagem de radar se carregada; senão, grade neutra.
   if (radar && radar.complete && radar.naturalWidth > 0) {
@@ -20,10 +20,12 @@ function desenharFrame(ctx, frame, radar) {
     }
   }
   if (!frame) return
+  ctx.textAlign = 'center'
+  ctx.font = '600 11px system-ui, sans-serif'
   for (const p of frame.players) {
     const cx = p.x * TAM
     const cy = p.y * TAM
-    ctx.globalAlpha = p.alive ? 1 : 0.3
+    ctx.globalAlpha = p.alive ? 1 : 0.25
     ctx.fillStyle = COR_TIME[p.team] ?? '#888'
     ctx.beginPath()
     ctx.arc(cx, cy, 6, 0, Math.PI * 2)
@@ -37,6 +39,15 @@ function desenharFrame(ctx, frame, radar) {
       ctx.moveTo(cx, cy)
       ctx.lineTo(cx + Math.cos(rad) * 11, cy + Math.sin(rad) * 11)
       ctx.stroke()
+    }
+    // nick acima do boneco, com contorno escuro pra ler sobre o mapa
+    const nick = names[p.id] || ''
+    if (nick && p.alive) {
+      ctx.lineWidth = 3
+      ctx.strokeStyle = 'rgba(0,0,0,0.85)'
+      ctx.strokeText(nick, cx, cy - 10)
+      ctx.fillStyle = '#fff'
+      ctx.fillText(nick, cx, cy - 10)
     }
     ctx.globalAlpha = 1
   }
@@ -88,10 +99,16 @@ export default function ReplayViewer({ replay }) {
   // Redesenha quando o frame muda OU quando o radar termina de carregar.
   useEffect(() => {
     const ctx = canvasRef.current?.getContext('2d')
-    if (ctx) desenharFrame(ctx, frames[frameAtual], radarRef.current)
+    if (ctx) desenharFrame(ctx, frames[frameAtual], radarRef.current, replay.names)
   }, [frameAtual, roundIdx, radarPronto]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const dur = duracaoSegundos(total, replay.tickRate)
+
+  // Kill feed: kills do round que já aconteceram e ainda estão dentro da janela de ~6s.
+  const janela = replay.tickRate * 6
+  const feed = (round?.kills ?? [])
+    .filter((k) => k.t <= frameAtual && frameAtual - k.t <= janela)
+    .slice(-5)
 
   return (
     <div className="space-y-3">
@@ -135,13 +152,33 @@ export default function ReplayViewer({ replay }) {
           {(frameAtual / replay.tickRate).toFixed(1)}s / {dur.toFixed(1)}s
         </span>
       </div>
-      <canvas
-        ref={canvasRef}
-        width={TAM}
-        height={TAM}
-        className="mx-auto block w-full max-w-[640px] rounded-xl border border-borda"
-        aria-label={`Replay 2D de ${nomeMapa(replay.map)}`}
-      />
+      <div className="relative mx-auto w-full max-w-[640px]">
+        <canvas
+          ref={canvasRef}
+          width={TAM}
+          height={TAM}
+          className="block w-full rounded-xl border border-borda"
+          aria-label={`Replay 2D de ${nomeMapa(replay.map)}`}
+        />
+        <div className="pointer-events-none absolute right-2 top-2 flex flex-col items-end gap-1">
+          {feed.map((k, i) => (
+            <div
+              key={`${k.t}-${i}`}
+              className="flex items-center gap-1.5 rounded bg-black/70 px-2 py-1 text-xs"
+            >
+              <span className="font-semibold" style={{ color: COR_TIME[replay.teams?.[k.killer]] ?? '#e6edf3' }}>
+                {replay.names?.[k.killer] ?? k.killer}
+              </span>
+              <span className="text-texto-fraco">{k.weapon}</span>
+              {k.headshot && <span className="font-semibold text-rose-400">hs</span>}
+              <span className="text-texto-fraco">→</span>
+              <span className="font-semibold" style={{ color: COR_TIME[replay.teams?.[k.victim]] ?? '#e6edf3' }}>
+                {replay.names?.[k.victim] ?? k.victim}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }

@@ -133,11 +133,13 @@ def parse_demo(path):
     }
 
 
-def extract_ticks(path, target_hz=8, demo_tick_rate=64):
-    """Posições por tick para o Replay 2D, já com downsample no parse (evita 1M+ linhas).
+def extract_replay(path, target_hz=8, demo_tick_rate=64):
+    """Dados do Replay 2D numa passada: posições (com downsample) + kills.
 
-    Devolve [{round, tick, players:[{id,x,y,yaw,hp,team,alive}]}] que replay.build_replay
-    consome. Segmenta por round usando os freeze_end. Só validável contra um .dem real.
+    Devolve {"ticks": [{round, tick, players:[{id,nick,x,y,yaw,hp,team,alive}]}],
+             "kills": [{round, tick, killer, victim, weapon, headshot}]}.
+    O round de cada tick/kill é atribuído pelos limites de freeze_end (consistente
+    entre posições e kills). Só validável contra um .dem real.
     """
     from demoparser2 import DemoParser
 
@@ -156,8 +158,15 @@ def extract_ticks(path, target_hz=8, demo_tick_rate=64):
         for t in range(ini, fim, passo):
             alvo.append(t)
     if not alvo:
-        return []
+        return {"ticks": [], "kills": []}
 
+    def round_do_tick(t):
+        for rnd, ini, fim in limites:
+            if ini <= t <= fim:
+                return rnd
+        return limites[-1][0]
+
+    # Posições (parse_ticks já traz a coluna "name").
     df = parser.parse_ticks(["X", "Y", "yaw", "health", "team_num", "is_alive"], ticks=alvo)
     por_tick = {}
     for r in df.to_dict("records"):
@@ -167,6 +176,7 @@ def extract_ticks(path, target_hz=8, demo_tick_rate=64):
         por_tick.setdefault(int(r["tick"]), []).append(
             {
                 "id": sid,
+                "nick": r.get("name") or "",
                 "x": float(r.get("X") or 0),
                 "y": float(r.get("Y") or 0),
                 "yaw": float(r.get("yaw") or 0),
@@ -175,14 +185,26 @@ def extract_ticks(path, target_hz=8, demo_tick_rate=64):
                 "alive": bool(r.get("is_alive")),
             }
         )
+    ticks = [{"round": round_do_tick(t), "tick": t, "players": por_tick[t]} for t in sorted(por_tick)]
 
-    def round_do_tick(t):
-        for rnd, ini, fim in limites:
-            if ini <= t <= fim:
-                return rnd
-        return limites[-1][0]
+    # Kills (fora do warmup).
+    deaths = parser.parse_event("player_death", other=["total_rounds_played", "is_warmup_period"])
+    deaths = deaths[deaths["is_warmup_period"] == False]  # noqa: E712
+    kills = []
+    for r in deaths.to_dict("records"):
+        killer, victim = _sid(r.get("attacker_steamid")), _sid(r.get("user_steamid"))
+        if not killer or not victim or killer == victim:
+            continue
+        tk = int(r["tick"])
+        kills.append(
+            {
+                "round": round_do_tick(tk),
+                "tick": tk,
+                "killer": killer,
+                "victim": victim,
+                "weapon": r.get("weapon") or "",
+                "headshot": bool(r.get("headshot")),
+            }
+        )
 
-    saida = []
-    for t in sorted(por_tick):
-        saida.append({"round": round_do_tick(t), "tick": t, "players": por_tick[t]})
-    return saida
+    return {"ticks": ticks, "kills": kills}

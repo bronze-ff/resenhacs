@@ -60,8 +60,8 @@ def ingest_demo(config, conn, path, share_code=None, source="upload", upload=Tru
 
         # Replay 2D: falha aqui não deve derrubar o ingest dos stats.
         try:
-            ticks = parsemod.extract_ticks(path)
-            replay_json = replaymod.build_replay(parsed["map"], ticks)
+            rdata = parsemod.extract_replay(path)
+            replay_json = replaymod.build_replay(parsed["map"], rdata["ticks"], kills=rdata["kills"])
             rkey = storage_r2.replay_key(ids["match_id"])
             storage_r2.upload_bytes(
                 client, config.r2_bucket, rkey,

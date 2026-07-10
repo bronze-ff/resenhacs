@@ -34,15 +34,20 @@ def world_to_radar(x, y, cal, size=RADAR_SIZE):
     return (round(_clamp01(px / size), 4), round(_clamp01(py / size), 4))
 
 
-def build_replay(map_name, ticks, target_hz=8):
+def build_replay(map_name, ticks, kills=None, target_hz=8):
     """Monta o replay JSON. `ticks` = lista (ordenada no tempo) de
-    {round, tick, players:[{id,x,y,yaw,hp,team,alive}]} — já no ritmo de target_hz
-    (o downsample é feito no extract_ticks, ao pedir só os ticks-alvo ao demoparser2).
+    {round, tick, players:[{id,nick,x,y,yaw,hp,team,alive}]} — já no ritmo de target_hz.
+    `kills` (opcional) = [{round, tick, killer, victim, weapon, headshot}] → vira o kill
+    feed, com cada kill casado ao índice de frame do seu round.
 
-    Normaliza mundo→radar e reindexa os frames em sequência (0,1,2,...) por round.
+    Normaliza mundo→radar, reindexa os frames por round, e expõe names/teams p/ o viewer.
     """
+    import bisect
+
     cal = MAP_CALIBRATION.get(map_name)
-    por_round = {}
+    por_round = {}       # round -> frames
+    ticks_round = {}     # round -> lista de ticks crus (paralela aos frames)
+    names, teams = {}, {}
     for t in ticks:
         players = []
         for p in t["players"]:
@@ -61,12 +66,38 @@ def build_replay(map_name, ticks, target_hz=8):
                     "alive": bool(p.get("alive", True)),
                 }
             )
+            if p.get("nick"):
+                names[p["id"]] = p["nick"]
+            teams[p["id"]] = p["team"]
         frames = por_round.setdefault(t["round"], [])
         frames.append({"t": len(frames), "players": players})
+        ticks_round.setdefault(t["round"], []).append(t["tick"])
+
+    # Casa cada kill ao frame do round (primeiro frame com tick >= tick da kill).
+    kills_round = {}
+    for k in kills or []:
+        rt = ticks_round.get(k["round"])
+        if not rt:
+            continue
+        idx = min(bisect.bisect_left(rt, k["tick"]), len(rt) - 1)
+        kills_round.setdefault(k["round"], []).append(
+            {
+                "t": idx,
+                "killer": k["killer"],
+                "victim": k["victim"],
+                "weapon": k.get("weapon", ""),
+                "headshot": bool(k.get("headshot")),
+            }
+        )
 
     return {
         "map": map_name,
         "calibrated": cal is not None,
         "tickRate": target_hz,
-        "rounds": [{"round": r, "frames": por_round[r]} for r in sorted(por_round)],
+        "names": names,
+        "teams": teams,
+        "rounds": [
+            {"round": r, "frames": por_round[r], "kills": kills_round.get(r, [])}
+            for r in sorted(por_round)
+        ],
     }
