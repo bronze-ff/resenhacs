@@ -5,9 +5,15 @@ import App from '../App.jsx'
 function mockMe(response) {
   vi.stubGlobal(
     'fetch',
-    vi.fn().mockResolvedValue({
-      ok: response !== null,
-      json: async () => response ?? { erro: 'Não autenticado' },
+    vi.fn().mockImplementation((url) => {
+      // Feed busca /api/matches; devolvemos lista vazia. /api/auth/me devolve o jogador.
+      if (typeof url === 'string' && url.includes('/api/matches')) {
+        return Promise.resolve({ ok: true, json: async () => [] })
+      }
+      return Promise.resolve({
+        ok: response !== null,
+        json: async () => response ?? { erro: 'Não autenticado' },
+      })
     }),
   )
 }
