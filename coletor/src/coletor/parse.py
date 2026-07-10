@@ -231,6 +231,19 @@ def extract_replay(path, target_hz=8, demo_tick_rate=64):
     inicios = sorted({int(t) for t in freeze["tick"].tolist()})
     fins = sorted({int(t) for t in ended["tick"].tolist()})  # dedupe: há 2 linhas por round
 
+    # Time fixo A/B pelo primeiro freeze_end (mesmo método de parse_demo, recalculado
+    # aqui porque extract_replay é uma passada independente). Precisa ser ESTÁVEL pro
+    # jogo inteiro — team_num sozinho é o lado atual (CT/T), que troca no intervalo;
+    # usar team_num por tick corrompia a detecção de clutch (replay.py) pra qualquer
+    # round antes da troca de lado, contando/perdendo clutches que nunca existiram.
+    fixed = {}
+    if inicios:
+        snap0 = parser.parse_ticks(["team_num"], ticks=[inicios[0]])
+        for r in snap0.to_dict("records"):
+            sid, team_num = _sid(r.get("steamid")), _num(r.get("team_num"))
+            if sid and team_num is not None:
+                fixed[sid] = _team_letter(team_num)
+
     passo = max(1, round(demo_tick_rate / target_hz))
     alvo = []
     limites = []
@@ -268,7 +281,10 @@ def extract_replay(path, target_hz=8, demo_tick_rate=64):
                 "y": y,
                 "yaw": _flt(r.get("yaw")) or 0.0,
                 "hp": _num(r.get("health")) or 0,
-                "team": _team_letter(team_num),
+                # Time ESTÁVEL (fixed), não o lado atual — team_num sozinho flipa no
+                # intervalo. Fallback pro lado atual só pra quem não estava no 1º freeze
+                # (entrou depois — raro, mas não pode sumir do replay).
+                "team": fixed.get(sid, _team_letter(team_num)),
                 "alive": bool(r.get("is_alive")),
             }
         )

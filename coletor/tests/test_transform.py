@@ -158,3 +158,63 @@ def test_enrich_empate_nao_vira_derrota_forcada():
     a = next(p for p in out["players"] if p["steam_id64"] == "A")
     b = next(p for p in out["players"] if p["steam_id64"] == "B")
     assert a["won"] is None and b["won"] is None
+
+
+def test_enrich_so_gera_highlight_de_clutch_realmente_vencido():
+    # Bug real (2026-07-10): os Highlights de clutch vinham de replay.py.detect_clutch
+    # (critério: eliminou todo mundo — mesmo perdendo o round por outro motivo, ex.
+    # bomba explode depois), diferente do clutch_wins/clutch_attempts do Ranking (exige
+    # vencer o ROUND). Resultado: Highlights mostravam clutch que o Ranking não contava.
+    # Agora os dois usam a mesma fonte (clutch_outcomes) — nunca mais devem discordar.
+    teams = {"A": "A", "B": "A", "C": "B", "D": "B"}
+    kills_vitoria = [
+        # round 1: A fica 1v2 e fecha o round matando os dois — E o time A venceu o round.
+        {"round_number": 1, "tick": 10, "attacker": "C", "victim": "B", "headshot": False, "team_kill": False},
+        {"round_number": 1, "tick": 20, "attacker": "A", "victim": "C", "headshot": False, "team_kill": False},
+        {"round_number": 1, "tick": 30, "attacker": "A", "victim": "D", "headshot": False, "team_kill": False},
+    ]
+    parsed = {
+        "map": "de_mirage",
+        "score_a": 1,
+        "score_b": 0,
+        "rounds": [{"round_number": 1, "winner_team": "A", "win_reason": "elim"}],
+        "players": [
+            {"steam_id64": "A", "nick": "fih", "team": "A", "kills": 2, "deaths": 0, "assists": 0, "headshot_kills": 0, "damage": 200},
+            {"steam_id64": "B", "nick": "x", "team": "A", "kills": 0, "deaths": 1, "assists": 0, "headshot_kills": 0, "damage": 0},
+            {"steam_id64": "C", "nick": "y", "team": "B", "kills": 1, "deaths": 1, "assists": 0, "headshot_kills": 0, "damage": 100},
+            {"steam_id64": "D", "nick": "z", "team": "B", "kills": 0, "deaths": 1, "assists": 0, "headshot_kills": 0, "damage": 0},
+        ],
+        "kills": kills_vitoria,
+    }
+    out = transform.enrich(parsed)
+    clutch_hl = [h for h in out["highlights"] if h["kind"].startswith("clutch")]
+    assert clutch_hl == [{"steam_id64": "A", "round_number": 1, "kind": "clutch_1v2", "description": "CLUTCH 1v2 no round 1"}]
+    a = next(p for p in out["players"] if p["steam_id64"] == "A")
+    assert a["clutch_wins"] == 1 and a["clutch_attempts"] == 1  # highlight e contador batem
+
+
+def test_enrich_clutch_perdido_o_round_nao_vira_highlight():
+    # Mesma situação, mas o time A PERDE o round (ex.: bomba já explodiu antes da
+    # eliminação) — não deve gerar highlight nenhum, só contar como tentativa perdida.
+    teams_kills = [
+        {"round_number": 1, "tick": 10, "attacker": "C", "victim": "B", "headshot": False, "team_kill": False},
+        {"round_number": 1, "tick": 20, "attacker": "A", "victim": "C", "headshot": False, "team_kill": False},
+        {"round_number": 1, "tick": 30, "attacker": "A", "victim": "D", "headshot": False, "team_kill": False},
+    ]
+    parsed = {
+        "map": "de_mirage",
+        "score_a": 0,
+        "score_b": 1,
+        "rounds": [{"round_number": 1, "winner_team": "B", "win_reason": "bomb"}],
+        "players": [
+            {"steam_id64": "A", "nick": "fih", "team": "A", "kills": 2, "deaths": 0, "assists": 0, "headshot_kills": 0, "damage": 200},
+            {"steam_id64": "B", "nick": "x", "team": "A", "kills": 0, "deaths": 1, "assists": 0, "headshot_kills": 0, "damage": 0},
+            {"steam_id64": "C", "nick": "y", "team": "B", "kills": 1, "deaths": 1, "assists": 0, "headshot_kills": 0, "damage": 100},
+            {"steam_id64": "D", "nick": "z", "team": "B", "kills": 0, "deaths": 1, "assists": 0, "headshot_kills": 0, "damage": 0},
+        ],
+        "kills": teams_kills,
+    }
+    out = transform.enrich(parsed)
+    assert [h for h in out["highlights"] if h["kind"].startswith("clutch")] == []
+    a = next(p for p in out["players"] if p["steam_id64"] == "A")
+    assert a["clutch_wins"] == 0 and a["clutch_attempts"] == 1

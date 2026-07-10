@@ -254,4 +254,25 @@ def enrich(parsed):
             }
         )
 
-    return {**parsed, "players": players, "highlights": multikill_highlights(kills)}
+    # Highlights de clutch: só as tentativas REALMENTE vencidas (round ganho de verdade,
+    # não só "matei todo mundo mas o round foi perdido por outro motivo" — bomba
+    # explodindo depois da eliminação, por exemplo). Mesma fonte que os contadores
+    # clutch_wins/clutch_attempts acima, pra Highlights e Ranking nunca discordarem
+    # (existiu um bug assim: replay.py tinha um detector PRÓPRIO, mais permissivo,
+    # que gerava Highlights de clutch que o Ranking não contava como vitória).
+    clutch_highlights = [
+        {
+            "steam_id64": c["steam_id64"],
+            "round_number": c["round_number"],
+            "kind": f"clutch_1v{c['vs']}",
+            "description": f"CLUTCH 1v{c['vs']} no round {c['round_number']}",
+        }
+        for c in clutches
+        if c["venceu"]
+    ]
+
+    return {
+        **parsed,
+        "players": players,
+        "highlights": multikill_highlights(kills) + clutch_highlights,
+    }

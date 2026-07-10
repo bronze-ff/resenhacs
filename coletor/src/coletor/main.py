@@ -189,21 +189,12 @@ def ingest_demo(config, conn, path, share_code=None, source="upload", upload=Tru
         replay_json = replaymod.build_replay(
             parsed["map"], rdata["ticks"], kills=rdata["kills"], extras=rdata
         )
-        for rnd in replay_json["rounds"]:
-            c = rnd.get("clutch")
-            if c:
-                parsed["highlights"].append(
-                    {
-                        "steam_id64": c["steamid"],
-                        "round_number": rnd["round"],
-                        "kind": f"clutch_1v{c['vs']}",
-                        "description": f"CLUTCH 1v{c['vs']} no round {rnd['round']}",
-                        "frame": c["t"],
-                    }
-                )
         # Frame do Replay 2D pra cada highlight (deep link — Partida.jsx abre o replay
-        # já no momento exato ao clicar). Clutch já veio com frame acima; multi-kill
-        # ganha aqui, casando pela última kill do jogador no round.
+        # já no momento exato ao clicar), casando pela última kill do jogador no round.
+        # Os highlights de clutch já vêm de transform.enrich() (fonte única de verdade,
+        # a mesma que conta clutch_wins/clutch_attempts) — não usa mais o detect_clutch
+        # de replay.py aqui, que tinha critério mais permissivo (elimina todo mundo =
+        # "clutch", mesmo perdendo o round por outro motivo — bomba explode depois).
         parsed["highlights"] = transform.attach_replay_frames(parsed["highlights"], replay_json["rounds"])
     except Exception as e:  # noqa: BLE001
         print(f"aviso: replay 2D / clutch não gerado ({e})")
