@@ -9,11 +9,12 @@ psycopg é injetada, então a lógica é testável com um fake que grava os exec
 def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status):
     cur.execute(
         """
-        insert into matches (share_code, source, map, score_a, score_b, demo_url, replay_url, status)
-        values (%s, %s, %s, %s, %s, %s, %s, %s)
+        insert into matches (share_code, source, map, score_a, score_b, played_at, demo_url, replay_url, status)
+        values (%s, %s, %s, %s, %s, %s, %s, %s, %s)
         on conflict (share_code) do update set
           source = excluded.source, map = excluded.map,
           score_a = excluded.score_a, score_b = excluded.score_b,
+          played_at = coalesce(matches.played_at, excluded.played_at),
           demo_url = coalesce(excluded.demo_url, matches.demo_url),
           replay_url = coalesce(excluded.replay_url, matches.replay_url),
           status = excluded.status
@@ -25,6 +26,7 @@ def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status)
             parsed.get("map"),
             parsed.get("score_a"),
             parsed.get("score_b"),
+            parsed.get("played_at"),
             demo_url,
             replay_url,
             status,

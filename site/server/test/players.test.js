@@ -52,7 +52,7 @@ describe('POST /api/players', () => {
     expect(res.status).toBe(400)
   })
 
-  it('admin: adiciona à whitelist', async () => {
+  it('admin: adiciona à whitelist e retroage is_tracked nas partidas antigas', async () => {
     const { app, db } = appWith()
     const res = await request(app)
       .post('/api/players')
@@ -60,6 +60,68 @@ describe('POST /api/players', () => {
       .send({ steamId: '76561198000000003' })
     expect(res.status).toBe(201)
     expect(db.query.mock.calls[0][1]).toEqual(['76561198000000003'])
+    expect(db.query.mock.calls[1][0]).toContain('update match_players set is_tracked')
+    expect(db.query.mock.calls[1][1]).toEqual(['76561198000000003'])
+  })
+})
+
+describe('POST /api/players/promote', () => {
+  function appWithNick(nick) {
+    const db = {
+      query: vi.fn().mockImplementation((sql) => {
+        if (sql.includes('from match_players mp')) return Promise.resolve({ rows: nick ? [{ nick }] : [] })
+        return Promise.resolve({ rows: [] })
+      }),
+    }
+    return { app: createApp({ config, db }), db }
+  }
+
+  it('sem login: 401', async () => {
+    const { app } = appWithNick('gabis')
+    const res = await request(app).post('/api/players/promote').send({ steamId: '76561198000000003' })
+    expect(res.status).toBe(401)
+  })
+
+  it('membro comum: 403', async () => {
+    const { app } = appWithNick('gabis')
+    const res = await request(app)
+      .post('/api/players/promote')
+      .set('Cookie', memberCookie)
+      .send({ steamId: '76561198000000003' })
+    expect(res.status).toBe(403)
+  })
+
+  it('admin com steamId inválido: 400', async () => {
+    const { app } = appWithNick('gabis')
+    const res = await request(app)
+      .post('/api/players/promote')
+      .set('Cookie', adminCookie)
+      .send({ steamId: 'abc' })
+    expect(res.status).toBe(400)
+  })
+
+  it('promove com o nick puxado do histórico e retroage is_tracked', async () => {
+    const { app, db } = appWithNick('gabis')
+    const res = await request(app)
+      .post('/api/players/promote')
+      .set('Cookie', adminCookie)
+      .send({ steamId: '76561198000000003' })
+    expect(res.status).toBe(201)
+    expect(res.body).toEqual({ ok: true, nick: 'gabis' })
+    const insertCall = db.query.mock.calls.find((c) => c[0].startsWith('insert into players'))
+    expect(insertCall[1]).toEqual(['76561198000000003', 'gabis'])
+    const trackCall = db.query.mock.calls.find((c) => c[0].includes('update match_players set is_tracked'))
+    expect(trackCall[1]).toEqual(['76561198000000003'])
+  })
+
+  it('participante sem histórico: promove com nick vazio', async () => {
+    const { app } = appWithNick(null)
+    const res = await request(app)
+      .post('/api/players/promote')
+      .set('Cookie', adminCookie)
+      .send({ steamId: '76561198000000003' })
+    expect(res.status).toBe(201)
+    expect(res.body).toEqual({ ok: true, nick: '' })
   })
 })
 

@@ -65,6 +65,7 @@ def _parsed():
         "map": "de_mirage",
         "score_a": 13,
         "score_b": 9,
+        "played_at": "2026-07-10T12:00:00+00:00",
         "players": [
             {"steam_id64": "A", "nick": "fih", "team": "A", "kills": 20, "deaths": 10,
              "assists": 4, "headshot_kills": 9, "damage": 2100, "rounds_played": 22,
@@ -82,6 +83,8 @@ def test_store_parsed_grava_tudo_e_commita():
     assert conn.commits == 1
     sqls = [c[0] for c in conn.calls]
     assert any(s.startswith("insert into matches") for s in sqls)
+    match_call = next(c for c in conn.calls if c[0].startswith("insert into matches"))
+    assert match_call[1][5] == "2026-07-10T12:00:00+00:00"  # played_at
     assert any(s.startswith("insert into match_players") for s in sqls)
     assert any("update match_players set is_tracked" in s for s in sqls)
     assert any(s.startswith("insert into rounds") for s in sqls)

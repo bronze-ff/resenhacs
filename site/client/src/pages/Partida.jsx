@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { nomeMapa, dataRelativa, corRating } from '../lib/format.js'
 import ReplayViewer from '../components/ReplayViewer.jsx'
+import { useAuth } from '../auth/AuthContext.jsx'
 
 function SecaoReplay({ replayUrl }) {
   const [replay, setReplay] = useState(null)
@@ -29,7 +30,7 @@ function SecaoReplay({ replayUrl }) {
   return <ReplayViewer replay={replay} />
 }
 
-function Scoreboard({ time, jogadores }) {
+function Scoreboard({ time, jogadores, podePromover, onPromover, promovendo }) {
   return (
     <div className="overflow-hidden rounded-xl border border-borda">
       <table className="w-full text-sm">
@@ -52,6 +53,15 @@ function Scoreboard({ time, jogadores }) {
               <span className="flex items-center gap-2">
                 {p.nick || p.steamId}
                 {p.isTracked && <span className="text-[10px] uppercase text-destaque">grupo</span>}
+                {!p.isTracked && podePromover && (
+                  <button
+                    onClick={(e) => { e.preventDefault(); onPromover(p.steamId) }}
+                    disabled={promovendo === p.steamId}
+                    className="rounded border border-borda px-1.5 py-0.5 text-[10px] text-texto-fraco hover:border-destaque hover:text-destaque disabled:opacity-50"
+                  >
+                    {promovendo === p.steamId ? '…' : '+ grupo'}
+                  </button>
+                )}
               </span>
             )
             return (
@@ -140,8 +150,10 @@ function FormClipe({ matchId, jogadores, onAdicionado }) {
 
 export default function Partida() {
   const { id } = useParams()
+  const { jogador } = useAuth()
   const [m, setM] = useState(null)
   const [erro, setErro] = useState(false)
+  const [promovendo, setPromovendo] = useState(null)
 
   function carregar() {
     fetch(`/api/matches/${id}`)
@@ -151,6 +163,20 @@ export default function Partida() {
       })
       .then(setM)
       .catch(() => setErro(true))
+  }
+
+  async function promover(steamId) {
+    setPromovendo(steamId)
+    try {
+      await fetch('/api/players/promote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ steamId }),
+      })
+      carregar()
+    } finally {
+      setPromovendo(null)
+    }
   }
 
   useEffect(carregar, [id])
@@ -177,8 +203,8 @@ export default function Partida() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Scoreboard time="A" jogadores={timeA} />
-        <Scoreboard time="B" jogadores={timeB} />
+        <Scoreboard time="A" jogadores={timeA} podePromover={jogador?.isAdmin} onPromover={promover} promovendo={promovendo} />
+        <Scoreboard time="B" jogadores={timeB} podePromover={jogador?.isAdmin} onPromover={promover} promovendo={promovendo} />
       </div>
 
       <section>

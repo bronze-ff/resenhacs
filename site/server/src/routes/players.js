@@ -27,7 +27,31 @@ export function createPlayersRouter({ db, requireAuth }) {
       'insert into players (steam_id64) values ($1) on conflict (steam_id64) do nothing',
       [steamId],
     )
+    // Retroage is_tracked: partidas antigas desse steamId (de antes de entrar na
+    // whitelist) passam a contar pra Sinergia e pro perfil, não só as futuras.
+    await db.query('update match_players set is_tracked = true where steam_id64 = $1', [steamId])
     res.status(201).json({ ok: true })
+  })
+
+  // Promove um Participante (já visto em alguma Partida) a Jogador com um clique,
+  // sem precisar digitar o SteamID64 na mão — puxa o nick do histórico de partidas.
+  router.post('/promote', requireAuth, requireAdmin, async (req, res) => {
+    const steamId = String(req.body?.steamId ?? '')
+    if (!/^\d{17}$/.test(steamId)) {
+      return res.status(400).json({ erro: 'steamId deve ser o SteamID64 (17 dígitos)' })
+    }
+    const nickQ = await db.query(
+      `select mp.nick from match_players mp join matches m on m.id = mp.match_id
+       where mp.steam_id64 = $1 order by m.played_at desc nulls last limit 1`,
+      [steamId],
+    )
+    const nick = nickQ.rows[0]?.nick ?? ''
+    await db.query(
+      'insert into players (steam_id64, nick) values ($1, $2) on conflict (steam_id64) do nothing',
+      [steamId, nick],
+    )
+    await db.query('update match_players set is_tracked = true where steam_id64 = $1', [steamId])
+    res.status(201).json({ ok: true, nick })
   })
 
   // Onboarding: o próprio Jogador informa seu código de autenticação de histórico e

@@ -11,7 +11,13 @@ Descobertas da API (CS2 / valve_demo_2):
 - time fixo A/B: `team_num` no 1º `round_freeze_end` (2=TR→A, 3=CT→B); estável apesar
   da troca de lados no intervalo.
 - warmup: filtra deaths por `is_warmup_period==False` e hurt por tick >= 1º freeze_end.
+- played_at: o formato .dem NÃO guarda data/hora real em lugar nenhum (header, cvars,
+  hltv_versioninfo — nada). Usamos a mtime do arquivo como proxy (é quando foi baixado,
+  tipicamente minutos/horas após jogado — melhor disponível, mas aproximado).
 """
+
+import datetime
+import os
 
 
 def _team_letter(team_number):
@@ -123,10 +129,15 @@ def parse_demo(path):
             rounds.append({"round_number": i + 1, "winner_team": winner, "win_reason": ""})
             prev = {"A": cur.get("A", prev["A"]), "B": cur.get("B", prev["B"])}
 
+    played_at = datetime.datetime.fromtimestamp(
+        os.path.getmtime(path), tz=datetime.timezone.utc
+    ).isoformat()
+
     return {
         "map": mapa,
         "score_a": score["A"],
         "score_b": score["B"],
+        "played_at": played_at,
         "rounds": rounds,
         "players": players,
         "kills": kills,
