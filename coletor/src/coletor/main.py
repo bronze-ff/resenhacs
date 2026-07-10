@@ -78,8 +78,13 @@ def ingest_demo(config, conn, path, share_code=None, source="upload", upload=Tru
                         "round_number": rnd["round"],
                         "kind": f"clutch_1v{c['vs']}",
                         "description": f"CLUTCH 1v{c['vs']} no round {rnd['round']}",
+                        "frame": c["t"],
                     }
                 )
+        # Frame do Replay 2D pra cada highlight (deep link — Partida.jsx abre o replay
+        # já no momento exato ao clicar). Clutch já veio com frame acima; multi-kill
+        # ganha aqui, casando pela última kill do jogador no round.
+        parsed["highlights"] = transform.attach_replay_frames(parsed["highlights"], replay_json["rounds"])
     except Exception as e:  # noqa: BLE001
         print(f"aviso: replay 2D / clutch não gerado ({e})")
 

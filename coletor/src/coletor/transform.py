@@ -83,6 +83,28 @@ def multikill_highlights(kills):
     return highlights
 
 
+def attach_replay_frames(highlights, replay_rounds):
+    """Preenche 'frame' (índice dentro do round, casa com o Replay 2D) em cada highlight,
+    pra Partida.jsx poder abrir o Replay 2D já no momento exato. Highlights que já têm
+    'frame' (ex.: clutch, calculado em main.py junto com o replay) passam direto. Pros
+    de multi-kill, usa a última kill do jogador no round. Se o round/jogador não aparecer
+    no replay (falhou a extração, mapa não calibrado etc.), fica frame=None."""
+    by_round = {r["round"]: r for r in replay_rounds}
+    saida = []
+    for h in highlights:
+        if "frame" in h:
+            saida.append(h)
+            continue
+        rnd = by_round.get(h["round_number"])
+        frame = None
+        if rnd:
+            kills_do_jogador = [k for k in rnd.get("kills", []) if k["killer"] == h["steam_id64"]]
+            if kills_do_jogador:
+                frame = kills_do_jogador[-1]["t"]
+        saida.append({**h, "frame": frame})
+    return saida
+
+
 def _distribuicao_multikills(por_round):
     """Conta em quantos rounds o jogador fez exatamente 1,2,3,4,5 kills → (k1..k5)."""
     contagem = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}

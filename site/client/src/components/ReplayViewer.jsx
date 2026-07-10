@@ -137,7 +137,7 @@ function desenharFrame(ctx, round, f, radar, replay) {
   }
 }
 
-export default function ReplayViewer({ replay }) {
+export default function ReplayViewer({ replay, seek }) {
   const canvasRef = useRef(null)
   const radarRef = useRef(null)
   const rafRef = useRef(0)
@@ -147,6 +147,18 @@ export default function ReplayViewer({ replay }) {
   const [velocidade, setVelocidade] = useState(1)
   const [frameAtual, setFrameAtual] = useState(0)
   const [radarPronto, setRadarPronto] = useState(false)
+
+  // Deep link (ex.: clicar num Highlight): pula pro round/frame e toca. `seek.key` muda
+  // a cada clique (mesmo mirando o mesmo round/frame de novo) pra sempre re-disparar.
+  useEffect(() => {
+    if (!seek) return
+    const idx = replay.rounds.findIndex((r) => r.round === seek.round)
+    if (idx === -1) return
+    setRoundIdx(idx)
+    setFrameAtual(seek.frame ?? 0)
+    setTocando(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seek?.key])
 
   const round = replay.rounds[roundIdx]
   const frames = round?.frames ?? []

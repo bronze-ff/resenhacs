@@ -49,14 +49,14 @@ describe('GET /api/matches/:id', () => {
       ['from matches where id', [{ id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9, source: 'valve_mm', status: 'parsed', demo_url: null }]],
       ['from match_players where match_id', [{ steam_id64: '765', nick: 'fih', team: 'A', kills: 25, team_kills: 1, deaths: 10, assists: 5, headshot_kills: 12, damage: 2500, rounds_played: 22, rating: '1.35', won: true, is_tracked: true }]],
       ['from rounds where match_id', [{ round_number: 1, winner_team: 'A', win_reason: 'elim' }]],
-      ['from highlights h', [{ id: 'h1', steam_id64: '765', round_number: 5, kind: 'ace', description: 'ACE', nick: 'fih' }]],
+      ['from highlights h', [{ id: 'h1', steam_id64: '765', round_number: 5, kind: 'ace', description: 'ACE', frame: 12, nick: 'fih' }]],
       ['from clips where match_id', [{ id: 'c1', steam_id64: '765', url: 'https://allstar.gg/x', provider: 'allstar', title: 'meu ace', highlight_id: 'h1' }]],
     ])
     const res = await request(app).get('/api/matches/m1').set('Cookie', cookie)
     expect(res.status).toBe(200)
     expect(res.body.players[0]).toMatchObject({ nick: 'fih', rating: 1.35, isTracked: true, teamKills: 1 })
     expect(res.body.rounds[0]).toMatchObject({ roundNumber: 1, winnerTeam: 'A' })
-    expect(res.body.highlights[0]).toMatchObject({ kind: 'ace', nick: 'fih' })
+    expect(res.body.highlights[0]).toMatchObject({ kind: 'ace', nick: 'fih', frame: 12 })
     expect(res.body.clips[0]).toMatchObject({ provider: 'allstar', url: 'https://allstar.gg/x' })
     expect(res.body.demoUrl).toBeNull() // sem demo_url no fixture
   })

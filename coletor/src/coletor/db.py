@@ -101,10 +101,10 @@ def _write_highlights(cur, match_id, highlights):
     for h in highlights:
         cur.execute(
             """
-            insert into highlights (match_id, steam_id64, round_number, kind, description)
-            values (%s, %s, %s, %s, %s)
+            insert into highlights (match_id, steam_id64, round_number, kind, description, frame)
+            values (%s, %s, %s, %s, %s, %s)
             """,
-            (match_id, h["steam_id64"], h["round_number"], h["kind"], h.get("description", "")),
+            (match_id, h["steam_id64"], h["round_number"], h["kind"], h.get("description", ""), h.get("frame")),
         )
 
 

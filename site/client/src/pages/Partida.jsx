@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { nomeMapa, dataRelativa, corRating } from '../lib/format.js'
 import ReplayViewer from '../components/ReplayViewer.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
 
-function SecaoReplay({ replayUrl }) {
+function SecaoReplay({ replayUrl, seek }) {
   const [replay, setReplay] = useState(null)
   const [erro, setErro] = useState(false)
 
@@ -27,7 +27,7 @@ function SecaoReplay({ replayUrl }) {
   }
   if (erro) return <p className="font-mono text-sm text-perigo">Não foi possível carregar o replay.</p>
   if (!replay) return <p className="font-mono text-sm text-texto-fraco">Carregando replay…</p>
-  return <ReplayViewer replay={replay} />
+  return <ReplayViewer replay={replay} seek={seek} />
 }
 
 function Scoreboard({ time, jogadores, podePromover, onPromover, promovendo }) {
@@ -161,6 +161,14 @@ export default function Partida() {
   const [m, setM] = useState(null)
   const [erro, setErro] = useState(false)
   const [promovendo, setPromovendo] = useState(null)
+  const [seek, setSeek] = useState(null)
+  const replayRef = useRef(null)
+
+  function irParaHighlight(h) {
+    if (h.frame == null) return
+    setSeek({ round: h.roundNumber, frame: h.frame, key: `${h.id}-${Date.now()}` })
+    replayRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
 
   function carregar() {
     fetch(`/api/matches/${id}`)
@@ -214,22 +222,40 @@ export default function Partida() {
         <Scoreboard time="B" jogadores={timeB} podePromover={jogador?.isAdmin} onPromover={promover} promovendo={promovendo} />
       </div>
 
-      <section>
+      <section ref={replayRef}>
         <h3 className="mb-2 font-display text-lg font-semibold uppercase tracking-wide text-texto">Replay 2D</h3>
-        <SecaoReplay replayUrl={m.replayUrl} />
+        <SecaoReplay replayUrl={m.replayUrl} seek={seek} />
       </section>
 
       {m.highlights.length > 0 && (
         <section>
           <h3 className="mb-2 font-display text-lg font-semibold uppercase tracking-wide text-texto">Highlights</h3>
           <div className="flex flex-wrap gap-2">
-            {m.highlights.map((h) => (
-              <div key={h.id} className="panel-cut-sm border border-borda bg-superficie px-3 py-2 font-mono text-sm">
-                <span className="font-display font-semibold uppercase text-destaque">{h.kind}</span>{' '}
-                <span className="text-texto">{h.nick || h.steamId}</span>{' '}
-                <span className="text-texto-fraco">round {h.roundNumber}</span>
-              </div>
-            ))}
+            {m.highlights.map((h) => {
+              const podeAssistir = h.frame != null && m.replayUrl
+              const conteudo = (
+                <>
+                  <span className="font-display font-semibold uppercase text-destaque">{h.kind}</span>{' '}
+                  <span className="text-texto">{h.nick || h.steamId}</span>{' '}
+                  <span className="text-texto-fraco">round {h.roundNumber}</span>
+                  {podeAssistir && <span className="ml-1.5 text-texto-fraco">▶</span>}
+                </>
+              )
+              return podeAssistir ? (
+                <button
+                  key={h.id}
+                  onClick={() => irParaHighlight(h)}
+                  className="panel-cut-sm border border-borda bg-superficie px-3 py-2 font-mono text-sm transition-colors hover:border-destaque/60 hover:bg-superficie-alta"
+                  title="Assistir no Replay 2D"
+                >
+                  {conteudo}
+                </button>
+              ) : (
+                <div key={h.id} className="panel-cut-sm border border-borda bg-superficie px-3 py-2 font-mono text-sm">
+                  {conteudo}
+                </div>
+              )
+            })}
           </div>
         </section>
       )}

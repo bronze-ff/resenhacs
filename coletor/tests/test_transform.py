@@ -53,6 +53,22 @@ def test_fill_kd_exclui_team_kill_do_kills_mas_conta_death_da_vitima():
     assert b["deaths"] == 1  # a vítima do TK ainda morreu
 
 
+def test_attach_replay_frames_usa_ultima_kill_do_jogador_no_round():
+    highlights = [
+        {"steam_id64": "A", "round_number": 1, "kind": "triple", "description": "TRIPLE no round 1"},
+        {"steam_id64": "B", "round_number": 2, "kind": "clutch_1v2", "description": "CLUTCH", "frame": 9},  # já tem frame
+        {"steam_id64": "C", "round_number": 3, "kind": "ace", "description": "ACE no round 3"},  # round sem replay
+    ]
+    replay_rounds = [
+        {"round": 1, "kills": [{"t": 2, "killer": "A", "victim": "x"}, {"t": 5, "killer": "A", "victim": "y"}]},
+        {"round": 2, "kills": [{"t": 1, "killer": "B", "victim": "z"}]},
+    ]
+    out = transform.attach_replay_frames(highlights, replay_rounds)
+    assert out[0]["frame"] == 5  # última kill de A no round 1
+    assert out[1]["frame"] == 9  # preservado, não recalculado
+    assert out[2]["frame"] is None  # round 3 não existe no replay
+
+
 def test_hltv_rating_arredonda_e_zera_sem_rounds():
     assert transform.hltv_rating(20, 15, 0, {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}) == 0.0
     r = transform.hltv_rating(20, 10, 22, {1: 8, 2: 4, 3: 1, 4: 0, 5: 0})

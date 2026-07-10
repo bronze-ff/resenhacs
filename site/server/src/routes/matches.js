@@ -53,7 +53,7 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket }) {
         [id],
       ),
       db.query(
-        `select h.id, h.steam_id64, h.round_number, h.kind, h.description, mp.nick
+        `select h.id, h.steam_id64, h.round_number, h.kind, h.description, h.frame, mp.nick
          from highlights h
          left join match_players mp on mp.match_id = h.match_id and mp.steam_id64 = h.steam_id64
          where h.match_id = $1 order by h.round_number`,
@@ -106,6 +106,7 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket }) {
         roundNumber: h.round_number,
         kind: h.kind,
         description: h.description,
+        frame: h.frame,
       })),
       clips: clips.rows.map((c) => ({
         id: c.id,
