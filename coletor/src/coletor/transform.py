@@ -19,31 +19,37 @@ MULTIKILL_KIND = {3: "triple", 4: "quad", 5: "ace"}
 
 
 def kills_por_round_por_jogador(kills):
-    """{steam_id64: {round_number: qtd_kills}} — só kills 'de verdade' (attacker != None)."""
+    """{steam_id64: {round_number: qtd_kills}} — só kills 'de verdade' contra o time
+    inimigo (exclui suicídio/dano de mundo E team kill — não deve inflar multikill/rating)."""
     saida = {}
     for k in kills:
         atk = k.get("attacker")
-        if not atk or atk == k.get("victim"):
-            continue  # suicídio/dano de mundo não conta
+        if not atk or atk == k.get("victim") or k.get("team_kill"):
+            continue
         saida.setdefault(atk, {}).setdefault(k["round_number"], 0)
         saida[atk][k["round_number"]] += 1
     return saida
 
 
 def fill_kd_from_kills(players, kills):
-    """Deriva kills/deaths/headshot_kills de cada jogador a partir da lista de kills.
+    """Deriva kills/deaths/headshot_kills/team_kills de cada jogador a partir da lista
+    de kills. Team kill NÃO conta como kill (nem headshot), mas a vítima ainda morreu —
+    conta como death normalmente. team_kills fica à parte, só informativo.
 
     Usado no pipeline real (parse.py fornece o roster + as kills; dano/assist vêm de
     outros eventos do demo). Não é chamado por enrich() para os testes poderem passar
     jogadores já agregados.
     """
-    k, d, hs = {}, {}, {}
+    k, d, hs, tk = {}, {}, {}, {}
     for e in kills:
         atk, vic = e.get("attacker"), e.get("victim")
         if atk and atk != vic:
-            k[atk] = k.get(atk, 0) + 1
-            if e.get("headshot"):
-                hs[atk] = hs.get(atk, 0) + 1
+            if e.get("team_kill"):
+                tk[atk] = tk.get(atk, 0) + 1
+            else:
+                k[atk] = k.get(atk, 0) + 1
+                if e.get("headshot"):
+                    hs[atk] = hs.get(atk, 0) + 1
         if vic:
             d[vic] = d.get(vic, 0) + 1
     return [
@@ -52,6 +58,7 @@ def fill_kd_from_kills(players, kills):
             "kills": k.get(p["steam_id64"], p.get("kills", 0)),
             "deaths": d.get(p["steam_id64"], p.get("deaths", 0)),
             "headshot_kills": hs.get(p["steam_id64"], p.get("headshot_kills", 0)),
+            "team_kills": tk.get(p["steam_id64"], p.get("team_kills", 0)),
         }
         for p in players
     ]

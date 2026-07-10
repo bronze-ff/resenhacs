@@ -6,6 +6,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["--prefix", "site/client", "run", "dev"],
       "port": 5173
+    },
+    {
+      "name": "resenha-server",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "site/server", "run", "dev"],
+      "port": 3001
     }
   ]
 }

@@ -38,6 +38,7 @@ function Scoreboard({ time, jogadores, podePromover, onPromover, promovendo }) {
           <tr className="bg-superficie text-left font-mono text-[10px] uppercase tracking-wider text-texto-fraco">
             <th className="px-3 py-2">Time {time}</th>
             <th className="px-2 py-2 text-right">K</th>
+            <th className="px-2 py-2 text-right" title="Team kills (não contam pro K nem pro rating)">TK</th>
             <th className="px-2 py-2 text-right">D</th>
             <th className="px-2 py-2 text-right">A</th>
             <th className="px-2 py-2 text-right">ADR</th>
@@ -76,6 +77,9 @@ function Scoreboard({ time, jogadores, podePromover, onPromover, promovendo }) {
                   )}
                 </td>
                 <td className="px-2 py-2 text-right tabular-nums">{p.kills}</td>
+                <td className={`px-2 py-2 text-right tabular-nums ${p.teamKills > 0 ? 'text-perigo' : 'text-texto-fraco'}`}>
+                  {p.teamKills || 0}
+                </td>
                 <td className="px-2 py-2 text-right tabular-nums">{p.deaths}</td>
                 <td className="px-2 py-2 text-right tabular-nums">{p.assists}</td>
                 <td className="px-2 py-2 text-right tabular-nums">{adr}</td>

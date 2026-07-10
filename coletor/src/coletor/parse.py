@@ -66,6 +66,8 @@ def parse_demo(path):
             score[ft] = int(r["team_rounds_total"])
 
     # Kills (para K/D via transform e highlights) + nomes + assists.
+    # team_kill: mesmo time do atacante e da vítima — não deve contar como kill
+    # de verdade (nem pra rating, nem pra highlight de multikill), só como morte.
     kills, names, assists = [], {}, {}
     for r in deaths.to_dict("records"):
         atk, vic, ast = _sid(r.get("attacker_steamid")), _sid(r.get("user_steamid")), _sid(r.get("assister_steamid"))
@@ -75,6 +77,7 @@ def parse_demo(path):
                 "attacker": atk,
                 "victim": vic,
                 "headshot": bool(r["headshot"]),
+                "team_kill": bool(atk and vic and atk != vic and fixed.get(atk) == fixed.get(vic)),
             }
         )
         if atk:

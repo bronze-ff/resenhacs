@@ -50,14 +50,14 @@ def _write_players(cur, match_id, players):
             """
             insert into match_players
               (match_id, steam_id64, nick, team, kills, deaths, assists,
-               headshot_kills, damage, rounds_played, rating, won)
-            values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+               headshot_kills, damage, rounds_played, rating, won, team_kills)
+            values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             on conflict (match_id, steam_id64) do update set
               nick = excluded.nick, team = excluded.team, kills = excluded.kills,
               deaths = excluded.deaths, assists = excluded.assists,
               headshot_kills = excluded.headshot_kills, damage = excluded.damage,
               rounds_played = excluded.rounds_played, rating = excluded.rating,
-              won = excluded.won
+              won = excluded.won, team_kills = excluded.team_kills
             """,
             (
                 match_id,
@@ -72,6 +72,7 @@ def _write_players(cur, match_id, players):
                 p.get("rounds_played", 0),
                 p.get("rating"),
                 p.get("won"),
+                p.get("team_kills", 0),
             ),
         )
     # is_tracked é cache de "é Jogador": liga para quem está na whitelist.

@@ -43,7 +43,7 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket }) {
     const [players, rounds, highlights, clips] = await Promise.all([
       db.query(
         `select steam_id64, nick, team, kills, deaths, assists, headshot_kills,
-                damage, rounds_played, rating, won, is_tracked
+                damage, rounds_played, rating, won, is_tracked, team_kills
          from match_players where match_id = $1
          order by team, rating desc nulls last, kills desc`,
         [id],
@@ -84,6 +84,7 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket }) {
         nick: p.nick,
         team: p.team,
         kills: p.kills,
+        teamKills: p.team_kills,
         deaths: p.deaths,
         assists: p.assists,
         headshotKills: p.headshot_kills,
