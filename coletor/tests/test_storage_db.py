@@ -98,3 +98,18 @@ def test_record_pending_match():
     assert mid == "00000000-0000-0000-0000-000000000001"
     assert conn.commits == 1
     assert conn.calls[0][1] == ("CSGO-novo", "valve_mm")
+    assert "played_at" in conn.calls[0][0] and "now()" in conn.calls[0][0]
+
+
+def test_store_parsed_por_padrao_preserva_played_at_existente():
+    conn = FakeConn()
+    db.store_parsed(conn, _parsed(), share_code="CSGO-x")
+    match_call = next(c for c in conn.calls if c[0].startswith("insert into matches"))
+    assert "coalesce(matches.played_at, excluded.played_at)" in match_call[0]
+
+
+def test_store_parsed_prefer_new_played_at_deixa_o_novo_vencer():
+    conn = FakeConn()
+    db.store_parsed(conn, _parsed(), share_code="CSGO-x", prefer_new_played_at=True)
+    match_call = next(c for c in conn.calls if c[0].startswith("insert into matches"))
+    assert "coalesce(excluded.played_at, matches.played_at)" in match_call[0]

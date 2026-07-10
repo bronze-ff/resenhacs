@@ -7,7 +7,13 @@ Dois modos:
 
 O download automático do .dem de matchmaking exige o Game Coordinator (conta-bot),
 fora do escopo da Fase 2 — por isso 'discover' só descobre, e 'ingest' cobre o
-caminho manual (o player/admin baixa o .dem e joga aqui). Ver README do coletor.
+caminho manual (o player/admin baixa o .dem e roda aqui). Ver README do coletor.
+
+Data da Partida (played_at): o formato .dem não guarda data/hora em lugar nenhum.
+'discover' grava a hora da descoberta (bem próxima da hora real, já que roda de
+hora em hora); 'ingest' manual, sem --played-at, cai pra mtime do arquivo — que
+pode estar bem errada se o .dem foi baixado dias depois de jogado. Use --played-at
+quando souber a data certa.
 """
 
 import argparse
@@ -41,11 +47,19 @@ def cmd_discover(config, conn):
     return total
 
 
-def ingest_demo(config, conn, path, share_code=None, source="upload", upload=True):
-    """Parseia um .dem, arquiva no R2 (se configurado) e grava no banco. Devolve match_id."""
+def ingest_demo(config, conn, path, share_code=None, source="upload", upload=True, played_at=None):
+    """Parseia um .dem, arquiva no R2 (se configurado) e grava no banco. Devolve match_id.
+
+    `played_at` (ISO 8601, opcional): quando o operador sabe a hora real da Partida,
+    essa informação é mais confiável que a mtime do arquivo (que só reflete quando o
+    .dem foi baixado/copiado — pode ser dias depois) e vence mesmo sobre um played_at
+    já gravado por descoberta automática (prefer_new_played_at=True em store_parsed).
+    """
     parsed = parsemod.parse_demo(path)
     parsed["players"] = transform.fill_kd_from_kills(parsed["players"], parsed["kills"])
     parsed = transform.enrich(parsed)
+    if played_at:
+        parsed["played_at"] = played_at
 
     # Replay 2D + clutch (sempre computados; só ARQUIVADOS no R2 se configurado).
     # Falha aqui não derruba o ingest dos stats.
@@ -90,6 +104,7 @@ def ingest_demo(config, conn, path, share_code=None, source="upload", upload=Tru
     return dbmod.store_parsed(
         conn, parsed, share_code=share_code, source=source,
         demo_url=demo_url, replay_url=replay_url,
+        prefer_new_played_at=bool(played_at),
     )
 
 
@@ -103,6 +118,11 @@ def main(argv=None):
     p_ing.add_argument("--share-code", default=None)
     p_ing.add_argument("--source", default="upload")
     p_ing.add_argument("--no-upload", action="store_true")
+    p_ing.add_argument(
+        "--played-at", default=None,
+        help="Hora real da Partida em ISO 8601 (ex.: 2026-07-09T20:15:00-03:00). "
+             "Use quando souber a data certa — mais confiável que a mtime do arquivo.",
+    )
 
     args = ap.parse_args(argv)
     config = Config()
@@ -117,6 +137,7 @@ def main(argv=None):
             mid = ingest_demo(
                 config, conn, Path(args.demo),
                 share_code=args.share_code, source=args.source, upload=not args.no_upload,
+                played_at=args.played_at,
             )
             print(f"ingest: Partida gravada {mid}")
     finally:

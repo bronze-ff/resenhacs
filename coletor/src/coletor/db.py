@@ -6,15 +6,24 @@ psycopg é injetada, então a lógica é testável com um fake que grava os exec
 """
 
 
-def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status):
+def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status, prefer_new_played_at=False):
+    # Por padrão preserva o played_at já gravado (normalmente a hora de descoberta,
+    # mais precisa que a mtime do arquivo num re-ingest posterior). Quando o operador
+    # passa --played-at explicitamente no ingest manual, prefer_new_played_at=True
+    # deixa o valor informado vencer mesmo sobre um played_at já existente.
+    played_at_expr = (
+        "coalesce(excluded.played_at, matches.played_at)"
+        if prefer_new_played_at
+        else "coalesce(matches.played_at, excluded.played_at)"
+    )
     cur.execute(
-        """
+        f"""
         insert into matches (share_code, source, map, score_a, score_b, played_at, demo_url, replay_url, status)
         values (%s, %s, %s, %s, %s, %s, %s, %s, %s)
         on conflict (share_code) do update set
           source = excluded.source, map = excluded.map,
           score_a = excluded.score_a, score_b = excluded.score_b,
-          played_at = coalesce(matches.played_at, excluded.played_at),
+          played_at = {played_at_expr},
           demo_url = coalesce(excluded.demo_url, matches.demo_url),
           replay_url = coalesce(excluded.replay_url, matches.replay_url),
           status = excluded.status
@@ -99,10 +108,12 @@ def _write_highlights(cur, match_id, highlights):
 
 
 def store_parsed(conn, parsed, share_code=None, source="valve_mm", demo_url=None,
-                 replay_url=None, status="parsed"):
+                 replay_url=None, status="parsed", prefer_new_played_at=False):
     """Grava a Partida inteira numa transação. Devolve o match_id (uuid)."""
     with conn.cursor() as cur:
-        match_id = _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status)
+        match_id = _insert_match(
+            cur, share_code, source, parsed, demo_url, replay_url, status, prefer_new_played_at
+        )
         _write_players(cur, match_id, parsed.get("players", []))
         _write_rounds(cur, match_id, parsed.get("rounds", []))
         _write_highlights(cur, match_id, parsed.get("highlights", []))
@@ -111,12 +122,17 @@ def store_parsed(conn, parsed, share_code=None, source="valve_mm", demo_url=None
 
 
 def record_pending_match(conn, share_code, source="valve_mm"):
-    """Registra um share code descoberto sem demo ainda (status pending). Idempotente."""
+    """Registra um share code descoberto sem demo ainda (status pending). Idempotente.
+
+    Grava played_at = now() (hora da descoberta): é bem mais próximo da hora real
+    da Partida do que a mtime do .dem, que só reflete quando o arquivo foi baixado
+    (pode ser dias depois — o formato .dem não guarda data em lugar nenhum).
+    """
     with conn.cursor() as cur:
         cur.execute(
             """
-            insert into matches (share_code, source, status)
-            values (%s, %s, 'pending')
+            insert into matches (share_code, source, status, played_at)
+            values (%s, %s, 'pending', now())
             on conflict (share_code) do nothing
             returning id
             """,
