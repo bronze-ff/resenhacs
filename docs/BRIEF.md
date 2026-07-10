@@ -35,14 +35,21 @@ Plataforma web fechada, em PT-BR, para um grupo de amigos acompanhar **Partidas*
 
 *Risco assumido: o Replay 2D é a peça mais cara da v1 e adia o primeiro release.*
 
-## Fases de implementação da v1
+## Fases de implementação da v1 — TODAS CONSTRUÍDAS (2026-07-10)
 
-Cada fase é um plano próprio em `docs/superpowers/plans/` e termina com software funcionando:
+Cada fase entregue com testes e commit próprio (67 testes ao todo: 43 server, 5 client, 19 coletor):
 
-1. **Fundação** — repo, site (Express + React/Vite/Tailwind), schema no Supabase, login Steam + whitelist, shell da UI
-2. **Coletor** — Python + demoparser2, corrente de share codes, download antes de expirar, parsing de stats essenciais + Momentos Notáveis, arquivamento no R2, GitHub Actions cron
-3. **Telas de stats** — feed de partidas, página da Partida, perfil do Jogador, Sinergia, anexar Clipes, design via taste-skill, deploy público
-4. **Replay 2D** — extração de frames posicionais no Coletor, radars dos mapas, engine de playback
+1. ✅ **Fundação** — repo, site (Express + React/Vite/Tailwind), schema no Supabase (aplicado), login Steam com anti-replay + whitelist, onboarding, shell da UI
+2. ✅ **Coletor** — Python: decode de share code, corrente via Steam Web API, transformações (K/D, rating, highlights), escritor idempotente, upload R2, GitHub Actions cron. *Download de demo de MM adiado (ADR-0003); caminho `ingest` manual funciona.*
+3. ✅ **Telas de stats** — feed, página da Partida (scoreboard + rounds + highlights + clipes), perfil do Jogador, **Sinergia** ("com quem mais joga" + winrate), anexar Clipes. Data layer verificado contra o Postgres real.
+4. ✅ **Replay 2D** — normalização mundo→radar (8 mapas calibrados) + engine de playback (canvas, play/pause/scrub/round/velocidade), verificada visualmente em `/replay-demo`. *Extração de posições precisa de .dem real; radares PNG a cargo do usuário.*
+
+### Pendências externas (só o usuário provê)
+- **Segredos**: senha do banco (Session Pooler, IPv4), Steam Web API key, seu SteamID64 (para `seed-admin.js`).
+- **Cloudflare R2**: criar bucket + credenciais (ajuda guiada pendente) — necessário para arquivar demos e servir replays.
+- **Push do repo no GitHub** + configurar os Secrets do Actions (DATABASE_URL, STEAM_API_KEY, R2_*).
+- **Assets**: PNGs de radar dos mapas em `site/client/public/radars/` (opcional; sem eles a engine usa grade).
+- **Fase 2b**: conta-bot Steam (Game Coordinator) para baixar demos de MM automaticamente.
 
 ## Roadmap pós-v1 (ordem acordada)
 
