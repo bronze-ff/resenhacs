@@ -164,6 +164,28 @@ def record_pending_match(conn, share_code, source="valve_mm"):
     return row[0] if row else None
 
 
+def list_pending_share_codes(conn):
+    """Share codes de Partidas descobertas (discover) mas ainda sem demo — status pending."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "select share_code from matches "
+            "where status = 'pending' and share_code is not null "
+            "order by played_at nulls last"
+        )
+        return [r[0] for r in cur.fetchall()]
+
+
+def mark_skipped(conn, share_code):
+    """Marca uma Partida pendente como 'skipped' (ex.: fora da janela de data pedida),
+    pra não ficar sendo re-resolvida a cada rodada do fetch."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "update matches set status = 'skipped' where share_code = %s and status = 'pending'",
+            (share_code,),
+        )
+    conn.commit()
+
+
 def list_tracked_players(conn):
     """[(steam_id64, match_auth_code, last_share_code)] dos Jogadores com onboarding feito."""
     with conn.cursor() as cur:

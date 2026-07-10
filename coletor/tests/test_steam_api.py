@@ -32,7 +32,7 @@ def test_walk_chain_para_no_fim():
         urls.append(url)
         return next(respostas)
 
-    novos = steam_api.walk_chain("KEY", "7656", "AUTH", "CSGO-1", http_get_json=fake_get)
+    novos = steam_api.walk_chain("KEY", "7656", "AUTH", "CSGO-1", http_get_json=fake_get, sleep=lambda *_: None)
     assert novos == ["CSGO-2", "CSGO-3"]
     assert len(urls) == 3  # parou ao receber n/a
 
@@ -41,5 +41,20 @@ def test_walk_chain_respeita_limite():
     def fake_get(url):
         return {"result": {"nextcode": "CSGO-loop"}}
 
-    novos = steam_api.walk_chain("K", "s", "a", "CSGO-0", http_get_json=fake_get, limite=4)
+    novos = steam_api.walk_chain("K", "s", "a", "CSGO-0", http_get_json=fake_get, limite=4, sleep=lambda *_: None)
     assert len(novos) == 4
+
+
+def test_http_get_json_trata_404_como_fim_da_corrente():
+    import urllib.error
+
+    def fake_urlopen(*_a, **_k):
+        raise urllib.error.HTTPError("u", 404, "Not Found", {}, None)
+
+    import urllib.request
+    orig = urllib.request.urlopen
+    urllib.request.urlopen = fake_urlopen
+    try:
+        assert steam_api._http_get_json("http://x") == {"result": {"nextcode": "n/a"}}
+    finally:
+        urllib.request.urlopen = orig

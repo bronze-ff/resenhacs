@@ -5,7 +5,10 @@ O Coletor usa a Steam Web API (GetNextMatchSharingCode) para andar a corrente de
 share codes de um Jogador; cada código decodificado identifica uma Partida nova.
 """
 
-DICTIONARY = "ABCDEFGHJKLMNOPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
+# Alfabeto oficial da Valve: 57 caracteres — exclui I/l/g/0/1 (ambíguos). Um caractere
+# a mais aqui muda a base e TODOS os decodes estouram/erram; calibrado contra uma
+# partida real do GC (matchid 3823672835881042126 ↔ CSGO-jjd5D-2JkUG-q9A8u-vABu5-PeS8N).
+DICTIONARY = "ABCDEFGHJKLMNOPQRSTUVWXYZabcdefhijkmnopqrstuvwxyz23456789"
 _BASE = len(DICTIONARY)  # 57
 
 
@@ -49,5 +52,5 @@ def is_valid(share_code: str) -> bool:
     try:
         decode(share_code)
         return True
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, OverflowError):
         return False

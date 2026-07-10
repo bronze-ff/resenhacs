@@ -32,6 +32,26 @@ def _sid(v):
     return str(int(v)) if isinstance(v, (int, float)) else str(v)
 
 
+def _num(v):
+    """int(v), ou None pra NaN/None — snapshots de tick podem trazer NaN pra jogadores
+    desconectados naquele instante (visto em demo real; int(NaN) estoura ValueError)."""
+    import pandas as pd
+
+    if v is None or (isinstance(v, float) and pd.isna(v)):
+        return None
+    return int(v)
+
+
+def _flt(v):
+    """float(v), ou None pra NaN/None (mesmo caso do _num, pra posições/yaw/duração —
+    NaN não pode vazar pro JSON do replay: JSON.parse no browser rejeita NaN)."""
+    import pandas as pd
+
+    if v is None or (isinstance(v, float) and pd.isna(v)):
+        return None
+    return float(v)
+
+
 # Descoberta empírica (mesmo demo real): armas em weapon_fire vêm prefixadas "weapon_"
 # (ex.: "weapon_ak47"); em player_hurt vêm sem prefixo (ex.: "ak47"). O dano de molotov/
 # incendiary aparece com weapon="inferno" no player_hurt, não "molotov" — só se descobre
@@ -77,15 +97,21 @@ def parse_demo(path):
 
     # Times fixos A/B pelo primeiro freeze_end.
     snap0 = parser.parse_ticks(["team_num"], ticks=[first_freeze])
-    fixed = {_sid(r["steamid"]): _team_letter(int(r["team_num"])) for r in snap0.to_dict("records")}
+    fixed = {}
+    for r in snap0.to_dict("records"):
+        team_num = _num(r.get("team_num"))
+        sid = _sid(r.get("steamid"))
+        if sid and team_num is not None:
+            fixed[sid] = _team_letter(team_num)
 
     # Placar final: team_rounds_total de cada time no fim.
     snapf = parser.parse_ticks(["team_num", "team_rounds_total"], ticks=[end_tick])
     score = {"A": 0, "B": 0}
     for r in snapf.to_dict("records"):
-        ft = fixed.get(_sid(r["steamid"]))
-        if ft:
-            score[ft] = int(r["team_rounds_total"])
+        ft = fixed.get(_sid(r.get("steamid")))
+        total = _num(r.get("team_rounds_total"))
+        if ft and total is not None:
+            score[ft] = total
 
     # Kills (para K/D via transform e highlights) + nomes + assists.
     # team_kill: mesmo time do atacante e da vítima — não deve contar como kill
@@ -158,9 +184,10 @@ def parse_demo(path):
         snaps = parser.parse_ticks(["team_rounds_total"], ticks=end_ticks)
         by_tick = {}
         for r in snaps.to_dict("records"):
-            ft = fixed.get(_sid(r["steamid"]))
-            if ft:
-                by_tick.setdefault(int(r["tick"]), {})[ft] = int(r["team_rounds_total"])
+            ft = fixed.get(_sid(r.get("steamid")))
+            total = _num(r.get("team_rounds_total"))
+            if ft and total is not None:
+                by_tick.setdefault(int(r["tick"]), {})[ft] = total
         prev = {"A": 0, "B": 0}
         for i, t in enumerate(end_ticks):
             cur = by_tick.get(t, prev)
@@ -228,15 +255,20 @@ def extract_replay(path, target_hz=8, demo_tick_rate=64):
         sid = _sid(r.get("steamid"))
         if not sid:
             continue
+        # Jogador desconectado neste tick vem com os campos NaN — fica fora do frame
+        # (mesma causa do _num acima; int(NaN)/float NaN estouram ou corrompem o JSON).
+        x, y, team_num = _flt(r.get("X")), _flt(r.get("Y")), _num(r.get("team_num"))
+        if x is None or y is None or team_num is None:
+            continue
         por_tick.setdefault(int(r["tick"]), []).append(
             {
                 "id": sid,
                 "nick": r.get("name") or "",
-                "x": float(r.get("X") or 0),
-                "y": float(r.get("Y") or 0),
-                "yaw": float(r.get("yaw") or 0),
-                "hp": int(r.get("health") or 0),
-                "team": _team_letter(int(r.get("team_num") or 0)),
+                "x": x,
+                "y": y,
+                "yaw": _flt(r.get("yaw")) or 0.0,
+                "hp": _num(r.get("health")) or 0,
+                "team": _team_letter(team_num),
                 "alive": bool(r.get("is_alive")),
             }
         )
@@ -273,7 +305,7 @@ def extract_replay(path, target_hz=8, demo_tick_rate=64):
             return []
 
     def _xy(r):
-        return float(r.get("x") or 0), float(r.get("y") or 0)
+        return _flt(r.get("x")) or 0.0, _flt(r.get("y")) or 0.0
 
     # Smokes e fogo: casa detonate/startburn com expired pelo entityid (duração real).
     def granadas_com_duracao(ev_ini, ev_fim, dur_padrao_s):
@@ -314,7 +346,7 @@ def extract_replay(path, target_hz=8, demo_tick_rate=64):
                 "tick": t0,
                 "victim": vic,
                 "attacker": _sid(r.get("attacker_steamid")),
-                "duration": float(r.get("blind_duration") or 0),
+                "duration": _flt(r.get("blind_duration")) or 0.0,
             }
         )
 

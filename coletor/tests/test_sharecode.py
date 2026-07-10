@@ -40,3 +40,23 @@ def test_decode_rejeita_invalido():
 def test_is_valid():
     assert sharecode.is_valid(sharecode.encode(1, 2, 3))
     assert not sharecode.is_valid("CSGO-inval")
+
+
+def test_vetor_real_do_game_coordinator():
+    """Vetor de calibração REAL: share code de uma partida cujo matchid/reservationid
+    o Game Coordinator devolveu (10/07/2026). Round-trip sintético não pega dicionário
+    errado (encode/decode ficam simétricos no erro) — só um vetor externo pega."""
+    d = sharecode.decode("CSGO-jjd5D-2JkUG-q9A8u-vABu5-PeS8N")
+    assert d["match_id"] == 3823672835881042126
+    assert d["reservation_id"] == 3823678666299146520
+
+
+def test_dicionario_oficial_57_chars():
+    assert len(sharecode.DICTIONARY) == 57  # base 57; um char a mais estoura os 18 bytes
+    for proibido in "Ilg01":
+        assert proibido not in sharecode.DICTIONARY
+
+
+def test_is_valid_nao_vaza_overflow():
+    # 25 'z' (índice máximo) estourava com OverflowError em vez de devolver False.
+    assert sharecode.is_valid("CSGO-zzzzz-zzzzz-zzzzz-zzzzz-zzzzz") is False

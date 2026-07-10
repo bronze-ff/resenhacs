@@ -35,7 +35,13 @@ def cmd_discover(config, conn):
     config.require("steam_api_key")
     total = 0
     for steam_id64, auth_code, last_code in dbmod.list_tracked_players(conn):
-        novos = steam_api.walk_chain(config.steam_api_key, steam_id64, auth_code, last_code)
+        # Um jogador com auth code inválido/expirado (ou rate limit persistente) não deve
+        # abortar a descoberta dos outros.
+        try:
+            novos = steam_api.walk_chain(config.steam_api_key, steam_id64, auth_code, last_code)
+        except Exception as e:  # noqa: BLE001
+            print(f"{steam_id64}: erro ao andar a corrente ({e}) — pulando")
+            continue
         for code in novos:
             if sharecode.is_valid(code):
                 dbmod.record_pending_match(conn, code)
@@ -44,6 +50,120 @@ def cmd_discover(config, conn):
             dbmod.set_last_share_code(conn, steam_id64, novos[-1])
         print(f"{steam_id64}: {len(novos)} share codes novos")
     print(f"discover: {total} Partidas pendentes registradas")
+    return total
+
+
+def _resolver_demo_urls(codes, bot_dir, node_bin):
+    """Chama o bot (Node) pra resolver share codes → links de .dem via Game Coordinator.
+    Devolve [{shareCode, demoUrl, matchTime}]. O bot loga na conta-bot uma vez e resolve
+    todos os codes numa sessão (ver bot/src/resolve.js).
+
+    Credenciais: STEAM_BOT_USER/PASS do ambiente (caso do CI); rodando local, se não
+    estiverem no ambiente, carrega do bot/.env (git-ignored) — o subprocess não herda
+    o --env-file do Node sozinho."""
+    import os
+    import subprocess
+
+    env = dict(os.environ)
+    if not env.get("STEAM_BOT_USER") or not env.get("STEAM_BOT_PASS"):
+        dotenv = bot_dir / ".env"
+        if dotenv.exists():
+            for linha in dotenv.read_text(encoding="utf-8").splitlines():
+                linha = linha.strip()
+                if linha and not linha.startswith("#") and "=" in linha:
+                    k, _, v = linha.partition("=")
+                    env.setdefault(k.strip(), v.strip())
+
+    proc = subprocess.run(
+        [node_bin, "src/resolve.js", *codes],
+        cwd=str(bot_dir),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60 + len(codes) * 20,
+    )
+    if not proc.stdout.strip():
+        raise RuntimeError(f"bot não devolveu nada (stderr: {proc.stderr[-400:]})")
+    return json.loads(proc.stdout)
+
+
+def _baixar_e_descomprimir(url, destino_dem):
+    """Baixa um .dem.bz2 da Valve e descomprime em streaming pro caminho .dem indicado."""
+    import bz2
+    import urllib.request
+
+    dec = bz2.BZ2Decompressor()
+    with urllib.request.urlopen(url, timeout=120) as resp, open(destino_dem, "wb") as out:
+        while True:
+            chunk = resp.read(1 << 20)
+            if not chunk:
+                break
+            out.write(dec.decompress(chunk))
+
+
+def cmd_fetch(config, conn, since=None, bot_dir=None, node_bin="node"):
+    """Baixa e ingere as Partidas pendentes (descobertas pelo discover, ainda sem demo).
+
+    Fluxo: lista pendentes → bot resolve os links do .dem via GC → baixa/descomprime →
+    ingere com played_at = matchtime real (bem mais confiável que a mtime do arquivo).
+    `since` (YYYY-MM-DD, opcional) ingere só Partidas a partir dessa data; as anteriores
+    viram 'skipped' pra não serem re-tentadas toda hora.
+    """
+    import datetime
+    import tempfile
+    from pathlib import Path
+
+    codes = dbmod.list_pending_share_codes(conn)
+    if not codes:
+        print("fetch: nenhuma Partida pendente")
+        return 0
+
+    bot_dir = bot_dir or (Path(__file__).resolve().parents[3] / "bot")
+    print(f"fetch: resolvendo {len(codes)} share code(s) via Game Coordinator…")
+    resolvidos = _resolver_demo_urls(codes, bot_dir, node_bin)
+
+    since_ts = None
+    if since:
+        since_ts = datetime.datetime.fromisoformat(since).replace(tzinfo=datetime.timezone.utc).timestamp()
+
+    total = 0
+    for r in resolvidos:
+        code, url, mt = r.get("shareCode"), r.get("demoUrl"), r.get("matchTime")
+        if not url:
+            print(f"  {code}: sem link de demo (GC não devolveu) — deixando pendente")
+            continue
+        if since_ts is not None and mt is not None and mt < since_ts:
+            print(f"  {code}: antes de {since} — marcando como skipped")
+            dbmod.mark_skipped(conn, code)
+            continue
+        played_at = (
+            datetime.datetime.fromtimestamp(mt, tz=datetime.timezone.utc).isoformat() if mt else None
+        )
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                dem = Path(tmp) / "match.dem"
+                print(f"  {code}: baixando {url}")
+                _baixar_e_descomprimir(url, dem)
+                mid = ingest_demo(
+                    config, conn, dem, share_code=code, source="valve_mm",
+                    upload=True, played_at=played_at,
+                )
+                print(f"  {code}: ingerida {mid} (played_at={played_at})")
+                total += 1
+        except Exception as e:  # noqa: BLE001
+            # Uma partida com demo problemático não derruba o lote; marca failed pra
+            # não ficar re-baixando 200MB toda hora (dá pra re-tentar voltando pra
+            # pending na mão depois de corrigir o parser).
+            conn.rollback()
+            print(f"  {code}: FALHOU ({e}) — marcando como failed")
+            with conn.cursor() as cur:
+                cur.execute(
+                    "update matches set status = 'failed' where share_code = %s and status = 'pending'",
+                    (code,),
+                )
+            conn.commit()
+
+    print(f"fetch: {total} Partida(s) ingerida(s)")
     return total
 
 
@@ -128,6 +248,13 @@ def main(argv=None):
         help="Hora real da Partida em ISO 8601 (ex.: 2026-07-09T20:15:00-03:00). "
              "Use quando souber a data certa — mais confiável que a mtime do arquivo.",
     )
+    p_fetch = sub.add_parser("fetch", help="Baixa/ingere as Partidas pendentes (bot GC → .dem → stats).")
+    p_fetch.add_argument(
+        "--since", default=None,
+        help="Só ingere Partidas a partir desta data (YYYY-MM-DD, UTC); anteriores viram skipped.",
+    )
+    p_fetch.add_argument("--bot-dir", default=None, help="Caminho da pasta bot/ (default: ../bot ao lado de coletor/).")
+    p_fetch.add_argument("--node", default="node", help="Executável do Node (default: node no PATH).")
 
     args = ap.parse_args(argv)
     config = Config()
@@ -145,6 +272,11 @@ def main(argv=None):
                 played_at=args.played_at,
             )
             print(f"ingest: Partida gravada {mid}")
+        elif args.cmd == "fetch":
+            from pathlib import Path
+
+            bot_dir = Path(args.bot_dir) if args.bot_dir else None
+            cmd_fetch(config, conn, since=args.since, bot_dir=bot_dir, node_bin=args.node)
     finally:
         conn.close()
 

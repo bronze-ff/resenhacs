@@ -7,6 +7,8 @@ Coordinator via conta-bot — ver parse.py/README; a corrente aqui só descobre.
 """
 
 import json
+import time
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -34,19 +36,35 @@ def parse_next_code_response(payload):
     return code
 
 
-def _http_get_json(url):
-    with urllib.request.urlopen(url, timeout=30) as resp:
-        return json.loads(resp.read().decode("utf-8"))
+def _http_get_json(url, tentativas=4, backoff=5.0, sleep=time.sleep):
+    """GET JSON com retry no 429 (rate limit da Steam Web API). Espera backoff crescente
+    entre tentativas. Um 404 aqui significa 'sem próximo code ainda' (a Steam responde 404
+    quando o knowncode é o mais recente) — tratado como fim da corrente, não erro."""
+    for tentativa in range(tentativas):
+        try:
+            with urllib.request.urlopen(url, timeout=30) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                return {"result": {"nextcode": "n/a"}}
+            if e.code == 429 and tentativa < tentativas - 1:
+                sleep(backoff * (tentativa + 1))
+                continue
+            raise
 
 
-def walk_chain(api_key, steam_id64, auth_code, known_code, http_get_json=_http_get_json, limite=50):
+def walk_chain(
+    api_key, steam_id64, auth_code, known_code,
+    http_get_json=_http_get_json, limite=50, intervalo=1.2, sleep=time.sleep,
+):
     """Gera os próximos share codes a partir de known_code, em ordem, até acabar ou bater o limite.
 
-    Retorna a lista de códigos novos (não inclui o known_code inicial).
+    Retorna a lista de códigos novos (não inclui o known_code inicial). Dá um respiro
+    (`intervalo`) entre chamadas pra não tomar 429 da Steam.
     """
     novos = []
     atual = known_code
-    for _ in range(limite):
+    for i in range(limite):
         url = build_next_code_url(api_key, steam_id64, auth_code, atual)
         payload = http_get_json(url)
         proximo = parse_next_code_response(payload)
@@ -54,4 +72,5 @@ def walk_chain(api_key, steam_id64, auth_code, known_code, http_get_json=_http_g
             break
         novos.append(proximo)
         atual = proximo
+        sleep(intervalo)
     return novos
