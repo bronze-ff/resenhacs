@@ -1,0 +1,15 @@
+{
+  "name": "resenha-bot",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --env-file-if-exists=.env src/main.js"
+  },
+  "dependencies": {
+    "steam-user": "^5.2.4",
+    "globaloffensive": "^3.3.0"
+  },
+  "overrides": {
+    "steam-appticket": "^2.0.1"
+  }
+}
