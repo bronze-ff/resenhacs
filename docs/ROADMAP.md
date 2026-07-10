@@ -49,6 +49,31 @@ barata de eventos que o demoparser2 já entrega). Nada de renderização de víd
 13. **PWA/mobile polish** — o grupo vê no celular.
 14. **Achievements internos** — "Pistoleiro do mês", "Rei do clutch", etc.
 
+## Dívida técnica conhecida (auditoria 2026-07-10)
+
+Três agentes auditaram server/client/coletor+bot em paralelo. Os achados críticos (XSS
+de clipe, crash de stream do R2, empate contado como derrota, crashes do MapaCalor/
+Partida, correlação errada de resposta do GC no bot) já foram corrigidos e estão em
+produção. O que ficou pra depois, por ordem de risco:
+
+- **Último round da partida some da tabela `rounds`** — só é derivado de
+  `round_officially_ended`, que tipicamente não dispara no round que fecha a partida
+  (ela termina antes, no `cs_win_panel_match`). Efeito: o clutch/entry do round decisivo
+  (o mais memorável) é sempre computado como perdido. `parse.py`.
+- **Dois algoritmos de clutch divergentes** — `replay.py.detect_clutch` (usado nos
+  Highlights) não olha quem ganhou o round; `transform.py.clutch_outcomes` (usado no
+  Ranking/perfil) exige vitória do round. Podem discordar sobre a mesma partida.
+- **Download truncado passa em silêncio** — se a CDN da Valve cortar a conexão no meio,
+  o `.dem` parcial é parseado "com sucesso" e grava stats errados. `main.py`.
+- **Upload manual sobe o `.dem` sem comprimir** sob a chave `demos/{id}.dem.bz2`
+  (extensão mente sobre o conteúdo) — custo de storage 3-5x maior que o necessário.
+- **Lote do `fetch` sem limite** — pode estourar o timeout de 45min do job num backfill
+  grande (o de hoje passou de 44min). Falta um `LIMIT N` + continuar na próxima rodada.
+- **Revogação de acesso/admin demora até 7 dias** — o JWT não é revalidado contra a
+  whitelist a cada request. Baixo risco aqui (grupo fechado de amigos), mas documentado.
+- **Re-ingest não limpa jogador/round órfão** — se um fix no parser reduzir rounds ou
+  remover um sid espúrio, a linha antiga fica pra trás em vez de ser removida.
+
 ## Fora de escopo (decidido)
 
 - Renderização de vídeo estilo Allstar (BRIEF; deep-link no Replay 2D cobre).
