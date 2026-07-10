@@ -5,17 +5,39 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket }) {
   const router = Router()
 
   // Feed: Partidas parseadas, com os Jogadores do grupo que jogaram cada uma.
+  // Filtros opcionais: ?from=YYYY-MM-DD&to=YYYY-MM-DD&map=de_mirage&source=valve_mm|upload
   router.get('/', requireAuth, async (req, res) => {
+    const cond = ["m.status = 'parsed'"]
+    const params = []
+    const { from, to, map, source } = req.query
+    if (from && /^\d{4}-\d{2}-\d{2}$/.test(from)) {
+      params.push(from)
+      cond.push(`m.played_at >= $${params.length}`)
+    }
+    if (to && /^\d{4}-\d{2}-\d{2}$/.test(to)) {
+      params.push(to)
+      // inclusivo: até o fim do dia informado
+      cond.push(`m.played_at < ($${params.length}::date + interval '1 day')`)
+    }
+    if (map && /^[a-z0-9_]+$/.test(map)) {
+      params.push(map)
+      cond.push(`m.map = $${params.length}`)
+    }
+    if (source === 'valve_mm' || source === 'upload') {
+      params.push(source)
+      cond.push(`m.source = $${params.length}`)
+    }
     const { rows } = await db.query(
       `select m.id, m.map, m.played_at, m.score_a, m.score_b, m.status, m.source,
          coalesce(json_agg(json_build_object('steamId', mp.steam_id64, 'nick', mp.nick, 'won', mp.won))
            filter (where mp.is_tracked), '[]') as tracked
        from matches m
        left join match_players mp on mp.match_id = m.id
-       where m.status = 'parsed'
+       where ${cond.join(' and ')}
        group by m.id
        order by m.played_at desc nulls last, m.created_at desc
-       limit 40`,
+       limit 200`,
+      params,
     )
     res.json(
       rows.map((m) => ({

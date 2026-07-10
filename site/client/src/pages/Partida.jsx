@@ -235,6 +235,11 @@ export default function Partida() {
   const timeA = m.players.filter((p) => p.team === 'A')
   const timeB = m.players.filter((p) => p.team === 'B')
 
+  // Resultado do ponto de vista do grupo (Jogadores whitelistados na partida).
+  const doGrupo = m.players.filter((p) => p.isTracked)
+  const resultadoGrupo =
+    doGrupo.length === 0 ? null : doGrupo.every((p) => p.won) ? 'vitoria' : doGrupo.every((p) => !p.won) ? 'derrota' : 'misto'
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -251,10 +256,27 @@ export default function Partida() {
           </div>
           <p className="font-mono text-sm text-texto-fraco">{dataHora(m.playedAt)}</p>
         </div>
-        <div className="font-mono text-3xl font-bold tabular-nums">
-          <span className={m.scoreA > m.scoreB ? 'text-sucesso' : 'text-perigo'}>{m.scoreA ?? '–'}</span>
-          <span className="mx-2 text-texto-fraco">:</span>
-          <span className={m.scoreB > m.scoreA ? 'text-sucesso' : 'text-perigo'}>{m.scoreB ?? '–'}</span>
+        <div className="flex items-center gap-3">
+          {resultadoGrupo === 'vitoria' && (
+            <span className="panel-cut-sm border border-sucesso/40 bg-sucesso/10 px-2.5 py-1 font-display text-xs font-bold uppercase tracking-widest text-sucesso">
+              Vitória
+            </span>
+          )}
+          {resultadoGrupo === 'derrota' && (
+            <span className="panel-cut-sm border border-perigo/40 bg-perigo/10 px-2.5 py-1 font-display text-xs font-bold uppercase tracking-widest text-perigo">
+              Derrota
+            </span>
+          )}
+          {resultadoGrupo === 'misto' && (
+            <span className="panel-cut-sm border border-borda bg-superficie px-2.5 py-1 font-display text-xs font-bold uppercase tracking-widest text-texto-fraco" title="O grupo jogou dividido nos dois times">
+              Misto
+            </span>
+          )}
+          <div className="font-mono text-3xl font-bold tabular-nums">
+            <span className={m.scoreA > m.scoreB ? 'text-sucesso' : 'text-perigo'}>{m.scoreA ?? '–'}</span>
+            <span className="mx-2 text-texto-fraco">:</span>
+            <span className={m.scoreB > m.scoreA ? 'text-sucesso' : 'text-perigo'}>{m.scoreB ?? '–'}</span>
+          </div>
         </div>
       </div>
 

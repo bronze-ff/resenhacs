@@ -9,7 +9,19 @@ export function createRankingRouter({ db, requireAuth }) {
   const router = Router()
 
   // Ranking interno do grupo: agrega os stats de cada Jogador em todas as Partidas.
+  // Filtro opcional de período: ?from=YYYY-MM-DD&to=YYYY-MM-DD (sobre matches.played_at).
   router.get('/', requireAuth, async (req, res) => {
+    const params = []
+    let periodo = ''
+    const { from, to } = req.query
+    if (from && /^\d{4}-\d{2}-\d{2}$/.test(from)) {
+      params.push(from)
+      periodo += ` and m.played_at >= $${params.length}`
+    }
+    if (to && /^\d{4}-\d{2}-\d{2}$/.test(to)) {
+      params.push(to)
+      periodo += ` and m.played_at < ($${params.length}::date + interval '1 day')`
+    }
     const { rows } = await db.query(
       `select p.steam_id64, p.nick, p.avatar_url,
               count(mp.match_id)::int as partidas,
@@ -19,12 +31,18 @@ export function createRankingRouter({ db, requireAuth }) {
               coalesce(sum(mp.headshot_kills), 0)::int as hs,
               avg(mp.rating) as rating,
               coalesce((select count(*) from highlights h
-                        where h.steam_id64 = p.steam_id64 and h.kind = 'ace'), 0)::int as aces,
+                        join matches m on m.id = h.match_id
+                        where h.steam_id64 = p.steam_id64 and h.kind = 'ace'${periodo}), 0)::int as aces,
               coalesce(sum(mp.clutch_wins), 0)::int as clutch_wins,
               coalesce(sum(mp.clutch_attempts), 0)::int as clutch_attempts
        from players p
-       left join match_players mp on mp.steam_id64 = p.steam_id64
+       left join (
+         select mp.* from match_players mp
+         join matches m on m.id = mp.match_id
+         where true${periodo}
+       ) mp on mp.steam_id64 = p.steam_id64
        group by p.steam_id64, p.nick, p.avatar_url`,
+      params,
     )
 
     const ranking = rows

@@ -1,25 +1,63 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { nomeMapa, dataHora, origemPartida } from '../lib/format.js'
+import FiltroPeriodo from '../components/FiltroPeriodo.jsx'
 
-function Placar({ a, b }) {
-  const venceuA = a > b
+const MAPAS = ['de_anubis', 'de_ancient', 'de_cache', 'de_dust2', 'de_inferno', 'de_mirage', 'de_nuke', 'de_overpass', 'de_train', 'de_vertigo']
+
+// Resultado do ponto de vista do GRUPO (não do "Time A"): vitória/derrota quando todo
+// mundo do grupo estava no mesmo lado; 'misto' quando o grupo se dividiu nos dois times.
+function resultadoDoGrupo(m) {
+  const t = m.tracked ?? []
+  if (t.length === 0) return null
+  if (t.every((x) => x.won)) return 'vitoria'
+  if (t.every((x) => !x.won)) return 'derrota'
+  return 'misto'
+}
+
+function Placar({ m }) {
+  const resultado = resultadoDoGrupo(m)
+  // Orienta o placar pra perspectiva do grupo: nosso placar primeiro.
+  let a = m.scoreA
+  let b = m.scoreB
+  if (resultado === 'vitoria') [a, b] = [Math.max(a, b), Math.min(a, b)]
+  if (resultado === 'derrota') [a, b] = [Math.min(a, b), Math.max(a, b)]
+  const corNosso = resultado === 'vitoria' ? 'text-sucesso' : resultado === 'derrota' ? 'text-perigo' : 'text-texto'
   return (
-    <div className="flex items-center gap-1.5 font-mono text-lg font-bold tabular-nums">
-      <span className={venceuA ? 'text-sucesso' : 'text-perigo'}>{a ?? '–'}</span>
-      <span className="text-texto-fraco">:</span>
-      <span className={!venceuA ? 'text-sucesso' : 'text-perigo'}>{b ?? '–'}</span>
+    <div className="flex items-center gap-3">
+      {resultado === 'vitoria' && (
+        <span className="panel-cut-sm border border-sucesso/40 bg-sucesso/10 px-2 py-0.5 font-display text-[10px] font-bold uppercase tracking-widest text-sucesso">
+          Vitória
+        </span>
+      )}
+      {resultado === 'derrota' && (
+        <span className="panel-cut-sm border border-perigo/40 bg-perigo/10 px-2 py-0.5 font-display text-[10px] font-bold uppercase tracking-widest text-perigo">
+          Derrota
+        </span>
+      )}
+      {resultado === 'misto' && (
+        <span className="panel-cut-sm border border-borda bg-superficie px-2 py-0.5 font-display text-[10px] font-bold uppercase tracking-widest text-texto-fraco" title="O grupo jogou dividido nos dois times">
+          Misto
+        </span>
+      )}
+      <div className="flex items-center gap-1.5 font-mono text-lg font-bold tabular-nums">
+        <span className={corNosso}>{a ?? '–'}</span>
+        <span className="text-texto-fraco">:</span>
+        <span className="text-texto-fraco">{b ?? '–'}</span>
+      </div>
     </div>
   )
 }
 
 function CardPartida({ m }) {
+  const resultado = resultadoDoGrupo(m)
+  const borda =
+    resultado === 'vitoria' ? 'border-l-2 border-l-sucesso/70' : resultado === 'derrota' ? 'border-l-2 border-l-perigo/70' : ''
   return (
     <Link
       to={`/partida/${m.id}`}
-      className="panel-cut relative flex items-center justify-between border border-borda bg-superficie p-4 transition-colors hover:border-destaque/50 hover:bg-superficie-alta"
+      className={`panel-cut relative flex items-center justify-between border border-borda bg-superficie p-4 transition-colors hover:border-destaque/50 hover:bg-superficie-alta ${borda}`}
     >
-      <div className="absolute left-0 top-0 h-full w-[3px] bg-destaque/0 transition-colors group-hover:bg-destaque" />
       <div className="flex items-center gap-4">
         <div className="panel-cut-sm flex h-12 w-12 items-center justify-center border border-borda bg-fundo font-mono text-xs font-bold uppercase text-destaque">
           {nomeMapa(m.map).slice(0, 3)}
@@ -42,32 +80,84 @@ function CardPartida({ m }) {
           </div>
         </div>
       </div>
-      <Placar a={m.scoreA} b={m.scoreB} />
+      <Placar m={m} />
     </Link>
   )
 }
 
 export default function Feed() {
   const [partidas, setPartidas] = useState(null)
+  const [de, setDe] = useState('')
+  const [ate, setAte] = useState('')
+  const [mapa, setMapa] = useState('')
+  const [origem, setOrigem] = useState('')
+  const [resultado, setResultado] = useState('')
 
   useEffect(() => {
-    fetch('/api/matches')
+    const qs = new URLSearchParams()
+    if (de) qs.set('from', de)
+    if (ate) qs.set('to', ate)
+    if (mapa) qs.set('map', mapa)
+    if (origem) qs.set('source', origem)
+    fetch(`/api/matches${qs.size ? `?${qs}` : ''}`)
       .then((res) => (res.ok ? res.json() : []))
       .then(setPartidas)
       .catch(() => setPartidas([]))
-  }, [])
+  }, [de, ate, mapa, origem])
+
+  // Resultado (V/D) é do ponto de vista do grupo — filtrado no client.
+  const visiveis = useMemo(() => {
+    if (!partidas) return null
+    if (!resultado) return partidas
+    return partidas.filter((m) => resultadoDoGrupo(m) === resultado)
+  }, [partidas, resultado])
 
   return (
     <div>
       <h2 className="mb-4 font-display text-xl font-semibold uppercase tracking-wide text-texto">Partidas</h2>
-      {partidas === null && <p className="font-mono text-sm text-texto-fraco">Carregando…</p>}
-      {partidas?.length === 0 && (
+
+      <div className="mb-4 flex flex-wrap items-center gap-x-5 gap-y-3">
+        <FiltroPeriodo de={de} ate={ate} onDe={setDe} onAte={setAte} />
+        <select
+          value={mapa}
+          onChange={(e) => setMapa(e.target.value)}
+          className="rounded border border-borda bg-superficie px-2 py-1 font-mono text-xs"
+        >
+          <option value="">Todos os mapas</option>
+          {MAPAS.map((m) => <option key={m} value={m}>{nomeMapa(m)}</option>)}
+        </select>
+        <div className="flex overflow-hidden rounded border border-borda font-mono text-xs uppercase">
+          {[['', 'Tudo'], ['vitoria', 'Vitórias'], ['derrota', 'Derrotas']].map(([v, label]) => (
+            <button
+              key={v}
+              onClick={() => setResultado(v)}
+              className={`px-2.5 py-1 transition-colors ${resultado === v ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="flex overflow-hidden rounded border border-borda font-mono text-xs uppercase">
+          {[['', 'Todas'], ['valve_mm', 'Auto'], ['upload', 'Manual']].map(([v, label]) => (
+            <button
+              key={v}
+              onClick={() => setOrigem(v)}
+              className={`px-2.5 py-1 transition-colors ${origem === v ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {visiveis === null && <p className="font-mono text-sm text-texto-fraco">Carregando…</p>}
+      {visiveis?.length === 0 && (
         <p className="font-mono text-sm text-texto-fraco">
-          Nenhuma Partida parseada ainda. Assim que o Coletor processar um demo, ela aparece aqui.
+          Nenhuma Partida encontrada com esses filtros.
         </p>
       )}
       <div className="space-y-2">
-        {partidas?.map((m) => <CardPartida key={m.id} m={m} />)}
+        {visiveis?.map((m) => <CardPartida key={m.id} m={m} />)}
       </div>
     </div>
   )

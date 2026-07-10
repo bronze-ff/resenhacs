@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { corRating, dataHora } from '../lib/format.js'
 import LinhaEvolucao from '../components/LinhaEvolucao.jsx'
+import FiltroPeriodo from '../components/FiltroPeriodo.jsx'
 
 const LINHAS_STAT = [
   { rotulo: 'Rating', chave: 'rating', formato: (v) => v?.toFixed(2) ?? '–', cor: true },
@@ -31,6 +32,8 @@ export default function Comparar() {
   const [jogadores, setJogadores] = useState([])
   const [a, setA] = useState(params.get('a') ?? '')
   const [b, setB] = useState(params.get('b') ?? '')
+  const [de, setDe] = useState('')
+  const [ate, setAte] = useState('')
   const [dados, setDados] = useState(null)
   const [erro, setErro] = useState(null)
 
@@ -44,7 +47,10 @@ export default function Comparar() {
     if (!a || !b) return
     if (a === b) { setErro('Escolha dois Jogadores diferentes.'); return }
     setParams({ a, b })
-    fetch(`/api/profile/compare?a=${a}&b=${b}`)
+    const qs = new URLSearchParams({ a, b })
+    if (de) qs.set('from', de)
+    if (ate) qs.set('to', ate)
+    fetch(`/api/profile/compare?${qs}`)
       .then((res) => {
         if (!res.ok) throw new Error()
         return res.json()
@@ -52,7 +58,7 @@ export default function Comparar() {
       .then(setDados)
       .catch(() => setErro('Não foi possível comparar esses Jogadores.'))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [a, b])
+  }, [a, b, de, ate])
 
   return (
     <div className="space-y-6">
@@ -71,6 +77,7 @@ export default function Comparar() {
           <option value="">Jogador B…</option>
           {jogadores.map((j) => <option key={j.steamId} value={j.steamId}>{j.nick || j.steamId}</option>)}
         </select>
+        <FiltroPeriodo de={de} ate={ate} onDe={setDe} onAte={setAte} />
       </div>
 
       {erro && <p className="font-mono text-sm text-perigo">{erro}</p>}

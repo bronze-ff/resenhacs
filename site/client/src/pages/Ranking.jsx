@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { corRating } from '../lib/format.js'
+import FiltroPeriodo from '../components/FiltroPeriodo.jsx'
 
 function Medalha({ posicao }) {
   const cores = { 0: 'text-yellow-400', 1: 'text-slate-300', 2: 'text-amber-600' }
@@ -21,13 +22,18 @@ function CardDestaque({ rotulo, nick, valor }) {
 
 export default function Ranking() {
   const [ranking, setRanking] = useState(null)
+  const [de, setDe] = useState('')
+  const [ate, setAte] = useState('')
 
   useEffect(() => {
-    fetch('/api/ranking')
+    const qs = new URLSearchParams()
+    if (de) qs.set('from', de)
+    if (ate) qs.set('to', ate)
+    fetch(`/api/ranking${qs.size ? `?${qs}` : ''}`)
       .then((res) => (res.ok ? res.json() : []))
       .then(setRanking)
       .catch(() => setRanking([]))
-  }, [])
+  }, [de, ate])
 
   if (ranking === null) return <p className="font-mono text-sm text-texto-fraco">Carregando…</p>
 
@@ -39,10 +45,13 @@ export default function Ranking() {
 
   return (
     <div className="space-y-6">
-      <h2 className="font-display text-xl font-semibold uppercase tracking-wide text-texto">Ranking do grupo</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="font-display text-xl font-semibold uppercase tracking-wide text-texto">Ranking do grupo</h2>
+        <FiltroPeriodo de={de} ate={ate} onDe={setDe} onAte={setAte} />
+      </div>
 
       {comPartida.length === 0 && (
-        <p className="font-mono text-sm text-texto-fraco">Ninguém do grupo tem Partidas registradas ainda.</p>
+        <p className="font-mono text-sm text-texto-fraco">Ninguém do grupo tem Partidas registradas {de || ate ? 'nesse período' : 'ainda'}.</p>
       )}
 
       {comPartida.length > 0 && (

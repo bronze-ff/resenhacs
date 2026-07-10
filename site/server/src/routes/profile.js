@@ -5,29 +5,47 @@ function pct(parte, total) {
   return Math.round((parte / total) * 1000) / 10
 }
 
-async function statsAgregados(db, steamId) {
+// Filtro opcional de período (?from=YYYY-MM-DD&to=YYYY-MM-DD) — anexa condições sobre
+// m.played_at aos params e devolve o pedaço de SQL. `to` é inclusivo (fim do dia).
+function periodoWhere(from, to, params) {
+  let sql = ''
+  if (from && /^\d{4}-\d{2}-\d{2}$/.test(from)) {
+    params.push(from)
+    sql += ` and m.played_at >= $${params.length}`
+  }
+  if (to && /^\d{4}-\d{2}-\d{2}$/.test(to)) {
+    params.push(to)
+    sql += ` and m.played_at < ($${params.length}::date + interval '1 day')`
+  }
+  return sql
+}
+
+async function statsAgregados(db, steamId, from, to) {
+  const params = [steamId]
+  const periodo = periodoWhere(from, to, params)
   const { rows } = await db.query(
     `select count(*)::int as partidas,
-            coalesce(sum(case when won then 1 else 0 end), 0)::int as vitorias,
-            coalesce(sum(kills), 0)::int as kills,
-            coalesce(sum(deaths), 0)::int as deaths,
-            coalesce(sum(assists), 0)::int as assists,
-            coalesce(sum(headshot_kills), 0)::int as hs,
-            coalesce(sum(damage), 0)::int as damage,
-            coalesce(sum(rounds_played), 0)::int as rounds,
-            avg(rating) as rating,
-            coalesce(sum(utility_damage), 0)::int as utility_damage,
-            coalesce(sum(shots_fired), 0)::int as shots_fired,
-            coalesce(sum(shots_hit), 0)::int as shots_hit,
-            coalesce(sum(entry_kills), 0)::int as entry_kills,
-            coalesce(sum(entry_deaths), 0)::int as entry_deaths,
-            coalesce(sum(entry_wins), 0)::int as entry_wins,
-            coalesce(sum(trade_kills), 0)::int as trade_kills,
-            coalesce(sum(traded_deaths), 0)::int as traded_deaths,
-            coalesce(sum(clutch_wins), 0)::int as clutch_wins,
-            coalesce(sum(clutch_attempts), 0)::int as clutch_attempts
-     from match_players where steam_id64 = $1`,
-    [steamId],
+            coalesce(sum(case when mp.won then 1 else 0 end), 0)::int as vitorias,
+            coalesce(sum(mp.kills), 0)::int as kills,
+            coalesce(sum(mp.deaths), 0)::int as deaths,
+            coalesce(sum(mp.assists), 0)::int as assists,
+            coalesce(sum(mp.headshot_kills), 0)::int as hs,
+            coalesce(sum(mp.damage), 0)::int as damage,
+            coalesce(sum(mp.rounds_played), 0)::int as rounds,
+            avg(mp.rating) as rating,
+            coalesce(sum(mp.utility_damage), 0)::int as utility_damage,
+            coalesce(sum(mp.shots_fired), 0)::int as shots_fired,
+            coalesce(sum(mp.shots_hit), 0)::int as shots_hit,
+            coalesce(sum(mp.entry_kills), 0)::int as entry_kills,
+            coalesce(sum(mp.entry_deaths), 0)::int as entry_deaths,
+            coalesce(sum(mp.entry_wins), 0)::int as entry_wins,
+            coalesce(sum(mp.trade_kills), 0)::int as trade_kills,
+            coalesce(sum(mp.traded_deaths), 0)::int as traded_deaths,
+            coalesce(sum(mp.clutch_wins), 0)::int as clutch_wins,
+            coalesce(sum(mp.clutch_attempts), 0)::int as clutch_attempts
+     from match_players mp join matches m on m.id = mp.match_id
+     where mp.steam_id64 = $1${periodo}`,
+    params,
   )
   const a = rows[0]
   return {
@@ -56,13 +74,16 @@ async function statsAgregados(db, steamId) {
   }
 }
 
-async function evolucaoRating(db, steamId, limite = 20) {
+async function evolucaoRating(db, steamId, from, to, limite = 20) {
+  const params = [steamId]
+  const periodo = periodoWhere(from, to, params)
+  params.push(limite)
   const { rows } = await db.query(
     `select m.id, m.played_at, mp.rating
      from match_players mp join matches m on m.id = mp.match_id
-     where mp.steam_id64 = $1 and m.status = 'parsed' and mp.rating is not null
-     order by m.played_at desc nulls last limit $2`,
-    [steamId, limite],
+     where mp.steam_id64 = $1 and m.status = 'parsed' and mp.rating is not null${periodo}
+     order by m.played_at desc nulls last limit $${params.length}`,
+    params,
   )
   return rows
     .map((r) => ({ matchId: r.id, playedAt: r.played_at, rating: Number(r.rating) }))
@@ -77,6 +98,7 @@ export function createProfileRouter({ db, requireAuth }) {
   router.get('/compare', requireAuth, async (req, res) => {
     const a = String(req.query.a ?? '')
     const b = String(req.query.b ?? '')
+    const { from, to } = req.query
     if (!/^\d{17}$/.test(a) || !/^\d{17}$/.test(b) || a === b) {
       return res.status(400).json({ erro: 'Informe dois SteamID64 diferentes (a e b)' })
     }
@@ -88,17 +110,20 @@ export function createProfileRouter({ db, requireAuth }) {
     const jogadorB = playersQ.rows.find((p) => p.steam_id64 === b)
     if (!jogadorA || !jogadorB) return res.status(404).json({ erro: 'Jogador não encontrado' })
 
+    const confrontoParams = [a, b]
+    const confrontoPeriodo = periodoWhere(from, to, confrontoParams)
     const [statsA, statsB, evolA, evolB, confrontoQ] = await Promise.all([
-      statsAgregados(db, a),
-      statsAgregados(db, b),
-      evolucaoRating(db, a),
-      evolucaoRating(db, b),
+      statsAgregados(db, a, from, to),
+      statsAgregados(db, b, from, to),
+      evolucaoRating(db, a, from, to),
+      evolucaoRating(db, b, from, to),
       db.query(
         `select mp_a.team as team_a, mp_b.team as team_b, mp_a.won as a_venceu
          from match_players mp_a
          join match_players mp_b on mp_b.match_id = mp_a.match_id and mp_b.steam_id64 = $2
-         where mp_a.steam_id64 = $1`,
-        [a, b],
+         join matches m on m.id = mp_a.match_id
+         where mp_a.steam_id64 = $1${confrontoPeriodo}`,
+        confrontoParams,
       ),
     ])
 
@@ -122,8 +147,10 @@ export function createProfileRouter({ db, requireAuth }) {
   })
 
   // Perfil do Jogador: stats agregados, por mapa, partidas recentes e Sinergia.
+  // Filtro opcional de período (?from/?to) em tudo menos a Sinergia (view pré-computada).
   router.get('/:steamId', requireAuth, async (req, res) => {
     const { steamId } = req.params
+    const { from, to } = req.query
     const playerQ = await db.query(
       'select steam_id64, nick, avatar_url, is_admin from players where steam_id64 = $1',
       [steamId],
@@ -131,23 +158,28 @@ export function createProfileRouter({ db, requireAuth }) {
     if (playerQ.rows.length === 0) return res.status(404).json({ erro: 'Jogador não encontrado' })
     const jogador = playerQ.rows[0]
 
+    const mapaParams = [steamId]
+    const mapaPeriodo = periodoWhere(from, to, mapaParams)
+    const recentesParams = [steamId]
+    const recentesPeriodo = periodoWhere(from, to, recentesParams)
+
     const [stats, porMapa, recentes, sinergia, evolucao] = await Promise.all([
-      statsAgregados(db, steamId),
+      statsAgregados(db, steamId, from, to),
       db.query(
         `select m.map, count(*)::int as partidas,
                 coalesce(sum(case when mp.won then 1 else 0 end), 0)::int as vitorias,
                 avg(mp.rating) as rating
          from match_players mp join matches m on m.id = mp.match_id
-         where mp.steam_id64 = $1 group by m.map order by partidas desc`,
-        [steamId],
+         where mp.steam_id64 = $1${mapaPeriodo} group by m.map order by partidas desc`,
+        mapaParams,
       ),
       db.query(
         `select m.id, m.map, m.played_at, m.score_a, m.score_b,
                 mp.kills, mp.deaths, mp.rating, mp.won
          from match_players mp join matches m on m.id = mp.match_id
-         where mp.steam_id64 = $1 and m.status = 'parsed'
+         where mp.steam_id64 = $1 and m.status = 'parsed'${recentesPeriodo}
          order by m.played_at desc nulls last limit 20`,
-        [steamId],
+        recentesParams,
       ),
       db.query(
         `select p.steam_id64, p.nick, p.avatar_url, sp.partidas, sp.vitorias
@@ -160,7 +192,7 @@ export function createProfileRouter({ db, requireAuth }) {
          order by sp.partidas desc`,
         [steamId],
       ),
-      evolucaoRating(db, steamId),
+      evolucaoRating(db, steamId, from, to),
     ])
 
     res.json({

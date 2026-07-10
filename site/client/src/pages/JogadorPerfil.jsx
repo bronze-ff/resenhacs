@@ -3,23 +3,29 @@ import { useParams, Link } from 'react-router-dom'
 import { nomeMapa, dataHora, corRating } from '../lib/format.js'
 import StatTile from '../components/StatTile.jsx'
 import LinhaEvolucao from '../components/LinhaEvolucao.jsx'
+import FiltroPeriodo from '../components/FiltroPeriodo.jsx'
 
 export default function JogadorPerfil() {
   const { steamId } = useParams()
   const [data, setData] = useState(null)
   const [erro, setErro] = useState(false)
+  const [de, setDe] = useState('')
+  const [ate, setAte] = useState('')
 
   useEffect(() => {
     setData(null)
     setErro(false)
-    fetch(`/api/profile/${steamId}`)
+    const qs = new URLSearchParams()
+    if (de) qs.set('from', de)
+    if (ate) qs.set('to', ate)
+    fetch(`/api/profile/${steamId}${qs.size ? `?${qs}` : ''}`)
       .then((res) => {
         if (!res.ok) throw new Error()
         return res.json()
       })
       .then(setData)
       .catch(() => setErro(true))
-  }, [steamId])
+  }, [steamId, de, ate])
 
   if (erro) return <p className="font-mono text-sm text-texto-fraco">Jogador não encontrado.</p>
   if (!data) return <p className="font-mono text-sm text-texto-fraco">Carregando…</p>
@@ -40,12 +46,15 @@ export default function JogadorPerfil() {
             <p className="font-mono text-sm text-texto-fraco">{stats.partidas} partidas · {stats.winrate}% de vitória</p>
           </div>
         </div>
-        <Link
-          to={`/comparar?a=${jogador.steamId}`}
-          className="panel-cut-sm border border-borda px-3 py-2 font-mono text-xs uppercase tracking-wide text-texto-fraco transition-colors hover:border-destaque/60 hover:text-destaque"
-        >
-          Comparar com…
-        </Link>
+        <div className="flex items-center gap-4">
+          <FiltroPeriodo de={de} ate={ate} onDe={setDe} onAte={setAte} />
+          <Link
+            to={`/comparar?a=${jogador.steamId}`}
+            className="panel-cut-sm border border-borda px-3 py-2 font-mono text-xs uppercase tracking-wide text-texto-fraco transition-colors hover:border-destaque/60 hover:text-destaque"
+          >
+            Comparar com…
+          </Link>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
