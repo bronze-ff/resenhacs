@@ -22,6 +22,7 @@ export default function Shell({ children }) {
         <nav className="space-y-1">
           <NavLink to="/" end className={itemClasse}>Partidas</NavLink>
           <NavLink to="/ranking" className={itemClasse}>Ranking</NavLink>
+          <NavLink to="/enviar-demo" className={itemClasse}>Enviar demo</NavLink>
           <NavLink to="/jogadores" className={itemClasse}>Jogadores</NavLink>
           <NavLink to="/perfil" className={itemClasse}>Meu perfil</NavLink>
           {jogador?.isAdmin && <NavLink to="/admin" className={itemClasse}>Admin</NavLink>}

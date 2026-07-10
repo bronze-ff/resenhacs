@@ -7,9 +7,10 @@ import { createMatchesRouter } from './routes/matches.js'
 import { createProfileRouter } from './routes/profile.js'
 import { createClipsRouter } from './routes/clips.js'
 import { createRankingRouter } from './routes/ranking.js'
+import { createUploadRouter } from './routes/upload.js'
 import { createRequireAuth } from './auth/middleware.js'
 
-export function createApp({ config, db, verifySteamLogin, fetchPersona, staticDir } = {}) {
+export function createApp({ config, db, verifySteamLogin, fetchPersona, staticDir, execFileImpl } = {}) {
   const app = express()
   app.use(express.json())
   app.use(cookieParser())
@@ -23,6 +24,21 @@ export function createApp({ config, db, verifySteamLogin, fetchPersona, staticDi
   app.use('/api/profile', createProfileRouter({ db, requireAuth }))
   app.use('/api/clips', createClipsRouter({ db, requireAuth }))
   app.use('/api/ranking', createRankingRouter({ db, requireAuth }))
+
+  // Upload manual via web só existe quando o Coletor Python está no mesmo host
+  // (dev/self-hosted). Na Vercel (serverless) config.coletorDir/pythonBin ficam
+  // indefinidos e a rota nem é montada — evita um 500 confuso em produção.
+  if (config.coletorDir && config.pythonBin) {
+    app.use(
+      '/api/upload',
+      createUploadRouter({
+        requireAuth,
+        coletorDir: config.coletorDir,
+        pythonBin: config.pythonBin,
+        ...(execFileImpl ? { execFileImpl } : {}),
+      }),
+    )
+  }
 
   if (staticDir) {
     app.use(express.static(staticDir))
