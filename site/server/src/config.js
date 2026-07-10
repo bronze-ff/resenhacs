@@ -16,5 +16,13 @@ export function loadConfig(env = process.env) {
     // a rota fica desligada (não há Python nem filesystem persistente na função).
     coletorDir: env.COLETOR_DIR ?? null,
     pythonBin: env.COLETOR_PYTHON ?? null,
+    // R2 (Cloudflare) — o bucket é PRIVADO de propósito (replays/demos têm dados
+    // reais dos 10 participantes de cada Partida, incluindo randoms não whitelistados
+    // que nunca consentiram ficar públicos). O server faz proxy autenticado; nunca
+    // expor a URL bruta do R2 pro client.
+    r2AccountId: env.R2_ACCOUNT_ID ?? null,
+    r2AccessKeyId: env.R2_ACCESS_KEY_ID ?? null,
+    r2SecretAccessKey: env.R2_SECRET_ACCESS_KEY ?? null,
+    r2Bucket: env.R2_BUCKET ?? null,
   }
 }

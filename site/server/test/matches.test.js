@@ -1,14 +1,15 @@
 import { describe, it, expect, vi } from 'vitest'
+import { Readable } from 'node:stream'
 import request from 'supertest'
 import { createApp } from '../src/app.js'
 import { signToken } from '../src/auth/jwt.js'
 import { detectProvider } from '../src/routes/clips.js'
 
-const config = { jwtSecret: 's', appUrl: 'http://localhost:5173', isProduction: false }
+const config = { jwtSecret: 's', appUrl: 'http://localhost:5173', isProduction: false, r2Bucket: 'resenha-demos' }
 const cookie = `resenha_token=${signToken({ steamId: '76561198000000009', isAdmin: false }, config.jwtSecret)}`
 
 // Roteia por SQL para simular as várias queries de cada handler.
-function appWith(handlers) {
+function appWith(handlers, extra = {}) {
   const db = {
     query: vi.fn().mockImplementation((sql) => {
       for (const [needle, rows] of handlers) {
@@ -17,7 +18,7 @@ function appWith(handlers) {
       return Promise.resolve({ rows: [] })
     }),
   }
-  return { app: createApp({ config, db }), db }
+  return { app: createApp({ config, db, ...extra }), db }
 }
 
 describe('GET /api/matches', () => {
@@ -57,6 +58,59 @@ describe('GET /api/matches/:id', () => {
     expect(res.body.rounds[0]).toMatchObject({ roundNumber: 1, winnerTeam: 'A' })
     expect(res.body.highlights[0]).toMatchObject({ kind: 'ace', nick: 'fih' })
     expect(res.body.clips[0]).toMatchObject({ provider: 'allstar', url: 'https://allstar.gg/x' })
+    expect(res.body.demoUrl).toBeNull() // sem demo_url no fixture
+  })
+
+  it('replayUrl aponta pro proxy do servidor, nunca pra URL crua do R2', async () => {
+    const { app } = appWith([
+      ['from matches where id', [{
+        id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9,
+        source: 'valve_mm', status: 'parsed',
+        demo_url: 'https://acc.r2.cloudflarestorage.com/resenha-demos/demos/1.dem.bz2',
+        replay_url: 'https://acc.r2.cloudflarestorage.com/resenha-demos/replays/1.json',
+      }]],
+    ])
+    const res = await request(app).get('/api/matches/m1').set('Cookie', cookie)
+    expect(res.body.demoUrl).toBe('/api/matches/m1/demo')
+    expect(res.body.replayUrl).toBe('/api/matches/m1/replay')
+    expect(res.body.replayUrl).not.toContain('r2.cloudflarestorage.com')
+  })
+})
+
+describe('GET /api/matches/:id/replay', () => {
+  it('sem login: 401', async () => {
+    const { app } = appWith([])
+    expect((await request(app).get('/api/matches/m1/replay')).status).toBe(401)
+  })
+
+  it('R2 não configurado: 503', async () => {
+    const { app } = appWith([], { r2Client: null })
+    const res = await request(app).get('/api/matches/m1/replay').set('Cookie', cookie)
+    expect(res.status).toBe(503)
+  })
+
+  it('partida sem replay: 404', async () => {
+    const fakeR2 = { send: vi.fn() }
+    const { app } = appWith([['select replay_url', [{ replay_url: null }]]], { r2Client: fakeR2 })
+    const res = await request(app).get('/api/matches/m1/replay').set('Cookie', cookie)
+    expect(res.status).toBe(404)
+    expect(fakeR2.send).not.toHaveBeenCalled()
+  })
+
+  it('faz proxy autenticado do objeto no R2 (nunca expõe a URL crua)', async () => {
+    const corpo = Readable.from([Buffer.from('{"map":"de_anubis"}')])
+    const fakeR2 = {
+      send: vi.fn().mockResolvedValue({ ContentType: 'application/json', Body: corpo }),
+    }
+    const { app } = appWith(
+      [['select replay_url', [{ replay_url: 'https://acc.r2.cloudflarestorage.com/resenha-demos/replays/701c.json' }]]],
+      { r2Client: fakeR2 },
+    )
+    const res = await request(app).get('/api/matches/701c/replay').set('Cookie', cookie)
+    expect(res.status).toBe(200)
+    expect(res.text).toBe('{"map":"de_anubis"}')
+    const cmd = fakeR2.send.mock.calls[0][0]
+    expect(cmd.input).toMatchObject({ Bucket: 'resenha-demos', Key: 'replays/701c.json' })
   })
 })
 

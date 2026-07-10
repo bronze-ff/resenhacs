@@ -1,6 +1,7 @@
 import { Router } from 'express'
+import { keyFromR2Url, streamObject } from '../r2.js'
 
-export function createMatchesRouter({ db, requireAuth }) {
+export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket }) {
   const router = Router()
 
   // Feed: Partidas parseadas, com os Jogadores do grupo que jogaram cada uma.
@@ -73,8 +74,11 @@ export function createMatchesRouter({ db, requireAuth }) {
       scoreB: m.score_b,
       source: m.source,
       status: m.status,
-      demoUrl: m.demo_url,
-      replayUrl: m.replay_url,
+      // O R2 é privado de propósito (dados reais dos participantes) — nunca expor a
+      // URL bruta do bucket. O client busca via esses paths, autenticados e
+      // proxiados pelo próprio servidor (ver rotas /:id/demo e /:id/replay abaixo).
+      demoUrl: m.demo_url ? `/api/matches/${m.id}/demo` : null,
+      replayUrl: m.replay_url ? `/api/matches/${m.id}/replay` : null,
       players: players.rows.map((p) => ({
         steamId: p.steam_id64,
         nick: p.nick,
@@ -111,6 +115,32 @@ export function createMatchesRouter({ db, requireAuth }) {
         highlightId: c.highlight_id,
       })),
     })
+  })
+
+  // Proxy autenticado pro replay 2D — nunca expõe a URL/credenciais do R2 ao client.
+  router.get('/:id/replay', requireAuth, async (req, res) => {
+    if (!r2Client) return res.status(503).json({ erro: 'Arquivamento (R2) não configurado' })
+    const { rows } = await db.query('select replay_url from matches where id = $1', [req.params.id])
+    const key = keyFromR2Url(rows[0]?.replay_url, r2Bucket)
+    if (!key) return res.status(404).json({ erro: 'Replay não disponível' })
+    try {
+      await streamObject(r2Client, r2Bucket, key, res)
+    } catch {
+      res.status(502).json({ erro: 'Falha ao buscar o replay no R2' })
+    }
+  })
+
+  // Idem para o .dem bruto (arquivado por completude — ADR-0002 — não usado pela UI ainda).
+  router.get('/:id/demo', requireAuth, async (req, res) => {
+    if (!r2Client) return res.status(503).json({ erro: 'Arquivamento (R2) não configurado' })
+    const { rows } = await db.query('select demo_url from matches where id = $1', [req.params.id])
+    const key = keyFromR2Url(rows[0]?.demo_url, r2Bucket)
+    if (!key) return res.status(404).json({ erro: 'Demo não disponível' })
+    try {
+      await streamObject(r2Client, r2Bucket, key, res)
+    } catch {
+      res.status(502).json({ erro: 'Falha ao buscar o demo no R2' })
+    }
   })
 
   return router

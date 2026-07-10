@@ -9,8 +9,9 @@ import { createClipsRouter } from './routes/clips.js'
 import { createRankingRouter } from './routes/ranking.js'
 import { createUploadRouter } from './routes/upload.js'
 import { createRequireAuth } from './auth/middleware.js'
+import { createR2Client } from './r2.js'
 
-export function createApp({ config, db, verifySteamLogin, fetchPersona, staticDir, execFileImpl } = {}) {
+export function createApp({ config, db, verifySteamLogin, fetchPersona, staticDir, execFileImpl, r2Client: r2ClientOverride } = {}) {
   const app = express()
   app.use(express.json())
   app.use(cookieParser())
@@ -18,9 +19,10 @@ export function createApp({ config, db, verifySteamLogin, fetchPersona, staticDi
   app.get('/api/health', (req, res) => res.json({ ok: true }))
 
   const requireAuth = createRequireAuth(config.jwtSecret)
+  const r2Client = r2ClientOverride !== undefined ? r2ClientOverride : createR2Client(config)
   app.use('/api/auth', createAuthRouter({ config, db, verifySteamLogin, fetchPersona, requireAuth }))
   app.use('/api/players', createPlayersRouter({ db, requireAuth }))
-  app.use('/api/matches', createMatchesRouter({ db, requireAuth }))
+  app.use('/api/matches', createMatchesRouter({ db, requireAuth, r2Client, r2Bucket: config.r2Bucket }))
   app.use('/api/profile', createProfileRouter({ db, requireAuth }))
   app.use('/api/clips', createClipsRouter({ db, requireAuth }))
   app.use('/api/ranking', createRankingRouter({ db, requireAuth }))
