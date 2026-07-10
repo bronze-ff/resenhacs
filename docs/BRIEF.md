@@ -59,7 +59,7 @@ Cada fase entregue com testes e commit próprio (67 testes ao todo: 43 server, 5
 - **`played_at` real** da Partida (proxy: mtime do arquivo — o formato .dem não guarda data)
 - **Promover Participante a Jogador** com 1 clique na tela da Partida (admin), com backfill retroativo de `is_tracked`
 - **Ranking interno do grupo** (`/ranking`): winrate, K/D, HS%, rating, ACEs, clutches, destaques do top 3
-- **Deploy na Vercel preparado** (server como função serverless, `site/server/api/[...path].js`)
+- **Deploy na Vercel preparado** (server como função serverless única, `site/server/api/index.js`, com rewrite `/(.*)` → `/api`)
 
 ## Roadmap pós-v1 (ordem acordada)
 

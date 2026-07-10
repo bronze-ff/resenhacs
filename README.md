@@ -40,7 +40,7 @@ como a Vercel roda em funções serverless, cada um vira um **projeto Vercel sep
 com o client fazendo proxy de `/api/*` pro domínio da API (mantém tudo same-origin,
 então o cookie de sessão funciona sem CORS).
 
-**Projeto 1 — API** (`site/server/api/[...path].js` é o entrypoint serverless):
+**Projeto 1 — API** (`site/server/api/index.js` é o entrypoint serverless; o `vercel.json` já faz o rewrite `/(.*)` → `/api`):
 1. Importar do GitHub → Root Directory: `site/server`
 2. Environment Variables (Settings → Environment Variables): `DATABASE_URL` (use o
    **Transaction Pooler** do Supabase, porta 6543 — é o recomendado pra serverless,

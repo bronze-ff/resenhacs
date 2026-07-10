@@ -1,7 +1,9 @@
-// Ponto de entrada da API na Vercel (Root Directory do projeto = site/server).
-// O nome [...path].js é o catch-all da Vercel: qualquer request sob /api/* cai aqui,
-// e a Vercel preserva o req.url original — o Express interno (que já espera rotas
-// prefixadas com /api/...) recebe o path real e roteia normalmente.
+// Ponto de entrada único da API na Vercel (Root Directory do projeto = site/server).
+// Todo o tráfego é roteado pra cá pelo rewrite "/(.*)" → "/api" no vercel.json; a Vercel
+// preserva o req.url original, então o Express interno (que já espera rotas prefixadas
+// com /api/...) recebe o path real e roteia normalmente. Esse padrão (função única +
+// rewrite) é o jeito canônico de rodar Express na Vercel — não depende da detecção de
+// framework nem do catch-all [...path] do sistema de arquivos, que se mostrou não-confiável.
 //
 // Config/db/app são criados uma vez por módulo: em invocações "quentes" da mesma
 // instância da função, o pool de conexões (pg.Pool) é reaproveitado em vez de recriado
