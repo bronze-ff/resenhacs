@@ -33,18 +33,16 @@ def world_to_radar(x, y, cal, size=RADAR_SIZE):
     return (round(_clamp01(px / size), 4), round(_clamp01(py / size), 4))
 
 
-def build_replay(map_name, ticks, target_hz=8, demo_tick_rate=64):
-    """Monta o replay JSON. `ticks` = lista de {round, tick, players:[{id,x,y,yaw,hp,team,alive}]}.
+def build_replay(map_name, ticks, target_hz=8):
+    """Monta o replay JSON. `ticks` = lista (ordenada no tempo) de
+    {round, tick, players:[{id,x,y,yaw,hp,team,alive}]} — já no ritmo de target_hz
+    (o downsample é feito no extract_ticks, ao pedir só os ticks-alvo ao demoparser2).
 
-    Faz downsample de demo_tick_rate para ~target_hz mantendo 1 a cada `passo` ticks.
+    Normaliza mundo→radar e reindexa os frames em sequência (0,1,2,...) por round.
     """
     cal = MAP_CALIBRATION.get(map_name)
-    passo = max(1, round(demo_tick_rate / target_hz))
-
     por_round = {}
     for t in ticks:
-        if (t["tick"] // passo) * passo != t["tick"]:
-            continue  # mantém só ticks múltiplos do passo (downsample determinístico)
         players = []
         for p in t["players"]:
             if cal:
@@ -62,7 +60,8 @@ def build_replay(map_name, ticks, target_hz=8, demo_tick_rate=64):
                     "alive": bool(p.get("alive", True)),
                 }
             )
-        por_round.setdefault(t["round"], []).append({"t": t["tick"] // passo, "players": players})
+        frames = por_round.setdefault(t["round"], [])
+        frames.append({"t": len(frames), "players": players})
 
     return {
         "map": map_name,

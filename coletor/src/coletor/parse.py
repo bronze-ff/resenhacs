@@ -1,94 +1,188 @@
 """Extração do .dem (demoparser2) → ParsedDemo (a IR que transform.py consome).
 
-demoparser2 é um pacote nativo (Rust) importado só aqui, dentro da função, para que
-os testes das transformações rodem sem ele. Esta função em si só é validável contra
-um .dem real — mantê-la fina, delegando toda a lógica calculável para transform.py.
+Validado contra um demo real de matchmaking (de_anubis). demoparser2 é nativo (Rust),
+importado só aqui para os testes das transformações rodarem sem ele.
+
+Descobertas da API (CS2 / valve_demo_2):
+- round vem de `total_rounds_played` (0-based) passado em `other=`; não há evento round_end.
+- dano = soma de `player_hurt.dmg_health` por atacante.
+- assist = `player_death.assister_steamid`.
+- placar = `team_rounds_total` (prop por jogador) lido no fim da partida.
+- time fixo A/B: `team_num` no 1º `round_freeze_end` (2=TR→A, 3=CT→B); estável apesar
+  da troca de lados no intervalo.
+- warmup: filtra deaths por `is_warmup_period==False` e hurt por tick >= 1º freeze_end.
 """
 
 
 def _team_letter(team_number):
-    # No CS2: 2 = TERRORIST, 3 = CT. Mapeamos os dois lados fixos da Partida em A/B.
     return "A" if team_number == 2 else "B"
 
 
+def _sid(v):
+    import pandas as pd
+
+    if v is None or (isinstance(v, float) and pd.isna(v)) or v == "":
+        return None
+    return str(int(v)) if isinstance(v, (int, float)) else str(v)
+
+
 def parse_demo(path):
-    from demoparser2 import DemoParser  # import isolado: só runtime precisa
+    import pandas as pd
+    from demoparser2 import DemoParser
 
     parser = DemoParser(str(path))
+    mapa = parser.parse_header().get("map_name")
 
-    header = parser.parse_header()
-    mapa = header.get("map_name")
+    deaths = parser.parse_event("player_death", other=["total_rounds_played", "is_warmup_period"])
+    deaths = deaths[deaths["is_warmup_period"] == False]  # noqa: E712
 
-    deaths = parser.parse_event("player_death")
-    kills = []
-    for _, row in deaths.iterrows():
-        atacante = row.get("attacker_steamid")
+    freeze = parser.parse_event("round_freeze_end", other=["total_rounds_played"])
+    first_freeze = int(freeze["tick"].min())
+
+    hurt = parser.parse_event("player_hurt", other=["total_rounds_played"])
+    hurt = hurt[hurt["tick"] >= first_freeze]
+
+    win_panel = parser.parse_event("cs_win_panel_match")
+    end_tick = (
+        int(win_panel["tick"].iloc[0]) - 100 if len(win_panel) else int(deaths["tick"].max())
+    )
+
+    # Times fixos A/B pelo primeiro freeze_end.
+    snap0 = parser.parse_ticks(["team_num"], ticks=[first_freeze])
+    fixed = {_sid(r["steamid"]): _team_letter(int(r["team_num"])) for r in snap0.to_dict("records")}
+
+    # Placar final: team_rounds_total de cada time no fim.
+    snapf = parser.parse_ticks(["team_num", "team_rounds_total"], ticks=[end_tick])
+    score = {"A": 0, "B": 0}
+    for r in snapf.to_dict("records"):
+        ft = fixed.get(_sid(r["steamid"]))
+        if ft:
+            score[ft] = int(r["team_rounds_total"])
+
+    # Kills (para K/D via transform e highlights) + nomes + assists.
+    kills, names, assists = [], {}, {}
+    for r in deaths.to_dict("records"):
+        atk, vic, ast = _sid(r.get("attacker_steamid")), _sid(r.get("user_steamid")), _sid(r.get("assister_steamid"))
         kills.append(
             {
-                "round_number": int(row.get("round") or 0),
-                "attacker": str(atacante) if atacante else None,
-                "victim": str(row.get("user_steamid")) if row.get("user_steamid") else None,
-                "headshot": bool(row.get("headshot")),
+                "round_number": int(r["total_rounds_played"]) + 1,
+                "attacker": atk,
+                "victim": vic,
+                "headshot": bool(r["headshot"]),
             }
         )
+        if atk:
+            names[atk] = r.get("attacker_name") or ""
+        if vic:
+            names[vic] = r.get("user_name") or ""
+        if ast:
+            assists[ast] = assists.get(ast, 0) + 1
 
-    # Placar e times finais por jogador
-    jogadores = parser.parse_ticks(["team_num", "player_name"], ticks=[parser.parse_header().get("playback_ticks", 0)])
-    players = []
-    for _, row in jogadores.iterrows():
-        sid = row.get("steamid")
-        if not sid:
-            continue
-        players.append(
-            {
-                "steam_id64": str(sid),
-                "nick": row.get("player_name") or "",
-                "team": _team_letter(int(row.get("team_num") or 0)),
-                "kills": 0,
-                "deaths": 0,
-                "assists": 0,
-                "headshot_kills": 0,
-                "damage": 0,
-            }
-        )
+    # Dano por atacante.
+    damage = {}
+    for r in hurt.to_dict("records"):
+        atk = _sid(r.get("attacker_steamid"))
+        if atk:
+            damage[atk] = damage.get(atk, 0) + int(r["dmg_health"])
 
-    parsed = {
+    players = [
+        {
+            "steam_id64": sid,
+            "nick": names.get(sid, ""),
+            "team": ft,
+            "kills": 0,
+            "deaths": 0,
+            "assists": assists.get(sid, 0),
+            "headshot_kills": 0,
+            "damage": damage.get(sid, 0),
+        }
+        for sid, ft in fixed.items()
+        if sid
+    ]
+
+    # Rounds: vencedor por delta de team_rounds_total nos ticks de fim de round.
+    rounds = []
+    ended = parser.parse_event("round_officially_ended", other=["total_rounds_played"])
+    end_ticks = sorted({int(t) for t in ended["tick"].tolist()})
+    if end_ticks:
+        snaps = parser.parse_ticks(["team_rounds_total"], ticks=end_ticks)
+        by_tick = {}
+        for r in snaps.to_dict("records"):
+            ft = fixed.get(_sid(r["steamid"]))
+            if ft:
+                by_tick.setdefault(int(r["tick"]), {})[ft] = int(r["team_rounds_total"])
+        prev = {"A": 0, "B": 0}
+        for i, t in enumerate(end_ticks):
+            cur = by_tick.get(t, prev)
+            if cur.get("A", 0) > prev["A"]:
+                winner = "A"
+            elif cur.get("B", 0) > prev["B"]:
+                winner = "B"
+            else:
+                winner = None
+            rounds.append({"round_number": i + 1, "winner_team": winner, "win_reason": ""})
+            prev = {"A": cur.get("A", prev["A"]), "B": cur.get("B", prev["B"])}
+
+    return {
         "map": mapa,
-        "score_a": 0,
-        "score_b": 0,
-        "rounds": [],
+        "score_a": score["A"],
+        "score_b": score["B"],
+        "rounds": rounds,
         "players": players,
         "kills": kills,
     }
-    return parsed
 
 
-def extract_ticks(path):
-    """Extrai posições por tick para o Replay 2D (Fase 4). Só validável contra um .dem real.
+def extract_ticks(path, target_hz=8, demo_tick_rate=64):
+    """Posições por tick para o Replay 2D, já com downsample no parse (evita 1M+ linhas).
 
-    Devolve a lista de {round, tick, players:[{id,x,y,yaw,hp,team,alive}]} que
-    replay.build_replay() consome. A normalização mundo→radar fica em replay.py.
+    Devolve [{round, tick, players:[{id,x,y,yaw,hp,team,alive}]}] que replay.build_replay
+    consome. Segmenta por round usando os freeze_end. Só validável contra um .dem real.
     """
     from demoparser2 import DemoParser
 
     parser = DemoParser(str(path))
-    df = parser.parse_ticks(["X", "Y", "yaw", "health", "team_num", "is_alive"])
-    ticks = {}
-    for _, row in df.iterrows():
-        sid = row.get("steamid")
+    freeze = parser.parse_event("round_freeze_end", other=["total_rounds_played"])
+    ended = parser.parse_event("round_officially_ended", other=["total_rounds_played"])
+    inicios = sorted({int(t) for t in freeze["tick"].tolist()})
+    fins = sorted({int(t) for t in ended["tick"].tolist()})  # dedupe: há 2 linhas por round
+
+    passo = max(1, round(demo_tick_rate / target_hz))
+    alvo = []
+    limites = []
+    for i, ini in enumerate(inicios):
+        fim = fins[i] if i < len(fins) else ini + 64 * 115
+        limites.append((i + 1, ini, fim))
+        for t in range(ini, fim, passo):
+            alvo.append(t)
+    if not alvo:
+        return []
+
+    df = parser.parse_ticks(["X", "Y", "yaw", "health", "team_num", "is_alive"], ticks=alvo)
+    por_tick = {}
+    for r in df.to_dict("records"):
+        sid = _sid(r.get("steamid"))
         if not sid:
             continue
-        chave = int(row.get("round") or 0), int(row.get("tick") or 0)
-        ticks.setdefault(chave, {"round": chave[0], "tick": chave[1], "players": []})
-        ticks[chave]["players"].append(
+        por_tick.setdefault(int(r["tick"]), []).append(
             {
-                "id": str(sid),
-                "x": float(row.get("X") or 0),
-                "y": float(row.get("Y") or 0),
-                "yaw": float(row.get("yaw") or 0),
-                "hp": int(row.get("health") or 0),
-                "team": _team_letter(int(row.get("team_num") or 0)),
-                "alive": bool(row.get("is_alive")),
+                "id": sid,
+                "x": float(r.get("X") or 0),
+                "y": float(r.get("Y") or 0),
+                "yaw": float(r.get("yaw") or 0),
+                "hp": int(r.get("health") or 0),
+                "team": _team_letter(int(r.get("team_num") or 0)),
+                "alive": bool(r.get("is_alive")),
             }
         )
-    return [ticks[k] for k in sorted(ticks)]
+
+    def round_do_tick(t):
+        for rnd, ini, fim in limites:
+            if ini <= t <= fim:
+                return rnd
+        return limites[-1][0]
+
+    saida = []
+    for t in sorted(por_tick):
+        saida.append({"round": round_do_tick(t), "tick": t, "players": por_tick[t]})
+    return saida

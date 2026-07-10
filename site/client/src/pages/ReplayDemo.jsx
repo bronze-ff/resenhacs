@@ -15,10 +15,11 @@ export default function ReplayDemo() {
 
   return (
     <div className="mx-auto max-w-2xl p-6">
-      <h1 className="mb-2 text-2xl font-bold text-destaque">Replay 2D — demo</h1>
+      <h1 className="mb-2 text-2xl font-bold text-destaque">Replay 2D — partida real</h1>
       <p className="mb-4 text-sm text-texto-fraco">
-        Dados sintéticos (10 bolinhas em de_mirage, 2 rounds) só para mostrar a engine.
-        Coloque os PNGs de radar em <code>public/radars/</code> para o fundo real.
+        Posições reais de uma partida de vocês (de_anubis, 1º round), extraídas do demo
+        pelo Coletor. Coloque <code>de_anubis.png</code> em <code>public/radars/</code> para
+        o fundo do mapa aparecer alinhado.
       </p>
       {replay ? <ReplayViewer replay={replay} /> : <p className="text-texto-fraco">Carregando…</p>}
     </div>

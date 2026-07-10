@@ -33,7 +33,7 @@ def _ticks():
 
 
 def test_build_replay_downsample_e_estrutura():
-    r = replay.build_replay("de_mirage", _ticks(), target_hz=8, demo_tick_rate=64)
+    r = replay.build_replay("de_mirage", _ticks(), target_hz=8)
     assert r["map"] == "de_mirage"
     assert r["calibrated"] is True
     assert len(r["rounds"]) == 1

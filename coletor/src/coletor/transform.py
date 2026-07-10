@@ -99,7 +99,8 @@ def hltv_rating(kills, deaths, rounds, k):
 
 def enrich(parsed):
     """Preenche won, rounds_played e rating em cada player; devolve o ParsedDemo pronto pro banco."""
-    rounds_total = len(parsed["rounds"]) or (parsed.get("score_a", 0) + parsed.get("score_b", 0))
+    # Total de rounds = soma do placar (autoritativo); cai para len(rounds) se não houver placar.
+    rounds_total = (parsed.get("score_a", 0) + parsed.get("score_b", 0)) or len(parsed["rounds"])
     vencedor = "A" if parsed.get("score_a", 0) > parsed.get("score_b", 0) else "B"
     kpr = kills_por_round_por_jogador(parsed.get("kills", []))
 
