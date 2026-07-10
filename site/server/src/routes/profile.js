@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import { calcularEstilos, calcularBadges, melhorSequenciaDeVitorias } from '../analise.js'
 
 function pct(parte, total) {
   if (!total) return 0
@@ -42,7 +43,9 @@ async function statsAgregados(db, steamId, from, to) {
             coalesce(sum(mp.trade_kills), 0)::int as trade_kills,
             coalesce(sum(mp.traded_deaths), 0)::int as traded_deaths,
             coalesce(sum(mp.clutch_wins), 0)::int as clutch_wins,
-            coalesce(sum(mp.clutch_attempts), 0)::int as clutch_attempts
+            coalesce(sum(mp.clutch_attempts), 0)::int as clutch_attempts,
+            coalesce((select count(*) from highlights h join matches mh on mh.id = h.match_id
+                      where h.steam_id64 = $1 and h.kind = 'ace'${periodo.replaceAll('m.', 'mh.')}), 0)::int as aces
      from match_players mp join matches m on m.id = mp.match_id
      where mp.steam_id64 = $1${periodo}`,
     params,
@@ -73,7 +76,51 @@ async function statsAgregados(db, steamId, from, to) {
     clutchWins: a.clutch_wins,
     clutchAttempts: a.clutch_attempts,
     clutchPct: pct(a.clutch_wins, a.clutch_attempts),
+    aces: a.aces,
   }
+}
+
+// Melhor sequência de vitórias consecutivas, sempre no histórico INTEIRO (badge de
+// conquista não deve sumir/reaparecer conforme o filtro de período da tela).
+async function melhorSequencia(db, steamId) {
+  const { rows } = await db.query(
+    `select mp.won from match_players mp join matches m on m.id = mp.match_id
+     where mp.steam_id64 = $1 and m.status = 'parsed' order by m.played_at asc nulls first`,
+    [steamId],
+  )
+  return melhorSequenciaDeVitorias(rows.map((r) => r.won))
+}
+
+// Estilo de jogo do steamId, relativo à média do GRUPO todo (mesmo período da tela).
+async function estiloDoJogador(db, steamId, from, to) {
+  const params = []
+  const periodo = periodoWhere(from, to, params)
+  const { rows } = await db.query(
+    `select mp.steam_id64,
+            count(*)::int as partidas,
+            coalesce(sum(mp.entry_kills), 0)::int as entry_kills,
+            coalesce(sum(mp.entry_deaths), 0)::int as entry_deaths,
+            coalesce(sum(mp.utility_damage), 0)::int as utility_damage,
+            coalesce(sum(mp.rounds_played), 0)::int as rounds,
+            coalesce(sum(mp.clutch_wins), 0)::int as clutch_wins,
+            coalesce(sum(mp.clutch_attempts), 0)::int as clutch_attempts,
+            coalesce(sum(mp.shots_fired), 0)::int as shots_fired,
+            coalesce(sum(mp.shots_hit), 0)::int as shots_hit
+     from match_players mp join matches m on m.id = mp.match_id
+     where true${periodo}
+     group by mp.steam_id64`,
+    params,
+  )
+  const entrada = rows.map((r) => ({
+    steamId: r.steam_id64,
+    partidas: r.partidas,
+    entryRate: r.partidas ? (r.entry_kills + r.entry_deaths) / r.partidas : 0,
+    utilityPerRound: r.rounds ? r.utility_damage / r.rounds : 0,
+    clutchPct: pct(r.clutch_wins, r.clutch_attempts),
+    clutchAttempts: r.clutch_attempts,
+    accuracy: pct(r.shots_hit, r.shots_fired),
+  }))
+  return calcularEstilos(entrada)[steamId] ?? null
 }
 
 async function evolucaoRating(db, steamId, from, to, limite = 20) {
@@ -165,7 +212,7 @@ export function createProfileRouter({ db, requireAuth }) {
     const recentesParams = [steamId]
     const recentesPeriodo = periodoWhere(from, to, recentesParams)
 
-    const [stats, porMapa, recentes, sinergia, evolucao] = await Promise.all([
+    const [stats, porMapa, recentes, sinergia, evolucao, statsGerais, sequencia, estilo] = await Promise.all([
       statsAgregados(db, steamId, from, to),
       db.query(
         `select m.map, count(*)::int as partidas,
@@ -195,12 +242,27 @@ export function createProfileRouter({ db, requireAuth }) {
         [steamId],
       ),
       evolucaoRating(db, steamId, from, to),
+      // Badges são conquista de carreira — sempre no histórico INTEIRO, não no período filtrado.
+      statsAgregados(db, steamId),
+      melhorSequencia(db, steamId),
+      estiloDoJogador(db, steamId, from, to),
     ])
+
+    const badges = calcularBadges({
+      aces: statsGerais.aces,
+      clutchWins: statsGerais.clutchWins,
+      melhorSequencia: sequencia,
+      accuracy: statsGerais.accuracy,
+      entryKills: statsGerais.entryKills,
+      partidas: statsGerais.partidas,
+    })
 
     res.json({
       jogador: { steamId: jogador.steam_id64, nick: jogador.nick, avatarUrl: jogador.avatar_url },
       stats,
       evolucao,
+      badges,
+      estilo,
       porMapa: porMapa.rows.map((r) => ({
         map: r.map,
         partidas: r.partidas,

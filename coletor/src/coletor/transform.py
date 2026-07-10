@@ -171,8 +171,10 @@ def clutch_outcomes(kills, teams, winner_by_round):
             alive.discard(k["victim"])
             a = [s for s in alive if teams.get(s) == "A"]
             b = [s for s in alive if teams.get(s) == "B"]
+            # >= 1 (não >= 2): 1vX É clutch pra convenção padrão (HLTV/Leetify contam
+            # 1v1 como categoria própria) — excluir 1v1 aqui era undercounting real.
             for lado, outro in ((a, b), (b, a)):
-                if len(lado) == 1 and len(outro) >= 2 and inicio is None:
+                if len(lado) == 1 and len(outro) >= 1 and inicio is None:
                     inicio = {"steamid": lado[0], "vs": len(outro), "tick": k["tick"], "time": teams.get(lado[0])}
         if not inicio:
             continue

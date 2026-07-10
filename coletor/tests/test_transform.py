@@ -113,6 +113,19 @@ def test_clutch_outcomes_detecta_vitoria_e_derrota():
     assert out2 == [{"steam_id64": "A", "round_number": 2, "vs": 2, "venceu": False}]
 
 
+def test_clutch_outcomes_conta_1v1():
+    # Bug real (2026-07-10, achado pelo usuário comparando de cabeça x sistema):
+    # exigia vs>=2, então 1v1 nunca virava clutch — undercounting real (HLTV/Leetify
+    # contam 1v1 como categoria própria de clutch).
+    teams = {"A": "A", "B": "A", "C": "B"}  # o outro jogador do time B já saiu antes deste trecho
+    kills = [
+        {"round_number": 1, "tick": 10, "attacker": "C", "victim": "B", "headshot": False, "team_kill": False},  # A fica sozinho: 1v1 contra C
+        {"round_number": 1, "tick": 20, "attacker": "A", "victim": "C", "headshot": False, "team_kill": False},  # A fecha o 1v1
+    ]
+    out = transform.clutch_outcomes(kills, teams, {1: "A"})
+    assert out == [{"steam_id64": "A", "round_number": 1, "vs": 1, "venceu": True}]
+
+
 def test_hltv_rating_arredonda_e_zera_sem_rounds():
     assert transform.hltv_rating(20, 15, 0, {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}) == 0.0
     r = transform.hltv_rating(20, 10, 22, {1: 8, 2: 4, 3: 1, 4: 0, 5: 0})

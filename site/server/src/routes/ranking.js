@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import { calcularEstilos } from '../analise.js'
 
 function pct(parte, total) {
   if (!total) return 0
@@ -34,7 +35,13 @@ export function createRankingRouter({ db, requireAuth }) {
                         join matches m on m.id = h.match_id
                         where h.steam_id64 = p.steam_id64 and h.kind = 'ace'${periodo}), 0)::int as aces,
               coalesce(sum(mp.clutch_wins), 0)::int as clutch_wins,
-              coalesce(sum(mp.clutch_attempts), 0)::int as clutch_attempts
+              coalesce(sum(mp.clutch_attempts), 0)::int as clutch_attempts,
+              coalesce(sum(mp.entry_kills), 0)::int as entry_kills,
+              coalesce(sum(mp.entry_deaths), 0)::int as entry_deaths,
+              coalesce(sum(mp.utility_damage), 0)::int as utility_damage,
+              coalesce(sum(mp.rounds_played), 0)::int as rounds,
+              coalesce(sum(mp.shots_fired), 0)::int as shots_fired,
+              coalesce(sum(mp.shots_hit), 0)::int as shots_hit
        from players p
        left join (
          select mp.* from match_players mp
@@ -44,6 +51,18 @@ export function createRankingRouter({ db, requireAuth }) {
        group by p.steam_id64, p.nick, p.avatar_url`,
       params,
     )
+
+    // Insumos pra classificação de estilo (relativa à média do grupo — ver analise.js).
+    const entradaEstilos = rows.map((r) => ({
+      steamId: r.steam_id64,
+      partidas: r.partidas,
+      entryRate: r.partidas ? (r.entry_kills + r.entry_deaths) / r.partidas : 0,
+      utilityPerRound: r.rounds ? r.utility_damage / r.rounds : 0,
+      clutchPct: pct(r.clutch_wins, r.clutch_attempts),
+      clutchAttempts: r.clutch_attempts,
+      accuracy: pct(r.shots_hit, r.shots_fired),
+    }))
+    const estilos = calcularEstilos(entradaEstilos)
 
     const ranking = rows
       .map((r) => ({
@@ -61,6 +80,7 @@ export function createRankingRouter({ db, requireAuth }) {
         clutchWins: r.clutch_wins,
         clutchAttempts: r.clutch_attempts,
         clutchPct: pct(r.clutch_wins, r.clutch_attempts),
+        estilo: estilos[r.steam_id64],
       }))
       .sort((a, b) => (b.rating ?? -1) - (a.rating ?? -1))
 

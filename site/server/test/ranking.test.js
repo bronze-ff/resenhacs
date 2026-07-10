@@ -19,8 +19,8 @@ describe('GET /api/ranking', () => {
 
   it('calcula winrate/kd/hs e ordena por rating desc', async () => {
     const { app } = appWith([
-      { steam_id64: '1', nick: 'baixo', avatar_url: null, partidas: 4, vitorias: 1, kills: 40, deaths: 50, hs: 10, rating: '0.80', aces: 0, clutch_wins: 0, clutch_attempts: 0 },
-      { steam_id64: '2', nick: 'alto', avatar_url: null, partidas: 10, vitorias: 7, kills: 200, deaths: 150, hs: 100, rating: '1.35', aces: 3, clutch_wins: 3, clutch_attempts: 5 },
+      { steam_id64: '1', nick: 'baixo', avatar_url: null, partidas: 4, vitorias: 1, kills: 40, deaths: 50, hs: 10, rating: '0.80', aces: 0, clutch_wins: 0, clutch_attempts: 0, entry_kills: 2, entry_deaths: 2, utility_damage: 100, rounds: 80, shots_fired: 200, shots_hit: 40 },
+      { steam_id64: '2', nick: 'alto', avatar_url: null, partidas: 10, vitorias: 7, kills: 200, deaths: 150, hs: 100, rating: '1.35', aces: 3, clutch_wins: 3, clutch_attempts: 5, entry_kills: 20, entry_deaths: 5, utility_damage: 200, rounds: 200, shots_fired: 500, shots_hit: 150 },
     ])
     const res = await request(app).get('/api/ranking').set('Cookie', cookie)
     expect(res.status).toBe(200)
@@ -29,6 +29,7 @@ describe('GET /api/ranking', () => {
       nick: 'alto', winrate: 70, kd: 1.33, hsPct: 50, rating: 1.35, aces: 3,
       clutchWins: 3, clutchAttempts: 5, clutchPct: 60,
     })
+    expect(res.body[0].estilo).not.toBeNull() // 2+ partidas -> classificado em algum estilo (testes dedicados em analise.test.js)
     expect(res.body[1].nick).toBe('baixo')
   })
 

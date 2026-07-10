@@ -4,6 +4,7 @@ import { nomeMapa, dataHora, corRating } from '../lib/format.js'
 import StatTile from '../components/StatTile.jsx'
 import LinhaEvolucao from '../components/LinhaEvolucao.jsx'
 import FiltroPeriodo from '../components/FiltroPeriodo.jsx'
+import TagEstilo from '../components/TagEstilo.jsx'
 
 export default function JogadorPerfil() {
   const { steamId } = useParams()
@@ -30,7 +31,7 @@ export default function JogadorPerfil() {
   if (erro) return <p className="font-mono text-sm text-texto-fraco">Jogador não encontrado.</p>
   if (!data) return <p className="font-mono text-sm text-texto-fraco">Carregando…</p>
 
-  const { jogador, stats, porMapa, recentes, sinergia, evolucao } = data
+  const { jogador, stats, porMapa, recentes, sinergia, evolucao, badges, estilo } = data
 
   return (
     <div className="space-y-6">
@@ -40,9 +41,12 @@ export default function JogadorPerfil() {
             <img src={jogador.avatarUrl} alt="" className="panel-cut h-16 w-16 border border-borda object-cover" />
           )}
           <div>
-            <h2 className="font-display text-2xl font-bold uppercase tracking-wide text-texto">
-              {jogador.nick || jogador.steamId}
-            </h2>
+            <div className="flex items-center gap-2">
+              <h2 className="font-display text-2xl font-bold uppercase tracking-wide text-texto">
+                {jogador.nick || jogador.steamId}
+              </h2>
+              <TagEstilo estilo={estilo} />
+            </div>
             <p className="font-mono text-sm text-texto-fraco">{stats.partidas} partidas · {stats.winrate}% de vitória</p>
           </div>
         </div>
@@ -65,6 +69,26 @@ export default function JogadorPerfil() {
         <StatTile rotulo="Vitórias" valor={`${stats.vitorias}/${stats.partidas}`} sub={`${stats.winrate}%`} />
         <StatTile rotulo="Kills" valor={stats.kills} sub={`${stats.deaths} deaths`} />
       </div>
+
+      {badges.length > 0 && (
+        <section>
+          <h3 className="mb-3 font-display text-lg font-semibold uppercase tracking-wide text-texto">
+            Conquistas <span className="text-texto-fraco">({badges.length})</span>
+          </h3>
+          <div className="flex flex-wrap gap-2">
+            {badges.map((b) => (
+              <div
+                key={b.tag}
+                title={b.label}
+                className="panel-cut-sm flex items-center gap-2 border border-borda bg-superficie px-3 py-2"
+              >
+                <span className="text-lg leading-none">{b.icon}</span>
+                <span className="font-mono text-xs text-texto">{b.label}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section>
         <h3 className="mb-3 font-display text-lg font-semibold uppercase tracking-wide text-texto">

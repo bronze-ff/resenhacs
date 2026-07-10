@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { corRating } from '../lib/format.js'
 import FiltroPeriodo from '../components/FiltroPeriodo.jsx'
+import TagEstilo from '../components/TagEstilo.jsx'
 
 function Medalha({ posicao }) {
   const cores = { 0: 'text-yellow-400', 1: 'text-slate-300', 2: 'text-amber-600' }
@@ -98,6 +99,7 @@ export default function Ranking() {
                         <img src={r.avatarUrl} alt="" className="panel-cut-sm h-6 w-6 border border-borda object-cover" />
                       )}
                       {r.nick || r.steamId}
+                      <TagEstilo estilo={r.estilo} />
                     </Link>
                   </td>
                   <td className="px-2 py-2 text-right tabular-nums">{r.partidas}</td>

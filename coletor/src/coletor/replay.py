@@ -45,8 +45,9 @@ def detect_clutch(round_kills, teams):
         alive.discard(k["victim"])
         a = [s for s in alive if teams.get(s) == "A"]
         b = [s for s in alive if teams.get(s) == "B"]
+        # >= 1 (não >= 2): 1vX é clutch — ver mesmo comentário em transform.clutch_outcomes.
         for lado, outro in ((a, b), (b, a)):
-            if len(lado) == 1 and len(outro) >= 2 and inicio is None:
+            if len(lado) == 1 and len(outro) >= 1 and inicio is None:
                 inicio = {"steamid": lado[0], "vs": len(outro), "tick": k["tick"]}
     if not inicio:
         return None
