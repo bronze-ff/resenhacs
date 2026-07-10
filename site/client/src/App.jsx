@@ -7,6 +7,7 @@ import Feed from './pages/Feed.jsx'
 import Partida from './pages/Partida.jsx'
 import Jogadores from './pages/Jogadores.jsx'
 import JogadorPerfil from './pages/JogadorPerfil.jsx'
+import Ranking from './pages/Ranking.jsx'
 import Perfil from './pages/Perfil.jsx'
 import Admin from './pages/Admin.jsx'
 import ReplayDemo from './pages/ReplayDemo.jsx'
@@ -28,6 +29,7 @@ export default function App() {
           <Route path="/replay-demo" element={<ReplayDemo />} />
           <Route path="/" element={<RotaProtegida><Feed /></RotaProtegida>} />
           <Route path="/partida/:id" element={<RotaProtegida><Partida /></RotaProtegida>} />
+          <Route path="/ranking" element={<RotaProtegida><Ranking /></RotaProtegida>} />
           <Route path="/jogadores" element={<RotaProtegida><Jogadores /></RotaProtegida>} />
           <Route path="/jogador/:steamId" element={<RotaProtegida><JogadorPerfil /></RotaProtegida>} />
           <Route path="/perfil" element={<RotaProtegida><Perfil /></RotaProtegida>} />
