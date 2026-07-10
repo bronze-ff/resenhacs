@@ -11,8 +11,8 @@ def demo_key(match_id):
 
 
 def replay_key(match_id):
-    """Chave dos frames do Replay 2D (Fase 4)."""
-    return f"replays/{match_id}.json.gz"
+    """Chave dos frames do Replay 2D (Fase 4). JSON puro para o browser fazer fetch direto."""
+    return f"replays/{match_id}.json"
 
 
 def upload_bytes(client, bucket, key, data, content_type="application/octet-stream"):

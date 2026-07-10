@@ -18,7 +18,7 @@ class FakeS3:
 
 def test_keys():
     assert storage_r2.demo_key(123) == "demos/123.dem.bz2"
-    assert storage_r2.replay_key(123) == "replays/123.json.gz"
+    assert storage_r2.replay_key(123) == "replays/123.json"
 
 
 def test_upload_bytes():

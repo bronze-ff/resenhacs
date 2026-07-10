@@ -1,6 +1,33 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { nomeMapa, dataRelativa, corRating } from '../lib/format.js'
+import ReplayViewer from '../components/ReplayViewer.jsx'
+
+function SecaoReplay({ replayUrl }) {
+  const [replay, setReplay] = useState(null)
+  const [erro, setErro] = useState(false)
+
+  useEffect(() => {
+    if (!replayUrl) return
+    setReplay(null)
+    setErro(false)
+    fetch(replayUrl)
+      .then((res) => (res.ok ? res.json() : Promise.reject()))
+      .then(setReplay)
+      .catch(() => setErro(true))
+  }, [replayUrl])
+
+  if (!replayUrl) {
+    return (
+      <p className="text-sm text-texto-fraco">
+        Replay 2D indisponível — gerado pelo Coletor quando o demo é processado (Fase 4).
+      </p>
+    )
+  }
+  if (erro) return <p className="text-sm text-rose-400">Não foi possível carregar o replay.</p>
+  if (!replay) return <p className="text-sm text-texto-fraco">Carregando replay…</p>
+  return <ReplayViewer replay={replay} />
+}
 
 function Scoreboard({ time, jogadores }) {
   return (
@@ -153,6 +180,11 @@ export default function Partida() {
         <Scoreboard time="A" jogadores={timeA} />
         <Scoreboard time="B" jogadores={timeB} />
       </div>
+
+      <section>
+        <h3 className="mb-2 text-lg font-semibold">Replay 2D</h3>
+        <SecaoReplay replayUrl={m.replayUrl} />
+      </section>
 
       {m.highlights.length > 0 && (
         <section>

@@ -9,6 +9,7 @@ import Jogadores from './pages/Jogadores.jsx'
 import JogadorPerfil from './pages/JogadorPerfil.jsx'
 import Perfil from './pages/Perfil.jsx'
 import Admin from './pages/Admin.jsx'
+import ReplayDemo from './pages/ReplayDemo.jsx'
 
 function RotaProtegida({ children }) {
   const { carregando, jogador } = useAuth()
@@ -24,6 +25,7 @@ export default function App() {
         <Routes>
           <Route path="/entrar" element={<Entrar />} />
           <Route path="/acesso-negado" element={<AcessoNegado />} />
+          <Route path="/replay-demo" element={<ReplayDemo />} />
           <Route path="/" element={<RotaProtegida><Feed /></RotaProtegida>} />
           <Route path="/partida/:id" element={<RotaProtegida><Partida /></RotaProtegida>} />
           <Route path="/jogadores" element={<RotaProtegida><Jogadores /></RotaProtegida>} />

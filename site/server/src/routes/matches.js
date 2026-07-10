@@ -33,7 +33,7 @@ export function createMatchesRouter({ db, requireAuth }) {
   router.get('/:id', requireAuth, async (req, res) => {
     const { id } = req.params
     const matchQ = await db.query(
-      'select id, map, played_at, score_a, score_b, source, status, demo_url from matches where id = $1',
+      'select id, map, played_at, score_a, score_b, source, status, demo_url, replay_url from matches where id = $1',
       [id],
     )
     if (matchQ.rows.length === 0) return res.status(404).json({ erro: 'Partida não encontrada' })
@@ -74,6 +74,7 @@ export function createMatchesRouter({ db, requireAuth }) {
       source: m.source,
       status: m.status,
       demoUrl: m.demo_url,
+      replayUrl: m.replay_url,
       players: players.rows.map((p) => ({
         steamId: p.steam_id64,
         nick: p.nick,

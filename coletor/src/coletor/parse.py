@@ -61,3 +61,34 @@ def parse_demo(path):
         "kills": kills,
     }
     return parsed
+
+
+def extract_ticks(path):
+    """Extrai posições por tick para o Replay 2D (Fase 4). Só validável contra um .dem real.
+
+    Devolve a lista de {round, tick, players:[{id,x,y,yaw,hp,team,alive}]} que
+    replay.build_replay() consome. A normalização mundo→radar fica em replay.py.
+    """
+    from demoparser2 import DemoParser
+
+    parser = DemoParser(str(path))
+    df = parser.parse_ticks(["X", "Y", "yaw", "health", "team_num", "is_alive"])
+    ticks = {}
+    for _, row in df.iterrows():
+        sid = row.get("steamid")
+        if not sid:
+            continue
+        chave = int(row.get("round") or 0), int(row.get("tick") or 0)
+        ticks.setdefault(chave, {"round": chave[0], "tick": chave[1], "players": []})
+        ticks[chave]["players"].append(
+            {
+                "id": str(sid),
+                "x": float(row.get("X") or 0),
+                "y": float(row.get("Y") or 0),
+                "yaw": float(row.get("yaw") or 0),
+                "hp": int(row.get("health") or 0),
+                "team": _team_letter(int(row.get("team_num") or 0)),
+                "alive": bool(row.get("is_alive")),
+            }
+        )
+    return [ticks[k] for k in sorted(ticks)]

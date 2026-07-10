@@ -13,8 +13,11 @@ caminho manual (o player/admin baixa o .dem e joga aqui). Ver README do coletor.
 import argparse
 import sys
 
+import json
+
 from . import db as dbmod
 from . import parse as parsemod
+from . import replay as replaymod
 from . import sharecode
 from . import steam_api
 from . import storage_r2
@@ -45,15 +48,33 @@ def ingest_demo(config, conn, path, share_code=None, source="upload", upload=Tru
     parsed = transform.enrich(parsed)
 
     demo_url = None
+    replay_url = None
     if upload and config.r2_endpoint:
         client = storage_r2.make_client(config)
         ids = sharecode.decode(share_code) if share_code else {"match_id": path.__hash__() & 0xFFFFFFFF}
+
         key = storage_r2.demo_key(ids["match_id"])
         with open(path, "rb") as fh:
             storage_r2.upload_bytes(client, config.r2_bucket, key, fh.read())
         demo_url = f"{config.r2_endpoint}/{config.r2_bucket}/{key}"
 
-    return dbmod.store_parsed(conn, parsed, share_code=share_code, source=source, demo_url=demo_url)
+        # Replay 2D: falha aqui não deve derrubar o ingest dos stats.
+        try:
+            ticks = parsemod.extract_ticks(path)
+            replay_json = replaymod.build_replay(parsed["map"], ticks)
+            rkey = storage_r2.replay_key(ids["match_id"])
+            storage_r2.upload_bytes(
+                client, config.r2_bucket, rkey,
+                json.dumps(replay_json).encode("utf-8"), content_type="application/json",
+            )
+            replay_url = f"{config.r2_endpoint}/{config.r2_bucket}/{rkey}"
+        except Exception as e:  # noqa: BLE001
+            print(f"aviso: replay 2D não gerado ({e})")
+
+    return dbmod.store_parsed(
+        conn, parsed, share_code=share_code, source=source,
+        demo_url=demo_url, replay_url=replay_url,
+    )
 
 
 def main(argv=None):
