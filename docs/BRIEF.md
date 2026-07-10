@@ -44,12 +44,22 @@ Cada fase entregue com testes e commit próprio (67 testes ao todo: 43 server, 5
 3. ✅ **Telas de stats** — feed, página da Partida (scoreboard + rounds + highlights + clipes), perfil do Jogador, **Sinergia** ("com quem mais joga" + winrate), anexar Clipes. Data layer verificado contra o Postgres real.
 4. ✅ **Replay 2D** — normalização mundo→radar (8 mapas calibrados) + engine de playback (canvas, play/pause/scrub/round/velocidade), verificada visualmente em `/replay-demo`. *Extração de posições precisa de .dem real; radares PNG a cargo do usuário.*
 
-### Pendências externas (só o usuário provê)
-- **Segredos**: senha do banco (Session Pooler, IPv4), Steam Web API key, seu SteamID64 (para `seed-admin.js`).
-- **Cloudflare R2**: criar bucket + credenciais (ajuda guiada pendente) — necessário para arquivar demos e servir replays.
-- **Push do repo no GitHub** + configurar os Secrets do Actions (DATABASE_URL, STEAM_API_KEY, R2_*).
-- **Assets**: PNGs de radar dos mapas em `site/client/public/radars/` (opcional; sem eles a engine usa grade).
-- **Fase 2b**: conta-bot Steam (Game Coordinator) para baixar demos de MM automaticamente.
+### Pendências externas (só o usuário provê) — atualizado 2026-07-10
+- ✅ Segredos configurados (`.env` local + Secrets do GitHub Actions: DATABASE_URL, STEAM_API_KEY, JWT_SECRET, R2_BUCKET).
+- ✅ Radares dos mapas incluídos (9 mapas, `site/client/public/radars/`).
+- ✅ Login Steam funcionando, bronze é admin, partida real de_anubis no banco.
+- ⏳ **Cloudflare R2 habilitado + bucket `resenha-demos` criado**, mas falta o **usuário criar o R2 API Token** (Account API Token → Object Read & Write) e passar Access Key ID / Secret Access Key / Account ID.
+- ⏳ **Push do repo no GitHub** bloqueado: o token do `gh` local não tem escopo `workflow` (necessário só pra enviar `.github/workflows/coletor.yml`). Precisa o usuário autorizar via https://github.com/login/device com um código novo (o anterior expirou).
+- **Fase 2b**: conta-bot Steam (Game Coordinator) para baixar demos de MM automaticamente — não iniciado.
+
+### Features extras construídas além do escopo original da v1
+- **Nicks + kill feed + timers** no Replay 2D (killer/vítima/arma, countdown de smoke/molotov/cegueira)
+- **Bomba, HP baixo, clutch, utilitárias** desenhados no Replay 2D (smoke/molotov/flash/HE com posição real)
+- **Detecção automática de clutch** (1vN) vira Highlight no banco
+- **`played_at` real** da Partida (proxy: mtime do arquivo — o formato .dem não guarda data)
+- **Promover Participante a Jogador** com 1 clique na tela da Partida (admin), com backfill retroativo de `is_tracked`
+- **Ranking interno do grupo** (`/ranking`): winrate, K/D, HS%, rating, ACEs, clutches, destaques do top 3
+- **Deploy na Vercel preparado** (server como função serverless, `site/server/api/[...path].js`)
 
 ## Roadmap pós-v1 (ordem acordada)
 
