@@ -33,6 +33,37 @@ barata de eventos que o demoparser2 já entrega). Nada de renderização de víd
    sequência de vitórias do grupo, mais clutches numa noite. Página nova ou seção no
    Ranking.
 
+## Fase E — Social e gamificação (não estava na lista original — ideias novas)
+
+Essas não são cópia de nenhuma ferramenta de mercado — pensadas especificamente pra um
+grupo fechado de amigos, onde o motivo de usar o sistema é reforçar a resenha, não só
+métricas frias.
+
+15. **Nemesis & vítima favorita** — "quem mais te mata" e "quem você mais mata", por
+    jogador, cruzando com jogadores de FORA do grupo também (todo `player_death` já é
+    parseado; só falta persistir agregado por par de steamId). Aparece no perfil como
+    "sua rivalidade" — bom gancho de zoeira no grupo.
+16. **Badges automáticos** — conquistas que desbloqueiam sozinhas no ingest: primeiro
+    ACE, primeiro 1v5, 100ª partida, sequência de 5 vitórias, "clutch de 1v4 salvando
+    o mapa". Sem esforço de UI pesado (um grid de ícones no perfil) e dá recompensa
+    imediata visível pra quem jogou bem ontem.
+17. **Classificação de estilo de jogo** — regras simples sobre métricas que já calculamos
+    (entry rate alto + ADR alto → "Entry Fragger"; utility damage alto + poucas kills →
+    "Support"; % de kills com AWP → "AWPer"; posição média no heatmap longe do bombsite
+    → "Lurker"). Vira uma tag no perfil, tipo "time da FIFA".
+18. **"Resenha da semana" — resumo automático** — todo domingo (cron novo), gera um
+    resumo textual da semana (partidas, V/D do grupo, destaque, recorde quebrado) e
+    posta no Discord (junto com o webhook do item 6) ou fica fixado no topo do Feed.
+19. **Progresso pessoal "eu vs eu"** — no perfil, comparação automática do mês atual
+    contra o mês anterior (rating, HS%, clutch%) com seta de tendência — sem precisar
+    mexer manualmente no filtro de período pra descobrir se está melhorando.
+20. **Comentário/reação em partida** — campo de texto simples (ou emoji) por Partida,
+    pros próprios membros comentarem ("perdemos de bobeira no 15", "clutch insano do
+    Bronze"). Vira mural social embutido na página da Partida, sem precisar sair pro
+    Discord pra comentar o jogo.
+21. **Duo/trio ideal** — expandir a Sinergia (que já existe, só pares) pra trios: quais
+    3 jogadores do grupo têm o melhor winrate jogando juntos, útil pra montar time.
+
 ## Fase C — Arma, lado e mapa
 
 9. **Stats por arma** — kills/HS% por arma por jogador (AWP vs rifle vs pistola). O
