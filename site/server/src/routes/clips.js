@@ -8,12 +8,16 @@ const PROVIDERS = [
 ]
 
 export function detectProvider(url) {
-  let host
+  let parsed
   try {
-    host = new URL(url).hostname.replace(/^www\./, '')
+    parsed = new URL(url)
   } catch {
     return null
   }
+  // Só http(s): uma URL javascript:/data: parseia sem erro e cairia no 'other' — o
+  // client renderiza href direto, então isso seria XSS armazenado clicável.
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return null
+  const host = parsed.hostname.replace(/^www\./, '')
   const achado = PROVIDERS.find((p) => host === p.host || host.endsWith(`.${p.host}`))
   return achado ? achado.nome : 'other'
 }

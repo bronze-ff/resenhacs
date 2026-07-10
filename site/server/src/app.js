@@ -11,10 +11,46 @@ import { createUploadRouter } from './routes/upload.js'
 import { createRequireAuth } from './auth/middleware.js'
 import { createR2Client } from './r2.js'
 
+// Express 4 NÃO encaminha rejections de handler async pro error middleware: uma query
+// que lance (ex.: cast de uuid inválido em /api/matches/abc) viraria unhandled rejection
+// e mataria a função serverless (FUNCTION_INVOCATION_FAILED). No Express 4 os métodos de
+// rota vivem como propriedades da função Router exportada (que é o prototype dos routers
+// via setPrototypeOf) — embrulhamos cada um pra capturar a promise e chamar next(err).
+function patchRouterAsync() {
+  const embrulha = (fn) =>
+    typeof fn === 'function' && fn.length < 4
+      ? function embrulhado(req, res, next) {
+          const out = fn.call(this, req, res, next)
+          if (out && typeof out.catch === 'function') out.catch(next)
+          return out
+        }
+      : fn
+  for (const metodo of ['get', 'post', 'put', 'patch', 'delete']) {
+    const original = express.Router[metodo]
+    if (typeof original === 'function' && !original.__comEmbrulho) {
+      express.Router[metodo] = function (...args) {
+        return original.apply(
+          this,
+          args.map((a) => (Array.isArray(a) ? a.map(embrulha) : embrulha(a))),
+        )
+      }
+      express.Router[metodo].__comEmbrulho = true
+    }
+  }
+}
+
 export function createApp({ config, db, verifySteamLogin, fetchPersona, staticDir, execFileImpl, r2Client: r2ClientOverride } = {}) {
   const app = express()
   app.use(express.json())
   app.use(cookieParser())
+  app.use((req, res, next) => {
+    res.set('X-Content-Type-Options', 'nosniff')
+    res.set('X-Frame-Options', 'DENY')
+    res.set('Referrer-Policy', 'same-origin')
+    next()
+  })
+
+  patchRouterAsync()
 
   app.get('/api/health', (req, res) => res.json({ ok: true }))
 
@@ -48,6 +84,15 @@ export function createApp({ config, db, verifySteamLogin, fetchPersona, staticDi
       res.sendFile(path.join(staticDir, 'index.html'))
     })
   }
+
+  // Error handler global (par do patchRouterAsync): erro vira 500 JSON logado,
+  // nunca crash da função. eslint-disable: o Express identifica error middleware
+  // pela ARIDADE, os 4 parâmetros são obrigatórios mesmo sem usar o next.
+  // eslint-disable-next-line no-unused-vars
+  app.use((err, req, res, next) => {
+    console.error(`erro não tratado em ${req.method} ${req.path}:`, err)
+    if (!res.headersSent) res.status(500).json({ erro: 'Erro interno' })
+  })
 
   return app
 }

@@ -1,4 +1,5 @@
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
+import { pipeline } from 'node:stream/promises'
 
 // O bucket é privado (dados reais dos participantes, sem consentimento pra ficar
 // público). Este cliente é usado só no servidor, pra fazer proxy autenticado —
@@ -28,5 +29,8 @@ export function keyFromR2Url(url, bucket) {
 export async function streamObject(client, bucket, key, res) {
   const obj = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }))
   if (obj.ContentType) res.type(obj.ContentType)
-  obj.Body.pipe(res)
+  // pipeline (não .pipe): um 'error' do stream do R2 no meio da transferência de um
+  // demo de ~200MB sem listener derrubaria o processo inteiro; aqui vira rejeição
+  // que o caller (matches.js) já trata com 502.
+  await pipeline(obj.Body, res)
 }

@@ -52,6 +52,21 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket }) {
     )
   })
 
+  // Status da sincronização: quantas Partidas descobertas ainda esperam download/parse.
+  // (Precisa vir antes de '/:id' — senão o Express casaria "sync-status" como um id.)
+  router.get('/sync-status', requireAuth, async (req, res) => {
+    const { rows } = await db.query(
+      `select
+         count(*) filter (where status = 'pending')::int as pending,
+         count(*) filter (where status = 'failed')::int as failed,
+         count(*) filter (where status = 'parsed')::int as parsed,
+         max(played_at) filter (where status = 'parsed') as last_played_at
+       from matches`,
+    )
+    const r = rows[0]
+    res.json({ pending: r.pending, failed: r.failed, parsed: r.parsed, lastPlayedAt: r.last_played_at })
+  })
+
   // Detalhe: placar dos 10 Participantes, rounds, highlights e clipes.
   router.get('/:id', requireAuth, async (req, res) => {
     const { id } = req.params
