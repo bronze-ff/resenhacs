@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { corRating, dataRelativa } from '../lib/format.js'
+import { corRating, dataHora } from '../lib/format.js'
 import LinhaEvolucao from '../components/LinhaEvolucao.jsx'
 
 const LINHAS_STAT = [
@@ -124,7 +124,7 @@ export default function Comparar() {
                 Evolução — {dados.a.nick || dados.a.steamId}
               </h3>
               <div className="panel-cut border border-borda bg-superficie p-4">
-                <LinhaEvolucao pontos={dados.a.evolucao.map((e) => ({ label: dataRelativa(e.playedAt), valor: e.rating }))} />
+                <LinhaEvolucao pontos={dados.a.evolucao.map((e) => ({ label: dataHora(e.playedAt), valor: e.rating }))} />
               </div>
             </section>
             <section>
@@ -132,7 +132,7 @@ export default function Comparar() {
                 Evolução — {dados.b.nick || dados.b.steamId}
               </h3>
               <div className="panel-cut border border-borda bg-superficie p-4">
-                <LinhaEvolucao pontos={dados.b.evolucao.map((e) => ({ label: dataRelativa(e.playedAt), valor: e.rating }))} cor="var(--color-time-b)" />
+                <LinhaEvolucao pontos={dados.b.evolucao.map((e) => ({ label: dataHora(e.playedAt), valor: e.rating }))} cor="var(--color-time-b)" />
               </div>
             </section>
           </div>

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { nomeMapa, dataRelativa, corRating } from '../lib/format.js'
+import { nomeMapa, dataHora, origemPartida, corRating } from '../lib/format.js'
 import ReplayViewer from '../components/ReplayViewer.jsx'
 import MapaCalor from '../components/MapaCalor.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
@@ -240,8 +240,16 @@ export default function Partida() {
       <div className="flex items-center justify-between">
         <div>
           <Link to="/" className="font-mono text-sm text-texto-fraco hover:text-texto">← Partidas</Link>
-          <h2 className="mt-1 font-display text-2xl font-bold uppercase tracking-wide text-texto">{nomeMapa(m.map)}</h2>
-          <p className="font-mono text-sm text-texto-fraco">{dataRelativa(m.playedAt)} · {m.source}</p>
+          <div className="mt-1 flex items-center gap-2">
+            <h2 className="font-display text-2xl font-bold uppercase tracking-wide text-texto">{nomeMapa(m.map)}</h2>
+            <span
+              title={origemPartida(m.source).title}
+              className="panel-cut-sm border border-borda bg-superficie px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-widest text-texto-fraco"
+            >
+              {origemPartida(m.source).label}
+            </span>
+          </div>
+          <p className="font-mono text-sm text-texto-fraco">{dataHora(m.playedAt)}</p>
         </div>
         <div className="font-mono text-3xl font-bold tabular-nums">
           <span className={m.scoreA > m.scoreB ? 'text-sucesso' : 'text-perigo'}>{m.scoreA ?? '–'}</span>

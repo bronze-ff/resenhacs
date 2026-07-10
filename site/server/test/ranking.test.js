@@ -19,20 +19,23 @@ describe('GET /api/ranking', () => {
 
   it('calcula winrate/kd/hs e ordena por rating desc', async () => {
     const { app } = appWith([
-      { steam_id64: '1', nick: 'baixo', avatar_url: null, partidas: 4, vitorias: 1, kills: 40, deaths: 50, hs: 10, rating: '0.80', aces: 0, clutches: 0 },
-      { steam_id64: '2', nick: 'alto', avatar_url: null, partidas: 10, vitorias: 7, kills: 200, deaths: 150, hs: 100, rating: '1.35', aces: 3, clutches: 5 },
+      { steam_id64: '1', nick: 'baixo', avatar_url: null, partidas: 4, vitorias: 1, kills: 40, deaths: 50, hs: 10, rating: '0.80', aces: 0, clutch_wins: 0, clutch_attempts: 0 },
+      { steam_id64: '2', nick: 'alto', avatar_url: null, partidas: 10, vitorias: 7, kills: 200, deaths: 150, hs: 100, rating: '1.35', aces: 3, clutch_wins: 3, clutch_attempts: 5 },
     ])
     const res = await request(app).get('/api/ranking').set('Cookie', cookie)
     expect(res.status).toBe(200)
     expect(res.body).toHaveLength(2)
-    expect(res.body[0]).toMatchObject({ nick: 'alto', winrate: 70, kd: 1.33, hsPct: 50, rating: 1.35, aces: 3, clutches: 5 })
+    expect(res.body[0]).toMatchObject({
+      nick: 'alto', winrate: 70, kd: 1.33, hsPct: 50, rating: 1.35, aces: 3,
+      clutchWins: 3, clutchAttempts: 5, clutchPct: 60,
+    })
     expect(res.body[1].nick).toBe('baixo')
   })
 
   it('jogador sem partidas ainda: rating null vai pro fim', async () => {
     const { app } = appWith([
-      { steam_id64: '1', nick: 'novato', avatar_url: null, partidas: 0, vitorias: 0, kills: 0, deaths: 0, hs: 0, rating: null, aces: 0, clutches: 0 },
-      { steam_id64: '2', nick: 'veterano', avatar_url: null, partidas: 5, vitorias: 3, kills: 80, deaths: 60, hs: 20, rating: '1.10', aces: 1, clutches: 0 },
+      { steam_id64: '1', nick: 'novato', avatar_url: null, partidas: 0, vitorias: 0, kills: 0, deaths: 0, hs: 0, rating: null, aces: 0, clutch_wins: 0, clutch_attempts: 0 },
+      { steam_id64: '2', nick: 'veterano', avatar_url: null, partidas: 5, vitorias: 3, kills: 80, deaths: 60, hs: 20, rating: '1.10', aces: 1, clutch_wins: 0, clutch_attempts: 2 },
     ])
     const res = await request(app).get('/api/ranking').set('Cookie', cookie)
     expect(res.body.map((r) => r.nick)).toEqual(['veterano', 'novato'])

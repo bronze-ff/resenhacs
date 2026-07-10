@@ -20,8 +20,8 @@ export function createRankingRouter({ db, requireAuth }) {
               avg(mp.rating) as rating,
               coalesce((select count(*) from highlights h
                         where h.steam_id64 = p.steam_id64 and h.kind = 'ace'), 0)::int as aces,
-              coalesce((select count(*) from highlights h
-                        where h.steam_id64 = p.steam_id64 and h.kind like 'clutch%'), 0)::int as clutches
+              coalesce(sum(mp.clutch_wins), 0)::int as clutch_wins,
+              coalesce(sum(mp.clutch_attempts), 0)::int as clutch_attempts
        from players p
        left join match_players mp on mp.steam_id64 = p.steam_id64
        group by p.steam_id64, p.nick, p.avatar_url`,
@@ -40,7 +40,9 @@ export function createRankingRouter({ db, requireAuth }) {
         hsPct: pct(r.hs, r.kills),
         rating: r.rating === null ? null : Math.round(Number(r.rating) * 100) / 100,
         aces: r.aces,
-        clutches: r.clutches,
+        clutchWins: r.clutch_wins,
+        clutchAttempts: r.clutch_attempts,
+        clutchPct: pct(r.clutch_wins, r.clutch_attempts),
       }))
       .sort((a, b) => (b.rating ?? -1) - (a.rating ?? -1))
 

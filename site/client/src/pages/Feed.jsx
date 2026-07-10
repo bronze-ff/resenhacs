@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { nomeMapa, dataRelativa } from '../lib/format.js'
+import { nomeMapa, dataHora, origemPartida } from '../lib/format.js'
 
 function Placar({ a, b }) {
   const venceuA = a > b
@@ -25,9 +25,17 @@ function CardPartida({ m }) {
           {nomeMapa(m.map).slice(0, 3)}
         </div>
         <div>
-          <div className="font-display font-semibold uppercase tracking-wide text-texto">{nomeMapa(m.map)}</div>
+          <div className="flex items-center gap-2">
+            <span className="font-display font-semibold uppercase tracking-wide text-texto">{nomeMapa(m.map)}</span>
+            <span
+              title={origemPartida(m.source).title}
+              className="panel-cut-sm border border-borda bg-fundo px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-widest text-texto-fraco"
+            >
+              {origemPartida(m.source).label}
+            </span>
+          </div>
           <div className="font-mono text-xs text-texto-fraco">
-            {dataRelativa(m.playedAt)}
+            {dataHora(m.playedAt)}
             {m.tracked?.length > 0 && (
               <span> · {m.tracked.map((t) => t.nick).join(', ')}</span>
             )}

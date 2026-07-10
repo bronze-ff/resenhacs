@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { nomeMapa, dataRelativa, corRating } from '../lib/format.js'
+import { nomeMapa, dataHora, corRating } from '../lib/format.js'
 import StatTile from '../components/StatTile.jsx'
 import LinhaEvolucao from '../components/LinhaEvolucao.jsx'
 
@@ -62,7 +62,7 @@ export default function JogadorPerfil() {
           Evolução do rating <span className="text-texto-fraco">(últimas {evolucao.length} partidas)</span>
         </h3>
         <div className="panel-cut border border-borda bg-superficie p-4">
-          <LinhaEvolucao pontos={evolucao.map((e) => ({ label: dataRelativa(e.playedAt), valor: e.rating }))} />
+          <LinhaEvolucao pontos={evolucao.map((e) => ({ label: dataHora(e.playedAt), valor: e.rating }))} />
         </div>
       </section>
 
@@ -138,7 +138,7 @@ export default function JogadorPerfil() {
               <span className="flex items-center gap-3 font-mono text-texto">
                 <span className={`inline-block h-2 w-2 rounded-full ${r.won ? 'bg-sucesso' : 'bg-perigo'}`} />
                 <span>{nomeMapa(r.map)}</span>
-                <span className="text-xs text-texto-fraco">{dataRelativa(r.playedAt)}</span>
+                <span className="text-xs text-texto-fraco">{dataHora(r.playedAt)}</span>
               </span>
               <span className="font-mono text-sm tabular-nums text-texto-fraco">
                 {r.scoreA}:{r.scoreB} · {r.kills}/{r.deaths}

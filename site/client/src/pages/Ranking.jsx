@@ -34,7 +34,7 @@ export default function Ranking() {
   const comPartida = ranking.filter((r) => r.partidas > 0)
   const semPartida = ranking.filter((r) => r.partidas === 0)
   const maisAces = [...comPartida].sort((a, b) => b.aces - a.aces)[0]
-  const maisClutches = [...comPartida].sort((a, b) => b.clutches - a.clutches)[0]
+  const maisClutches = [...comPartida].sort((a, b) => b.clutchWins - a.clutchWins)[0]
   const melhorWinrate = [...comPartida].filter((r) => r.partidas >= 3).sort((a, b) => b.winrate - a.winrate)[0]
 
   return (
@@ -50,11 +50,11 @@ export default function Ranking() {
           {maisAces?.aces > 0 && (
             <CardDestaque rotulo="Mais ACEs" nick={maisAces.nick} valor={`${maisAces.aces} ace${maisAces.aces > 1 ? 's' : ''}`} />
           )}
-          {maisClutches?.clutches > 0 && (
+          {maisClutches?.clutchWins > 0 && (
             <CardDestaque
               rotulo="Mais clutches"
               nick={maisClutches.nick}
-              valor={`${maisClutches.clutches} clutch${maisClutches.clutches > 1 ? 'es' : ''}`}
+              valor={`${maisClutches.clutchWins}/${maisClutches.clutchAttempts} tentativas · ${maisClutches.clutchPct}%`}
             />
           )}
           {melhorWinrate && (
@@ -96,7 +96,12 @@ export default function Ranking() {
                   <td className="px-2 py-2 text-right tabular-nums">{r.kd}</td>
                   <td className="px-2 py-2 text-right tabular-nums">{r.hsPct}%</td>
                   <td className="px-2 py-2 text-right tabular-nums">{r.aces}</td>
-                  <td className="px-2 py-2 text-right tabular-nums">{r.clutches}</td>
+                  <td className="px-2 py-2 text-right tabular-nums" title="Clutches vencidos / tentativas (1vX)">
+                    {r.clutchWins}/{r.clutchAttempts}
+                    {r.clutchAttempts > 0 && (
+                      <span className={`ml-1.5 text-xs ${r.clutchPct >= 50 ? 'text-sucesso' : 'text-texto-fraco'}`}>{r.clutchPct}%</span>
+                    )}
+                  </td>
                   <td className={`px-3 py-2 text-right font-semibold tabular-nums ${corRating(r.rating)}`}>
                     {r.rating?.toFixed(2) ?? '–'}
                   </td>

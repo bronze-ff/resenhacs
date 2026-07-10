@@ -16,6 +16,22 @@ export function dataRelativa(iso) {
   return d.toLocaleDateString('pt-BR')
 }
 
+// Data/hora absoluta no fuso do navegador (ex.: "08/07/2026 21:04") — pedido do grupo:
+// "ontem" relativo engana perto da virada do dia; played_at no banco é UTC.
+export function dataHora(iso) {
+  if (!iso) return 'data desconhecida'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return 'data desconhecida'
+  return `${d.toLocaleDateString('pt-BR')} ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+}
+
+// Tag de origem da Partida: baixada pelo bot (valve_mm) ou enviada manualmente (upload).
+export function origemPartida(source) {
+  return source === 'upload'
+    ? { label: 'MANUAL', title: 'Demo enviada manualmente' }
+    : { label: 'AUTO', title: 'Baixada automaticamente pelo Coletor' }
+}
+
 // Verde/vermelho/neutro para rating estilo HLTV.
 export function corRating(rating) {
   if (rating == null) return 'text-texto-fraco'
