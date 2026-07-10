@@ -5,7 +5,7 @@ import ReplayViewer from '../components/ReplayViewer.jsx'
 import MapaCalor from '../components/MapaCalor.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
 
-function SecaoReplay({ replayUrl, seek }) {
+function SecaoReplay({ replayUrl, seek, onSelecionarPonto }) {
   const [replay, setReplay] = useState(null)
   const [erro, setErro] = useState(false)
   const [aba, setAba] = useState('replay') // replay | calor
@@ -48,7 +48,11 @@ function SecaoReplay({ replayUrl, seek }) {
           </button>
         ))}
       </div>
-      {aba === 'replay' ? <ReplayViewer replay={replay} seek={seek} /> : <MapaCalor replay={replay} />}
+      {aba === 'replay' ? (
+        <ReplayViewer replay={replay} seek={seek} />
+      ) : (
+        <MapaCalor replay={replay} onSelecionarPonto={onSelecionarPonto} />
+      )}
     </div>
   )
 }
@@ -187,10 +191,16 @@ export default function Partida() {
   const [seek, setSeek] = useState(null)
   const replayRef = useRef(null)
 
+  // Usado tanto pelos Highlights (clicar num "ACE round 5") quanto pelo Mapa de calor
+  // (clicar num ponto de morte/kill) — os dois só precisam saber round + frame.
+  function irParaMomento(round, frame) {
+    setSeek({ round, frame, key: `${round}-${frame}-${Date.now()}` })
+    replayRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
   function irParaHighlight(h) {
     if (h.frame == null) return
-    setSeek({ round: h.roundNumber, frame: h.frame, key: `${h.id}-${Date.now()}` })
-    replayRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    irParaMomento(h.roundNumber, h.frame)
   }
 
   function carregar() {
@@ -247,7 +257,11 @@ export default function Partida() {
 
       <section ref={replayRef}>
         <h3 className="mb-2 font-display text-lg font-semibold uppercase tracking-wide text-texto">Replay 2D</h3>
-        <SecaoReplay replayUrl={m.replayUrl} seek={seek} />
+        <SecaoReplay
+          replayUrl={m.replayUrl}
+          seek={seek}
+          onSelecionarPonto={({ round, frame }) => irParaMomento(round, frame)}
+        />
       </section>
 
       {m.highlights.length > 0 && (

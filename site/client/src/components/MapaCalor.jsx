@@ -2,16 +2,18 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { nomeMapa } from '../lib/format.js'
 
 const TAM = 640
+const RAIO_CLIQUE = 14 // px — distância máxima do clique até um ponto pra considerar "acertou"
 
 // Reaproveita as mesmas posições já normalizadas (0..1) que o Replay 2D usa —
 // nenhum dado novo do demo é necessário, só uma leitura diferente do mesmo JSON.
+// Cada ponto guarda round/frame também, pra dar pra clicar e pular pro replay.
 function pontosDeMorte(replay, steamId) {
   const pontos = []
   for (const r of replay.rounds) {
     for (const k of r.kills) {
       if (steamId && k.victim !== steamId) continue
       const p = r.frames[k.t]?.players.find((pl) => pl.id === k.victim)
-      if (p) pontos.push(p)
+      if (p) pontos.push({ x: p.x, y: p.y, round: r.round, frame: k.t })
     }
   }
   return pontos
@@ -21,9 +23,10 @@ function pontosDeKill(replay, steamId) {
   const pontos = []
   for (const r of replay.rounds) {
     for (const k of r.kills) {
+      if (!k.killer) continue
       if (steamId && k.killer !== steamId) continue
       const p = r.frames[k.t]?.players.find((pl) => pl.id === k.killer)
-      if (p) pontos.push(p)
+      if (p) pontos.push({ x: p.x, y: p.y, round: r.round, frame: k.t })
     }
   }
   return pontos
@@ -32,10 +35,10 @@ function pontosDeKill(replay, steamId) {
 function pontosDeGranada(replay) {
   const pontos = []
   for (const r of replay.rounds) {
-    for (const s of r.smokes) pontos.push({ ...s, tipo: 'smoke' })
-    for (const f of r.fires) pontos.push({ ...f, tipo: 'fire' })
-    for (const f of r.flashes) pontos.push({ ...f, tipo: 'flash' })
-    for (const h of r.hes) pontos.push({ ...h, tipo: 'he' })
+    for (const s of r.smokes) pontos.push({ x: s.x, y: s.y, round: r.round, frame: s.tStart, tipo: 'smoke' })
+    for (const f of r.fires) pontos.push({ x: f.x, y: f.y, round: r.round, frame: f.tStart, tipo: 'fire' })
+    for (const f of r.flashes) pontos.push({ x: f.x, y: f.y, round: r.round, frame: f.t, tipo: 'flash' })
+    for (const h of r.hes) pontos.push({ x: h.x, y: h.y, round: r.round, frame: h.t, tipo: 'he' })
   }
   return pontos
 }
@@ -61,7 +64,7 @@ function desenhar(ctx, radar, pontos, cor, modo) {
   ctx.globalCompositeOperation = 'source-over'
 }
 
-export default function MapaCalor({ replay }) {
+export default function MapaCalor({ replay, onSelecionarPonto }) {
   const canvasRef = useRef(null)
   const radarRef = useRef(null)
   const [radarPronto, setRadarPronto] = useState(false)
@@ -84,12 +87,31 @@ export default function MapaCalor({ replay }) {
     return pontosDeGranada(replay)
   }, [replay, modo, jogadorFiltro])
 
+  const interativo = modo !== 'granadas' // granada não tem "o que aconteceu" claro pra assistir
+
   useEffect(() => {
     const ctx = canvasRef.current?.getContext('2d')
     if (!ctx) return
     const cor = modo === 'mortes' ? 'rgba(229,72,77,0.35)' : 'rgba(255,154,31,0.35)'
     desenhar(ctx, radarRef.current, pontos, cor, modo)
   }, [pontos, modo, radarPronto])
+
+  function aoClicarCanvas(e) {
+    if (!interativo || !onSelecionarPonto) return
+    const rect = canvasRef.current.getBoundingClientRect()
+    const cx = ((e.clientX - rect.left) / rect.width) * TAM
+    const cy = ((e.clientY - rect.top) / rect.height) * TAM
+    let mais_perto = null
+    let menor_dist = RAIO_CLIQUE
+    for (const p of pontos) {
+      const dist = Math.hypot(p.x * TAM - cx, p.y * TAM - cy)
+      if (dist < menor_dist) {
+        menor_dist = dist
+        mais_perto = p
+      }
+    }
+    if (mais_perto) onSelecionarPonto({ round: mais_perto.round, frame: mais_perto.frame })
+  }
 
   return (
     <div className="space-y-3">
@@ -116,6 +138,7 @@ export default function MapaCalor({ replay }) {
           </select>
         )}
         <span className="font-mono text-xs text-texto-fraco">{pontos.length} pontos</span>
+        {interativo && <span className="font-mono text-xs text-texto-fraco">· clique num ponto pra assistir no Replay 2D</span>}
       </div>
       {!replay.calibrated && (
         <p className="font-mono text-xs uppercase tracking-wide text-amber-400">
@@ -126,7 +149,8 @@ export default function MapaCalor({ replay }) {
         ref={canvasRef}
         width={TAM}
         height={TAM}
-        className="panel-cut mx-auto block w-full max-w-[640px] border border-borda"
+        onClick={aoClicarCanvas}
+        className={`panel-cut mx-auto block w-full max-w-[640px] border border-borda ${interativo ? 'cursor-pointer' : ''}`}
         aria-label={`Mapa de calor de ${nomeMapa(replay.map)}`}
       />
     </div>

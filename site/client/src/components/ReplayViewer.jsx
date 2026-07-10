@@ -266,11 +266,17 @@ export default function ReplayViewer({ replay, seek }) {
               key={`${k.t}-${i}`}
               className="flex items-center gap-1.5 border border-borda/60 bg-black/75 px-2 py-1 font-mono text-xs"
             >
-              <span className="font-semibold" style={{ color: COR_TIME[replay.teams?.[k.killer]] ?? '#e6edf3' }}>
-                {replay.names?.[k.killer] ?? k.killer}
-              </span>
-              <span className="text-texto-fraco">{k.weapon}</span>
-              {k.headshot && <span className="font-semibold text-perigo">hs</span>}
+              {k.killer ? (
+                <>
+                  <span className="font-semibold" style={{ color: COR_TIME[replay.teams?.[k.killer]] ?? '#e6edf3' }}>
+                    {replay.names?.[k.killer] ?? k.killer}
+                  </span>
+                  <span className="text-texto-fraco">{k.weapon}</span>
+                  {k.headshot && <span className="font-semibold text-perigo">hs</span>}
+                </>
+              ) : (
+                <span className="text-texto-fraco">queda/ambiente</span>
+              )}
               <span className="text-texto-fraco">→</span>
               <span className="font-semibold" style={{ color: COR_TIME[replay.teams?.[k.victim]] ?? '#e6edf3' }}>
                 {replay.names?.[k.victim] ?? k.victim}

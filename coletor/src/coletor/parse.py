@@ -248,7 +248,10 @@ def extract_replay(path, target_hz=8, demo_tick_rate=64):
     kills = []
     for r in deaths.to_dict("records"):
         killer, victim = _sid(r.get("attacker_steamid")), _sid(r.get("user_steamid"))
-        if not killer or not victim or killer == victim:
+        # killer pode ser None (dano de queda/mundo, sem atacante) — mantém pro heatmap
+        # de mortes (a posição da morte existe mesmo sem "quem matou"); só descarta
+        # suicídio (killer == victim, ex.: própria HE/molotov).
+        if not victim or killer == victim:
             continue
         tk = int(r["tick"])
         kills.append(
