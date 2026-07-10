@@ -2,11 +2,13 @@ import { useEffect, useRef, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { nomeMapa, dataRelativa, corRating } from '../lib/format.js'
 import ReplayViewer from '../components/ReplayViewer.jsx'
+import MapaCalor from '../components/MapaCalor.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
 
 function SecaoReplay({ replayUrl, seek }) {
   const [replay, setReplay] = useState(null)
   const [erro, setErro] = useState(false)
+  const [aba, setAba] = useState('replay') // replay | calor
 
   useEffect(() => {
     if (!replayUrl) return
@@ -18,6 +20,11 @@ function SecaoReplay({ replayUrl, seek }) {
       .catch(() => setErro(true))
   }, [replayUrl])
 
+  // Deep link de um Highlight sempre volta pra aba do replay animado.
+  useEffect(() => {
+    if (seek) setAba('replay')
+  }, [seek?.key]) // eslint-disable-line react-hooks/exhaustive-deps
+
   if (!replayUrl) {
     return (
       <p className="font-mono text-sm text-texto-fraco">
@@ -27,7 +34,23 @@ function SecaoReplay({ replayUrl, seek }) {
   }
   if (erro) return <p className="font-mono text-sm text-perigo">Não foi possível carregar o replay.</p>
   if (!replay) return <p className="font-mono text-sm text-texto-fraco">Carregando replay…</p>
-  return <ReplayViewer replay={replay} seek={seek} />
+
+  return (
+    <div className="space-y-3">
+      <div className="flex overflow-hidden rounded border border-borda font-mono text-xs uppercase">
+        {[['replay', 'Replay 2D'], ['calor', 'Mapa de calor']].map(([v, label]) => (
+          <button
+            key={v}
+            onClick={() => setAba(v)}
+            className={`px-3 py-1.5 transition-colors ${aba === v ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {aba === 'replay' ? <ReplayViewer replay={replay} seek={seek} /> : <MapaCalor replay={replay} />}
+    </div>
+  )
 }
 
 function Scoreboard({ time, jogadores, podePromover, onPromover, promovendo }) {

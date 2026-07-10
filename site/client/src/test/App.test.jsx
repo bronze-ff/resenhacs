@@ -38,6 +38,8 @@ describe('App', () => {
     mockMe({ steamId: '765', nick: 'fih', avatarUrl: null, isAdmin: false })
     render(<App />)
     expect(await screen.findByText('fih')).toBeInTheDocument()
-    expect(screen.getByText(/nenhuma partida/i)).toBeInTheDocument()
+    // /api/matches é um fetch separado do /api/auth/me (que resolveu findByText acima);
+    // precisa de findByText (assíncrono) aqui também, senão às vezes ainda não resolveu.
+    expect(await screen.findByText(/nenhuma partida/i)).toBeInTheDocument()
   })
 })
