@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { nomeMapa, dataRelativa, corRating } from '../lib/format.js'
 import StatTile from '../components/StatTile.jsx'
+import LinhaEvolucao from '../components/LinhaEvolucao.jsx'
 
 export default function JogadorPerfil() {
   const { steamId } = useParams()
@@ -23,20 +24,28 @@ export default function JogadorPerfil() {
   if (erro) return <p className="font-mono text-sm text-texto-fraco">Jogador não encontrado.</p>
   if (!data) return <p className="font-mono text-sm text-texto-fraco">Carregando…</p>
 
-  const { jogador, stats, porMapa, recentes, sinergia } = data
+  const { jogador, stats, porMapa, recentes, sinergia, evolucao } = data
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        {jogador.avatarUrl && (
-          <img src={jogador.avatarUrl} alt="" className="panel-cut h-16 w-16 border border-borda object-cover" />
-        )}
-        <div>
-          <h2 className="font-display text-2xl font-bold uppercase tracking-wide text-texto">
-            {jogador.nick || jogador.steamId}
-          </h2>
-          <p className="font-mono text-sm text-texto-fraco">{stats.partidas} partidas · {stats.winrate}% de vitória</p>
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          {jogador.avatarUrl && (
+            <img src={jogador.avatarUrl} alt="" className="panel-cut h-16 w-16 border border-borda object-cover" />
+          )}
+          <div>
+            <h2 className="font-display text-2xl font-bold uppercase tracking-wide text-texto">
+              {jogador.nick || jogador.steamId}
+            </h2>
+            <p className="font-mono text-sm text-texto-fraco">{stats.partidas} partidas · {stats.winrate}% de vitória</p>
+          </div>
         </div>
+        <Link
+          to={`/comparar?a=${jogador.steamId}`}
+          className="panel-cut-sm border border-borda px-3 py-2 font-mono text-xs uppercase tracking-wide text-texto-fraco transition-colors hover:border-destaque/60 hover:text-destaque"
+        >
+          Comparar com…
+        </Link>
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
@@ -47,6 +56,15 @@ export default function JogadorPerfil() {
         <StatTile rotulo="Vitórias" valor={`${stats.vitorias}/${stats.partidas}`} sub={`${stats.winrate}%`} />
         <StatTile rotulo="Kills" valor={stats.kills} sub={`${stats.deaths} deaths`} />
       </div>
+
+      <section>
+        <h3 className="mb-3 font-display text-lg font-semibold uppercase tracking-wide text-texto">
+          Evolução do rating <span className="text-texto-fraco">(últimas {evolucao.length} partidas)</span>
+        </h3>
+        <div className="panel-cut border border-borda bg-superficie p-4">
+          <LinhaEvolucao pontos={evolucao.map((e) => ({ label: dataRelativa(e.playedAt), valor: e.rating }))} />
+        </div>
+      </section>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <section>
