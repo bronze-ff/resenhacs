@@ -1,4 +1,5 @@
 # Runtime do Coletor (GitHub Actions). Testes usam só pandas+pytest (ver dev-requirements).
-demoparser2>=0.44
+# 0.41.4 é a versão validada contra demos reais (e a mais nova no PyPI em 2026-07).
+demoparser2>=0.41,<1
 boto3>=1.34
 psycopg[binary]>=3.2

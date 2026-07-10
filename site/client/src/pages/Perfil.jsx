@@ -21,7 +21,7 @@ export default function Perfil() {
       <h2 className="mb-2 font-display text-xl font-semibold uppercase tracking-wide text-texto">Meu perfil</h2>
       <p className="mb-4 font-mono text-sm leading-relaxed text-texto-fraco">
         Para o Resenha achar suas Partidas de matchmaking, cole seu código de autenticação de
-        histórico e o último share code. Pegue os dois em{' '}
+        histórico e um share code de partida. Pegue os dois em{' '}
         <a
           className="text-destaque underline"
           href="https://help.steampowered.com/en/wizard/HelpWithGameIssue/?appid=730&issueid=128"
@@ -30,7 +30,9 @@ export default function Perfil() {
         >
           Steam → Ajuda → Compartilhar histórico de partidas
         </a>
-        .
+        . A busca anda <span className="text-texto">pra frente</span> a partir do código informado —
+        use o <span className="text-texto">"primeiro código de partilha"</span> dessa página da Steam
+        pra puxar seu histórico inteiro, ou um código recente pra começar só das partidas novas.
       </p>
       <form onSubmit={salvar} className="space-y-3">
         <div>
@@ -47,7 +49,7 @@ export default function Perfil() {
         </div>
         <div>
           <label className="block font-mono text-xs uppercase tracking-wide text-texto-fraco" htmlFor="shareCode">
-            Último share code
+            Share code de partida (ponto de partida da busca)
           </label>
           <input
             id="shareCode"
