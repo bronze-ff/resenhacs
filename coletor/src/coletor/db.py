@@ -6,7 +6,62 @@ psycopg é injetada, então a lógica é testável com um fake que grava os exec
 """
 
 
+def match_fingerprint(parsed):
+    """Digital de conteúdo da Partida: mapa + placar + jogadores com K/D. A MESMA partida
+    parseada por dois caminhos (upload manual sem share code + download automático com)
+    gera a mesma digital — é o que permite deduplicar. Colisão entre partidas distintas
+    exigiria mesmo mapa, mesmo placar E os mesmos 10 jogadores com K/D idênticos."""
+    import hashlib
+
+    jogadores = sorted(
+        f"{p['steam_id64']}:{p.get('kills', 0)}:{p.get('deaths', 0)}" for p in parsed.get("players", [])
+    )
+    base = f"{parsed.get('map')}|{parsed.get('score_a')}|{parsed.get('score_b')}|" + "|".join(jogadores)
+    return hashlib.sha256(base.encode("utf-8")).hexdigest()[:32]
+
+
 def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status, prefer_new_played_at=False):
+    fingerprint = match_fingerprint(parsed)
+
+    # Dedupe por conteúdo ANTES do insert: se a mesma partida já existe (chegou pelo
+    # outro caminho), atualiza a linha existente em vez de criar uma duplicata — o
+    # conflito de share_code sozinho não pega upload manual feito sem share code.
+    cur.execute("select id from matches where fingerprint = %s", (fingerprint,))
+    row = cur.fetchone()
+    if row:
+        match_id = row[0]
+        if share_code:
+            # Um placeholder 'pending' do discover pode estar segurando esse share code
+            # em outra linha; absorve (é só um marcador, sem stats filhos).
+            cur.execute(
+                "delete from matches where share_code = %s and id <> %s and status = 'pending'",
+                (share_code, match_id),
+            )
+        played_expr = "coalesce(%s, played_at)" if prefer_new_played_at else "coalesce(played_at, %s)"
+        cur.execute(
+            f"""
+            update matches set
+              share_code = coalesce(%s, share_code), source = %s, map = %s,
+              score_a = %s, score_b = %s, played_at = {played_expr},
+              demo_url = coalesce(%s, demo_url), replay_url = coalesce(%s, replay_url),
+              status = %s
+            where id = %s
+            """,
+            (
+                share_code,
+                source,
+                parsed.get("map"),
+                parsed.get("score_a"),
+                parsed.get("score_b"),
+                parsed.get("played_at"),
+                demo_url,
+                replay_url,
+                status,
+                match_id,
+            ),
+        )
+        return match_id
+
     # Por padrão preserva o played_at já gravado (normalmente a hora de descoberta,
     # mais precisa que a mtime do arquivo num re-ingest posterior). Quando o operador
     # passa --played-at explicitamente no ingest manual, prefer_new_played_at=True
@@ -18,15 +73,16 @@ def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status,
     )
     cur.execute(
         f"""
-        insert into matches (share_code, source, map, score_a, score_b, played_at, demo_url, replay_url, status)
-        values (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        insert into matches (share_code, source, map, score_a, score_b, played_at, demo_url, replay_url, status, fingerprint)
+        values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         on conflict (share_code) do update set
           source = excluded.source, map = excluded.map,
           score_a = excluded.score_a, score_b = excluded.score_b,
           played_at = {played_at_expr},
           demo_url = coalesce(excluded.demo_url, matches.demo_url),
           replay_url = coalesce(excluded.replay_url, matches.replay_url),
-          status = excluded.status
+          status = excluded.status,
+          fingerprint = excluded.fingerprint
         returning id
         """,
         (
@@ -39,6 +95,7 @@ def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status,
             demo_url,
             replay_url,
             status,
+            fingerprint,
         ),
     )
     return cur.fetchone()[0]
