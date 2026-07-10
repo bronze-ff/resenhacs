@@ -19,6 +19,7 @@ MAP_CALIBRATION = {
     "de_vertigo": {"pos_x": -3168, "pos_y": 1762, "scale": 4.00},
     "de_ancient": {"pos_x": -2953, "pos_y": 2164, "scale": 5.00},
     "de_anubis": {"pos_x": -2796, "pos_y": 3328, "scale": 5.22},
+    "de_train": {"pos_x": -2308, "pos_y": 2078, "scale": 4.082077},
 }
 
 

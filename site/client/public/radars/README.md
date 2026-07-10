@@ -1,14 +1,13 @@
-# Radares dos mapas (assets da Valve)
+# Radares dos mapas
 
-A engine de Replay 2D procura a imagem de fundo de cada mapa em `/radars/{map}.png`
-(ex.: `de_mirage.png`, `de_inferno.png`), 1024×1024, top-down.
+A engine de Replay 2D usa `/radars/{map}.png` (1024×1024, top-down) como fundo.
+Já estão incluídos os mapas da fila competitiva: mirage, inferno, dust2, nuke,
+overpass, vertigo, ancient, anubis, train.
 
-Essas imagens são **assets da Valve** e não são versionadas aqui. Para ativar o fundo
-real (em vez da grade neutra), coloque os PNGs de radar aqui. Fontes comuns:
+**Origem:** [2mlml/cs2-radar-images](https://github.com/2mlml/cs2-radar-images) — são os
+radares oficiais extraídos do jogo (assets da Valve). Uso interno/privado do grupo. A
+calibração (pos_x/pos_y/scale) em `coletor/src/coletor/replay.py` casa com esses PNGs
+(conferida contra os `.txt` do mesmo repositório).
 
-- Extrair de `game/csgo/pak01_dir.vpk` → `resource/overviews/` com um extrator de VPK.
-- Repositórios da comunidade (ex.: simple-radar) — respeite a licença de cada um.
-
-Sem os PNGs, a engine funciona igual, só que com uma grade de fundo. A calibração
-(pos_x/pos_y/scale) que converte coordenadas do mundo para o radar fica em
-`coletor/src/coletor/replay.py` (`MAP_CALIBRATION`) e deve casar com a imagem usada.
+Para adicionar/atualizar um mapa: baixe `{map}.png` desse repositório para cá e confira
+se a calibração correspondente existe em `MAP_CALIBRATION`.

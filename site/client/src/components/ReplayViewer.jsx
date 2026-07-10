@@ -51,19 +51,21 @@ export default function ReplayViewer({ replay }) {
   const [tocando, setTocando] = useState(false)
   const [velocidade, setVelocidade] = useState(1)
   const [frameAtual, setFrameAtual] = useState(0)
+  const [radarPronto, setRadarPronto] = useState(false)
 
   const round = replay.rounds[roundIdx]
   const frames = round?.frames ?? []
   const total = frames.length
 
   // Carrega a imagem de radar do mapa (opcional; se não existir, usa a grade).
+  // radarPronto força o redesenho quando a imagem termina de carregar.
   useEffect(() => {
+    setRadarPronto(false)
     const img = new Image()
+    img.onload = () => { radarRef.current = img; setRadarPronto(true) }
+    img.onerror = () => { radarRef.current = null; setRadarPronto(false) }
     img.src = `/radars/${replay.map}.png`
-    radarRef.current = img
-    img.onload = () => desenharFrame(canvasRef.current?.getContext('2d'), frames[frameAtual], img)
-    return () => { radarRef.current = null }
-  }, [replay.map]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [replay.map])
 
   // Loop de animação.
   useEffect(() => {
@@ -83,11 +85,11 @@ export default function ReplayViewer({ replay }) {
     return () => cancelAnimationFrame(rafRef.current)
   }, [tocando, velocidade, roundIdx]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Redesenha sempre que o frame muda.
+  // Redesenha quando o frame muda OU quando o radar termina de carregar.
   useEffect(() => {
     const ctx = canvasRef.current?.getContext('2d')
     if (ctx) desenharFrame(ctx, frames[frameAtual], radarRef.current)
-  }, [frameAtual, roundIdx]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [frameAtual, roundIdx, radarPronto]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const dur = duracaoSegundos(total, replay.tickRate)
 
