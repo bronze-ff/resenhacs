@@ -150,12 +150,16 @@ export default function ReplayViewer({ replay, seek }) {
 
   // Deep link (ex.: clicar num Highlight): pula pro round/frame e toca. `seek.key` muda
   // a cada clique (mesmo mirando o mesmo round/frame de novo) pra sempre re-disparar.
+  // O frame salvo é o momento exato do highlight (ex.: o último kill do multi-kill) —
+  // recua alguns segundos antes de tocar, senão a jogada já teria acabado de acontecer.
   useEffect(() => {
     if (!seek) return
     const idx = replay.rounds.findIndex((r) => r.round === seek.round)
     if (idx === -1) return
+    const LOOKBACK_SEGUNDOS = 5
+    const frameInicial = Math.max(0, (seek.frame ?? 0) - LOOKBACK_SEGUNDOS * replay.tickRate)
     setRoundIdx(idx)
-    setFrameAtual(seek.frame ?? 0)
+    setFrameAtual(frameInicial)
     setTocando(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seek?.key])
