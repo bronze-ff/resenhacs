@@ -27,14 +27,21 @@ function desenharFrame(ctx, round, f, radar, replay) {
   const frame = round.frames[f]
   const hz = replay.tickRate
 
-  // Molotov (fogo) e smoke, por baixo dos jogadores.
+  // Molotov (fogo) e smoke, por baixo dos jogadores, com o tempo restante no centro.
+  ctx.textAlign = 'center'
   for (const fire of janelaAtiva(round.fires, f)) {
+    const fx = fire.x * TAM, fy = fire.y * TAM
     ctx.fillStyle = 'rgba(255,110,30,0.30)'
-    ctx.beginPath(); ctx.arc(fire.x * TAM, fire.y * TAM, 18, 0, Math.PI * 2); ctx.fill()
+    ctx.beginPath(); ctx.arc(fx, fy, 18, 0, Math.PI * 2); ctx.fill()
+    ctx.fillStyle = '#fff'; ctx.font = '700 10px system-ui'
+    ctx.fillText(`${((fire.tEnd - f) / hz).toFixed(1)}s`, fx, fy + 3)
   }
   for (const sm of janelaAtiva(round.smokes, f)) {
+    const sx = sm.x * TAM, sy = sm.y * TAM
     ctx.fillStyle = 'rgba(210,210,215,0.55)'
-    ctx.beginPath(); ctx.arc(sm.x * TAM, sm.y * TAM, 24, 0, Math.PI * 2); ctx.fill()
+    ctx.beginPath(); ctx.arc(sx, sy, 24, 0, Math.PI * 2); ctx.fill()
+    ctx.fillStyle = '#0b0e13'; ctx.font = '700 10px system-ui'
+    ctx.fillText(`${((sm.tEnd - f) / hz).toFixed(1)}s`, sx, sy + 3)
   }
 
   // Bomba plantada.
@@ -50,7 +57,10 @@ function desenharFrame(ctx, round, f, radar, replay) {
 
   // Quem está com a bomba (segmento ativo) e quem cegou agora.
   const carrier = (round.bomb || []).find((b) => f >= b.tStart && f <= b.tEnd)?.carrier
-  const cegos = new Set((round.blinds || []).filter((b) => f >= b.t && f <= b.tEnd).map((b) => b.victim))
+  const cegos = new Map()
+  for (const b of round.blinds || []) {
+    if (f >= b.t && f <= b.tEnd) cegos.set(b.victim, Math.max(cegos.get(b.victim) ?? 0, b.tEnd))
+  }
   const clutcher = round.clutch && f >= round.clutch.t ? round.clutch.steamid : null
 
   ctx.textAlign = 'center'
@@ -99,6 +109,12 @@ function desenharFrame(ctx, round, f, radar, replay) {
       if (hpBaixo) {
         ctx.fillStyle = '#f87171'; ctx.font = '700 9px system-ui'
         ctx.fillText(String(p.hp), cx, cy + 16); ctx.font = '600 11px system-ui, sans-serif'
+      }
+      // countdown de cegueira ao lado do boneco
+      if (cegos.has(p.id)) {
+        ctx.textAlign = 'left'; ctx.fillStyle = '#7dd3fc'; ctx.font = '700 9px system-ui'
+        ctx.fillText(`${((cegos.get(p.id) - f) / hz).toFixed(1)}s`, cx + 10, cy + 4)
+        ctx.textAlign = 'center'; ctx.font = '600 11px system-ui, sans-serif'
       }
     }
     ctx.globalAlpha = 1
