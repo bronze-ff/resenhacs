@@ -50,14 +50,24 @@ def _write_players(cur, match_id, players):
             """
             insert into match_players
               (match_id, steam_id64, nick, team, kills, deaths, assists,
-               headshot_kills, damage, rounds_played, rating, won, team_kills)
-            values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+               headshot_kills, damage, rounds_played, rating, won, team_kills,
+               utility_damage, shots_fired, shots_hit,
+               entry_kills, entry_deaths, entry_wins,
+               trade_kills, traded_deaths, clutch_wins, clutch_attempts)
+            values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             on conflict (match_id, steam_id64) do update set
               nick = excluded.nick, team = excluded.team, kills = excluded.kills,
               deaths = excluded.deaths, assists = excluded.assists,
               headshot_kills = excluded.headshot_kills, damage = excluded.damage,
               rounds_played = excluded.rounds_played, rating = excluded.rating,
-              won = excluded.won, team_kills = excluded.team_kills
+              won = excluded.won, team_kills = excluded.team_kills,
+              utility_damage = excluded.utility_damage,
+              shots_fired = excluded.shots_fired, shots_hit = excluded.shots_hit,
+              entry_kills = excluded.entry_kills, entry_deaths = excluded.entry_deaths,
+              entry_wins = excluded.entry_wins,
+              trade_kills = excluded.trade_kills, traded_deaths = excluded.traded_deaths,
+              clutch_wins = excluded.clutch_wins, clutch_attempts = excluded.clutch_attempts
             """,
             (
                 match_id,
@@ -73,6 +83,16 @@ def _write_players(cur, match_id, players):
                 p.get("rating"),
                 p.get("won"),
                 p.get("team_kills", 0),
+                p.get("utility_damage", 0),
+                p.get("shots_fired", 0),
+                p.get("shots_hit", 0),
+                p.get("entry_kills", 0),
+                p.get("entry_deaths", 0),
+                p.get("entry_wins", 0),
+                p.get("trade_kills", 0),
+                p.get("traded_deaths", 0),
+                p.get("clutch_wins", 0),
+                p.get("clutch_attempts", 0),
             ),
         )
     # is_tracked é cache de "é Jogador": liga para quem está na whitelist.

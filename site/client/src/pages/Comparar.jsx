@@ -8,6 +8,8 @@ const LINHAS_STAT = [
   { rotulo: 'K/D', chave: 'kd', formato: (v) => v },
   { rotulo: 'ADR', chave: 'adr', formato: (v) => v },
   { rotulo: 'HS%', chave: 'hsPct', formato: (v) => `${v}%` },
+  { rotulo: 'Precisão', chave: 'accuracy', formato: (v) => `${v}%` },
+  { rotulo: 'Clutch %', chave: 'clutchPct', formato: (v) => `${v}%` },
   { rotulo: 'Vitórias', chave: 'winrate', formato: (v) => `${v}%` },
   { rotulo: 'Partidas', chave: 'partidas', formato: (v) => v },
 ]

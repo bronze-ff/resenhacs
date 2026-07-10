@@ -15,7 +15,17 @@ async function statsAgregados(db, steamId) {
             coalesce(sum(headshot_kills), 0)::int as hs,
             coalesce(sum(damage), 0)::int as damage,
             coalesce(sum(rounds_played), 0)::int as rounds,
-            avg(rating) as rating
+            avg(rating) as rating,
+            coalesce(sum(utility_damage), 0)::int as utility_damage,
+            coalesce(sum(shots_fired), 0)::int as shots_fired,
+            coalesce(sum(shots_hit), 0)::int as shots_hit,
+            coalesce(sum(entry_kills), 0)::int as entry_kills,
+            coalesce(sum(entry_deaths), 0)::int as entry_deaths,
+            coalesce(sum(entry_wins), 0)::int as entry_wins,
+            coalesce(sum(trade_kills), 0)::int as trade_kills,
+            coalesce(sum(traded_deaths), 0)::int as traded_deaths,
+            coalesce(sum(clutch_wins), 0)::int as clutch_wins,
+            coalesce(sum(clutch_attempts), 0)::int as clutch_attempts
      from match_players where steam_id64 = $1`,
     [steamId],
   )
@@ -31,6 +41,18 @@ async function statsAgregados(db, steamId) {
     hsPct: pct(a.hs, a.kills),
     adr: a.rounds ? Math.round((a.damage / a.rounds) * 10) / 10 : 0,
     rating: a.rating === null ? null : Math.round(Number(a.rating) * 100) / 100,
+    // Estilo Leetify: precisão, dano de utilitária, entries, trades, clutch.
+    accuracy: pct(a.shots_hit, a.shots_fired),
+    utilityDamage: a.utility_damage,
+    utilityDamagePerRound: a.rounds ? Math.round((a.utility_damage / a.rounds) * 10) / 10 : 0,
+    entryKills: a.entry_kills,
+    entryDeaths: a.entry_deaths,
+    entryWinPct: pct(a.entry_wins, a.entry_kills),
+    tradeKills: a.trade_kills,
+    tradedDeaths: a.traded_deaths,
+    clutchWins: a.clutch_wins,
+    clutchAttempts: a.clutch_attempts,
+    clutchPct: pct(a.clutch_wins, a.clutch_attempts),
   }
 }
 

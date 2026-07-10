@@ -66,6 +66,17 @@ export default function JogadorPerfil() {
         </div>
       </section>
 
+      <section>
+        <h3 className="mb-3 font-display text-lg font-semibold uppercase tracking-wide text-texto">Detalhado</h3>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          <StatTile rotulo="Precisão" valor={`${stats.accuracy}%`} sub={`${stats.kills} tiros certeiros`} />
+          <StatTile rotulo="Dano utilitária" valor={stats.utilityDamagePerRound} sub="por round" />
+          <StatTile rotulo="Entry" valor={`${stats.entryKills}/${stats.entryDeaths}`} sub={`${stats.entryWinPct}% de vitória`} />
+          <StatTile rotulo="Trade" valor={stats.tradeKills} sub={`${stats.tradedDeaths} mortes vingadas`} />
+          <StatTile rotulo="Clutch" valor={`${stats.clutchWins}/${stats.clutchAttempts}`} sub={`${stats.clutchPct}%`} />
+        </div>
+      </section>
+
       <div className="grid gap-6 lg:grid-cols-2">
         <section>
           <h3 className="mb-3 font-display text-lg font-semibold uppercase tracking-wide text-texto">Com quem mais joga</h3>

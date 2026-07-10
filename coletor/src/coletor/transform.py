@@ -115,6 +115,73 @@ def _distribuicao_multikills(por_round):
     return contagem
 
 
+JANELA_TRADE_TICKS = 5 * 64  # 5s a 64 tick — janela padrão de trade usada pela maioria das ferramentas de stats
+
+
+def _agrupar_por_round(kills):
+    saida = {}
+    for k in kills:
+        saida.setdefault(k["round_number"], []).append(k)
+    return saida
+
+
+def entry_duels(kills, teams, winner_by_round):
+    """Primeiro kill 'de verdade' (não TK) de cada round = entry duel. Devolve uma lista
+    de {round_number, attacker, victim, venceu} (venceu = o time do atacante ganhou o round)."""
+    saida = []
+    for round_number, round_kills in _agrupar_por_round(kills).items():
+        reais = [k for k in round_kills if not k.get("team_kill") and k.get("attacker") and k["attacker"] != k["victim"]]
+        if not reais:
+            continue
+        primeiro = min(reais, key=lambda k: k["tick"])
+        venceu = winner_by_round.get(round_number) == teams.get(primeiro["attacker"])
+        saida.append({"round_number": round_number, "attacker": primeiro["attacker"], "victim": primeiro["victim"], "venceu": venceu})
+    return saida
+
+
+def trade_kills(kills, teams, janela=JANELA_TRADE_TICKS):
+    """Uma kill é 'trade' quando vinga um companheiro morto há pouco: o atacante mata,
+    dentro da janela, quem tinha acabado de matar um teammate dele. Devolve lista de
+    {round_number, attacker, avenged_teammate}."""
+    saida = []
+    for round_number, round_kills in _agrupar_por_round(kills).items():
+        ordenado = sorted((k for k in round_kills if not k.get("team_kill") and k.get("attacker")), key=lambda k: k["tick"])
+        for i, k in enumerate(ordenado):
+            atk, vic, tick = k["attacker"], k["victim"], k["tick"]
+            atk_time = teams.get(atk)
+            for j in range(i - 1, -1, -1):
+                anterior = ordenado[j]
+                if tick - anterior["tick"] > janela:
+                    break
+                if anterior["attacker"] == vic and teams.get(anterior["victim"]) == atk_time:
+                    saida.append({"round_number": round_number, "attacker": atk, "avenged_teammate": anterior["victim"]})
+                    break
+    return saida
+
+
+def clutch_outcomes(kills, teams, winner_by_round):
+    """Detecta tentativas de clutch (último vivo de um time vs 2+ inimigos) por round,
+    vencidas ou não. Devolve lista de {steam_id64, round_number, vs, venceu}."""
+    saida = []
+    for round_number, round_kills in _agrupar_por_round(kills).items():
+        ordenado = sorted((k for k in round_kills if not k.get("team_kill")), key=lambda k: k["tick"])
+        alive = set(teams.keys())
+        inicio = None
+        for k in ordenado:
+            alive.discard(k["victim"])
+            a = [s for s in alive if teams.get(s) == "A"]
+            b = [s for s in alive if teams.get(s) == "B"]
+            for lado, outro in ((a, b), (b, a)):
+                if len(lado) == 1 and len(outro) >= 2 and inicio is None:
+                    inicio = {"steamid": lado[0], "vs": len(outro), "tick": k["tick"], "time": teams.get(lado[0])}
+        if not inicio:
+            continue
+        sobreviveu = not any(k["victim"] == inicio["steamid"] and k["tick"] >= inicio["tick"] for k in ordenado)
+        venceu = sobreviveu and winner_by_round.get(round_number) == inicio["time"]
+        saida.append({"steam_id64": inicio["steamid"], "round_number": round_number, "vs": inicio["vs"], "venceu": venceu})
+    return saida
+
+
 def hltv_rating(kills, deaths, rounds, k):
     """Aproximação do HLTV Rating 1.0. `k` é o dict {1:..,5:..} de _distribuicao_multikills."""
     if rounds <= 0:
@@ -127,15 +194,44 @@ def hltv_rating(kills, deaths, rounds, k):
 
 
 def enrich(parsed):
-    """Preenche won, rounds_played e rating em cada player; devolve o ParsedDemo pronto pro banco."""
+    """Preenche won, rounds_played, rating e os stats estilo Leetify (entry, trade,
+    clutch) em cada player; devolve o ParsedDemo pronto pro banco."""
     # Total de rounds = soma do placar (autoritativo); cai para len(rounds) se não houver placar.
     rounds_total = (parsed.get("score_a", 0) + parsed.get("score_b", 0)) or len(parsed["rounds"])
     vencedor = "A" if parsed.get("score_a", 0) > parsed.get("score_b", 0) else "B"
-    kpr = kills_por_round_por_jogador(parsed.get("kills", []))
+    kills = parsed.get("kills", [])
+    kpr = kills_por_round_por_jogador(kills)
+
+    teams = {p["steam_id64"]: p["team"] for p in parsed["players"]}
+    winner_by_round = {r["round_number"]: r.get("winner_team") for r in parsed.get("rounds", [])}
+    tem_tick = all("tick" in k for k in kills)  # testes antigos passam kills sem tick — pula os stats novos
+
+    entry = entry_duels(kills, teams, winner_by_round) if tem_tick else []
+    trades = trade_kills(kills, teams) if tem_tick else []
+    clutches = clutch_outcomes(kills, teams, winner_by_round) if tem_tick else []
+
+    entry_kills, entry_deaths, entry_wins = {}, {}, {}
+    for e in entry:
+        entry_kills[e["attacker"]] = entry_kills.get(e["attacker"], 0) + 1
+        entry_deaths[e["victim"]] = entry_deaths.get(e["victim"], 0) + 1
+        if e["venceu"]:
+            entry_wins[e["attacker"]] = entry_wins.get(e["attacker"], 0) + 1
+
+    trade_count, traded_deaths = {}, {}
+    for t in trades:
+        trade_count[t["attacker"]] = trade_count.get(t["attacker"], 0) + 1
+        traded_deaths[t["avenged_teammate"]] = traded_deaths.get(t["avenged_teammate"], 0) + 1
+
+    clutch_wins, clutch_attempts = {}, {}
+    for c in clutches:
+        clutch_attempts[c["steam_id64"]] = clutch_attempts.get(c["steam_id64"], 0) + 1
+        if c["venceu"]:
+            clutch_wins[c["steam_id64"]] = clutch_wins.get(c["steam_id64"], 0) + 1
 
     players = []
     for p in parsed["players"]:
-        por_round = kpr.get(p["steam_id64"], {})
+        sid = p["steam_id64"]
+        por_round = kpr.get(sid, {})
         dist = _distribuicao_multikills(por_round)
         rating = hltv_rating(p.get("kills", 0), p.get("deaths", 0), rounds_total, dist)
         players.append(
@@ -144,7 +240,14 @@ def enrich(parsed):
                 "rounds_played": rounds_total,
                 "won": p["team"] == vencedor,
                 "rating": rating,
+                "entry_kills": entry_kills.get(sid, 0),
+                "entry_deaths": entry_deaths.get(sid, 0),
+                "entry_wins": entry_wins.get(sid, 0),
+                "trade_kills": trade_count.get(sid, 0),
+                "traded_deaths": traded_deaths.get(sid, 0),
+                "clutch_wins": clutch_wins.get(sid, 0),
+                "clutch_attempts": clutch_attempts.get(sid, 0),
             }
         )
 
-    return {**parsed, "players": players, "highlights": multikill_highlights(parsed.get("kills", []))}
+    return {**parsed, "players": players, "highlights": multikill_highlights(kills)}

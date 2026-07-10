@@ -69,6 +69,50 @@ def test_attach_replay_frames_usa_ultima_kill_do_jogador_no_round():
     assert out[2]["frame"] is None  # round 3 não existe no replay
 
 
+def test_entry_duels_pega_o_primeiro_kill_de_verdade_do_round_e_confere_vitoria():
+    # Times são sempre "A"/"B" nessa base (convenção de parse.py:_team_letter), não "T"/"CT".
+    teams = {"A": "A", "B": "A", "C": "B"}
+    winner_by_round = {1: "A", 2: "B"}
+    kills = [
+        {"round_number": 1, "tick": 100, "attacker": "A", "victim": "C", "headshot": False, "team_kill": False},
+        {"round_number": 1, "tick": 50, "attacker": "A", "victim": "B", "headshot": False, "team_kill": True},  # TK antes, deve ser ignorado
+        {"round_number": 2, "tick": 200, "attacker": "C", "victim": "A", "headshot": False, "team_kill": False},
+    ]
+    out = transform.entry_duels(kills, teams, winner_by_round)
+    assert {"round_number": 1, "attacker": "A", "victim": "C", "venceu": True} in out
+    assert {"round_number": 2, "attacker": "C", "victim": "A", "venceu": True} in out
+
+
+def test_trade_kills_vinga_teammate_dentro_da_janela():
+    teams = {"A": "A", "B": "A", "C": "B"}
+    kills = [
+        {"round_number": 1, "tick": 1000, "attacker": "C", "victim": "A", "headshot": False, "team_kill": False},  # C mata A (do time A)
+        {"round_number": 1, "tick": 1000 + 100, "attacker": "B", "victim": "C", "headshot": False, "team_kill": False},  # B vinga A rapidinho
+        {"round_number": 1, "tick": 1000 + 500 * 64, "attacker": "B", "victim": "C", "headshot": False, "team_kill": False},  # fora da janela
+    ]
+    out = transform.trade_kills(kills, teams)
+    assert len(out) == 1
+    assert out[0] == {"round_number": 1, "attacker": "B", "avenged_teammate": "A"}
+
+
+def test_clutch_outcomes_detecta_vitoria_e_derrota():
+    teams = {"A": "A", "B": "A", "C": "B", "D": "B"}
+    kills_vitoria = [
+        {"round_number": 1, "tick": 10, "attacker": "C", "victim": "B", "headshot": False, "team_kill": False},  # A fica 1v2
+        {"round_number": 1, "tick": 20, "attacker": "A", "victim": "C", "headshot": False, "team_kill": False},
+        {"round_number": 1, "tick": 30, "attacker": "A", "victim": "D", "headshot": False, "team_kill": False},  # A fecha o 1v2
+    ]
+    out = transform.clutch_outcomes(kills_vitoria, teams, {1: "A"})
+    assert out == [{"steam_id64": "A", "round_number": 1, "vs": 2, "venceu": True}]
+
+    kills_derrota = [
+        {"round_number": 2, "tick": 10, "attacker": "C", "victim": "B", "headshot": False, "team_kill": False},  # A fica 1v2
+        {"round_number": 2, "tick": 20, "attacker": "C", "victim": "A", "headshot": False, "team_kill": False},  # A morre, clutch falhou
+    ]
+    out2 = transform.clutch_outcomes(kills_derrota, teams, {2: "B"})
+    assert out2 == [{"steam_id64": "A", "round_number": 2, "vs": 2, "venceu": False}]
+
+
 def test_hltv_rating_arredonda_e_zera_sem_rounds():
     assert transform.hltv_rating(20, 15, 0, {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}) == 0.0
     r = transform.hltv_rating(20, 10, 22, {1: 8, 2: 4, 3: 1, 4: 0, 5: 0})

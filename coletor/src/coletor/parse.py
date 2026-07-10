@@ -32,6 +32,25 @@ def _sid(v):
     return str(int(v)) if isinstance(v, (int, float)) else str(v)
 
 
+# Descoberta empírica (mesmo demo real): armas em weapon_fire vêm prefixadas "weapon_"
+# (ex.: "weapon_ak47"); em player_hurt vêm sem prefixo (ex.: "ak47"). O dano de molotov/
+# incendiary aparece com weapon="inferno" no player_hurt, não "molotov" — só se descobre
+# isso rodando contra um .dem de verdade.
+_NAO_ARMA_DE_FOGO = {
+    "knife", "knife_css", "knife_t", "knife_kukri", "knife_ct",
+    "hegrenade", "incgrenade", "molotov", "inferno", "flashbang", "smokegrenade", "decoy",
+    "c4", "planted_c4", "taser",
+}
+_ARMAS_UTILITARIAS = {"hegrenade", "molotov", "inferno", "incgrenade"}
+
+
+def _eh_arma_de_fogo(weapon):
+    if not weapon:
+        return False
+    w = str(weapon).replace("weapon_", "")
+    return w not in _NAO_ARMA_DE_FOGO and not w.startswith("knife")
+
+
 def parse_demo(path):
     import pandas as pd
     from demoparser2 import DemoParser
@@ -45,8 +64,11 @@ def parse_demo(path):
     freeze = parser.parse_event("round_freeze_end", other=["total_rounds_played"])
     first_freeze = int(freeze["tick"].min())
 
-    hurt = parser.parse_event("player_hurt", other=["total_rounds_played"])
+    hurt = parser.parse_event("player_hurt", other=["total_rounds_played", "weapon"])
     hurt = hurt[hurt["tick"] >= first_freeze]
+
+    fogo = parser.parse_event("weapon_fire")
+    fogo = fogo[fogo["tick"] >= first_freeze]
 
     win_panel = parser.parse_event("cs_win_panel_match")
     end_tick = (
@@ -74,6 +96,7 @@ def parse_demo(path):
         kills.append(
             {
                 "round_number": int(r["total_rounds_played"]) + 1,
+                "tick": int(r["tick"]),
                 "attacker": atk,
                 "victim": vic,
                 "headshot": bool(r["headshot"]),
@@ -87,12 +110,27 @@ def parse_demo(path):
         if ast:
             assists[ast] = assists.get(ast, 0) + 1
 
-    # Dano por atacante.
-    damage = {}
+    # Dano por atacante, separando bala de utilitária (granada/molotov — "inferno" no
+    # weapon é o dano de queimadura do molotov/incendiary, descoberto empiricamente).
+    damage, utility_damage, shots_hit = {}, {}, {}
     for r in hurt.to_dict("records"):
         atk = _sid(r.get("attacker_steamid"))
-        if atk:
-            damage[atk] = damage.get(atk, 0) + int(r["dmg_health"])
+        if not atk:
+            continue
+        dmg = int(r["dmg_health"])
+        damage[atk] = damage.get(atk, 0) + dmg
+        arma = r.get("weapon")
+        if arma in _ARMAS_UTILITARIAS:
+            utility_damage[atk] = utility_damage.get(atk, 0) + dmg
+        elif _eh_arma_de_fogo(arma):
+            shots_hit[atk] = shots_hit.get(atk, 0) + 1
+
+    # Tiros disparados (só armas de fogo — exclui faca e granadas) → precisão.
+    shots_fired = {}
+    for r in fogo.to_dict("records"):
+        sid = _sid(r.get("user_steamid"))
+        if sid and _eh_arma_de_fogo(r.get("weapon")):
+            shots_fired[sid] = shots_fired.get(sid, 0) + 1
 
     players = [
         {
@@ -104,6 +142,9 @@ def parse_demo(path):
             "assists": assists.get(sid, 0),
             "headshot_kills": 0,
             "damage": damage.get(sid, 0),
+            "utility_damage": utility_damage.get(sid, 0),
+            "shots_fired": shots_fired.get(sid, 0),
+            "shots_hit": shots_hit.get(sid, 0),
         }
         for sid, ft in fixed.items()
         if sid
