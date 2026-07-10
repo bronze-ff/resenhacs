@@ -77,13 +77,52 @@ export default function JogadorPerfil() {
 
       <section>
         <h3 className="mb-3 font-display text-lg font-semibold uppercase tracking-wide text-texto">Detalhado</h3>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          <StatTile rotulo="Precisão" valor={`${stats.accuracy}%`} sub={`${stats.kills} tiros certeiros`} />
-          <StatTile rotulo="Dano utilitária" valor={stats.utilityDamagePerRound} sub="por round" />
-          <StatTile rotulo="Entry" valor={`${stats.entryKills}/${stats.entryDeaths}`} sub={`${stats.entryWinPct}% de vitória`} />
-          <StatTile rotulo="Trade" valor={stats.tradeKills} sub={`${stats.tradedDeaths} mortes vingadas`} />
-          <StatTile rotulo="Clutch" valor={`${stats.clutchWins}/${stats.clutchAttempts}`} sub={`${stats.clutchPct}%`} />
-        </div>
+        {(() => {
+          // Convenção do sistema inteiro: X/Y sempre = sucessos/total.
+          const duelosEntry = stats.entryKills + stats.entryDeaths
+          const entryPct = duelosEntry ? Math.round((stats.entryKills / duelosEntry) * 1000) / 10 : 0
+          return (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+              <StatTile
+                rotulo="Precisão"
+                valor={`${stats.accuracy}%`}
+                sub={`${stats.shotsHit} de ${stats.shotsFired} tiros`}
+                title="Tiros que acertaram alguém ÷ tiros disparados (só armas de fogo; granada e faca ficam de fora)."
+              />
+              <StatTile
+                rotulo="Dano utilitária"
+                valor={stats.utilityDamagePerRound}
+                sub="dano de granada / round"
+                title="Dano de HE, molotov e incendiária por round jogado."
+              />
+              <StatTile
+                rotulo="Entry (1º duelo)"
+                valor={`${stats.entryKills}/${duelosEntry}`}
+                sub={`${entryPct}% vencidos`}
+                title={`O primeiro duelo de cada round: venceu ${stats.entryKills} (matou primeiro) e perdeu ${stats.entryDeaths} (morreu primeiro). Quando ele abre matando, o time ganha o round em ${stats.entryWinPct}% das vezes.`}
+              />
+              <StatTile
+                rotulo="Trades"
+                valor={stats.tradeKills}
+                sub={`${stats.tradedDeaths} mortes suas vingadas`}
+                title="Kills que vingaram um colega morto nos 5s anteriores. O número de baixo é o contrário: quantas vezes um colega vingou a morte dele."
+              />
+              <StatTile
+                rotulo="Clutch (1vX)"
+                valor={`${stats.clutchWins}/${stats.clutchAttempts}`}
+                sub={`${stats.clutchPct}% vencidos`}
+                title="Rounds em que ele ficou sozinho contra 2 ou mais inimigos: vencidos / tentativas."
+              />
+            </div>
+          )
+        })()}
+        <p className="mt-3 font-mono text-xs leading-relaxed text-texto-fraco">
+          Como medimos — <span className="text-texto">Precisão</span>: tiros certos ÷ disparados (só armas de fogo).{' '}
+          <span className="text-texto">Entry</span>: o 1º duelo de cada round, vencidos/disputados.{' '}
+          <span className="text-texto">Trades</span>: kill em até 5s vingando um colega que acabou de morrer.{' '}
+          <span className="text-texto">Clutch</span>: sozinho contra 2+, vencidos/tentativas.{' '}
+          Em todo o site, <span className="text-texto">X/Y = sucessos/total</span>. Passe o mouse em cada card pra mais detalhe.
+        </p>
       </section>
 
       <div className="grid gap-6 lg:grid-cols-2">

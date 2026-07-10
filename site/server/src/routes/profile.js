@@ -61,6 +61,8 @@ async function statsAgregados(db, steamId, from, to) {
     rating: a.rating === null ? null : Math.round(Number(a.rating) * 100) / 100,
     // Estilo Leetify: precisão, dano de utilitária, entries, trades, clutch.
     accuracy: pct(a.shots_hit, a.shots_fired),
+    shotsFired: a.shots_fired,
+    shotsHit: a.shots_hit,
     utilityDamage: a.utility_damage,
     utilityDamagePerRound: a.rounds ? Math.round((a.utility_damage / a.rounds) * 10) / 10 : 0,
     entryKills: a.entry_kills,
