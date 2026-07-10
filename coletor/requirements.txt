@@ -1,0 +1,4 @@
+# Runtime do Coletor (GitHub Actions). Testes usam só pandas+pytest (ver dev-requirements).
+demoparser2>=0.44
+boto3>=1.34
+psycopg[binary]>=3.2

@@ -1,0 +1,3 @@
+# Só o necessário para rodar os testes (as transformações são independentes do demoparser2).
+pytest>=8
+pandas>=2
