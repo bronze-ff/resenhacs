@@ -31,7 +31,7 @@ export default function JogadorPerfil() {
   if (erro) return <p className="font-mono text-sm text-texto-fraco">Jogador não encontrado.</p>
   if (!data) return <p className="font-mono text-sm text-texto-fraco">Carregando…</p>
 
-  const { jogador, stats, porMapa, recentes, sinergia, evolucao, badges, estilo } = data
+  const { jogador, stats, porMapa, recentes, sinergia, evolucao, badges, estilo, destaques } = data
 
   return (
     <div className="space-y-6">
@@ -196,6 +196,30 @@ export default function JogadorPerfil() {
           </div>
         </section>
       </div>
+
+      {destaques.length > 0 && (
+        <section>
+          <h3 className="mb-3 font-display text-lg font-semibold uppercase tracking-wide text-texto">
+            Highlights <span className="text-texto-fraco">({destaques.length}) — "em qual partida foi esse mesmo?"</span>
+          </h3>
+          <div className="flex flex-wrap gap-2">
+            {destaques.map((d) => (
+              <Link
+                key={d.id}
+                to={`/partida/${d.matchId}?highlight=${d.id}`}
+                className="panel-cut-sm flex items-center gap-2 border border-borda bg-superficie px-3 py-2 font-mono text-xs transition-colors hover:border-destaque/60"
+                title={`${nomeMapa(d.map)} · ${dataHora(d.playedAt)}`}
+              >
+                <span className="font-display font-semibold uppercase text-destaque">{d.kind}</span>
+                <span className="text-texto-fraco">round {d.roundNumber}</span>
+                <span className="text-texto-fraco">·</span>
+                <span className="text-texto">{nomeMapa(d.map)}</span>
+                <span className="text-texto-fraco">{dataHora(d.playedAt)}</span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section>
         <h3 className="mb-3 font-display text-lg font-semibold uppercase tracking-wide text-texto">Partidas recentes</h3>

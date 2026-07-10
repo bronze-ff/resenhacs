@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, useSearchParams, Link } from 'react-router-dom'
 import { nomeMapa, dataHora, origemPartida, corRating } from '../lib/format.js'
 import ReplayViewer from '../components/ReplayViewer.jsx'
 import MapaCalor from '../components/MapaCalor.jsx'
@@ -184,12 +184,14 @@ function FormClipe({ matchId, jogadores, onAdicionado }) {
 
 export default function Partida() {
   const { id } = useParams()
+  const [searchParams] = useSearchParams()
   const { jogador } = useAuth()
   const [m, setM] = useState(null)
   const [erro, setErro] = useState(false)
   const [promovendo, setPromovendo] = useState(null)
   const [seek, setSeek] = useState(null)
   const replayRef = useRef(null)
+  const autoJumpFeito = useRef(false)
 
   // Usado tanto pelos Highlights (clicar num "ACE round 5") quanto pelo Mapa de calor
   // (clicar num ponto de morte/kill) — os dois só precisam saber round + frame.
@@ -232,9 +234,23 @@ export default function Partida() {
 
   useEffect(() => {
     setM(null) // troca de :id via navegação client-side não deve mostrar a partida antiga
+    autoJumpFeito.current = false
     carregar()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
+
+  // Veio de "?highlight=<id>" (link do Perfil do Jogador: "em qual partida foi esse
+  // clutch mesmo?") — assim que a partida carregar, pula sozinho pro momento certo.
+  useEffect(() => {
+    const highlightId = searchParams.get('highlight')
+    if (!m || !highlightId || autoJumpFeito.current) return
+    const h = m.highlights.find((x) => x.id === highlightId)
+    if (h) {
+      autoJumpFeito.current = true
+      irParaHighlight(h)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [m])
 
   if (erro && !m) return <p className="font-mono text-sm text-texto-fraco">Partida não encontrada.</p>
   if (!m) return <p className="font-mono text-sm text-texto-fraco">Carregando…</p>

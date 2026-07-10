@@ -40,6 +40,9 @@ describe('GET /api/profile/:steamId', () => {
       ['from synergy_pairs', [{ steam_id64: '999', nick: 'parça', avatar_url: null, partidas: 8, vitorias: 6 }]],
       ['mp.rating is not null', [{ id: 'm1', played_at: null, rating: '1.1' }, { id: 'm2', played_at: null, rating: '1.4' }]],
       ['mp.won from match_players', [{ won: true }, { won: true }, { won: false }, { won: true }]],
+      ['from highlights h join matches m on m.id = h.match_id', [
+        { id: 'h1', match_id: 'm1', round_number: 3, kind: 'clutch_1v2', description: 'CLUTCH 1v2 no round 3', map: 'de_mirage', played_at: null },
+      ]],
     ])
     const res = await request(app).get('/api/profile/765').set('Cookie', cookie)
     expect(res.status).toBe(200)
@@ -56,6 +59,10 @@ describe('GET /api/profile/:steamId', () => {
     expect(res.body.estilo).not.toBeNull()
     // melhor sequência do fixture [true,true,false,true] = 2
     expect(res.body.badges.map((b) => b.tag)).not.toContain('sequencia_5')
+    // "em qual partida foi esse clutch mesmo?" — lista de highlights com o matchId pra linkar
+    expect(res.body.destaques).toEqual([
+      { id: 'h1', matchId: 'm1', roundNumber: 3, kind: 'clutch_1v2', description: 'CLUTCH 1v2 no round 3', map: 'de_mirage', playedAt: null },
+    ])
   })
 })
 

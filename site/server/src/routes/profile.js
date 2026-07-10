@@ -211,8 +211,10 @@ export function createProfileRouter({ db, requireAuth }) {
     const mapaPeriodo = periodoWhere(from, to, mapaParams)
     const recentesParams = [steamId]
     const recentesPeriodo = periodoWhere(from, to, recentesParams)
+    const destaquesParams = [steamId]
+    const destaquesPeriodo = periodoWhere(from, to, destaquesParams)
 
-    const [stats, porMapa, recentes, sinergia, evolucao, statsGerais, sequencia, estilo] = await Promise.all([
+    const [stats, porMapa, recentes, sinergia, evolucao, statsGerais, sequencia, estilo, destaques] = await Promise.all([
       statsAgregados(db, steamId, from, to),
       db.query(
         `select m.map, count(*)::int as partidas,
@@ -246,6 +248,15 @@ export function createProfileRouter({ db, requireAuth }) {
       statsAgregados(db, steamId),
       melhorSequencia(db, steamId),
       estiloDoJogador(db, steamId, from, to),
+      // "Em qual partida foi esse clutch/ace mesmo?" — lista de Highlights com link
+      // pra Partida (que já sabe pular pro momento exato do Replay 2D).
+      db.query(
+        `select h.id, h.match_id, h.round_number, h.kind, h.description, m.map, m.played_at
+         from highlights h join matches m on m.id = h.match_id
+         where h.steam_id64 = $1${destaquesPeriodo}
+         order by m.played_at desc nulls last limit 100`,
+        destaquesParams,
+      ),
     ])
 
     const badges = calcularBadges({
@@ -263,6 +274,15 @@ export function createProfileRouter({ db, requireAuth }) {
       evolucao,
       badges,
       estilo,
+      destaques: destaques.rows.map((d) => ({
+        id: d.id,
+        matchId: d.match_id,
+        roundNumber: d.round_number,
+        kind: d.kind,
+        description: d.description,
+        map: d.map,
+        playedAt: d.played_at,
+      })),
       porMapa: porMapa.rows.map((r) => ({
         map: r.map,
         partidas: r.partidas,
