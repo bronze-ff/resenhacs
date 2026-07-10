@@ -11,6 +11,28 @@
 import SteamUser from 'steam-user'
 import GlobalOffensive from 'globaloffensive'
 
+// Mesmo codec de coletor/src/coletor/sharecode.py — usado só pra CORRELACIONAR a
+// resposta do GC com o code pedido (ver decodeShareCode abaixo), não pra descobrir
+// codes novos (isso é a API oficial da Steam, no coletor).
+const DICTIONARY = 'ABCDEFGHJKLMNOPQRSTUVWXYZabcdefhijkmnopqrstuvwxyz23456789'
+const BASE = BigInt(DICTIONARY.length)
+
+function decodeShareCode(code) {
+  const limpo = code.replace('CSGO-', '').replaceAll('-', '')
+  if (limpo.length !== 25) return null
+  let big = 0n
+  for (const ch of [...limpo].reverse()) {
+    const idx = DICTIONARY.indexOf(ch)
+    if (idx < 0) return null
+    big = big * BASE + BigInt(idx)
+  }
+  // 18 bytes big-endian; matchId/reservationId são os primeiros 16 bytes, little-endian.
+  const hex = big.toString(16).padStart(36, '0')
+  const bytes = Buffer.from(hex, 'hex')
+  const matchId = bytes.subarray(0, 8).reverse().readBigUInt64BE()
+  return { matchId: matchId.toString() }
+}
+
 const user = process.env.STEAM_BOT_USER
 const pass = process.env.STEAM_BOT_PASS
 const codes = process.argv.slice(2)
@@ -39,12 +61,19 @@ function extrairDemoUrl(match) {
 }
 
 // Resolve um code: pede ao GC e espera o próximo matchList (com timeout por code).
+// Correlaciona pelo matchid decodificado do PRÓPRIO code — sem isso, uma resposta
+// atrasada do code anterior (chegou depois do timeout dele) seria confundida com a
+// resposta do code atual e gravaria o demo/matchTime da partida ERRADA.
 function resolverUm(code) {
+  const esperado = decodeShareCode(code)
   return new Promise((resolve) => {
     const onList = (matches) => {
+      const match = matches && matches[0]
+      if (esperado && match?.matchid && String(match.matchid) !== esperado.matchId) {
+        return // resposta de outro code (atrasada) — ignora, continua esperando a certa
+      }
       csgo.removeListener('matchList', onList)
       clearTimeout(t)
-      const match = matches && matches[0]
       resolve({ shareCode: code, demoUrl: extrairDemoUrl(match), matchTime: match?.matchtime ?? null })
     }
     const t = setTimeout(() => {
@@ -66,7 +95,10 @@ client.on('loggedOn', () => {
   client.gamesPlayed([730])
 })
 
-csgo.on('connectedToGC', async () => {
+// once: se o GC cair e reconectar no meio do lote (sessão longa, backfill grande), o
+// handler rodando de novo resolveria tudo duas vezes e escreveria dois JSONs
+// concatenados no stdout — o Python quebraria tentando fazer json.loads daquilo.
+csgo.once('connectedToGC', async () => {
   for (const code of codes) {
     resultados.push(await resolverUm(code))
   }

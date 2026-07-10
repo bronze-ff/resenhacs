@@ -7,12 +7,14 @@ const RAIO_CLIQUE = 14 // px — distância máxima do clique até um ponto pra 
 // Reaproveita as mesmas posições já normalizadas (0..1) que o Replay 2D usa —
 // nenhum dado novo do demo é necessário, só uma leitura diferente do mesmo JSON.
 // Cada ponto guarda round/frame também, pra dar pra clicar e pular pro replay.
+// Os arrays de eventos são opcionais no replay JSON (round sem granada não tem `flashes`
+// etc.) — mesma convenção do ReplayViewer; sem os `?? []` um round vazio derruba a página.
 function pontosDeMorte(replay, steamId) {
   const pontos = []
-  for (const r of replay.rounds) {
-    for (const k of r.kills) {
+  for (const r of replay.rounds ?? []) {
+    for (const k of r.kills ?? []) {
       if (steamId && k.victim !== steamId) continue
-      const p = r.frames[k.t]?.players.find((pl) => pl.id === k.victim)
+      const p = r.frames?.[k.t]?.players.find((pl) => pl.id === k.victim)
       if (p) pontos.push({ x: p.x, y: p.y, round: r.round, frame: k.t })
     }
   }
@@ -21,11 +23,11 @@ function pontosDeMorte(replay, steamId) {
 
 function pontosDeKill(replay, steamId) {
   const pontos = []
-  for (const r of replay.rounds) {
-    for (const k of r.kills) {
+  for (const r of replay.rounds ?? []) {
+    for (const k of r.kills ?? []) {
       if (!k.killer) continue
       if (steamId && k.killer !== steamId) continue
-      const p = r.frames[k.t]?.players.find((pl) => pl.id === k.killer)
+      const p = r.frames?.[k.t]?.players.find((pl) => pl.id === k.killer)
       if (p) pontos.push({ x: p.x, y: p.y, round: r.round, frame: k.t })
     }
   }
@@ -34,11 +36,11 @@ function pontosDeKill(replay, steamId) {
 
 function pontosDeGranada(replay) {
   const pontos = []
-  for (const r of replay.rounds) {
-    for (const s of r.smokes) pontos.push({ x: s.x, y: s.y, round: r.round, frame: s.tStart, tipo: 'smoke' })
-    for (const f of r.fires) pontos.push({ x: f.x, y: f.y, round: r.round, frame: f.tStart, tipo: 'fire' })
-    for (const f of r.flashes) pontos.push({ x: f.x, y: f.y, round: r.round, frame: f.t, tipo: 'flash' })
-    for (const h of r.hes) pontos.push({ x: h.x, y: h.y, round: r.round, frame: h.t, tipo: 'he' })
+  for (const r of replay.rounds ?? []) {
+    for (const s of r.smokes ?? []) pontos.push({ x: s.x, y: s.y, round: r.round, frame: s.tStart, tipo: 'smoke' })
+    for (const f of r.fires ?? []) pontos.push({ x: f.x, y: f.y, round: r.round, frame: f.tStart, tipo: 'fire' })
+    for (const f of r.flashes ?? []) pontos.push({ x: f.x, y: f.y, round: r.round, frame: f.t, tipo: 'flash' })
+    for (const h of r.hes ?? []) pontos.push({ x: h.x, y: h.y, round: r.round, frame: h.t, tipo: 'he' })
   }
   return pontos
 }

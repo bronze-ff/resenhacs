@@ -204,6 +204,9 @@ export default function Partida() {
   }
 
   function carregar() {
+    // Reseta o erro a cada tentativa: um refetch falho (ex.: rede oscilou ao anexar
+    // clipe) não pode transformar uma partida já carregada em "não encontrada".
+    setErro(false)
     fetch(`/api/matches/${id}`)
       .then((res) => {
         if (!res.ok) throw new Error()
@@ -227,18 +230,32 @@ export default function Partida() {
     }
   }
 
-  useEffect(carregar, [id])
+  useEffect(() => {
+    setM(null) // troca de :id via navegação client-side não deve mostrar a partida antiga
+    carregar()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id])
 
-  if (erro) return <p className="font-mono text-sm text-texto-fraco">Partida não encontrada.</p>
+  if (erro && !m) return <p className="font-mono text-sm text-texto-fraco">Partida não encontrada.</p>
   if (!m) return <p className="font-mono text-sm text-texto-fraco">Carregando…</p>
 
   const timeA = m.players.filter((p) => p.team === 'A')
   const timeB = m.players.filter((p) => p.team === 'B')
 
-  // Resultado do ponto de vista do grupo (Jogadores whitelistados na partida).
+  // Resultado do ponto de vista do grupo (Jogadores whitelistados na partida). won é
+  // nullable (empate — placar igual — não tem vencedor); `!p.won` sozinho trataria
+  // empate como derrota, por isso os 3 estados são checados explicitamente.
   const doGrupo = m.players.filter((p) => p.isTracked)
   const resultadoGrupo =
-    doGrupo.length === 0 ? null : doGrupo.every((p) => p.won) ? 'vitoria' : doGrupo.every((p) => !p.won) ? 'derrota' : 'misto'
+    doGrupo.length === 0
+      ? null
+      : doGrupo.every((p) => p.won === true)
+        ? 'vitoria'
+        : doGrupo.every((p) => p.won === false)
+          ? 'derrota'
+          : doGrupo.every((p) => p.won === null)
+            ? 'empate'
+            : 'misto'
 
   return (
     <div className="space-y-6">
@@ -267,15 +284,20 @@ export default function Partida() {
               Derrota
             </span>
           )}
+          {resultadoGrupo === 'empate' && (
+            <span className="panel-cut-sm border border-borda bg-superficie px-2.5 py-1 font-display text-xs font-bold uppercase tracking-widest text-texto-fraco">
+              Empate
+            </span>
+          )}
           {resultadoGrupo === 'misto' && (
             <span className="panel-cut-sm border border-borda bg-superficie px-2.5 py-1 font-display text-xs font-bold uppercase tracking-widest text-texto-fraco" title="O grupo jogou dividido nos dois times">
               Misto
             </span>
           )}
           <div className="font-mono text-3xl font-bold tabular-nums">
-            <span className={m.scoreA > m.scoreB ? 'text-sucesso' : 'text-perigo'}>{m.scoreA ?? '–'}</span>
+            <span className={m.scoreA === m.scoreB ? 'text-texto' : m.scoreA > m.scoreB ? 'text-sucesso' : 'text-perigo'}>{m.scoreA ?? '–'}</span>
             <span className="mx-2 text-texto-fraco">:</span>
-            <span className={m.scoreB > m.scoreA ? 'text-sucesso' : 'text-perigo'}>{m.scoreB ?? '–'}</span>
+            <span className={m.scoreA === m.scoreB ? 'text-texto' : m.scoreB > m.scoreA ? 'text-sucesso' : 'text-perigo'}>{m.scoreB ?? '–'}</span>
           </div>
         </div>
       </div>

@@ -184,7 +184,10 @@ export default function JogadorPerfil() {
               className="panel-cut flex items-center justify-between border border-borda bg-superficie p-3 transition-colors hover:border-destaque/60"
             >
               <span className="flex items-center gap-3 font-mono text-texto">
-                <span className={`inline-block h-2 w-2 rounded-full ${r.won ? 'bg-sucesso' : 'bg-perigo'}`} />
+                <span
+                  className={`inline-block h-2 w-2 rounded-full ${r.won === true ? 'bg-sucesso' : r.won === false ? 'bg-perigo' : 'bg-texto-fraco'}`}
+                  title={r.won === true ? 'Vitória' : r.won === false ? 'Derrota' : 'Empate'}
+                />
                 <span>{nomeMapa(r.map)}</span>
                 <span className="text-xs text-texto-fraco">{dataHora(r.playedAt)}</span>
               </span>

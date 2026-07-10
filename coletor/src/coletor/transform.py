@@ -198,7 +198,11 @@ def enrich(parsed):
     clutch) em cada player; devolve o ParsedDemo pronto pro banco."""
     # Total de rounds = soma do placar (autoritativo); cai para len(rounds) se não houver placar.
     rounds_total = (parsed.get("score_a", 0) + parsed.get("score_b", 0)) or len(parsed["rounds"])
-    vencedor = "A" if parsed.get("score_a", 0) > parsed.get("score_b", 0) else "B"
+    score_a, score_b = parsed.get("score_a", 0), parsed.get("score_b", 0)
+    # Placar igual é empate — não existe "vencedor" pra decidir won=True/False (o bug
+    # antigo forçava B como vencedor sempre que score_a não fosse estritamente maior,
+    # marcando todo empate como derrota do time A).
+    vencedor = "A" if score_a > score_b else "B" if score_b > score_a else None
     kills = parsed.get("kills", [])
     kpr = kills_por_round_por_jogador(kills)
 
@@ -238,7 +242,7 @@ def enrich(parsed):
             {
                 **p,
                 "rounds_played": rounds_total,
-                "won": p["team"] == vencedor,
+                "won": None if vencedor is None else p["team"] == vencedor,
                 "rating": rating,
                 "entry_kills": entry_kills.get(sid, 0),
                 "entry_deaths": entry_deaths.get(sid, 0),

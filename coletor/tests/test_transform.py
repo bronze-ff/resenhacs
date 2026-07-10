@@ -138,3 +138,23 @@ def test_enrich_marca_vencedor_e_rating():
     assert a["rounds_played"] == 22
     assert a["rating"] > 0
     assert any(h["kind"] == "ace" for h in out["highlights"])
+
+
+def test_enrich_empate_nao_vira_derrota_forcada():
+    # Bug real (2026-07-10): placar igual sempre caía no "else" de score_a > score_b,
+    # forçando o time B como "vencedor" e marcando o time A como derrota mesmo empatado.
+    parsed = {
+        "map": "de_mirage",
+        "score_a": 12,
+        "score_b": 12,
+        "rounds": [{"round_number": i + 1, "winner_team": "A", "win_reason": "x"} for i in range(24)],
+        "players": [
+            {"steam_id64": "A", "nick": "fih", "team": "A", "kills": 20, "deaths": 20, "assists": 5, "headshot_kills": 8, "damage": 2000},
+            {"steam_id64": "B", "nick": "rand", "team": "B", "kills": 18, "deaths": 18, "assists": 4, "headshot_kills": 6, "damage": 1900},
+        ],
+        "kills": [],
+    }
+    out = transform.enrich(parsed)
+    a = next(p for p in out["players"] if p["steam_id64"] == "A")
+    b = next(p for p in out["players"] if p["steam_id64"] == "B")
+    assert a["won"] is None and b["won"] is None
