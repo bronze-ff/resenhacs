@@ -4,7 +4,11 @@ import { nomeMapa } from '../lib/format.js'
 
 const TAM = 640 // lado do canvas em px
 
-function desenharFrame(ctx, frame, radar, names = {}) {
+function janelaAtiva(itens, f, campoIni = 'tStart', campoFim = 'tEnd') {
+  return (itens || []).filter((it) => f >= it[campoIni] && f <= it[campoFim])
+}
+
+function desenharFrame(ctx, round, f, radar, replay) {
   ctx.clearRect(0, 0, TAM, TAM)
   // Fundo: imagem de radar se carregada; senão, grade neutra.
   if (radar && radar.complete && radar.naturalWidth > 0) {
@@ -19,37 +23,101 @@ function desenharFrame(ctx, frame, radar, names = {}) {
       ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(TAM, i); ctx.stroke()
     }
   }
+  if (!round) return
+  const frame = round.frames[f]
+  const hz = replay.tickRate
+
+  // Molotov (fogo) e smoke, por baixo dos jogadores.
+  for (const fire of janelaAtiva(round.fires, f)) {
+    ctx.fillStyle = 'rgba(255,110,30,0.30)'
+    ctx.beginPath(); ctx.arc(fire.x * TAM, fire.y * TAM, 18, 0, Math.PI * 2); ctx.fill()
+  }
+  for (const sm of janelaAtiva(round.smokes, f)) {
+    ctx.fillStyle = 'rgba(210,210,215,0.55)'
+    ctx.beginPath(); ctx.arc(sm.x * TAM, sm.y * TAM, 24, 0, Math.PI * 2); ctx.fill()
+  }
+
+  // Bomba plantada.
+  if (round.bombPlant && f >= round.bombPlant.t) {
+    const pulso = 4 + 2 * Math.sin(f / 2)
+    ctx.fillStyle = '#e5484d'
+    ctx.beginPath(); ctx.arc(round.bombPlant.x * TAM, round.bombPlant.y * TAM, pulso, 0, Math.PI * 2); ctx.fill()
+    ctx.fillStyle = '#fff'; ctx.font = '700 9px system-ui'; ctx.textAlign = 'center'
+    ctx.fillText('C4', round.bombPlant.x * TAM, round.bombPlant.y * TAM - 8)
+  }
+
   if (!frame) return
+
+  // Quem está com a bomba (segmento ativo) e quem cegou agora.
+  const carrier = (round.bomb || []).find((b) => f >= b.tStart && f <= b.tEnd)?.carrier
+  const cegos = new Set((round.blinds || []).filter((b) => f >= b.t && f <= b.tEnd).map((b) => b.victim))
+  const clutcher = round.clutch && f >= round.clutch.t ? round.clutch.steamid : null
+
   ctx.textAlign = 'center'
   ctx.font = '600 11px system-ui, sans-serif'
   for (const p of frame.players) {
     const cx = p.x * TAM
     const cy = p.y * TAM
-    ctx.globalAlpha = p.alive ? 1 : 0.25
+    const hpBaixo = p.alive && p.hp > 0 && p.hp <= 20
+    ctx.globalAlpha = p.alive ? 1 : 0.22
+
+    // clutcher: anel dourado
+    if (p.id === clutcher && p.alive) {
+      ctx.strokeStyle = '#facc15'; ctx.lineWidth = 2.5
+      ctx.beginPath(); ctx.arc(cx, cy, 10, 0, Math.PI * 2); ctx.stroke()
+    }
+    // cego: anel branco
+    if (cegos.has(p.id) && p.alive) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 2
+      ctx.beginPath(); ctx.arc(cx, cy, 9, 0, Math.PI * 2); ctx.stroke()
+    }
+
+    // corpo
     ctx.fillStyle = COR_TIME[p.team] ?? '#888'
-    ctx.beginPath()
-    ctx.arc(cx, cy, 6, 0, Math.PI * 2)
-    ctx.fill()
-    // direção (yaw): traço curto apontando pra onde olha
+    ctx.beginPath(); ctx.arc(cx, cy, 6, 0, Math.PI * 2); ctx.fill()
+    // HP baixo: anel vermelho fino
+    if (hpBaixo) {
+      ctx.strokeStyle = '#e5484d'; ctx.lineWidth = 2
+      ctx.beginPath(); ctx.arc(cx, cy, 8, 0, Math.PI * 2); ctx.stroke()
+    }
+    // direção (yaw)
     if (p.alive) {
       const rad = (-p.yaw * Math.PI) / 180
-      ctx.strokeStyle = '#fff'
-      ctx.lineWidth = 2
-      ctx.beginPath()
-      ctx.moveTo(cx, cy)
-      ctx.lineTo(cx + Math.cos(rad) * 11, cy + Math.sin(rad) * 11)
-      ctx.stroke()
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2
+      ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(rad) * 11, cy + Math.sin(rad) * 11); ctx.stroke()
     }
-    // nick acima do boneco, com contorno escuro pra ler sobre o mapa
-    const nick = names[p.id] || ''
-    if (nick && p.alive) {
-      ctx.lineWidth = 3
-      ctx.strokeStyle = 'rgba(0,0,0,0.85)'
-      ctx.strokeText(nick, cx, cy - 10)
-      ctx.fillStyle = '#fff'
-      ctx.fillText(nick, cx, cy - 10)
+    // portador da bomba: quadradinho laranja ao lado
+    if (p.id === carrier && p.alive) {
+      ctx.fillStyle = '#f5a623'
+      ctx.fillRect(cx + 6, cy - 3, 6, 6)
+    }
+    // nick (+ estrela se clutcher, + hp se baixo)
+    if (p.alive) {
+      const nick = (replay.names?.[p.id] || '') + (p.id === clutcher ? ' ★' : '')
+      ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.85)'
+      ctx.strokeText(nick, cx, cy - 11); ctx.fillStyle = '#fff'; ctx.fillText(nick, cx, cy - 11)
+      if (hpBaixo) {
+        ctx.fillStyle = '#f87171'; ctx.font = '700 9px system-ui'
+        ctx.fillText(String(p.hp), cx, cy + 16); ctx.font = '600 11px system-ui, sans-serif'
+      }
     }
     ctx.globalAlpha = 1
+  }
+
+  // Flashes (estouro) e HE, por cima — breves.
+  for (const fl of (round.flashes || [])) {
+    const dt = f - fl.t
+    if (dt >= 0 && dt <= hz) {
+      ctx.fillStyle = `rgba(255,255,255,${0.6 * (1 - dt / hz)})`
+      ctx.beginPath(); ctx.arc(fl.x * TAM, fl.y * TAM, 16, 0, Math.PI * 2); ctx.fill()
+    }
+  }
+  for (const he of (round.hes || [])) {
+    const dt = f - he.t
+    if (dt >= 0 && dt <= hz / 2) {
+      ctx.strokeStyle = `rgba(255,170,60,${1 - dt / (hz / 2)})`; ctx.lineWidth = 2
+      ctx.beginPath(); ctx.arc(he.x * TAM, he.y * TAM, 8 + dt * 4, 0, Math.PI * 2); ctx.stroke()
+    }
   }
 }
 
@@ -99,7 +167,7 @@ export default function ReplayViewer({ replay }) {
   // Redesenha quando o frame muda OU quando o radar termina de carregar.
   useEffect(() => {
     const ctx = canvasRef.current?.getContext('2d')
-    if (ctx) desenharFrame(ctx, frames[frameAtual], radarRef.current, replay.names)
+    if (ctx) desenharFrame(ctx, round, frameAtual, radarRef.current, replay)
   }, [frameAtual, roundIdx, radarPronto]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const dur = duracaoSegundos(total, replay.tickRate)

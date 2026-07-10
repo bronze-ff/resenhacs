@@ -34,36 +34,57 @@ def world_to_radar(x, y, cal, size=RADAR_SIZE):
     return (round(_clamp01(px / size), 4), round(_clamp01(py / size), 4))
 
 
-def build_replay(map_name, ticks, kills=None, target_hz=8):
-    """Monta o replay JSON. `ticks` = lista (ordenada no tempo) de
-    {round, tick, players:[{id,nick,x,y,yaw,hp,team,alive}]} — já no ritmo de target_hz.
-    `kills` (opcional) = [{round, tick, killer, victim, weapon, headshot}] → vira o kill
-    feed, com cada kill casado ao índice de frame do seu round.
+def detect_clutch(round_kills, teams):
+    """Detecta um clutch no round: último vivo de um time que zera os inimigos.
 
-    Normaliza mundo→radar, reindexa os frames por round, e expõe names/teams p/ o viewer.
+    round_kills em ordem cronológica. Devolve {steamid, vs, tick} ou None.
+    """
+    alive = set(teams.keys())
+    inicio = None
+    for k in round_kills:
+        alive.discard(k["victim"])
+        a = [s for s in alive if teams.get(s) == "A"]
+        b = [s for s in alive if teams.get(s) == "B"]
+        for lado, outro in ((a, b), (b, a)):
+            if len(lado) == 1 and len(outro) >= 2 and inicio is None:
+                inicio = {"steamid": lado[0], "vs": len(outro), "tick": k["tick"]}
+    if not inicio:
+        return None
+    surv, time_surv, faltam = inicio["steamid"], teams.get(inicio["steamid"]), inicio["vs"]
+    for k in round_kills:
+        if k["tick"] < inicio["tick"]:
+            continue
+        if k["victim"] == surv:
+            return None  # o clutcher morreu → falhou
+        if teams.get(k["victim"]) != time_surv:
+            faltam -= 1
+    return inicio if faltam <= 0 else None
+
+
+def build_replay(map_name, ticks, kills=None, extras=None, target_hz=8):
+    """Monta o replay JSON a partir das posições (`ticks`), kills e `extras`
+    (smokes/fires/flashes/hes/blinds/bomb* de extract_replay). Normaliza mundo→radar,
+    reindexa frames por round, casa cada evento ao frame certo, e detecta clutch.
     """
     import bisect
 
     cal = MAP_CALIBRATION.get(map_name)
-    por_round = {}       # round -> frames
-    ticks_round = {}     # round -> lista de ticks crus (paralela aos frames)
+    extras = extras or {}
+
+    def norm(x, y):
+        return world_to_radar(x, y, cal) if cal else (round(x, 2), round(y, 2))
+
+    por_round, ticks_round = {}, {}
     names, teams = {}, {}
     for t in ticks:
         players = []
         for p in t["players"]:
-            if cal:
-                nx, ny = world_to_radar(p["x"], p["y"], cal)
-            else:
-                nx, ny = p["x"], p["y"]  # sem calibração: passthrough (engine avisa)
+            nx, ny = norm(p["x"], p["y"])
             players.append(
                 {
-                    "id": p["id"],
-                    "x": nx,
-                    "y": ny,
-                    "yaw": round(p.get("yaw", 0), 1),
-                    "hp": p.get("hp", 100),
-                    "team": p["team"],
-                    "alive": bool(p.get("alive", True)),
+                    "id": p["id"], "x": nx, "y": ny,
+                    "yaw": round(p.get("yaw", 0), 1), "hp": p.get("hp", 100),
+                    "team": p["team"], "alive": bool(p.get("alive", True)),
                 }
             )
             if p.get("nick"):
@@ -73,31 +94,92 @@ def build_replay(map_name, ticks, kills=None, target_hz=8):
         frames.append({"t": len(frames), "players": players})
         ticks_round.setdefault(t["round"], []).append(t["tick"])
 
-    # Casa cada kill ao frame do round (primeiro frame com tick >= tick da kill).
-    kills_round = {}
-    for k in kills or []:
-        rt = ticks_round.get(k["round"])
-        if not rt:
-            continue
-        idx = min(bisect.bisect_left(rt, k["tick"]), len(rt) - 1)
-        kills_round.setdefault(k["round"], []).append(
-            {
-                "t": idx,
-                "killer": k["killer"],
-                "victim": k["victim"],
-                "weapon": k.get("weapon", ""),
-                "headshot": bool(k.get("headshot")),
-            }
+    def idx(round_no, tick):
+        rt = ticks_round.get(round_no)
+        return None if not rt else min(bisect.bisect_left(rt, tick), len(rt) - 1)
+
+    def por_round_group(lista):
+        g = {}
+        for e in lista:
+            g.setdefault(e["round"], []).append(e)
+        return g
+
+    kills_g = por_round_group(kills or [])
+    smokes_g = por_round_group(extras.get("smokes", []))
+    fires_g = por_round_group(extras.get("fires", []))
+    flashes_g = por_round_group(extras.get("flashes", []))
+    hes_g = por_round_group(extras.get("hes", []))
+    blinds_g = por_round_group(extras.get("blinds", []))
+    pickups_g = por_round_group(extras.get("bombPickups", []))
+    drops_g = por_round_group(extras.get("bombDrops", []))
+    plants_g = por_round_group(extras.get("bombPlants", []))
+
+    rounds_out = []
+    for r in sorted(por_round):
+        frames = por_round[r]
+        rk = sorted(kills_g.get(r, []), key=lambda k: k["tick"])
+        kills_round = [
+            {"t": idx(r, k["tick"]), "killer": k["killer"], "victim": k["victim"],
+             "weapon": k.get("weapon", ""), "headshot": bool(k.get("headshot"))}
+            for k in rk
+        ]
+
+        def janela(e):
+            nx, ny = norm(e["x"], e["y"])
+            return {"x": nx, "y": ny, "tStart": idx(r, e["tickStart"]), "tEnd": idx(r, e["tickEnd"])}
+
+        def instante(e):
+            nx, ny = norm(e["x"], e["y"])
+            return {"x": nx, "y": ny, "t": idx(r, e["tick"])}
+
+        smokes = [janela(e) for e in smokes_g.get(r, [])]
+        fires = [janela(e) for e in fires_g.get(r, [])]
+        flashes = [instante(e) for e in flashes_g.get(r, [])]
+        hes = [instante(e) for e in hes_g.get(r, [])]
+        blinds = [
+            {"t": idx(r, e["tick"]), "tEnd": idx(r, e["tick"] + int(e["duration"] * 64)),
+             "victim": e["victim"]}
+            for e in blinds_g.get(r, [])
+        ]
+
+        # Portador da bomba: pickup ativa até o próximo drop/plant/fim do round.
+        eventos = (
+            [(e["tick"], "pega", e["steamid"]) for e in pickups_g.get(r, [])]
+            + [(e["tick"], "solta", None) for e in drops_g.get(r, [])]
+            + [(e["tick"], "planta", None) for e in plants_g.get(r, [])]
         )
+        eventos.sort()
+        fim_round = ticks_round[r][-1]
+        bomba, atual, desde = [], None, None
+        for tick, tipo, sid in eventos:
+            if tipo == "pega":
+                if atual is None:
+                    atual, desde = sid, tick
+            elif atual is not None:
+                bomba.append({"tStart": idx(r, desde), "tEnd": idx(r, tick), "carrier": atual})
+                atual = None
+        if atual is not None:
+            bomba.append({"tStart": idx(r, desde), "tEnd": idx(r, fim_round), "carrier": atual})
+
+        # Plant: posição = onde o plantador estava no frame do plant.
+        plant = None
+        if plants_g.get(r):
+            pl = plants_g[r][0]
+            ti = idx(r, pl["tick"])
+            pos = next((p for p in frames[ti]["players"] if p["id"] == pl["steamid"]), None)
+            if pos:
+                plant = {"t": ti, "x": pos["x"], "y": pos["y"]}
+
+        clutch = detect_clutch(rk, teams)
+        clutch_out = {"steamid": clutch["steamid"], "vs": clutch["vs"], "t": idx(r, clutch["tick"])} if clutch else None
+
+        rounds_out.append({
+            "round": r, "frames": frames, "kills": kills_round,
+            "smokes": smokes, "fires": fires, "flashes": flashes, "hes": hes,
+            "blinds": blinds, "bomb": bomba, "bombPlant": plant, "clutch": clutch_out,
+        })
 
     return {
-        "map": map_name,
-        "calibrated": cal is not None,
-        "tickRate": target_hz,
-        "names": names,
-        "teams": teams,
-        "rounds": [
-            {"round": r, "frames": por_round[r], "kills": kills_round.get(r, [])}
-            for r in sorted(por_round)
-        ],
+        "map": map_name, "calibrated": cal is not None, "tickRate": target_hz,
+        "names": names, "teams": teams, "rounds": rounds_out,
     }

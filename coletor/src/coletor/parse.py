@@ -207,4 +207,82 @@ def extract_replay(path, target_hz=8, demo_tick_rate=64):
             }
         )
 
-    return {"ticks": ticks, "kills": kills}
+    # ---- Utilitárias + bomba ----
+    def evento(nome):
+        try:
+            return parser.parse_event(nome).to_dict("records")
+        except Exception:
+            return []
+
+    def _xy(r):
+        return float(r.get("x") or 0), float(r.get("y") or 0)
+
+    # Smokes e fogo: casa detonate/startburn com expired pelo entityid (duração real).
+    def granadas_com_duracao(ev_ini, ev_fim, dur_padrao_s):
+        fins = {}
+        for r in evento(ev_fim):
+            fins[r.get("entityid")] = int(r["tick"])
+        saida = []
+        for r in evento(ev_ini):
+            x, y = _xy(r)
+            t0 = int(r["tick"])
+            t1 = fins.get(r.get("entityid"), t0 + int(dur_padrao_s * 64))
+            saida.append({"round": round_do_tick(t0), "x": x, "y": y, "tickStart": t0, "tickEnd": t1})
+        return saida
+
+    smokes = granadas_com_duracao("smokegrenade_detonate", "smokegrenade_expired", 18)
+    fires = granadas_com_duracao("inferno_startburn", "inferno_expire", 7)
+
+    def granadas_instantaneas(nome):
+        saida = []
+        for r in evento(nome):
+            x, y = _xy(r)
+            t0 = int(r["tick"])
+            saida.append({"round": round_do_tick(t0), "x": x, "y": y, "tick": t0})
+        return saida
+
+    flashes = granadas_instantaneas("flashbang_detonate")
+    hes = granadas_instantaneas("hegrenade_detonate")
+
+    blinds = []
+    for r in evento("player_blind"):
+        vic = _sid(r.get("user_steamid"))
+        if not vic:
+            continue
+        t0 = int(r["tick"])
+        blinds.append(
+            {
+                "round": round_do_tick(t0),
+                "tick": t0,
+                "victim": vic,
+                "attacker": _sid(r.get("attacker_steamid")),
+                "duration": float(r.get("blind_duration") or 0),
+            }
+        )
+
+    def bomba(nome):
+        saida = []
+        for r in evento(nome):
+            sid = _sid(r.get("user_steamid"))
+            if not sid:
+                continue
+            t0 = int(r["tick"])
+            saida.append({"round": round_do_tick(t0), "tick": t0, "steamid": sid})
+        return saida
+
+    bomb_pickups = bomba("bomb_pickup")
+    bomb_drops = bomba("bomb_dropped")
+    bomb_plants = bomba("bomb_planted")
+
+    return {
+        "ticks": ticks,
+        "kills": kills,
+        "smokes": smokes,
+        "fires": fires,
+        "flashes": flashes,
+        "hes": hes,
+        "blinds": blinds,
+        "bombPickups": bomb_pickups,
+        "bombDrops": bomb_drops,
+        "bombPlants": bomb_plants,
+    }
