@@ -97,33 +97,53 @@ def test_trade_kills_vinga_teammate_dentro_da_janela():
 
 def test_clutch_outcomes_detecta_vitoria_e_derrota():
     teams = {"A": "A", "B": "A", "C": "B", "D": "B"}
+    # Vitória: A fica 1v2 e o round é do time A (ex.: defuse/tempo) sem A precisar matar
+    # os dois — o time B nunca chega a 1 vivo, então só A clutcha.
     kills_vitoria = [
         {"round_number": 1, "tick": 10, "attacker": "C", "victim": "B", "headshot": False, "team_kill": False},  # A fica 1v2
-        {"round_number": 1, "tick": 20, "attacker": "A", "victim": "C", "headshot": False, "team_kill": False},
-        {"round_number": 1, "tick": 30, "attacker": "A", "victim": "D", "headshot": False, "team_kill": False},  # A fecha o 1v2
     ]
     out = transform.clutch_outcomes(kills_vitoria, teams, {1: "A"})
-    assert out == [{"steam_id64": "A", "round_number": 1, "vs": 2, "venceu": True}]
+    assert out == [{"steam_id64": "A", "round_number": 1, "vs": 2, "venceu": True, "salvou": False}]
 
+    # Derrota: A fica 1v2 e morre; time B nunca chega a 1 vivo.
     kills_derrota = [
         {"round_number": 2, "tick": 10, "attacker": "C", "victim": "B", "headshot": False, "team_kill": False},  # A fica 1v2
         {"round_number": 2, "tick": 20, "attacker": "C", "victim": "A", "headshot": False, "team_kill": False},  # A morre, clutch falhou
     ]
     out2 = transform.clutch_outcomes(kills_derrota, teams, {2: "B"})
-    assert out2 == [{"steam_id64": "A", "round_number": 2, "vs": 2, "venceu": False}]
+    assert out2 == [{"steam_id64": "A", "round_number": 2, "vs": 2, "venceu": False, "salvou": False}]
 
 
-def test_clutch_outcomes_conta_1v1():
-    # Bug real (2026-07-10, achado pelo usuário comparando de cabeça x sistema):
-    # exigia vs>=2, então 1v1 nunca virava clutch — undercounting real (HLTV/Leetify
-    # contam 1v1 como categoria própria de clutch).
+def test_clutch_outcomes_conta_1v1_pros_dois():
+    # Bug real (2026-07-10): exigia vs>=2, então 1v1 nunca virava clutch. E (2026-07-11)
+    # um 1v1 conta pros DOIS últimos vivos — um ganha, o outro perde — validado round a
+    # round contra o Leetify em partidas reais.
     teams = {"A": "A", "B": "A", "C": "B"}  # o outro jogador do time B já saiu antes deste trecho
     kills = [
-        {"round_number": 1, "tick": 10, "attacker": "C", "victim": "B", "headshot": False, "team_kill": False},  # A fica sozinho: 1v1 contra C
+        {"round_number": 1, "tick": 10, "attacker": "C", "victim": "B", "headshot": False, "team_kill": False},  # A e C ficam 1v1
         {"round_number": 1, "tick": 20, "attacker": "A", "victim": "C", "headshot": False, "team_kill": False},  # A fecha o 1v1
     ]
     out = transform.clutch_outcomes(kills, teams, {1: "A"})
-    assert out == [{"steam_id64": "A", "round_number": 1, "vs": 1, "venceu": True}]
+    assert {"steam_id64": "A", "round_number": 1, "vs": 1, "venceu": True, "salvou": False} in out
+    assert {"steam_id64": "C", "round_number": 1, "vs": 1, "venceu": False, "salvou": False} in out
+    assert len(out) == 2
+
+
+def test_clutch_1v1_registra_o_vencedor_mesmo_quando_o_perdedor_chega_primeiro():
+    # Bug real (2026-07-11, achado pelo usuário comparando com o Leetify): o algoritmo
+    # antigo travava no PRIMEIRO time a chegar a 1 vivo por round (`inicio is None`).
+    # Num 1v1 isso é quase sempre o PERDEDOR — o vencedor nunca era registrado e o total
+    # de vitórias vinha ~0. Aqui o time B chega a 1 vivo ANTES, mas quem VENCE é o time A.
+    teams = {"A": "A", "B": "A", "C": "B", "D": "B"}
+    kills = [
+        {"round_number": 1, "tick": 10, "attacker": "A", "victim": "C", "headshot": False, "team_kill": False},  # D (time B) fica sozinho: 1v2
+        {"round_number": 1, "tick": 20, "attacker": "D", "victim": "B", "headshot": False, "team_kill": False},  # agora A (time A) tbm fica só: 1v1
+        {"round_number": 1, "tick": 30, "attacker": "A", "victim": "D", "headshot": False, "team_kill": False},  # A vence o 1v1
+    ]
+    out = transform.clutch_outcomes(kills, teams, {1: "A"})
+    por_sid = {c["steam_id64"]: c for c in out}
+    assert por_sid["A"]["venceu"] is True and por_sid["A"]["vs"] == 1   # o vencedor É registrado
+    assert por_sid["D"]["venceu"] is False and por_sid["D"]["vs"] == 2  # o perdedor (chegou 1º) tbm
 
 
 def test_hltv_rating_arredonda_e_zera_sem_rounds():
@@ -207,23 +227,24 @@ def test_enrich_so_gera_highlight_de_clutch_realmente_vencido():
 
 
 def test_enrich_clutch_perdido_o_round_nao_vira_highlight():
-    # Mesma situação, mas o time A PERDE o round (ex.: bomba já explodiu antes da
-    # eliminação) — não deve gerar highlight nenhum, só contar como tentativa perdida.
+    # A fica 1v3 e MORRE sem matar ninguém (o time B fica com 3 vivos, nunca chega a 1
+    # vivo, então não há clutch reverso). Só deve contar como tentativa perdida de A,
+    # sem gerar highlight nenhum.
     teams_kills = [
-        {"round_number": 1, "tick": 10, "attacker": "C", "victim": "B", "headshot": False, "team_kill": False},
-        {"round_number": 1, "tick": 20, "attacker": "A", "victim": "C", "headshot": False, "team_kill": False},
-        {"round_number": 1, "tick": 30, "attacker": "A", "victim": "D", "headshot": False, "team_kill": False},
+        {"round_number": 1, "tick": 10, "attacker": "C", "victim": "B", "headshot": False, "team_kill": False},  # A fica 1v3
+        {"round_number": 1, "tick": 20, "attacker": "C", "victim": "A", "headshot": False, "team_kill": False},  # A morre
     ]
     parsed = {
         "map": "de_mirage",
         "score_a": 0,
         "score_b": 1,
-        "rounds": [{"round_number": 1, "winner_team": "B", "win_reason": "bomb"}],
+        "rounds": [{"round_number": 1, "winner_team": "B", "win_reason": "elim"}],
         "players": [
-            {"steam_id64": "A", "nick": "fih", "team": "A", "kills": 2, "deaths": 0, "assists": 0, "headshot_kills": 0, "damage": 200},
+            {"steam_id64": "A", "nick": "fih", "team": "A", "kills": 0, "deaths": 1, "assists": 0, "headshot_kills": 0, "damage": 0},
             {"steam_id64": "B", "nick": "x", "team": "A", "kills": 0, "deaths": 1, "assists": 0, "headshot_kills": 0, "damage": 0},
-            {"steam_id64": "C", "nick": "y", "team": "B", "kills": 1, "deaths": 1, "assists": 0, "headshot_kills": 0, "damage": 100},
-            {"steam_id64": "D", "nick": "z", "team": "B", "kills": 0, "deaths": 1, "assists": 0, "headshot_kills": 0, "damage": 0},
+            {"steam_id64": "C", "nick": "y", "team": "B", "kills": 2, "deaths": 0, "assists": 0, "headshot_kills": 0, "damage": 200},
+            {"steam_id64": "D", "nick": "z", "team": "B", "kills": 0, "deaths": 0, "assists": 0, "headshot_kills": 0, "damage": 0},
+            {"steam_id64": "E", "nick": "w", "team": "B", "kills": 0, "deaths": 0, "assists": 0, "headshot_kills": 0, "damage": 0},
         ],
         "kills": teams_kills,
     }

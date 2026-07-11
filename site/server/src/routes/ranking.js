@@ -80,6 +80,9 @@ export function createRankingRouter({ db, requireAuth }) {
         clutchWins: r.clutch_wins,
         clutchAttempts: r.clutch_attempts,
         clutchPct: pct(r.clutch_wins, r.clutch_attempts),
+        entryKills: r.entry_kills,
+        entryDeaths: r.entry_deaths,
+        entryWinPct: pct(r.entry_kills, r.entry_kills + r.entry_deaths),
         estilo: estilos[r.steam_id64],
       }))
       .sort((a, b) => (b.rating ?? -1) - (a.rating ?? -1))

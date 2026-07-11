@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { nomeMapa, dataHora, corRating } from '../lib/format.js'
+import { nomeMapa, dataHora, corRating, nomeArma, TIPO_COMPRA } from '../lib/format.js'
 import StatTile from '../components/StatTile.jsx'
 import LinhaEvolucao from '../components/LinhaEvolucao.jsx'
 import FiltroPeriodo from '../components/FiltroPeriodo.jsx'
 import TagEstilo from '../components/TagEstilo.jsx'
+import PosicionamentoAgregado from '../components/PosicionamentoAgregado.jsx'
 
 export default function JogadorPerfil() {
   const { steamId } = useParams()
@@ -31,7 +32,7 @@ export default function JogadorPerfil() {
   if (erro) return <p className="font-mono text-sm text-texto-fraco">Jogador não encontrado.</p>
   if (!data) return <p className="font-mono text-sm text-texto-fraco">Carregando…</p>
 
-  const { jogador, stats, porMapa, recentes, sinergia, evolucao, badges, estilo, destaques } = data
+  const { jogador, stats, porMapa, recentes, sinergia, evolucao, badges, estilo, destaques, armas, economia } = data
 
   return (
     <div className="space-y-6">
@@ -134,8 +135,8 @@ export default function JogadorPerfil() {
               <StatTile
                 rotulo="Clutch (1vX)"
                 valor={`${stats.clutchWins}/${stats.clutchAttempts}`}
-                sub={`${stats.clutchPct}% vencidos`}
-                title="Rounds em que ele ficou sozinho contra 2 ou mais inimigos: vencidos / tentativas."
+                sub={`${stats.clutchPct}% vencidos${stats.clutchSaves ? ` · ${stats.clutchSaves} save` : ''}`}
+                title="Rounds em que ele ficou por último vivo contra 1+ inimigos: vencidos / total de situações. Save = sobreviveu mas o round foi perdido (salvou a arma)."
               />
             </div>
           )
@@ -144,9 +145,104 @@ export default function JogadorPerfil() {
           Como medimos — <span className="text-texto">Precisão</span>: tiros certos ÷ disparados (só armas de fogo).{' '}
           <span className="text-texto">Entry</span>: o 1º duelo de cada round, vencidos/disputados.{' '}
           <span className="text-texto">Trades</span>: kill em até 5s vingando um colega que acabou de morrer.{' '}
-          <span className="text-texto">Clutch</span>: sozinho contra 2+, vencidos/tentativas.{' '}
+          <span className="text-texto">Clutch</span>: por último vivo contra 1+, vencidos/total.{' '}
           Em todo o site, <span className="text-texto">X/Y = sucessos/total</span>. Passe o mouse em cada card pra mais detalhe.
         </p>
+      </section>
+
+      <section>
+        <h3 className="mb-3 font-display text-lg font-semibold uppercase tracking-wide text-texto">Utilitária</h3>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <StatTile
+            rotulo="Smokes"
+            valor={stats.smokesThrown}
+            title="Smokes jogadas no período."
+          />
+          <StatTile
+            rotulo="Flashes"
+            valor={stats.flashesThrown}
+            sub={`${stats.enemiesFlashedPerFlash} inimigo/flash`}
+            title="Flashes jogadas e a média de quantos inimigos cada uma cegou (não é %, uma flash pode cegar vários de uma vez)."
+          />
+          <StatTile
+            rotulo="HEs"
+            valor={stats.heThrown}
+            sub={`${stats.heDamage} dano`}
+            title="HEs jogadas e o dano total causado por elas."
+          />
+          <StatTile
+            rotulo="Molotov/Incend."
+            valor={stats.molotovsThrown}
+            sub={`${stats.molotovDamage} dano`}
+            title="Molotov/incendiary jogadas e o dano total (queimadura) causado."
+          />
+          <StatTile
+            rotulo="Cegou inimigo"
+            valor={stats.enemiesFlashed}
+            sub={`${stats.enemyFlashDuration}s no total`}
+            title="Quantas vezes flashou um inimigo, e a soma de segundos de cegueira causada neles."
+          />
+          <StatTile
+            rotulo="Cegou aliado"
+            valor={stats.teammatesFlashed}
+            sub={`${stats.teammateFlashDuration}s no total`}
+            destaque={stats.teammatesFlashed > 0 ? 'text-perigo' : undefined}
+            title="Flash de time: quantas vezes cegou um aliado (não conta auto-flash), e os segundos totais."
+          />
+        </div>
+      </section>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <section>
+          <h3 className="mb-3 font-display text-lg font-semibold uppercase tracking-wide text-texto">Armas</h3>
+          {armas.length === 0 && <p className="font-mono text-sm text-texto-fraco">Sem dados de arma ainda.</p>}
+          <div className="space-y-2">
+            {armas.slice(0, 6).map((a) => {
+              const maiorKills = armas[0]?.kills || 1
+              return (
+                <div key={a.weapon} className="panel-cut border border-borda bg-superficie p-3">
+                  <div className="mb-1.5 flex items-center justify-between font-mono text-sm">
+                    <span className="text-texto">{nomeArma(a.weapon)}</span>
+                    <span className="text-texto-fraco">
+                      <span className="text-texto">{a.kills}</span> kills · {a.hsPct}% HS
+                      {a.temAccuracyConfiavel && <> · {a.accuracy}% precisão</>}
+                    </span>
+                  </div>
+                  <div className="h-1.5 overflow-hidden rounded bg-fundo">
+                    <div className="h-full bg-destaque/70" style={{ width: `${(a.kills / maiorKills) * 100}%` }} />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </section>
+
+        <section>
+          <h3 className="mb-3 font-display text-lg font-semibold uppercase tracking-wide text-texto">
+            Economia <span className="text-texto-fraco">— winrate por tipo de compra</span>
+          </h3>
+          <div className="grid grid-cols-2 gap-3">
+            {Object.entries(economia ?? {}).map(([tipo, e]) => (
+              <div key={tipo} className="panel-cut border border-borda bg-superficie p-3">
+                <div className={`font-mono text-xs uppercase tracking-wide ${TIPO_COMPRA[tipo]?.cor ?? 'text-texto-fraco'}`}>
+                  {TIPO_COMPRA[tipo]?.label ?? tipo}
+                </div>
+                <div className="mt-1 font-display text-xl font-bold text-texto">
+                  {e.rounds > 0 ? `${e.winPct}%` : '–'}
+                </div>
+                <div className="font-mono text-xs text-texto-fraco">{e.won}/{e.rounds} rounds</div>
+              </div>
+            ))}
+          </div>
+          <p className="mt-2 font-mono text-[11px] text-texto-fraco">
+            Classificação por valor de equipamento do TIME no fim do freezetime (padrão HLTV): eco &lt; $5k, forçado $5k-10k, meia-compra $10k-20k, cheia ≥ $20k.
+          </p>
+        </section>
+      </div>
+
+      <section>
+        <h3 className="mb-3 font-display text-lg font-semibold uppercase tracking-wide text-texto">Posicionamento</h3>
+        <PosicionamentoAgregado steamId={jogador.steamId} />
       </section>
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -222,10 +318,19 @@ export default function JogadorPerfil() {
       )}
 
       <section>
-        <h3 className="mb-3 font-display text-lg font-semibold uppercase tracking-wide text-texto">Partidas recentes</h3>
+        <h3 className="mb-3 font-display text-lg font-semibold uppercase tracking-wide text-texto">
+          Partidas recentes
+          {stats.rating != null && (
+            <span className="ml-2 font-mono text-xs font-normal normal-case text-texto-fraco">
+              (± vs média de {stats.rating.toFixed(2)} — consistência: acima ou abaixo do normal dele)
+            </span>
+          )}
+        </h3>
         {recentes.length === 0 && <p className="font-mono text-sm text-texto-fraco">Nenhuma partida ainda.</p>}
         <div className="space-y-2">
-          {recentes.map((r) => (
+          {recentes.map((r) => {
+            const delta = r.rating != null && stats.rating != null ? Math.round((r.rating - stats.rating) * 100) / 100 : null
+            return (
             <Link
               key={r.id}
               to={`/partida/${r.id}`}
@@ -238,13 +343,22 @@ export default function JogadorPerfil() {
                 />
                 <span>{nomeMapa(r.map)}</span>
                 <span className="text-xs text-texto-fraco">{dataHora(r.playedAt)}</span>
+                {delta != null && (
+                  <span
+                    className={`text-xs ${delta >= 0.1 ? 'text-sucesso' : delta <= -0.1 ? 'text-perigo' : 'text-texto-fraco'}`}
+                    title="Diferença do rating dessa partida pra média dele no período"
+                  >
+                    {delta >= 0 ? '+' : ''}{delta.toFixed(2)}
+                  </span>
+                )}
               </span>
               <span className="font-mono text-sm tabular-nums text-texto-fraco">
                 {r.scoreA}:{r.scoreB} · {r.kills}/{r.deaths}
                 {r.rating != null && <span className={`ml-2 ${corRating(r.rating)}`}>{r.rating.toFixed(2)}</span>}
               </span>
             </Link>
-          ))}
+            )
+          })}
         </div>
       </section>
     </div>

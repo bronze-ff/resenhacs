@@ -7,6 +7,7 @@ import { createMatchesRouter } from './routes/matches.js'
 import { createProfileRouter } from './routes/profile.js'
 import { createClipsRouter } from './routes/clips.js'
 import { createRankingRouter } from './routes/ranking.js'
+import { createSessionsRouter } from './routes/sessions.js'
 import { createUploadRouter } from './routes/upload.js'
 import { createRequireAuth } from './auth/middleware.js'
 import { createR2Client } from './r2.js'
@@ -39,7 +40,7 @@ function patchRouterAsync() {
   }
 }
 
-export function createApp({ config, db, verifySteamLogin, fetchPersona, staticDir, execFileImpl, r2Client: r2ClientOverride } = {}) {
+export function createApp({ config, db, verifySteamLogin, fetchPersona, fetchBans, staticDir, execFileImpl, r2Client: r2ClientOverride } = {}) {
   const app = express()
   app.use(express.json())
   app.use(cookieParser())
@@ -57,11 +58,12 @@ export function createApp({ config, db, verifySteamLogin, fetchPersona, staticDi
   const requireAuth = createRequireAuth(config.jwtSecret)
   const r2Client = r2ClientOverride !== undefined ? r2ClientOverride : createR2Client(config)
   app.use('/api/auth', createAuthRouter({ config, db, verifySteamLogin, fetchPersona, requireAuth }))
-  app.use('/api/players', createPlayersRouter({ db, requireAuth }))
+  app.use('/api/players', createPlayersRouter({ db, requireAuth, fetchBans }))
   app.use('/api/matches', createMatchesRouter({ db, requireAuth, r2Client, r2Bucket: config.r2Bucket }))
   app.use('/api/profile', createProfileRouter({ db, requireAuth }))
   app.use('/api/clips', createClipsRouter({ db, requireAuth }))
   app.use('/api/ranking', createRankingRouter({ db, requireAuth }))
+  app.use('/api/sessions', createSessionsRouter({ db, requireAuth }))
 
   // Upload manual via web só existe quando o Coletor Python está no mesmo host
   // (dev/self-hosted). Na Vercel (serverless) config.coletorDir/pythonBin ficam

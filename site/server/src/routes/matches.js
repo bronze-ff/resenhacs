@@ -77,10 +77,13 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket }) {
     if (matchQ.rows.length === 0) return res.status(404).json({ erro: 'Partida não encontrada' })
     const m = matchQ.rows[0]
 
-    const [players, rounds, highlights, clips] = await Promise.all([
+    const [players, rounds, highlights, clips, econ] = await Promise.all([
       db.query(
         `select steam_id64, nick, team, kills, deaths, assists, headshot_kills,
-                damage, rounds_played, rating, won, is_tracked, team_kills
+                damage, rounds_played, rating, won, is_tracked, team_kills,
+                he_damage, molotov_damage, smokes_thrown, flashes_thrown,
+                he_thrown, molotovs_thrown, enemies_flashed, teammates_flashed,
+                enemy_flash_duration, teammate_flash_duration
          from match_players where match_id = $1
          order by team, rating desc nulls last, kills desc`,
         [id],
@@ -99,6 +102,11 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket }) {
       db.query(
         `select id, steam_id64, url, provider, title, highlight_id
          from clips where match_id = $1 order by created_at`,
+        [id],
+      ),
+      db.query(
+        `select round_number, team, equip_value, buy_type
+         from match_round_econ where match_id = $1 order by round_number`,
         [id],
       ),
     ])
@@ -130,6 +138,18 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket }) {
         rating: p.rating === null ? null : Number(p.rating),
         won: p.won,
         isTracked: p.is_tracked,
+        utilitaria: {
+          heDamage: p.he_damage,
+          molotovDamage: p.molotov_damage,
+          smokesThrown: p.smokes_thrown,
+          flashesThrown: p.flashes_thrown,
+          heThrown: p.he_thrown,
+          molotovsThrown: p.molotovs_thrown,
+          enemiesFlashed: p.enemies_flashed,
+          teammatesFlashed: p.teammates_flashed,
+          enemyFlashDuration: Number(p.enemy_flash_duration),
+          teammateFlashDuration: Number(p.teammate_flash_duration),
+        },
       })),
       rounds: rounds.rows.map((r) => ({
         roundNumber: r.round_number,
@@ -152,6 +172,12 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket }) {
         provider: c.provider,
         title: c.title,
         highlightId: c.highlight_id,
+      })),
+      economia: econ.rows.map((e) => ({
+        roundNumber: e.round_number,
+        team: e.team,
+        equipValue: e.equip_value,
+        buyType: e.buy_type,
       })),
     })
   })

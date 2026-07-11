@@ -35,31 +35,39 @@ def world_to_radar(x, y, cal, size=RADAR_SIZE):
 
 
 def detect_clutch(round_kills, teams):
-    """Detecta um clutch no round: último vivo de um time que zera os inimigos.
+    """Detecta um clutch VENCIDO no round (pro anel dourado no Replay 2D): último vivo
+    de um time que zera os inimigos sobrevivendo.
 
-    round_kills em ordem cronológica. Devolve {steamid, vs, tick} ou None.
-    """
+    round_kills em ordem cronológica. Devolve {steamid, vs, tick} ou None. Checa o
+    clutcher de CADA time (num 1v1 os dois clutcham) e devolve o que efetivamente
+    limpou os inimigos — o bug antigo travava no 1º a chegar a 1 vivo (o perdedor num
+    1v1), fazendo o anel sumir em clutch 1v1 vencido. Ver transform.clutch_outcomes."""
     alive = set(teams.keys())
-    inicio = None
+    inicio_por_time = {}
     for k in round_kills:
         alive.discard(k["victim"])
-        a = [s for s in alive if teams.get(s) == "A"]
-        b = [s for s in alive if teams.get(s) == "B"]
-        # >= 1 (não >= 2): 1vX é clutch — ver mesmo comentário em transform.clutch_outcomes.
-        for lado, outro in ((a, b), (b, a)):
-            if len(lado) == 1 and len(outro) >= 1 and inicio is None:
-                inicio = {"steamid": lado[0], "vs": len(outro), "tick": k["tick"]}
-    if not inicio:
-        return None
-    surv, time_surv, faltam = inicio["steamid"], teams.get(inicio["steamid"]), inicio["vs"]
-    for k in round_kills:
-        if k["tick"] < inicio["tick"]:
-            continue
-        if k["victim"] == surv:
-            return None  # o clutcher morreu → falhou
-        if teams.get(k["victim"]) != time_surv:
-            faltam -= 1
-    return inicio if faltam <= 0 else None
+        vivos = {"A": [], "B": []}
+        for s in alive:
+            t = teams.get(s)
+            if t in vivos:
+                vivos[t].append(s)
+        for lado, outro in (("A", "B"), ("B", "A")):
+            if len(vivos[lado]) == 1 and len(vivos[outro]) >= 1 and lado not in inicio_por_time:
+                inicio_por_time[lado] = {"steamid": vivos[lado][0], "vs": len(vivos[outro]), "tick": k["tick"]}
+    for time_surv, inicio in inicio_por_time.items():
+        surv, faltam = inicio["steamid"], inicio["vs"]
+        morreu = False
+        for k in round_kills:
+            if k["tick"] < inicio["tick"]:
+                continue
+            if k["victim"] == surv:
+                morreu = True
+                break
+            if teams.get(k["victim"]) != time_surv:
+                faltam -= 1
+        if not morreu and faltam <= 0:
+            return inicio  # esse time limpou os inimigos → clutch vencido
+    return None
 
 
 def build_replay(map_name, ticks, kills=None, extras=None, target_hz=8):

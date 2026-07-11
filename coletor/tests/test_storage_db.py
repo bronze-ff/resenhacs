@@ -97,6 +97,41 @@ def test_store_parsed_grava_tudo_e_commita():
     assert any(s.startswith("insert into rounds") for s in sqls)
     assert any(s.startswith("delete from highlights") for s in sqls)
     assert any(s.startswith("insert into highlights") for s in sqls)
+    assert any(s.startswith("delete from match_player_weapons") for s in sqls)
+    assert any(s.startswith("delete from match_round_econ") for s in sqls)
+    assert any(s.startswith("delete from kill_positions") for s in sqls)
+
+
+def test_store_parsed_grava_posicoes_de_kill():
+    conn = FakeConn()
+    parsed = _parsed()
+    parsed["kill_positions"] = [{
+        "round_number": 1, "tick": 500, "killer": "A", "victim": "B", "weapon": "ak47",
+        "headshot": True, "killer_x": 100.0, "killer_y": 200.0, "victim_x": 150.0, "victim_y": 250.0,
+    }]
+    db.store_parsed(conn, parsed, share_code="CSGO-x", source="upload")
+    insert = next(c for c in conn.calls if c[0].startswith("insert into kill_positions"))
+    assert insert[1] == ("00000000-0000-0000-0000-000000000001", 1, 500, "A", "B", "ak47", True, 100.0, 200.0, 150.0, 250.0)
+
+
+def test_store_parsed_grava_economia_por_round():
+    conn = FakeConn()
+    parsed = _parsed()
+    parsed["round_econ"] = [{"round_number": 1, "team": "A", "equip_value": 4500, "buy_type": "eco"}]
+    db.store_parsed(conn, parsed, share_code="CSGO-x", source="upload")
+    insert = next(c for c in conn.calls if c[0].startswith("insert into match_round_econ"))
+    assert insert[1] == ("00000000-0000-0000-0000-000000000001", 1, "A", 4500, "eco")
+
+
+def test_store_parsed_grava_stats_por_arma():
+    conn = FakeConn()
+    parsed = _parsed()
+    parsed["players"][0]["weapons"] = {
+        "ak47": {"kills": 10, "hs_kills": 5, "shots_fired": 80, "shots_hit": 30, "damage": 1500},
+    }
+    db.store_parsed(conn, parsed, share_code="CSGO-x", source="upload")
+    insert = next(c for c in conn.calls if c[0].startswith("insert into match_player_weapons"))
+    assert insert[1] == ("00000000-0000-0000-0000-000000000001", "A", "ak47", 10, 5, 80, 30, 1500)
 
 
 def test_record_pending_match():

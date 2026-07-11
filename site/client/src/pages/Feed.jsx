@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { nomeMapa, dataHora, origemPartida } from '../lib/format.js'
+import { nomeMapa, dataHora, origemPartida, corRating } from '../lib/format.js'
 import FiltroPeriodo from '../components/FiltroPeriodo.jsx'
 
 const MAPAS = ['de_anubis', 'de_ancient', 'de_cache', 'de_dust2', 'de_inferno', 'de_mirage', 'de_nuke', 'de_overpass', 'de_train', 'de_vertigo']
@@ -130,6 +130,58 @@ function SincStatus() {
   )
 }
 
+// "Resenhas": partidas jogadas seguidas (gap < 3h) resumidas — quem se destacou,
+// quantas venceu/perdeu, sem precisar abrir partida por partida.
+function Resenhas() {
+  const [sessoes, setSessoes] = useState(null)
+
+  useEffect(() => {
+    fetch('/api/sessions?limit=5')
+      .then((res) => (res.ok ? res.json() : []))
+      .then(setSessoes)
+      .catch(() => setSessoes([]))
+  }, [])
+
+  if (!sessoes || sessoes.length === 0) return null
+
+  return (
+    <section className="mb-6">
+      <h3 className="mb-2 font-display text-sm font-semibold uppercase tracking-wide text-texto-fraco">
+        Resenhas recentes
+      </h3>
+      <div className="flex gap-3 overflow-x-auto pb-1">
+        {sessoes.map((s) => (
+          <div
+            key={s.matchIds[0]}
+            className="panel-cut-sm min-w-[240px] flex-shrink-0 border border-borda bg-superficie p-3"
+          >
+            <div className="flex items-center justify-between font-mono text-xs text-texto-fraco">
+              <span>{dataHora(s.inicio)}</span>
+              <span>{s.partidas} partida{s.partidas === 1 ? '' : 's'}</span>
+            </div>
+            <div className="mt-1 flex items-center gap-2 font-mono text-sm">
+              {s.vitorias > 0 && <span className="text-sucesso">{s.vitorias}V</span>}
+              {s.derrotas > 0 && <span className="text-perigo">{s.derrotas}D</span>}
+              {s.empates > 0 && <span className="text-texto-fraco">{s.empates}E</span>}
+              {s.mistos > 0 && <span className="text-texto-fraco">{s.mistos} misto</span>}
+            </div>
+            {s.destaque && (
+              <div className="mt-2 border-t border-borda pt-2 font-mono text-xs">
+                <span className="text-texto-fraco">Destaque: </span>
+                <Link to={`/jogador/${s.destaque.steamId}`} className="text-texto hover:text-destaque">
+                  {s.destaque.nick}
+                </Link>{' '}
+                <span className={corRating(s.destaque.ratingMedio)}>{s.destaque.ratingMedio.toFixed(2)}</span>
+                {s.destaque.aces > 0 && <span className="ml-1 text-texto-fraco">· {s.destaque.aces} ace{s.destaque.aces > 1 ? 's' : ''}</span>}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
 export default function Feed() {
   const [partidas, setPartidas] = useState(null)
   const [de, setDe] = useState('')
@@ -161,6 +213,7 @@ export default function Feed() {
     <div>
       <h2 className="mb-4 font-display text-xl font-semibold uppercase tracking-wide text-texto">Partidas</h2>
       <SincStatus />
+      <Resenhas />
 
       <div className="mb-4 flex flex-wrap items-center gap-x-5 gap-y-3">
         <FiltroPeriodo de={de} ate={ate} onDe={setDe} onAte={setAte} />

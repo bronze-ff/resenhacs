@@ -1,8 +1,25 @@
 import { Router } from 'express'
 import { requireAdmin } from '../auth/middleware.js'
 
-export function createPlayersRouter({ db, requireAuth }) {
+export function createPlayersRouter({ db, requireAuth, fetchBans }) {
   const router = Router()
+
+  // Alerta de ban/smurf: cruza os Jogadores do grupo com GetPlayerBans da Steam —
+  // "a conta de alguém do grupo tomou VAC/Overwatch ban?" Precisa vir antes de
+  // qualquer rota "/:algo" (não tem hoje em players.js, mas por hábito/segurança).
+  router.get('/bans', requireAuth, async (req, res) => {
+    if (!fetchBans) return res.status(503).json({ erro: 'Checagem de ban não configurada (falta STEAM_API_KEY)' })
+    const { rows } = await db.query('select steam_id64, nick from players order by nick')
+    const bans = await fetchBans(rows.map((p) => p.steam_id64))
+    const porId = new Map(bans.map((b) => [b.steamId, b]))
+    res.json(
+      rows.map((p) => ({
+        steamId: p.steam_id64,
+        nick: p.nick,
+        ban: porId.get(p.steam_id64) ?? null,
+      })),
+    )
+  })
 
   router.get('/', requireAuth, async (req, res) => {
     const { rows } = await db.query(

@@ -33,6 +33,34 @@ describe('GET /api/players', () => {
   })
 })
 
+describe('GET /api/players/bans', () => {
+  it('sem fetchBans configurado (falta STEAM_API_KEY): 503', async () => {
+    const db = { query: vi.fn().mockResolvedValue({ rows: [] }) }
+    const app = createApp({ config, db })
+    const res = await request(app).get('/api/players/bans').set('Cookie', memberCookie)
+    expect(res.status).toBe(503)
+  })
+
+  it('cruza os Jogadores com o resultado de fetchBans', async () => {
+    const db = {
+      query: vi.fn().mockResolvedValue({
+        rows: [{ steam_id64: '765', nick: 'fih' }, { steam_id64: '999', nick: 'limpo' }],
+      }),
+    }
+    const fetchBans = vi.fn().mockResolvedValue([
+      { steamId: '765', vacBanned: true, numVacBans: 1, daysSinceLastBan: 10, gameBanned: false, numGameBans: 0, communityBanned: false },
+    ])
+    const app = createApp({ config, db, fetchBans })
+    const res = await request(app).get('/api/players/bans').set('Cookie', memberCookie)
+    expect(res.status).toBe(200)
+    expect(fetchBans).toHaveBeenCalledWith(['765', '999'])
+    expect(res.body).toEqual([
+      { steamId: '765', nick: 'fih', ban: { steamId: '765', vacBanned: true, numVacBans: 1, daysSinceLastBan: 10, gameBanned: false, numGameBans: 0, communityBanned: false } },
+      { steamId: '999', nick: 'limpo', ban: null },
+    ])
+  })
+})
+
 describe('POST /api/players', () => {
   it('membro comum: 403', async () => {
     const { app } = appWith()

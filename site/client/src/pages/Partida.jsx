@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useSearchParams, Link } from 'react-router-dom'
-import { nomeMapa, dataHora, origemPartida, corRating } from '../lib/format.js'
+import { nomeMapa, dataHora, origemPartida, corRating, TIPO_COMPRA } from '../lib/format.js'
 import ReplayViewer from '../components/ReplayViewer.jsx'
 import MapaCalor from '../components/MapaCalor.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
@@ -119,6 +119,144 @@ function Scoreboard({ time, jogadores, podePromover, onPromover, promovendo }) {
           })}
         </tbody>
       </table>
+    </div>
+  )
+}
+
+// Linha do tempo dos rounds: quem venceu cada um e o que aconteceu de notável nele
+// (ace/multikill/clutch já detectados). Não é uma decomposição de rating round a round
+// (isso exigiria guardar win-probability por kill, que não persistimos hoje) — é o
+// "o que rolou em cada round" que dá pra montar com o que já temos.
+function LinhaDoTempoRounds({ rounds, highlights, timeDoGrupo, onClicarHighlight, replayDisponivel }) {
+  if (!rounds || rounds.length === 0) return null
+  const porRound = new Map()
+  for (const h of highlights) {
+    if (!porRound.has(h.roundNumber)) porRound.set(h.roundNumber, [])
+    porRound.get(h.roundNumber).push(h)
+  }
+  return (
+    <div className="panel-cut border border-borda bg-superficie p-3">
+      <div className="flex flex-wrap gap-1">
+        {rounds.map((r) => {
+          const hs = porRound.get(r.roundNumber) ?? []
+          const vencedorGrupo = timeDoGrupo ? r.winnerTeam === timeDoGrupo : null
+          const cor =
+            vencedorGrupo === true ? 'border-sucesso/50 bg-sucesso/10' : vencedorGrupo === false ? 'border-perigo/50 bg-perigo/10' : 'border-borda bg-fundo'
+          const conteudo = (
+            <div className={`panel-cut-sm flex h-9 w-9 flex-col items-center justify-center border ${cor} font-mono text-[10px]`}>
+              <span className="text-texto">{r.roundNumber}</span>
+              {hs.length > 0 && <span className="leading-none text-destaque">●</span>}
+            </div>
+          )
+          const primeiroComFrame = hs.find((h) => h.frame != null)
+          return primeiroComFrame && replayDisponivel ? (
+            <button key={r.roundNumber} title={hs.map((h) => h.kind).join(', ')} onClick={() => onClicarHighlight(primeiroComFrame)}>
+              {conteudo}
+            </button>
+          ) : (
+            <div key={r.roundNumber} title={r.winReason ?? ''}>{conteudo}</div>
+          )
+        })}
+      </div>
+      <p className="mt-2 font-mono text-[11px] text-texto-fraco">
+        Verde/vermelho = round vencido/perdido pelo grupo. ● = teve highlight nesse round (clique pra assistir).
+      </p>
+    </div>
+  )
+}
+
+const COR_BARRA_COMPRA = {
+  eco: 'bg-texto-fraco/50', forcado: 'bg-perigo/60', semi: 'bg-texto/60', full: 'bg-sucesso/60',
+}
+
+function LinhaDoTempoEconomia({ economia, timeDoGrupo }) {
+  if (!economia || economia.length === 0) return null
+  const porRound = new Map()
+  for (const e of economia) {
+    if (!porRound.has(e.roundNumber)) porRound.set(e.roundNumber, {})
+    porRound.get(e.roundNumber)[e.team] = e
+  }
+  const maiorEquip = Math.max(...economia.map((e) => e.equipValue), 1)
+  const rounds = [...porRound.keys()].sort((a, b) => a - b)
+  return (
+    <div className="panel-cut border border-borda bg-superficie p-3">
+      <div className="flex items-end gap-1 overflow-x-auto pb-1">
+        {rounds.map((rn) => {
+          const r = porRound.get(rn)
+          return (
+            <div key={rn} className="flex flex-shrink-0 flex-col items-center gap-0.5" style={{ width: 20 }}>
+              {['A', 'B'].map((time) => {
+                const e = r[time]
+                const altura = e ? Math.max(4, (e.equipValue / maiorEquip) * 40) : 4
+                return (
+                  <div
+                    key={time}
+                    title={e ? `Round ${rn} · Time ${time}: $${e.equipValue} (${TIPO_COMPRA[e.buyType]?.label ?? e.buyType})` : ''}
+                    className={`w-4 rounded-sm ${e ? COR_BARRA_COMPRA[e.buyType] : 'bg-borda'} ${time === timeDoGrupo ? 'ring-1 ring-destaque/50' : ''}`}
+                    style={{ height: altura }}
+                  />
+                )
+              })}
+              <span className="font-mono text-[9px] text-texto-fraco">{rn}</span>
+            </div>
+          )
+        })}
+      </div>
+      <div className="mt-2 flex flex-wrap gap-3 font-mono text-[11px] text-texto-fraco">
+        {Object.entries(TIPO_COMPRA).map(([tipo, info]) => (
+          <span key={tipo} className="flex items-center gap-1">
+            <span className={`inline-block h-2 w-2 rounded-sm ${COR_BARRA_COMPRA[tipo]}`} />
+            {info.label}
+          </span>
+        ))}
+        {timeDoGrupo && <span>· contorno = time do grupo</span>}
+      </div>
+    </div>
+  )
+}
+
+function TabelaUtilitaria({ jogadores }) {
+  return (
+    <div className="panel-cut overflow-x-auto border border-borda">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="bg-superficie text-left font-mono text-[10px] uppercase tracking-wider text-texto-fraco">
+            <th className="px-3 py-2">Jogador</th>
+            <th className="px-2 py-2 text-right" title="Smokes / Flashes / HEs / Molotovs jogadas">Granadas</th>
+            <th className="px-2 py-2 text-right" title="Inimigos cegados (vezes) e segundos totais de cegueira">Cegou inimigo</th>
+            <th className="px-2 py-2 text-right" title="Aliados cegados (vezes) e segundos totais — flash de time">Cegou aliado</th>
+            <th className="px-2 py-2 text-right" title="Dano de HE">Dano HE</th>
+            <th className="px-2 py-2 text-right" title="Dano de molotov/incendiary">Dano fogo</th>
+          </tr>
+        </thead>
+        <tbody>
+          {jogadores.map((p) => {
+            const u = p.utilitaria ?? {}
+            return (
+              <tr key={p.steamId} className="border-t border-borda transition-colors hover:bg-superficie-alta">
+                <td className="px-3 py-2 font-mono text-texto">{p.nick || p.steamId}</td>
+                <td className="px-2 py-2 text-right font-mono text-xs tabular-nums text-texto-fraco">
+                  {u.smokesThrown ?? 0}/{u.flashesThrown ?? 0}/{u.heThrown ?? 0}/{u.molotovsThrown ?? 0}
+                </td>
+                <td className="px-2 py-2 text-right tabular-nums">
+                  {u.enemiesFlashed ?? 0}
+                  <span className="ml-1 text-xs text-texto-fraco">({(u.enemyFlashDuration ?? 0).toFixed(1)}s)</span>
+                </td>
+                <td className={`px-2 py-2 text-right tabular-nums ${u.teammatesFlashed > 0 ? 'text-perigo' : ''}`}>
+                  {u.teammatesFlashed ?? 0}
+                  <span className="ml-1 text-xs text-texto-fraco">({(u.teammateFlashDuration ?? 0).toFixed(1)}s)</span>
+                </td>
+                <td className="px-2 py-2 text-right tabular-nums">{u.heDamage ?? 0}</td>
+                <td className="px-2 py-2 text-right tabular-nums">{u.molotovDamage ?? 0}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+      <p className="border-t border-borda bg-superficie px-3 py-2 font-mono text-[11px] leading-relaxed text-texto-fraco">
+        Granadas = smokes/flashes/HEs/molotovs jogadas (não necessariamente acertaram alguém).{' '}
+        Cegou = vezes que a flash pegou alguém, com o total de segundos de cegueira causada.
+      </p>
     </div>
   )
 }
@@ -262,6 +400,11 @@ export default function Partida() {
   // nullable (empate — placar igual — não tem vencedor); `!p.won` sozinho trataria
   // empate como derrota, por isso os 3 estados são checados explicitamente.
   const doGrupo = m.players.filter((p) => p.isTracked)
+  // Time predominante do grupo nessa partida (pra colorir a linha do tempo de rounds).
+  // null se não tem ninguém do grupo ou o grupo se dividiu igual nos dois times.
+  const contagemTimes = doGrupo.reduce((acc, p) => ({ ...acc, [p.team]: (acc[p.team] ?? 0) + 1 }), {})
+  const timeDoGrupo =
+    (contagemTimes.A ?? 0) > (contagemTimes.B ?? 0) ? 'A' : (contagemTimes.B ?? 0) > (contagemTimes.A ?? 0) ? 'B' : null
   const resultadoGrupo =
     doGrupo.length === 0
       ? null
@@ -322,6 +465,29 @@ export default function Partida() {
         <Scoreboard time="A" jogadores={timeA} podePromover={jogador?.isAdmin} onPromover={promover} promovendo={promovendo} />
         <Scoreboard time="B" jogadores={timeB} podePromover={jogador?.isAdmin} onPromover={promover} promovendo={promovendo} />
       </div>
+
+      <section>
+        <h3 className="mb-2 font-display text-lg font-semibold uppercase tracking-wide text-texto">Linha do tempo dos rounds</h3>
+        <LinhaDoTempoRounds
+          rounds={m.rounds}
+          highlights={m.highlights}
+          timeDoGrupo={timeDoGrupo}
+          onClicarHighlight={irParaHighlight}
+          replayDisponivel={!!m.replayUrl}
+        />
+      </section>
+
+      {m.economia?.length > 0 && (
+        <section>
+          <h3 className="mb-2 font-display text-lg font-semibold uppercase tracking-wide text-texto">Economia</h3>
+          <LinhaDoTempoEconomia economia={m.economia} timeDoGrupo={timeDoGrupo} />
+        </section>
+      )}
+
+      <section>
+        <h3 className="mb-2 font-display text-lg font-semibold uppercase tracking-wide text-texto">Utilitária</h3>
+        <TabelaUtilitaria jogadores={m.players} />
+      </section>
 
       <section ref={replayRef}>
         <h3 className="mb-2 font-display text-lg font-semibold uppercase tracking-wide text-texto">Replay 2D</h3>

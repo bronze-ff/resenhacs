@@ -43,6 +43,10 @@ export default function Ranking() {
   const maisAces = [...comPartida].sort((a, b) => b.aces - a.aces)[0]
   const maisClutches = [...comPartida].sort((a, b) => b.clutchWins - a.clutchWins)[0]
   const melhorWinrate = [...comPartida].filter((r) => r.partidas >= 3).sort((a, b) => b.winrate - a.winrate)[0]
+  // Categorias "peixe grande, lago pequeno": olham a TAXA, não o total — com piso
+  // mínimo de amostra pra não premiar quem teve sorte numa tentativa só.
+  const melhorClutchPct = [...comPartida].filter((r) => r.clutchAttempts >= 5).sort((a, b) => b.clutchPct - a.clutchPct)[0]
+  const melhorEntryRate = [...comPartida].filter((r) => r.entryKills + r.entryDeaths >= 10).sort((a, b) => b.entryWinPct - a.entryWinPct)[0]
 
   return (
     <div className="space-y-6">
@@ -56,7 +60,7 @@ export default function Ranking() {
       )}
 
       {comPartida.length > 0 && (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           {maisAces?.aces > 0 && (
             <CardDestaque rotulo="Mais ACEs" nick={maisAces.nick} valor={`${maisAces.aces} ace${maisAces.aces > 1 ? 's' : ''}`} />
           )}
@@ -69,6 +73,20 @@ export default function Ranking() {
           )}
           {melhorWinrate && (
             <CardDestaque rotulo="Melhor winrate (3+ partidas)" nick={melhorWinrate.nick} valor={`${melhorWinrate.winrate}%`} />
+          )}
+          {melhorClutchPct && (
+            <CardDestaque
+              rotulo="Melhor clutch% (5+ tentativas)"
+              nick={melhorClutchPct.nick}
+              valor={`${melhorClutchPct.clutchPct}% (${melhorClutchPct.clutchWins}/${melhorClutchPct.clutchAttempts})`}
+            />
+          )}
+          {melhorEntryRate && (
+            <CardDestaque
+              rotulo="Melhor entry rate (10+ duelos)"
+              nick={melhorEntryRate.nick}
+              valor={`${melhorEntryRate.entryWinPct}% (${melhorEntryRate.entryKills}/${melhorEntryRate.entryKills + melhorEntryRate.entryDeaths})`}
+            />
           )}
         </div>
       )}

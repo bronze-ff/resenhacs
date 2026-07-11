@@ -110,9 +110,13 @@ def _write_players(cur, match_id, players):
                headshot_kills, damage, rounds_played, rating, won, team_kills,
                utility_damage, shots_fired, shots_hit,
                entry_kills, entry_deaths, entry_wins,
-               trade_kills, traded_deaths, clutch_wins, clutch_attempts)
+               trade_kills, traded_deaths, clutch_wins, clutch_attempts,
+               he_damage, molotov_damage, smokes_thrown, flashes_thrown,
+               he_thrown, molotovs_thrown, enemies_flashed, teammates_flashed,
+               enemy_flash_duration, teammate_flash_duration, clutch_saves)
             values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             on conflict (match_id, steam_id64) do update set
               nick = excluded.nick, team = excluded.team, kills = excluded.kills,
               deaths = excluded.deaths, assists = excluded.assists,
@@ -124,7 +128,15 @@ def _write_players(cur, match_id, players):
               entry_kills = excluded.entry_kills, entry_deaths = excluded.entry_deaths,
               entry_wins = excluded.entry_wins,
               trade_kills = excluded.trade_kills, traded_deaths = excluded.traded_deaths,
-              clutch_wins = excluded.clutch_wins, clutch_attempts = excluded.clutch_attempts
+              clutch_wins = excluded.clutch_wins, clutch_attempts = excluded.clutch_attempts,
+              he_damage = excluded.he_damage, molotov_damage = excluded.molotov_damage,
+              smokes_thrown = excluded.smokes_thrown, flashes_thrown = excluded.flashes_thrown,
+              he_thrown = excluded.he_thrown, molotovs_thrown = excluded.molotovs_thrown,
+              enemies_flashed = excluded.enemies_flashed,
+              teammates_flashed = excluded.teammates_flashed,
+              enemy_flash_duration = excluded.enemy_flash_duration,
+              teammate_flash_duration = excluded.teammate_flash_duration,
+              clutch_saves = excluded.clutch_saves
             """,
             (
                 match_id,
@@ -150,6 +162,17 @@ def _write_players(cur, match_id, players):
                 p.get("traded_deaths", 0),
                 p.get("clutch_wins", 0),
                 p.get("clutch_attempts", 0),
+                p.get("he_damage", 0),
+                p.get("molotov_damage", 0),
+                p.get("smokes_thrown", 0),
+                p.get("flashes_thrown", 0),
+                p.get("he_thrown", 0),
+                p.get("molotovs_thrown", 0),
+                p.get("enemies_flashed", 0),
+                p.get("teammates_flashed", 0),
+                p.get("enemy_flash_duration", 0),
+                p.get("teammate_flash_duration", 0),
+                p.get("clutch_saves", 0),
             ),
         )
     # is_tracked é cache de "é Jogador": liga para quem está na whitelist.
@@ -185,6 +208,58 @@ def _write_highlights(cur, match_id, highlights):
         )
 
 
+def _write_player_weapons(cur, match_id, players):
+    # delete-antes-de-insert (mesmo padrão de _write_highlights): reprocesso/re-ingest
+    # não pode duplicar nem deixar arma "presa" de uma versão antiga do parser.
+    cur.execute("delete from match_player_weapons where match_id = %s", (match_id,))
+    for p in players:
+        for arma, stats in p.get("weapons", {}).items():
+            if not arma:
+                continue
+            cur.execute(
+                """
+                insert into match_player_weapons
+                  (match_id, steam_id64, weapon, kills, hs_kills, shots_fired, shots_hit, damage)
+                values (%s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    match_id, p["steam_id64"], arma,
+                    stats.get("kills", 0), stats.get("hs_kills", 0),
+                    stats.get("shots_fired", 0), stats.get("shots_hit", 0), stats.get("damage", 0),
+                ),
+            )
+
+
+def _write_round_econ(cur, match_id, round_econ):
+    cur.execute("delete from match_round_econ where match_id = %s", (match_id,))
+    for e in round_econ:
+        cur.execute(
+            """
+            insert into match_round_econ (match_id, round_number, team, equip_value, buy_type)
+            values (%s, %s, %s, %s, %s)
+            """,
+            (match_id, e["round_number"], e["team"], e["equip_value"], e["buy_type"]),
+        )
+
+
+def _write_kill_positions(cur, match_id, kill_positions):
+    cur.execute("delete from kill_positions where match_id = %s", (match_id,))
+    for k in kill_positions:
+        cur.execute(
+            """
+            insert into kill_positions
+              (match_id, round_number, tick, killer, victim, weapon, headshot,
+               killer_x, killer_y, victim_x, victim_y)
+            values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                match_id, k["round_number"], k["tick"], k.get("killer"), k["victim"],
+                k.get("weapon", ""), k.get("headshot", False),
+                k.get("killer_x"), k.get("killer_y"), k["victim_x"], k["victim_y"],
+            ),
+        )
+
+
 def store_parsed(conn, parsed, share_code=None, source="valve_mm", demo_url=None,
                  replay_url=None, status="parsed", prefer_new_played_at=False):
     """Grava a Partida inteira numa transação. Devolve o match_id (uuid)."""
@@ -195,6 +270,9 @@ def store_parsed(conn, parsed, share_code=None, source="valve_mm", demo_url=None
         _write_players(cur, match_id, parsed.get("players", []))
         _write_rounds(cur, match_id, parsed.get("rounds", []))
         _write_highlights(cur, match_id, parsed.get("highlights", []))
+        _write_player_weapons(cur, match_id, parsed.get("players", []))
+        _write_round_econ(cur, match_id, parsed.get("round_econ", []))
+        _write_kill_positions(cur, match_id, parsed.get("kill_positions", []))
     conn.commit()
     return match_id
 

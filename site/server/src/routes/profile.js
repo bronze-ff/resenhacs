@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { calcularEstilos, calcularBadges, melhorSequenciaDeVitorias } from '../analise.js'
+import { worldToRadar, isMapaCalibrado } from '../mapCalibration.js'
 
 function pct(parte, total) {
   if (!total) return 0
@@ -44,6 +45,17 @@ async function statsAgregados(db, steamId, from, to) {
             coalesce(sum(mp.traded_deaths), 0)::int as traded_deaths,
             coalesce(sum(mp.clutch_wins), 0)::int as clutch_wins,
             coalesce(sum(mp.clutch_attempts), 0)::int as clutch_attempts,
+            coalesce(sum(mp.clutch_saves), 0)::int as clutch_saves,
+            coalesce(sum(mp.he_damage), 0)::int as he_damage,
+            coalesce(sum(mp.molotov_damage), 0)::int as molotov_damage,
+            coalesce(sum(mp.smokes_thrown), 0)::int as smokes_thrown,
+            coalesce(sum(mp.flashes_thrown), 0)::int as flashes_thrown,
+            coalesce(sum(mp.he_thrown), 0)::int as he_thrown,
+            coalesce(sum(mp.molotovs_thrown), 0)::int as molotovs_thrown,
+            coalesce(sum(mp.enemies_flashed), 0)::int as enemies_flashed,
+            coalesce(sum(mp.teammates_flashed), 0)::int as teammates_flashed,
+            coalesce(sum(mp.enemy_flash_duration), 0)::numeric as enemy_flash_duration,
+            coalesce(sum(mp.teammate_flash_duration), 0)::numeric as teammate_flash_duration,
             coalesce((select count(*) from highlights h join matches mh on mh.id = h.match_id
                       where h.steam_id64 = $1 and h.kind = 'ace'${periodo.replaceAll('m.', 'mh.')}), 0)::int as aces
      from match_players mp join matches m on m.id = mp.match_id
@@ -75,8 +87,24 @@ async function statsAgregados(db, steamId, from, to) {
     tradedDeaths: a.traded_deaths,
     clutchWins: a.clutch_wins,
     clutchAttempts: a.clutch_attempts,
+    clutchSaves: a.clutch_saves,
     clutchPct: pct(a.clutch_wins, a.clutch_attempts),
     aces: a.aces,
+    // Utilitária: granadas usadas por tipo, dano de HE/molotov separado, e cegueira
+    // causada em inimigo vs aliado (contagem + segundos totais).
+    heDamage: a.he_damage,
+    molotovDamage: a.molotov_damage,
+    smokesThrown: a.smokes_thrown,
+    flashesThrown: a.flashes_thrown,
+    heThrown: a.he_thrown,
+    molotovsThrown: a.molotovs_thrown,
+    enemiesFlashed: a.enemies_flashed,
+    teammatesFlashed: a.teammates_flashed,
+    enemyFlashDuration: Math.round(Number(a.enemy_flash_duration) * 10) / 10,
+    teammateFlashDuration: Math.round(Number(a.teammate_flash_duration) * 10) / 10,
+    // "Sucesso" da flash = quantos inimigos cegados por flash jogada (não é % porque
+    // uma flash pode cegar 0 a 5 inimigos de uma vez).
+    enemiesFlashedPerFlash: a.flashes_thrown ? Math.round((a.enemies_flashed / a.flashes_thrown) * 100) / 100 : 0,
   }
 }
 
@@ -139,6 +167,68 @@ async function evolucaoRating(db, steamId, from, to, limite = 20) {
     .reverse() // cronológico, pro gráfico ler da esquerda pra direita
 }
 
+// AWP fora do cálculo de accuracy/HS-por-acerto (quase todo hit mata, distorce o %) e
+// shotguns à parte (1 weapon_fire dispara vários pellets → vários player_hurt, accuracy
+// passaria de 100% se contado ingenuamente) — mesma convenção do Leetify (ver pesquisa).
+const ARMAS_SEM_ACCURACY_CONFIAVEL = new Set(['awp', 'nova', 'xm1014', 'mag7', 'sawedoff'])
+
+async function armasDoJogador(db, steamId, from, to) {
+  const params = [steamId]
+  const periodo = periodoWhere(from, to, params)
+  const { rows } = await db.query(
+    `select w.weapon,
+            sum(w.kills)::int as kills,
+            sum(w.hs_kills)::int as hs_kills,
+            sum(w.shots_fired)::int as shots_fired,
+            sum(w.shots_hit)::int as shots_hit,
+            sum(w.damage)::int as damage
+     from match_player_weapons w join matches m on m.id = w.match_id
+     where w.steam_id64 = $1${periodo}
+     group by w.weapon
+     order by kills desc`,
+    params,
+  )
+  // Agregação multi-partida = SOMA dos totais, nunca média de porcentagens.
+  return rows.map((r) => ({
+    weapon: r.weapon,
+    kills: r.kills,
+    hsPct: pct(r.hs_kills, r.kills),
+    shotsFired: r.shots_fired,
+    shotsHit: r.shots_hit,
+    accuracy: pct(r.shots_hit, r.shots_fired),
+    temAccuracyConfiavel: !ARMAS_SEM_ACCURACY_CONFIAVEL.has(r.weapon),
+    damage: r.damage,
+  }))
+}
+
+const BUY_TYPES = ['eco', 'forcado', 'semi', 'full']
+
+async function economiaDoJogador(db, steamId, from, to) {
+  const params = [steamId]
+  const periodo = periodoWhere(from, to, params)
+  const { rows } = await db.query(
+    `select e.buy_type,
+            count(*)::int as rounds,
+            count(*) filter (where r.winner_team = mp.team)::int as won
+     from match_players mp
+     join match_round_econ e on e.match_id = mp.match_id and e.team = mp.team
+     join rounds r on r.match_id = mp.match_id and r.round_number = e.round_number
+     join matches m on m.id = mp.match_id
+     where mp.steam_id64 = $1${periodo}
+     group by e.buy_type`,
+    params,
+  )
+  const porTipo = Object.fromEntries(rows.map((r) => [r.buy_type, r]))
+  return Object.fromEntries(
+    BUY_TYPES.map((tipo) => {
+      const r = porTipo[tipo]
+      const rounds = r?.rounds ?? 0
+      const won = r?.won ?? 0
+      return [tipo, { rounds, won, winPct: pct(won, rounds) }]
+    }),
+  )
+}
+
 export function createProfileRouter({ db, requireAuth }) {
   const router = Router()
 
@@ -195,6 +285,39 @@ export function createProfileRouter({ db, requireAuth }) {
     })
   })
 
+  // Posicionamento agregado: "onde ele mais mata/morre" ao longo de VÁRIAS Partidas
+  // (não só uma, como o Replay 2D). Precisa vir antes de '/:steamId' — Express não
+  // confundiria os dois (segmentos diferentes), mas por hábito/consistência com as
+  // outras rotas de 2+ segmentos deste router.
+  router.get('/:steamId/posicoes', requireAuth, async (req, res) => {
+    const { steamId } = req.params
+    const modo = req.query.modo === 'kills' ? 'kills' : 'mortes'
+
+    const mapasQ = await db.query(
+      `select m.map, count(*)::int as n
+       from kill_positions kp join matches m on m.id = kp.match_id
+       where kp.victim = $1 or kp.killer = $1
+       group by m.map order by n desc`,
+      [steamId],
+    )
+    const mapas = mapasQ.rows.map((r) => ({ map: r.map, pontos: r.n }))
+    const mapa = mapas.find((m) => m.map === req.query.map)?.map ?? mapas[0]?.map ?? null
+    if (!mapa) return res.json({ map: null, calibrated: false, mapas: [], pontos: [] })
+
+    const coluna = modo === 'kills' ? 'killer' : 'victim'
+    const { rows } = await db.query(
+      `select kp.${coluna}_x as x, kp.${coluna}_y as y
+       from kill_positions kp join matches m on m.id = kp.match_id
+       where kp.${coluna} = $1 and m.map = $2 and kp.${coluna}_x is not null`,
+      [steamId, mapa],
+    )
+    const calibrated = isMapaCalibrado(mapa)
+    const pontos = calibrated
+      ? rows.map((r) => worldToRadar(r.x, r.y, mapa)).filter(Boolean).map(([x, y]) => ({ x, y }))
+      : []
+    res.json({ map: mapa, calibrated, mapas, pontos })
+  })
+
   // Perfil do Jogador: stats agregados, por mapa, partidas recentes e Sinergia.
   // Filtro opcional de período (?from/?to) em tudo menos a Sinergia (view pré-computada).
   router.get('/:steamId', requireAuth, async (req, res) => {
@@ -214,7 +337,7 @@ export function createProfileRouter({ db, requireAuth }) {
     const destaquesParams = [steamId]
     const destaquesPeriodo = periodoWhere(from, to, destaquesParams)
 
-    const [stats, porMapa, recentes, sinergia, evolucao, statsGerais, sequencia, estilo, destaques] = await Promise.all([
+    const [stats, porMapa, recentes, sinergia, evolucao, statsGerais, sequencia, estilo, destaques, armas, economia] = await Promise.all([
       statsAgregados(db, steamId, from, to),
       db.query(
         `select m.map, count(*)::int as partidas,
@@ -257,6 +380,8 @@ export function createProfileRouter({ db, requireAuth }) {
          order by m.played_at desc nulls last limit 100`,
         destaquesParams,
       ),
+      armasDoJogador(db, steamId, from, to),
+      economiaDoJogador(db, steamId, from, to),
     ])
 
     const badges = calcularBadges({
@@ -274,6 +399,8 @@ export function createProfileRouter({ db, requireAuth }) {
       evolucao,
       badges,
       estilo,
+      armas,
+      economia,
       destaques: destaques.rows.map((d) => ({
         id: d.id,
         matchId: d.match_id,

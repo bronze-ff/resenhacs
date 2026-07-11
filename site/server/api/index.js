@@ -12,7 +12,7 @@ import { loadConfig } from '../src/config.js'
 import { createDb } from '../src/db.js'
 import { createApp } from '../src/app.js'
 import { verifySteamAssertion } from '../src/steam/openid.js'
-import { createFetchPersona } from '../src/steam/api.js'
+import { createFetchPersona, createFetchBans } from '../src/steam/api.js'
 
 const config = loadConfig()
 const db = createDb(config.databaseUrl)
@@ -22,6 +22,7 @@ const app = createApp({
   db,
   verifySteamLogin: verifySteamAssertion,
   fetchPersona: createFetchPersona(config.steamApiKey),
+  fetchBans: createFetchBans(config.steamApiKey),
   // staticDir: undefined — nesta topologia o client é um projeto Vercel à parte
   // (site/client), servido como site estático; esta função só responde /api/*.
 })

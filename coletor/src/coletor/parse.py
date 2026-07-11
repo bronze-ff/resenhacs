@@ -63,12 +63,49 @@ _NAO_ARMA_DE_FOGO = {
 }
 _ARMAS_UTILITARIAS = {"hegrenade", "molotov", "inferno", "incgrenade"}
 
+# Classificação de economia por time (soma dos 5 no fim do freezetime) — esquema
+# HLTV/awpy ("Taken from hltv economy tab"), validado via pesquisa web (2026-07-11):
+# eco < $5.000 | forçado $5.000-9.999 | semi-compra $10.000-19.999 | full >= $20.000.
+def _tipo_de_compra(equip_value_time):
+    if equip_value_time < 5000:
+        return "eco"
+    if equip_value_time < 10000:
+        return "forcado"
+    if equip_value_time < 20000:
+        return "semi"
+    return "full"
+
 
 def _eh_arma_de_fogo(weapon):
     if not weapon:
         return False
     w = str(weapon).replace("weapon_", "")
     return w not in _NAO_ARMA_DE_FOGO and not w.startswith("knife")
+
+
+# Descoberta empírica (mesmo demo real, 2026-07-11): player_hurt NÃO distingue essas
+# 3 duplas de arma — os hits/dano de QUALQUER uma das duas vêm com o nome do lado
+# direito, mesmo quando o kill (player_death, que distingue certinho) foi com a da
+# esquerda. Sem esse alias, a arma "perdedora" do par ficava com kills>0 mas
+# shots_hit=0/damage=0 (accuracy quebrada) e a outra ficava com hits sobrando sem
+# kill nenhum. Rastreado round a round contra um duelo real pra confirmar (não é
+# achismo): kill m4a1_silencer <- hurt correspondente chega como "m4a1"; kill
+# usp_silencer <- hurt chega como "hkp2000"; kill revolver <- hurt chega como "deagle".
+_ALIAS_ARMA_POR_HURT = {
+    "m4a1_silencer": "m4a1",
+    "usp_silencer": "hkp2000",
+    "revolver": "deagle",
+}
+
+
+def _arma_limpa(weapon):
+    """Nome canônico da arma (sem o prefixo 'weapon_' que só o weapon_fire traz, e com
+    o alias de _ALIAS_ARMA_POR_HURT aplicado — ver o comentário acima). player_death/
+    player_hurt já vêm sem prefixo; None quando não há arma."""
+    if not weapon:
+        return None
+    limpo = str(weapon).replace("weapon_", "")
+    return _ALIAS_ARMA_POR_HURT.get(limpo, limpo) or None
 
 
 def parse_demo(path):
@@ -104,6 +141,30 @@ def parse_demo(path):
         if sid and team_num is not None:
             fixed[sid] = _team_letter(team_num)
 
+    # Economia por round×time: soma do equipamento dos 5 jogadores no fim do freezetime
+    # (current_equip_value), classificada no esquema HLTV (_tipo_de_compra). Best-effort:
+    # se o nome de campo não bater numa versão do demoparser2, cai pra lista vazia em
+    # vez de derrubar o ingest inteiro (mesmo padrão de player_blind acima).
+    round_econ = []
+    try:
+        tick_to_round = {int(t): int(rn) + 1 for t, rn in zip(freeze["tick"], freeze["total_rounds_played"])}
+        econ_df = parser.parse_ticks(["current_equip_value"], ticks=sorted(tick_to_round.keys()))
+        soma = {}  # (round_number, team) -> equip_value somado
+        for r in econ_df.to_dict("records"):
+            sid = _sid(r.get("steamid"))
+            time = fixed.get(sid)
+            equip = _num(r.get("current_equip_value"))
+            rn = tick_to_round.get(int(r["tick"]))
+            if not time or equip is None or rn is None:
+                continue
+            soma[(rn, time)] = soma.get((rn, time), 0) + equip
+        round_econ = [
+            {"round_number": rn, "team": time, "equip_value": equip, "buy_type": _tipo_de_compra(equip)}
+            for (rn, time), equip in soma.items()
+        ]
+    except Exception:  # noqa: BLE001
+        pass
+
     # Placar final: team_rounds_total de cada time no fim.
     snapf = parser.parse_ticks(["team_num", "team_rounds_total"], ticks=[end_tick])
     score = {"A": 0, "B": 0}
@@ -113,20 +174,33 @@ def parse_demo(path):
         if ft and total is not None:
             score[ft] = total
 
+    # Stats por arma (kills/hs/shots/dano), por jogador — agregação multi-partida no
+    # servidor é sempre SUM por weapon, nunca média de %. weapon_slot() cria a entrada
+    # sob demanda; os 3 loops abaixo (kills, hurt, fogo) só incrementam os campos que
+    # cada evento sabe informar.
+    weapons = {}
+
+    def weapon_slot(sid, arma):
+        por_jogador = weapons.setdefault(sid, {})
+        return por_jogador.setdefault(arma, {"kills": 0, "hs_kills": 0, "shots_fired": 0, "shots_hit": 0, "damage": 0})
+
     # Kills (para K/D via transform e highlights) + nomes + assists.
     # team_kill: mesmo time do atacante e da vítima — não deve contar como kill
     # de verdade (nem pra rating, nem pra highlight de multikill), só como morte.
     kills, names, assists = [], {}, {}
     for r in deaths.to_dict("records"):
         atk, vic, ast = _sid(r.get("attacker_steamid")), _sid(r.get("user_steamid")), _sid(r.get("assister_steamid"))
+        headshot = bool(r["headshot"])
+        team_kill = bool(atk and vic and atk != vic and fixed.get(atk) == fixed.get(vic))
         kills.append(
             {
                 "round_number": int(r["total_rounds_played"]) + 1,
                 "tick": int(r["tick"]),
                 "attacker": atk,
                 "victim": vic,
-                "headshot": bool(r["headshot"]),
-                "team_kill": bool(atk and vic and atk != vic and fixed.get(atk) == fixed.get(vic)),
+                "headshot": headshot,
+                "team_kill": team_kill,
+                "weapon": _arma_limpa(r.get("weapon")) or "",
             }
         )
         if atk:
@@ -135,10 +209,58 @@ def parse_demo(path):
             names[vic] = r.get("user_name") or ""
         if ast:
             assists[ast] = assists.get(ast, 0) + 1
+        arma_kill = _arma_limpa(r.get("weapon"))
+        if atk and atk != vic and not team_kill and arma_kill:
+            slot = weapon_slot(atk, arma_kill)
+            slot["kills"] += 1
+            if headshot:
+                slot["hs_kills"] += 1
+
+    # Posições de kill: o evento player_death NÃO carrega X/Y direto (demoparser2 ignora
+    # nomes de prop desconhecidos em vez de dar erro — descoberto empiricamente). A
+    # posição vem de um snapshot de tick nos mesmos ticks das mortes (mesmo método já
+    # usado e validado em extract_replay), casando por (steamid, tick).
+    kill_positions = []
+    try:
+        death_ticks = sorted({int(k["tick"]) for k in kills})
+        if death_ticks:
+            pos_df = parser.parse_ticks(["X", "Y"], ticks=death_ticks)
+            pos_by_sid_tick = {}
+            for r in pos_df.to_dict("records"):
+                sid = _sid(r.get("steamid"))
+                x, y = _flt(r.get("X")), _flt(r.get("Y"))
+                if sid and x is not None and y is not None:
+                    pos_by_sid_tick[(sid, int(r["tick"]))] = (x, y)
+            for k in kills:
+                if k["team_kill"]:
+                    continue
+                vic_pos = pos_by_sid_tick.get((k["victim"], k["tick"]))
+                if not vic_pos:
+                    continue  # sem posição da vítima (fora do range de ticks amostrados) — descarta
+                atk_pos = pos_by_sid_tick.get((k["attacker"], k["tick"])) if k["attacker"] else None
+                kill_positions.append(
+                    {
+                        "round_number": k["round_number"],
+                        "tick": k["tick"],
+                        "killer": k["attacker"],
+                        "victim": k["victim"],
+                        "weapon": k["weapon"],
+                        "headshot": k["headshot"],
+                        "killer_x": atk_pos[0] if atk_pos else None,
+                        "killer_y": atk_pos[1] if atk_pos else None,
+                        "victim_x": vic_pos[0],
+                        "victim_y": vic_pos[1],
+                    }
+                )
+    except Exception:  # noqa: BLE001
+        pass
 
     # Dano por atacante, separando bala de utilitária (granada/molotov — "inferno" no
     # weapon é o dano de queimadura do molotov/incendiary, descoberto empiricamente).
+    # he_damage/molotov_damage: mesmo split, granular (utility_damage continua sendo a
+    # soma dos dois, pro stat tile antigo "Dano utilitária" não mudar de significado).
     damage, utility_damage, shots_hit = {}, {}, {}
+    he_damage, molotov_damage = {}, {}
     for r in hurt.to_dict("records"):
         atk = _sid(r.get("attacker_steamid"))
         if not atk:
@@ -148,15 +270,66 @@ def parse_demo(path):
         arma = r.get("weapon")
         if arma in _ARMAS_UTILITARIAS:
             utility_damage[atk] = utility_damage.get(atk, 0) + dmg
+            if arma == "hegrenade":
+                he_damage[atk] = he_damage.get(atk, 0) + dmg
+            elif arma == "inferno":
+                molotov_damage[atk] = molotov_damage.get(atk, 0) + dmg
         elif _eh_arma_de_fogo(arma):
             shots_hit[atk] = shots_hit.get(atk, 0) + 1
+            slot = weapon_slot(atk, _arma_limpa(arma))
+            slot["shots_hit"] += 1
+            slot["damage"] += dmg
 
     # Tiros disparados (só armas de fogo — exclui faca e granadas) → precisão.
+    # Granadas lançadas por tipo: mesmo evento (weapon_fire), filtrando o outro lado
+    # (armas de utilitária) — é a fonte mais confiável de "quem jogou o quê" (o evento
+    # de detonar nem sempre carrega o lançador; o de disparar sempre carrega).
     shots_fired = {}
+    smokes_thrown, flashes_thrown, he_thrown, molotovs_thrown = {}, {}, {}, {}
+    _CONTADOR_POR_ARMA = {
+        "smokegrenade": smokes_thrown,
+        "flashbang": flashes_thrown,
+        "hegrenade": he_thrown,
+        "molotov": molotovs_thrown,
+        "incgrenade": molotovs_thrown,
+    }
     for r in fogo.to_dict("records"):
         sid = _sid(r.get("user_steamid"))
-        if sid and _eh_arma_de_fogo(r.get("weapon")):
+        if not sid:
+            continue
+        arma = str(r.get("weapon") or "").replace("weapon_", "")
+        if _eh_arma_de_fogo(r.get("weapon")):
             shots_fired[sid] = shots_fired.get(sid, 0) + 1
+            # _arma_limpa (não só o strip de "weapon_" já feito acima) porque o
+            # weapon_fire DISTINGUE m4a1/m4a1_silencer (etc.) mas o player_hurt não —
+            # sem o alias aqui, sobraria um bucket de "shots_fired" órfão sem hit/kill.
+            weapon_slot(sid, _arma_limpa(arma))["shots_fired"] += 1
+            continue
+        contador = _CONTADOR_POR_ARMA.get(arma)
+        if contador is not None:
+            contador[sid] = contador.get(sid, 0) + 1
+
+    # Cegueira: quem flashou quem, inimigo ou aliado (auto-flash não conta em nenhum
+    # dos dois — nem ele "flashou o time", nem "flashou o inimigo").
+    enemies_flashed, teammates_flashed = {}, {}
+    enemy_flash_duration, teammate_flash_duration = {}, {}
+    try:
+        blind = parser.parse_event("player_blind")
+        blind = blind[blind["tick"] >= first_freeze]
+        blind_records = blind.to_dict("records")
+    except Exception:  # noqa: BLE001
+        blind_records = []
+    for r in blind_records:
+        atk, vic = _sid(r.get("attacker_steamid")), _sid(r.get("user_steamid"))
+        if not atk or not vic or atk == vic:
+            continue
+        dur = _flt(r.get("blind_duration")) or 0.0
+        if fixed.get(atk) == fixed.get(vic):
+            teammates_flashed[atk] = teammates_flashed.get(atk, 0) + 1
+            teammate_flash_duration[atk] = teammate_flash_duration.get(atk, 0.0) + dur
+        else:
+            enemies_flashed[atk] = enemies_flashed.get(atk, 0) + 1
+            enemy_flash_duration[atk] = enemy_flash_duration.get(atk, 0.0) + dur
 
     players = [
         {
@@ -171,6 +344,17 @@ def parse_demo(path):
             "utility_damage": utility_damage.get(sid, 0),
             "shots_fired": shots_fired.get(sid, 0),
             "shots_hit": shots_hit.get(sid, 0),
+            "he_damage": he_damage.get(sid, 0),
+            "molotov_damage": molotov_damage.get(sid, 0),
+            "smokes_thrown": smokes_thrown.get(sid, 0),
+            "flashes_thrown": flashes_thrown.get(sid, 0),
+            "he_thrown": he_thrown.get(sid, 0),
+            "molotovs_thrown": molotovs_thrown.get(sid, 0),
+            "enemies_flashed": enemies_flashed.get(sid, 0),
+            "teammates_flashed": teammates_flashed.get(sid, 0),
+            "enemy_flash_duration": round(enemy_flash_duration.get(sid, 0.0), 2),
+            "teammate_flash_duration": round(teammate_flash_duration.get(sid, 0.0), 2),
+            "weapons": weapons.get(sid, {}),
         }
         for sid, ft in fixed.items()
         if sid
@@ -212,6 +396,8 @@ def parse_demo(path):
         "rounds": rounds,
         "players": players,
         "kills": kills,
+        "round_econ": round_econ,
+        "kill_positions": kill_positions,
     }
 
 

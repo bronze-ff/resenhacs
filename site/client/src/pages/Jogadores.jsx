@@ -3,19 +3,29 @@ import { Link } from 'react-router-dom'
 
 export default function Jogadores() {
   const [jogadores, setJogadores] = useState([])
+  const [bans, setBans] = useState(null) // Map steamId -> ban info; null = ainda não carregou/indisponível
 
   useEffect(() => {
     fetch('/api/players')
       .then((res) => (res.ok ? res.json() : []))
       .then(setJogadores)
       .catch(() => setJogadores([]))
+    // Alerta de ban/smurf: cruza o grupo com GetPlayerBans da Steam. Se não tiver
+    // STEAM_API_KEY configurada o endpoint devolve 503 — degrada silenciosamente
+    // (sem tag de ban), não quebra a tela.
+    fetch('/api/players/bans')
+      .then((res) => (res.ok ? res.json() : []))
+      .then((rows) => setBans(new Map(rows.map((r) => [r.steamId, r.ban]))))
+      .catch(() => setBans(new Map()))
   }, [])
 
   return (
     <div>
       <h2 className="mb-4 font-display text-xl font-semibold uppercase tracking-wide text-texto">Jogadores</h2>
       <ul className="space-y-2">
-        {jogadores.map((j) => (
+        {jogadores.map((j) => {
+          const ban = bans?.get(j.steamId)
+          return (
           <li key={j.steamId}>
             <Link
               to={`/jogador/${j.steamId}`}
@@ -28,9 +38,26 @@ export default function Jogadores() {
               {j.isAdmin && (
                 <span className="font-mono text-[10px] uppercase tracking-widest text-destaque">admin</span>
               )}
+              {ban?.vacBanned && (
+                <span
+                  className="panel-cut-sm border border-perigo/40 bg-perigo/10 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-widest text-perigo"
+                  title={`VAC ban — ${ban.numVacBans} conta(s), há ${ban.daysSinceLastBan} dias`}
+                >
+                  VAC ban
+                </span>
+              )}
+              {!ban?.vacBanned && ban?.gameBanned && (
+                <span
+                  className="panel-cut-sm border border-perigo/40 bg-perigo/10 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-widest text-perigo"
+                  title={`Game ban (Overwatch/cheat) — ${ban.numGameBans} ban(s)`}
+                >
+                  Game ban
+                </span>
+              )}
             </Link>
           </li>
-        ))}
+          )
+        })}
       </ul>
     </div>
   )

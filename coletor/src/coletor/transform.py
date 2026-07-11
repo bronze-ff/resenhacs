@@ -160,27 +160,48 @@ def trade_kills(kills, teams, janela=JANELA_TRADE_TICKS):
 
 
 def clutch_outcomes(kills, teams, winner_by_round):
-    """Detecta tentativas de clutch (último vivo de um time vs 2+ inimigos) por round,
-    vencidas ou não. Devolve lista de {steam_id64, round_number, vs, venceu}."""
+    """Detecta tentativas de clutch (último vivo de um time vs 1+ inimigos) por round.
+
+    Registra o clutcher de CADA time separadamente: num 1v1 os DOIS últimos vivos estão
+    clutchando — um ganha, o outro perde (é assim que o Leetify conta, validado round a
+    round contra partidas reais). O bug antigo travava no PRIMEIRO time a chegar a 1 vivo
+    (`inicio is None`), que num 1v1 é quase sempre o eventual PERDEDOR: o vencedor do
+    clutch nunca era registrado e o total de vitórias vinha ~0. Além disso, `venceu` não
+    exige mais sobrevivência — se o round é ganho pelo time do clutcher (ex.: bomba
+    explode depois dele morrer), conta como clutch vencido, igual ao Leetify.
+
+    Devolve lista de {steam_id64, round_number, vs, venceu, salvou}. `salvou` = sobreviveu
+    mas o round foi perdido (salvou a arma — o "SAVE" do Leetify)."""
     saida = []
     for round_number, round_kills in _agrupar_por_round(kills).items():
         ordenado = sorted((k for k in round_kills if not k.get("team_kill")), key=lambda k: k["tick"])
         alive = set(teams.keys())
-        inicio = None
+        # Primeiro instante em que CADA time ficou com exatamente 1 vivo contra 1+ inimigo.
+        inicio_por_time = {}
         for k in ordenado:
             alive.discard(k["victim"])
-            a = [s for s in alive if teams.get(s) == "A"]
-            b = [s for s in alive if teams.get(s) == "B"]
-            # >= 1 (não >= 2): 1vX É clutch pra convenção padrão (HLTV/Leetify contam
-            # 1v1 como categoria própria) — excluir 1v1 aqui era undercounting real.
-            for lado, outro in ((a, b), (b, a)):
-                if len(lado) == 1 and len(outro) >= 1 and inicio is None:
-                    inicio = {"steamid": lado[0], "vs": len(outro), "tick": k["tick"], "time": teams.get(lado[0])}
-        if not inicio:
-            continue
-        sobreviveu = not any(k["victim"] == inicio["steamid"] and k["tick"] >= inicio["tick"] for k in ordenado)
-        venceu = sobreviveu and winner_by_round.get(round_number) == inicio["time"]
-        saida.append({"steam_id64": inicio["steamid"], "round_number": round_number, "vs": inicio["vs"], "venceu": venceu})
+            vivos = {"A": [], "B": []}
+            for s in alive:
+                t = teams.get(s)
+                if t in vivos:
+                    vivos[t].append(s)
+            for lado, outro in (("A", "B"), ("B", "A")):
+                if len(vivos[lado]) == 1 and len(vivos[outro]) >= 1 and lado not in inicio_por_time:
+                    inicio_por_time[lado] = {"steamid": vivos[lado][0], "vs": len(vivos[outro]), "tick": k["tick"]}
+        for lado, info in inicio_por_time.items():
+            sobreviveu = not any(
+                k["victim"] == info["steamid"] and k["tick"] >= info["tick"] for k in ordenado
+            )
+            venceu = winner_by_round.get(round_number) == lado
+            saida.append(
+                {
+                    "steam_id64": info["steamid"],
+                    "round_number": round_number,
+                    "vs": info["vs"],
+                    "venceu": venceu,
+                    "salvou": sobreviveu and not venceu,
+                }
+            )
     return saida
 
 
@@ -228,11 +249,13 @@ def enrich(parsed):
         trade_count[t["attacker"]] = trade_count.get(t["attacker"], 0) + 1
         traded_deaths[t["avenged_teammate"]] = traded_deaths.get(t["avenged_teammate"], 0) + 1
 
-    clutch_wins, clutch_attempts = {}, {}
+    clutch_wins, clutch_attempts, clutch_saves = {}, {}, {}
     for c in clutches:
         clutch_attempts[c["steam_id64"]] = clutch_attempts.get(c["steam_id64"], 0) + 1
         if c["venceu"]:
             clutch_wins[c["steam_id64"]] = clutch_wins.get(c["steam_id64"], 0) + 1
+        elif c.get("salvou"):
+            clutch_saves[c["steam_id64"]] = clutch_saves.get(c["steam_id64"], 0) + 1
 
     players = []
     for p in parsed["players"]:
@@ -253,6 +276,7 @@ def enrich(parsed):
                 "traded_deaths": traded_deaths.get(sid, 0),
                 "clutch_wins": clutch_wins.get(sid, 0),
                 "clutch_attempts": clutch_attempts.get(sid, 0),
+                "clutch_saves": clutch_saves.get(sid, 0),
             }
         )
 

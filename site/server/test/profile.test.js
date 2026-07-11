@@ -18,6 +18,38 @@ function appWith(handlers) {
   return { app: createApp({ config, db }), db }
 }
 
+describe('GET /api/profile/:steamId/posicoes', () => {
+  it('projeta coordenadas de mundo pro radar normalizado (0..1) num mapa calibrado', async () => {
+    const { app } = appWith([
+      ['group by m.map order by n desc', [{ map: 'de_mirage', n: 42 }]],
+      ['kp.victim_x as x', [{ x: -3230, y: 1713 }]], // == pos_x/pos_y do mapa -> projeta pro (0,0)
+    ])
+    const res = await request(app).get('/api/profile/765/posicoes').set('Cookie', cookie)
+    expect(res.status).toBe(200)
+    expect(res.body).toEqual({
+      map: 'de_mirage', calibrated: true,
+      mapas: [{ map: 'de_mirage', pontos: 42 }],
+      pontos: [{ x: 0, y: 0 }],
+    })
+  })
+
+  it('sem dados: devolve mapa null e listas vazias', async () => {
+    const { app } = appWith([['group by m.map order by n desc', []]])
+    const res = await request(app).get('/api/profile/765/posicoes').set('Cookie', cookie)
+    expect(res.status).toBe(200)
+    expect(res.body).toEqual({ map: null, calibrated: false, mapas: [], pontos: [] })
+  })
+
+  it('modo=kills troca a coluna de origem (killer, não victim)', async () => {
+    const { app } = appWith([
+      ['group by m.map order by n desc', [{ map: 'de_dust2', n: 5 }]],
+      ['kp.killer_x as x', [{ x: -2476, y: 3239 }]],
+    ])
+    const res = await request(app).get('/api/profile/765/posicoes?modo=kills').set('Cookie', cookie)
+    expect(res.body.pontos).toEqual([{ x: 0, y: 0 }])
+  })
+})
+
 describe('GET /api/profile/:steamId', () => {
   it('404 quando jogador não existe', async () => {
     const { app } = appWith([['from players where steam_id64', []]])
@@ -43,6 +75,14 @@ describe('GET /api/profile/:steamId', () => {
       ['from highlights h join matches m on m.id = h.match_id', [
         { id: 'h1', match_id: 'm1', round_number: 3, kind: 'clutch_1v2', description: 'CLUTCH 1v2 no round 3', map: 'de_mirage', played_at: null },
       ]],
+      ['from match_player_weapons w join matches m', [
+        { weapon: 'ak47', kills: 20, hs_kills: 8, shots_fired: 150, shots_hit: 45, damage: 2500 },
+        { weapon: 'awp', kills: 5, hs_kills: 4, shots_fired: 10, shots_hit: 6, damage: 700 },
+      ]],
+      ['join match_round_econ e on e.match_id', [
+        { buy_type: 'full', rounds: 15, won: 10 },
+        { buy_type: 'eco', rounds: 3, won: 1 },
+      ]],
     ])
     const res = await request(app).get('/api/profile/765').set('Cookie', cookie)
     expect(res.status).toBe(200)
@@ -63,6 +103,18 @@ describe('GET /api/profile/:steamId', () => {
     expect(res.body.destaques).toEqual([
       { id: 'h1', matchId: 'm1', roundNumber: 3, kind: 'clutch_1v2', description: 'CLUTCH 1v2 no round 3', map: 'de_mirage', playedAt: null },
     ])
+    // por-arma: agregação SUM (nunca média de %), AWP marcada como accuracy não confiável
+    expect(res.body.armas).toEqual([
+      { weapon: 'ak47', kills: 20, hsPct: 40, shotsFired: 150, shotsHit: 45, accuracy: 30, temAccuracyConfiavel: true, damage: 2500 },
+      { weapon: 'awp', kills: 5, hsPct: 80, shotsFired: 10, shotsHit: 6, accuracy: 60, temAccuracyConfiavel: false, damage: 700 },
+    ])
+    // economia: win% por tipo de compra, com os 4 tipos sempre presentes (zerados se não jogou)
+    expect(res.body.economia).toEqual({
+      eco: { rounds: 3, won: 1, winPct: 33.3 },
+      forcado: { rounds: 0, won: 0, winPct: 0 },
+      semi: { rounds: 0, won: 0, winPct: 0 },
+      full: { rounds: 15, won: 10, winPct: 66.7 },
+    })
   })
 })
 

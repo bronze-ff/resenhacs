@@ -39,3 +39,27 @@ export function corRating(rating) {
   if (rating <= 0.85) return 'text-rose-400'
   return 'text-texto'
 }
+
+// Nome cru da arma (como vem do demo, ex. "m4a1_silencer") → nome de exibição.
+const NOMES_ARMA = {
+  ak47: 'AK-47', m4a1: 'M4A4', m4a1_silencer: 'M4A1-S', awp: 'AWP',
+  deagle: 'Desert Eagle', usp_silencer: 'USP-S', glock: 'Glock-18',
+  p250: 'P250', tec9: 'Tec-9', fiveseven: 'Five-SeveN', cz75a: 'CZ75-Auto',
+  elite: 'Dual Berettas', revolver: 'R8 Revolver',
+  ssg08: 'SSG 08', scar20: 'SCAR-20', g3sg1: 'G3SG1', aug: 'AUG', sg556: 'SG 553',
+  galilar: 'Galil AR', famas: 'FAMAS', mac10: 'MAC-10', mp9: 'MP9', mp7: 'MP7',
+  ump45: 'UMP-45', p90: 'P90', bizon: 'PP-Bizon', mp5sd: 'MP5-SD',
+  nova: 'Nova', xm1014: 'XM1014', mag7: 'MAG-7', sawedoff: 'Sawed-Off',
+  m249: 'M249', negev: 'Negev', hkp2000: 'P2000', knife: 'Faca',
+}
+export function nomeArma(weapon) {
+  return NOMES_ARMA[weapon] ?? weapon
+}
+
+// Rótulo do tipo de compra (eco/forçado/semi/full), cor incluída.
+export const TIPO_COMPRA = {
+  eco: { label: 'Eco', cor: 'text-texto-fraco' },
+  forcado: { label: 'Forçado', cor: 'text-perigo' },
+  semi: { label: 'Meia-compra', cor: 'text-texto' },
+  full: { label: 'Compra cheia', cor: 'text-sucesso' },
+}
