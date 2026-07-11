@@ -6,8 +6,10 @@ function mockMe(response) {
   vi.stubGlobal(
     'fetch',
     vi.fn().mockImplementation((url) => {
-      // Feed busca /api/matches; devolvemos lista vazia. /api/auth/me devolve o jogador.
-      if (typeof url === 'string' && url.includes('/api/matches')) {
+      // Feed busca /api/matches e /api/sessions; devolvemos lista vazia pros dois.
+      // /api/auth/me devolve o jogador. Sem esses dois casos, cai no fallback abaixo
+      // e o componente Resenhas recebe o objeto do jogador como "sessoes" e quebra.
+      if (typeof url === 'string' && (url.includes('/api/matches') || url.includes('/api/sessions'))) {
         return Promise.resolve({ ok: true, json: async () => [] })
       }
       return Promise.resolve({
