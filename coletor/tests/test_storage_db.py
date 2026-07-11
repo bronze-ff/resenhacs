@@ -11,9 +11,13 @@ from coletor import storage_r2, db
 class FakeS3:
     def __init__(self):
         self.puts = []
+        self.deletes = []
 
     def put_object(self, **kw):
         self.puts.append(kw)
+
+    def delete_object(self, **kw):
+        self.deletes.append(kw)
 
 
 def test_keys():
@@ -27,6 +31,12 @@ def test_upload_bytes():
     assert key == "demos/1.dem.bz2"
     assert s3.puts[0]["Bucket"] == "bucket"
     assert s3.puts[0]["Body"] == b"abc"
+
+
+def test_delete_object():
+    s3 = FakeS3()
+    storage_r2.delete_object(s3, "bucket", "demos/1.dem.bz2")
+    assert s3.deletes[0] == {"Bucket": "bucket", "Key": "demos/1.dem.bz2"}
 
 
 # ---- db ----

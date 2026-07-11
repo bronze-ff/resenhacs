@@ -20,6 +20,10 @@ def upload_bytes(client, bucket, key, data, content_type="application/octet-stre
     return key
 
 
+def delete_object(client, bucket, key):
+    client.delete_object(Bucket=bucket, Key=key)
+
+
 def make_client(config):
     import boto3
 

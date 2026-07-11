@@ -167,6 +167,46 @@ def cmd_fetch(config, conn, since=None, bot_dir=None, node_bin="node"):
     return total
 
 
+def cmd_cleanup(config, conn, days=90):
+    """Apaga do R2 o .dem BRUTO (não o replay.json, que a UI usa pra sempre) de Partidas
+    já processadas há mais de `days` dias. Decisão do usuário: bug de parser corrigido
+    depois exige reprocessar a demo original (aconteceu 3x só nesta fase do projeto) —
+    por isso a janela de 90 dias, não deleção imediata. replay_url continua intacto;
+    só demo_url vira NULL (a rota /:id/demo já devolve 404 nesse caso, mesmo tratamento
+    de "sem demo" que já existia)."""
+    import datetime
+
+    limite = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=days)
+    with conn.cursor() as cur:
+        cur.execute(
+            "select id, demo_url from matches where status = 'parsed' and demo_url is not null and played_at < %s",
+            (limite,),
+        )
+        rows = cur.fetchall()
+    if not rows:
+        print(f"cleanup: nenhuma Partida com demo mais velha que {days} dias")
+        return 0
+
+    client = storage_r2.make_client(config)
+    total = 0
+    for match_id, demo_url in rows:
+        if f"/{config.r2_bucket}/" not in demo_url:
+            continue
+        key = demo_url.split(f"/{config.r2_bucket}/", 1)[1]
+        try:
+            storage_r2.delete_object(client, config.r2_bucket, key)
+            with conn.cursor() as cur:
+                cur.execute("update matches set demo_url = null where id = %s", (match_id,))
+            conn.commit()
+            total += 1
+            print(f"  {match_id}: demo apagado ({key})")
+        except Exception as e:  # noqa: BLE001
+            conn.rollback()
+            print(f"  {match_id}: falha ao apagar ({e})")
+    print(f"cleanup: {total} demo(s) apagado(s)")
+    return total
+
+
 def ingest_demo(config, conn, path, share_code=None, source="upload", upload=True, played_at=None):
     """Parseia um .dem, arquiva no R2 (se configurado) e grava no banco. Devolve match_id.
 
@@ -246,6 +286,8 @@ def main(argv=None):
     )
     p_fetch.add_argument("--bot-dir", default=None, help="Caminho da pasta bot/ (default: ../bot ao lado de coletor/).")
     p_fetch.add_argument("--node", default="node", help="Executável do Node (default: node no PATH).")
+    p_cleanup = sub.add_parser("cleanup", help="Apaga do R2 o .dem bruto de Partidas processadas há mais de N dias (mantém o replay.json).")
+    p_cleanup.add_argument("--days", type=int, default=90, help="Idade mínima em dias (default: 90).")
 
     args = ap.parse_args(argv)
     config = Config()
@@ -268,6 +310,8 @@ def main(argv=None):
 
             bot_dir = Path(args.bot_dir) if args.bot_dir else None
             cmd_fetch(config, conn, since=args.since, bot_dir=bot_dir, node_bin=args.node)
+        elif args.cmd == "cleanup":
+            cmd_cleanup(config, conn, days=args.days)
     finally:
         conn.close()
 

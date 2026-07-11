@@ -61,6 +61,20 @@ jobs:
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
         run: python -m coletor.main fetch
+      # Apaga só o .dem BRUTO (mantém replay.json pra sempre) de Partidas processadas há
+      # 90+ dias — decisão do usuário: reduz custo de armazenamento no R2 sem travar
+      # reprocessamento de bug de parser achado logo depois de uma Partida ser jogada
+      # (janela de 90 dias cobre isso; casos mais raros/antigos perdem essa flexibilidade).
+      - name: Limpar demos antigas do R2 (90+ dias)
+        working-directory: coletor
+        env:
+          PYTHONPATH: src
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: python -m coletor.main cleanup
 
   # Só em push/manual — rodar isso a cada 30 min sem mudança de código é dinheiro
   # (minutos) jogado fora, e é a maior fatia do orçamento se ficasse no agendamento.
