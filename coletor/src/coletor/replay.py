@@ -93,7 +93,7 @@ def build_replay(map_name, ticks, kills=None, extras=None, target_hz=8):
                 {
                     "id": p["id"], "x": nx, "y": ny,
                     "yaw": round(p.get("yaw", 0), 1), "hp": p.get("hp", 100),
-                    "team": p["team"], "alive": bool(p.get("alive", True)),
+                    "team": p["team"], "side": p.get("side", "CT"), "alive": bool(p.get("alive", True)),
                 }
             )
             if p.get("nick"):

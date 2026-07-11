@@ -9,13 +9,15 @@ const RAIO_CLIQUE = 14 // px — distância máxima do clique até um ponto pra 
 // Cada ponto guarda round/frame também, pra dar pra clicar e pular pro replay.
 // Os arrays de eventos são opcionais no replay JSON (round sem granada não tem `flashes`
 // etc.) — mesma convenção do ReplayViewer; sem os `?? []` um round vazio derruba a página.
+// side (CT/T) é o lado REAL naquele tick (troca no intervalo, ao contrário do
+// team A/B fixo) — permite filtrar "morreu avançando de CT", por exemplo.
 function pontosDeMorte(replay, steamId) {
   const pontos = []
   for (const r of replay.rounds ?? []) {
     for (const k of r.kills ?? []) {
       if (steamId && k.victim !== steamId) continue
       const p = r.frames?.[k.t]?.players.find((pl) => pl.id === k.victim)
-      if (p) pontos.push({ x: p.x, y: p.y, round: r.round, frame: k.t })
+      if (p) pontos.push({ x: p.x, y: p.y, round: r.round, frame: k.t, side: p.side })
     }
   }
   return pontos
@@ -28,7 +30,7 @@ function pontosDeKill(replay, steamId) {
       if (!k.killer) continue
       if (steamId && k.killer !== steamId) continue
       const p = r.frames?.[k.t]?.players.find((pl) => pl.id === k.killer)
-      if (p) pontos.push({ x: p.x, y: p.y, round: r.round, frame: k.t })
+      if (p) pontos.push({ x: p.x, y: p.y, round: r.round, frame: k.t, side: p.side })
     }
   }
   return pontos
@@ -46,6 +48,8 @@ function pontosDeGranada(replay) {
 }
 
 const COR_GRANADA = { smoke: 'rgba(210,210,215,0.5)', fire: 'rgba(255,110,30,0.5)', flash: 'rgba(255,255,255,0.5)', he: 'rgba(255,170,60,0.5)' }
+const TIPOS_GRANADA = [['', 'Todas'], ['flash', 'Flash'], ['smoke', 'Smoke'], ['he', 'HE'], ['fire', 'Molotov']]
+const LADOS = [['', 'Ambos'], ['CT', 'CT'], ['T', 'T']]
 
 function desenhar(ctx, radar, pontos, cor, modo) {
   ctx.clearRect(0, 0, TAM, TAM)
@@ -72,6 +76,8 @@ export default function MapaCalor({ replay, onSelecionarPonto }) {
   const [radarPronto, setRadarPronto] = useState(false)
   const [modo, setModo] = useState('mortes') // mortes | kills | granadas
   const [jogadorFiltro, setJogadorFiltro] = useState('')
+  const [ladoFiltro, setLadoFiltro] = useState('') // '' | CT | T — só se aplica a mortes/kills
+  const [tipoGranadaFiltro, setTipoGranadaFiltro] = useState('') // '' | flash | smoke | he | fire
 
   const jogadoresIds = useMemo(() => Object.keys(replay.names || {}), [replay])
 
@@ -84,12 +90,15 @@ export default function MapaCalor({ replay, onSelecionarPonto }) {
   }, [replay.map])
 
   const pontos = useMemo(() => {
-    if (modo === 'mortes') return pontosDeMorte(replay, jogadorFiltro || null)
-    if (modo === 'kills') return pontosDeKill(replay, jogadorFiltro || null)
-    return pontosDeGranada(replay)
-  }, [replay, modo, jogadorFiltro])
+    if (modo === 'mortes' || modo === 'kills') {
+      const base = modo === 'mortes' ? pontosDeMorte(replay, jogadorFiltro || null) : pontosDeKill(replay, jogadorFiltro || null)
+      return ladoFiltro ? base.filter((p) => p.side === ladoFiltro) : base
+    }
+    const granadas = pontosDeGranada(replay)
+    return tipoGranadaFiltro ? granadas.filter((p) => p.tipo === tipoGranadaFiltro) : granadas
+  }, [replay, modo, jogadorFiltro, ladoFiltro, tipoGranadaFiltro])
 
-  const interativo = modo !== 'granadas' // granada não tem "o que aconteceu" claro pra assistir
+  const interativo = true // todo ponto (kill/morte/granada) já carrega round+frame pra pular no Replay 2D
 
   useEffect(() => {
     const ctx = canvasRef.current?.getContext('2d')
@@ -130,14 +139,41 @@ export default function MapaCalor({ replay, onSelecionarPonto }) {
           ))}
         </div>
         {modo !== 'granadas' && (
-          <select
-            value={jogadorFiltro}
-            onChange={(e) => setJogadorFiltro(e.target.value)}
-            className="rounded border border-borda bg-superficie px-2 py-1 font-mono text-xs"
-          >
-            <option value="">Todo mundo</option>
-            {jogadoresIds.map((id) => <option key={id} value={id}>{replay.names[id]}</option>)}
-          </select>
+          <>
+            <select
+              value={jogadorFiltro}
+              onChange={(e) => setJogadorFiltro(e.target.value)}
+              className="rounded border border-borda bg-superficie px-2 py-1 font-mono text-xs"
+            >
+              <option value="">Todo mundo</option>
+              {jogadoresIds.map((id) => <option key={id} value={id}>{replay.names[id]}</option>)}
+            </select>
+            <div className="flex overflow-hidden rounded border border-borda font-mono text-xs uppercase">
+              {LADOS.map(([v, label]) => (
+                <button
+                  key={v || 'ambos'}
+                  onClick={() => setLadoFiltro(v)}
+                  title={v ? `Só quando estava jogando de ${v}` : 'CT e T juntos'}
+                  className={`px-2.5 py-1.5 transition-colors ${ladoFiltro === v ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+        {modo === 'granadas' && (
+          <div className="flex overflow-hidden rounded border border-borda font-mono text-xs uppercase">
+            {TIPOS_GRANADA.map(([v, label]) => (
+              <button
+                key={v || 'todas'}
+                onClick={() => setTipoGranadaFiltro(v)}
+                className={`px-2.5 py-1.5 transition-colors ${tipoGranadaFiltro === v ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         )}
         <span className="font-mono text-xs text-texto-fraco">{pontos.length} pontos</span>
         {interativo && <span className="font-mono text-xs text-texto-fraco">· clique num ponto pra assistir no Replay 2D</span>}

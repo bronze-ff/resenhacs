@@ -79,14 +79,16 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket }) {
 
     const [players, rounds, highlights, clips, econ] = await Promise.all([
       db.query(
-        `select steam_id64, nick, team, kills, deaths, assists, headshot_kills,
-                damage, rounds_played, rating, won, is_tracked, team_kills,
-                he_damage, molotov_damage, smokes_thrown, flashes_thrown,
-                he_thrown, molotovs_thrown, enemies_flashed, teammates_flashed,
-                enemy_flash_duration, teammate_flash_duration,
-                he_team_damage, molotov_team_damage, flash_assists
-         from match_players where match_id = $1
-         order by team, rating desc nulls last, kills desc`,
+        `select mp.steam_id64, mp.nick, mp.team, mp.kills, mp.deaths, mp.assists, mp.headshot_kills,
+                mp.damage, mp.rounds_played, mp.rating, mp.won, mp.is_tracked, mp.team_kills,
+                mp.he_damage, mp.molotov_damage, mp.smokes_thrown, mp.flashes_thrown,
+                mp.he_thrown, mp.molotovs_thrown, mp.enemies_flashed, mp.teammates_flashed,
+                mp.enemy_flash_duration, mp.teammate_flash_duration,
+                mp.he_team_damage, mp.molotov_team_damage, mp.flash_assists, p.avatar_url
+         from match_players mp
+         left join players p on p.steam_id64 = mp.steam_id64
+         where mp.match_id = $1
+         order by mp.team, mp.rating desc nulls last, mp.kills desc`,
         [id],
       ),
       db.query(
@@ -128,6 +130,7 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket }) {
       players: players.rows.map((p) => ({
         steamId: p.steam_id64,
         nick: p.nick,
+        avatarUrl: p.avatar_url,
         team: p.team,
         kills: p.kills,
         teamKills: p.team_kills,

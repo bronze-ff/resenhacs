@@ -542,6 +542,11 @@ def extract_replay(path, target_hz=8, demo_tick_rate=64):
                 # intervalo. Fallback pro lado atual só pra quem não estava no 1º freeze
                 # (entrou depois — raro, mas não pode sumir do replay).
                 "team": fixed.get(sid, _team_letter(team_num)),
+                # Lado REAL (CT/T) nesse tick específico — ao contrário de "team" acima,
+                # esse troca no intervalo de propósito (pedido do usuário: mapa de calor
+                # filtrar "morreu avançando de CT", que só faz sentido com o lado de
+                # verdade daquele momento, não o time fixo A/B).
+                "side": "T" if team_num == 2 else "CT",
                 "alive": bool(r.get("is_alive")),
             }
         )

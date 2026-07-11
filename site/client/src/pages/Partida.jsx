@@ -165,11 +165,78 @@ function LinhaDoTempoRounds({ rounds, highlights, timeDoGrupo, onClicarHighlight
   )
 }
 
+// Avatar do jogador (mesmo padrão do Ranking: panel-cut-sm + border + object-cover) com
+// fallback pra quem nunca logou no site (avatarUrl null — comum, ~metade do placar de uma
+// partida costuma ser adversário sem conta) — mostra a inicial do nick tingida na cor do
+// time em vez de sumir/quebrar o layout. Compartilhado entre Economia e Utilitária.
+function Avatar({ p }) {
+  const titulo = p?.nick || p?.steamId || '?'
+  if (p?.avatarUrl) {
+    return (
+      <img
+        src={p.avatarUrl}
+        alt=""
+        title={titulo}
+        className="panel-cut-sm h-6 w-6 flex-shrink-0 border border-borda object-cover"
+      />
+    )
+  }
+  const inicial = titulo.charAt(0).toUpperCase()
+  const cor =
+    p?.team === 'A'
+      ? 'border-time-a/50 bg-time-a/10 text-time-a'
+      : p?.team === 'B'
+        ? 'border-time-b/50 bg-time-b/10 text-time-b'
+        : 'border-borda bg-superficie-alta text-texto-fraco'
+  return (
+    <span
+      title={titulo}
+      className={`panel-cut-sm flex h-6 w-6 flex-shrink-0 items-center justify-center border font-display text-[10px] font-bold ${cor}`}
+    >
+      {inicial}
+    </span>
+  )
+}
+
 const COR_BARRA_COMPRA = {
   eco: 'bg-texto-fraco/50', forcado: 'bg-perigo/60', semi: 'bg-texto/60', full: 'bg-sucesso/60',
 }
 
-function LinhaDoTempoEconomia({ economia, timeDoGrupo }) {
+// "$3200" -> "$3.2k" — cabe acima/abaixo da barra sem precisar de hover, mesmo com 28+
+// rounds visíveis lado a lado. Abaixo de 1000 mostra o valor cheio (pistol round: $800...).
+function fmtEquip(v) {
+  if (v == null) return '–'
+  if (v >= 1000) return `$${(v / 1000).toFixed(1)}k`
+  return `$${v}`
+}
+
+// Cabeçalho de time: nome colorido (time-a/time-b) + os 5 avatares — a primeira coisa que
+// o olho vê, antes de qualquer barra. "seu time" identifica o lado do grupo (substitui o
+// "· contorno = time do grupo" que só aparecia no rodapé antes).
+function CabecalhoTimeEconomia({ time, jogadores, timeDoGrupo }) {
+  const cor = time === 'A' ? 'text-time-a' : 'text-time-b'
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className={`font-display text-sm font-bold uppercase tracking-widest ${cor}`}>Time {time}</span>
+      {timeDoGrupo === time && (
+        <span className="panel-cut-sm border border-destaque/40 bg-destaque/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-widest text-destaque">
+          seu time
+        </span>
+      )}
+      <div className="ml-auto flex items-center gap-1">
+        {jogadores?.map((p) => <Avatar key={p.steamId} p={p} />)}
+      </div>
+    </div>
+  )
+}
+
+// Gráfico divergente: Time A cresce pra cima, Time B cresce pra baixo, separados pelo
+// número do round no meio — a POSIÇÃO da barra já diz de qual time é (mais robusto que só
+// cor). Preenchimento da barra = tipo de compra (igual antes, com legenda sempre visível
+// embaixo); borda em border-time-a/border-time-b reforça o time em cada barra individual;
+// o número acima/abaixo (na cor do time) mostra o valor sem precisar de hover. Cabeçalhos
+// espelhados no topo (Time A) e na base (Time B) fecham a leitura vertical.
+function LinhaDoTempoEconomia({ economia, timeDoGrupo, timeA, timeB }) {
   if (!economia || economia.length === 0) return null
   const porRound = new Map()
   for (const e of economia) {
@@ -177,49 +244,88 @@ function LinhaDoTempoEconomia({ economia, timeDoGrupo }) {
     porRound.get(e.roundNumber)[e.team] = e
   }
   const maiorEquip = Math.max(...economia.map((e) => e.equipValue), 1)
+  const ALTURA_MAX = 44 // px — precisa bater com h-11 (44px) das caixas abaixo
+  const altura = (equip) => (equip ? Math.max(4, (equip / maiorEquip) * ALTURA_MAX) : 4)
   const rounds = [...porRound.keys()].sort((a, b) => a - b)
+
   return (
     <div className="panel-cut border border-borda bg-superficie p-3">
-      <div className="flex items-end gap-1 overflow-x-auto pb-1">
+      <div className="mb-2">
+        <CabecalhoTimeEconomia time="A" jogadores={timeA} timeDoGrupo={timeDoGrupo} />
+      </div>
+
+      <div className="flex items-stretch gap-1 overflow-x-auto py-1">
         {rounds.map((rn) => {
           const r = porRound.get(rn)
+          const a = r.A
+          const b = r.B
           return (
-            <div key={rn} className="flex flex-shrink-0 flex-col items-center gap-0.5" style={{ width: 20 }}>
-              {['A', 'B'].map((time) => {
-                const e = r[time]
-                const altura = e ? Math.max(4, (e.equipValue / maiorEquip) * 40) : 4
-                return (
-                  <div
-                    key={time}
-                    title={e ? `Round ${rn} · Time ${time}: $${e.equipValue} (${TIPO_COMPRA[e.buyType]?.label ?? e.buyType})` : ''}
-                    className={`w-4 rounded-sm ${e ? COR_BARRA_COMPRA[e.buyType] : 'bg-borda'} ${time === timeDoGrupo ? 'ring-1 ring-destaque/50' : ''}`}
-                    style={{ height: altura }}
-                  />
-                )
-              })}
-              <span className="font-mono text-[9px] text-texto-fraco">{rn}</span>
+            <div key={rn} className="flex flex-shrink-0 flex-col items-center" style={{ width: 30 }}>
+              <span className="whitespace-nowrap font-mono text-[8px] font-semibold tabular-nums text-time-a">
+                {a ? fmtEquip(a.equipValue) : '–'}
+              </span>
+              <div className="flex h-11 w-full items-end justify-center">
+                <div
+                  title={
+                    a
+                      ? `Round ${rn} · Time A: $${a.equipValue} (${TIPO_COMPRA[a.buyType]?.label ?? a.buyType})`
+                      : `Round ${rn} · Time A: sem dado`
+                  }
+                  className={`w-4 rounded-t-sm border-2 ${a ? `${COR_BARRA_COMPRA[a.buyType]} border-time-a/70` : 'border-borda bg-borda'}`}
+                  style={{ height: altura(a?.equipValue) }}
+                />
+              </div>
+              <span className="my-0.5 font-mono text-[9px] font-semibold text-texto-fraco">{rn}</span>
+              <div className="flex h-11 w-full items-start justify-center">
+                <div
+                  title={
+                    b
+                      ? `Round ${rn} · Time B: $${b.equipValue} (${TIPO_COMPRA[b.buyType]?.label ?? b.buyType})`
+                      : `Round ${rn} · Time B: sem dado`
+                  }
+                  className={`w-4 rounded-b-sm border-2 ${b ? `${COR_BARRA_COMPRA[b.buyType]} border-time-b/70` : 'border-borda bg-borda'}`}
+                  style={{ height: altura(b?.equipValue) }}
+                />
+              </div>
+              <span className="whitespace-nowrap font-mono text-[8px] font-semibold tabular-nums text-time-b">
+                {b ? fmtEquip(b.equipValue) : '–'}
+              </span>
             </div>
           )
         })}
       </div>
-      <div className="mt-2 flex flex-wrap gap-3 font-mono text-[11px] text-texto-fraco">
+
+      <div className="mt-2">
+        <CabecalhoTimeEconomia time="B" jogadores={timeB} timeDoGrupo={timeDoGrupo} />
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-borda pt-2 font-mono text-[11px] text-texto-fraco">
         {Object.entries(TIPO_COMPRA).map(([tipo, info]) => (
           <span key={tipo} className="flex items-center gap-1">
             <span className={`inline-block h-2 w-2 rounded-sm ${COR_BARRA_COMPRA[tipo]}`} />
             {info.label}
           </span>
         ))}
-        {timeDoGrupo && <span>· contorno = time do grupo</span>}
+        <span>· preenchimento = tipo de compra · borda laranja/azul = Time A/Time B · número acima/abaixo = valor do equipamento</span>
       </div>
     </div>
   )
 }
 
-function TabelaUtilitaria({ jogadores }) {
+// Uma tabela por time (mesmo padrão do Scoreboard, que já faz isso duas seções acima).
+// Recebe só os jogadores de UM time — o split A/B é feito no TabelaUtilitaria logo abaixo.
+function TabelaUtilitariaTime({ time, jogadores }) {
+  const cor = time === 'A' ? 'text-time-a' : 'text-time-b'
+  const borda = time === 'A' ? 'border-time-a/30' : 'border-time-b/30'
   return (
-    <div className="panel-cut overflow-x-auto border border-borda">
+    <div className={`panel-cut overflow-x-auto border ${borda}`}>
       <table className="w-full text-sm">
         <thead>
+          <tr className={`border-b ${borda} bg-superficie text-left`}>
+            <th className="px-3 py-2" colSpan={7}>
+              <span className={`font-display text-xs font-bold uppercase tracking-widest ${cor}`}>Time {time}</span>
+            </th>
+          </tr>
           <tr className="bg-superficie text-left font-mono text-[10px] uppercase tracking-wider text-texto-fraco">
             <th className="px-3 py-2">Jogador</th>
             <th className="px-2 py-2 text-right" title="Smokes / Flashes / HEs / Molotovs jogadas">Granadas</th>
@@ -235,33 +341,57 @@ function TabelaUtilitaria({ jogadores }) {
             const u = p.utilitaria ?? {}
             return (
               <tr key={p.steamId} className="border-t border-borda transition-colors hover:bg-superficie-alta">
-                <td className="px-3 py-2 font-mono text-texto">{p.nick || p.steamId}</td>
-                <td className="px-2 py-2 text-right font-mono text-xs tabular-nums text-texto-fraco">
+                <td className="px-3 py-2.5">
+                  <span className="flex items-center gap-2 font-mono text-texto">
+                    <Avatar p={p} />
+                    {p.nick || p.steamId}
+                    {p.isTracked && <span className="text-[9px] uppercase tracking-widest text-destaque">grupo</span>}
+                  </span>
+                </td>
+                <td className="px-2 py-2.5 text-right font-mono text-xs tabular-nums text-texto-fraco">
                   {u.smokesThrown ?? 0}/{u.flashesThrown ?? 0}/{u.heThrown ?? 0}/{u.molotovsThrown ?? 0}
                 </td>
-                <td className="px-2 py-2 text-right tabular-nums">
+                <td className="px-2 py-2.5 text-right tabular-nums">
                   {u.enemiesFlashed ?? 0}
                   <span className="ml-1 text-xs text-texto-fraco">({(u.enemyFlashDuration ?? 0).toFixed(1)}s)</span>
                 </td>
-                <td className={`px-2 py-2 text-right tabular-nums ${u.teammatesFlashed > 0 ? 'text-perigo' : ''}`}>
+                <td className={`px-2 py-2.5 text-right tabular-nums ${u.teammatesFlashed > 0 ? 'text-perigo' : ''}`}>
                   {u.teammatesFlashed ?? 0}
                   <span className="ml-1 text-xs text-texto-fraco">({(u.teammateFlashDuration ?? 0).toFixed(1)}s)</span>
                 </td>
-                <td className="px-2 py-2 text-right tabular-nums">{u.flashAssists ?? 0}</td>
-                <td className="px-2 py-2 text-right tabular-nums">
+                <td className="px-2 py-2.5 text-right tabular-nums">{u.flashAssists ?? 0}</td>
+                <td className="px-2 py-2.5 text-right tabular-nums">
                   {u.heDamage ?? 0}
                   {u.heTeamDamage > 0 && <span className="ml-1 text-xs text-perigo">({u.heTeamDamage})</span>}
                 </td>
-                <td className="px-2 py-2 text-right tabular-nums">
+                <td className="px-2 py-2.5 text-right tabular-nums">
                   {u.molotovDamage ?? 0}
                   {u.molotovTeamDamage > 0 && <span className="ml-1 text-xs text-perigo">({u.molotovTeamDamage})</span>}
                 </td>
               </tr>
             )
           })}
+          {jogadores.length === 0 && (
+            <tr>
+              <td colSpan={7} className="px-3 py-4 text-center font-mono text-xs text-texto-fraco">
+                Sem jogadores nesse time.
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
-      <p className="border-t border-borda bg-superficie px-3 py-2 font-mono text-[11px] leading-relaxed text-texto-fraco">
+    </div>
+  )
+}
+
+function TabelaUtilitaria({ timeA, timeB }) {
+  return (
+    <div className="space-y-3">
+      <div className="grid gap-4 lg:grid-cols-2">
+        <TabelaUtilitariaTime time="A" jogadores={timeA} />
+        <TabelaUtilitariaTime time="B" jogadores={timeB} />
+      </div>
+      <p className="panel-cut-sm border border-borda bg-superficie px-3 py-2 font-mono text-[11px] leading-relaxed text-texto-fraco">
         Granadas = smokes/flashes/HEs/molotovs jogadas (não necessariamente acertaram alguém).{' '}
         Cegou = vezes que a flash pegou alguém por mais de 1.1s (cegueira de raspão não conta — mesmo critério do Leetify), com o total de segundos causados. Auto-flash conta como "cegou aliado".{' '}
         Dano HE/fogo = só em inimigo; número em <span className="text-perigo">vermelho entre parênteses</span> é fogo amigo.
@@ -489,13 +619,13 @@ export default function Partida() {
       {m.economia?.length > 0 && (
         <section>
           <h3 className="mb-2 font-display text-lg font-semibold uppercase tracking-wide text-texto">Economia</h3>
-          <LinhaDoTempoEconomia economia={m.economia} timeDoGrupo={timeDoGrupo} />
+          <LinhaDoTempoEconomia economia={m.economia} timeDoGrupo={timeDoGrupo} timeA={timeA} timeB={timeB} />
         </section>
       )}
 
       <section>
         <h3 className="mb-2 font-display text-lg font-semibold uppercase tracking-wide text-texto">Utilitária</h3>
-        <TabelaUtilitaria jogadores={m.players} />
+        <TabelaUtilitaria timeA={timeA} timeB={timeB} />
       </section>
 
       <section ref={replayRef}>
