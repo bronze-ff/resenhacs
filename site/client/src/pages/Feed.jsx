@@ -150,7 +150,7 @@ function Resenhas() {
         Resenhas recentes
       </h3>
       <div className="flex gap-3 overflow-x-auto pb-1">
-        {sessoes.map((s) => (
+        {(sessoes ?? []).map((s) => (
           <div
             key={s.matchIds[0]}
             className="panel-cut-sm min-w-[240px] flex-shrink-0 border border-borda bg-superficie p-3"
