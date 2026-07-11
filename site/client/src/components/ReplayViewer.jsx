@@ -1,8 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
-import { frameIndexAt, duracaoSegundos, COR_TIME } from '../lib/replayEngine.js'
+import { frameIndexAt, duracaoSegundos } from '../lib/replayEngine.js'
 import { nomeMapa, categoriaArma } from '../lib/format.js'
 
 const TAM = 640 // lado do canvas em px
+// Cor por LADO real (CT/T), não pelo time fixo A/B — pedido do usuário: no jogo de
+// verdade CT é sempre azul e T sempre laranja, trocando no intervalo; usar o time fixo
+// (como Economia/Scoreboard fazem, de propósito, pra somar stats da partida inteira)
+// deixava o radar tático "errado" aos olhos de quem tá acostumado com o HUD do CS2.
+const COR_LADO = { CT: '#4fb6ff', T: '#ff9a1f' }
+
+// Lado (CT/T) de um jogador num tick específico do round — usado pro kill feed, que só
+// tem o id do killer/vítima e o tick do kill, não o objeto do frame já resolvido.
+function ladoNoTick(round, tick, steamId) {
+  return round?.frames?.[tick]?.players.find((p) => p.id === steamId)?.side
+}
 // Quanto tempo (em segundos) o traçado da bala + ícone de kill ficam visíveis depois
 // do tiro, desaparecendo aos poucos — mesma ideia do "round recap" da Leetify, só que
 // ao vivo durante a reprodução em vez de um card estático de round inteiro.
@@ -91,7 +102,7 @@ function desenharUmTiro(ctx, t, evento, round, f, replay, hz, fatal) {
   const vitima = frameDoTiro.players.find((p) => p.id === evento.victim)
   if (!vitima) return
   const vx = vitima.x * TAM, vy = vitima.y * TAM
-  const corTiro = COR_TIME[replay.teams?.[evento.killer]] ?? '#e6edf3'
+  const corTiro = COR_LADO[atirador?.side] ?? '#e6edf3'
 
   if (atirador) {
     const ax = atirador.x * TAM, ay = atirador.y * TAM
@@ -209,7 +220,7 @@ function desenharFrame(ctx, round, f, radar, replay) {
     }
 
     // corpo
-    ctx.fillStyle = COR_TIME[p.team] ?? '#888'
+    ctx.fillStyle = COR_LADO[p.side] ?? '#888'
     ctx.beginPath(); ctx.arc(cx, cy, 6, 0, Math.PI * 2); ctx.fill()
     // HP baixo: anel vermelho fino
     if (hpBaixo) {
@@ -397,7 +408,7 @@ export default function ReplayViewer({ replay, seek }) {
             >
               {k.killer ? (
                 <>
-                  <span className="font-semibold" style={{ color: COR_TIME[replay.teams?.[k.killer]] ?? '#e6edf3' }}>
+                  <span className="font-semibold" style={{ color: COR_LADO[ladoNoTick(round, k.t, k.killer)] ?? '#e6edf3' }}>
                     {replay.names?.[k.killer] ?? k.killer}
                   </span>
                   <span className="text-texto-fraco">{k.weapon}</span>
@@ -407,7 +418,7 @@ export default function ReplayViewer({ replay, seek }) {
                 <span className="text-texto-fraco">queda/ambiente</span>
               )}
               <span className="text-texto-fraco">→</span>
-              <span className="font-semibold" style={{ color: COR_TIME[replay.teams?.[k.victim]] ?? '#e6edf3' }}>
+              <span className="font-semibold" style={{ color: COR_LADO[ladoNoTick(round, k.t, k.victim)] ?? '#e6edf3' }}>
                 {replay.names?.[k.victim] ?? k.victim}
               </span>
             </div>
