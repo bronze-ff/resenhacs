@@ -152,7 +152,7 @@ export default function JogadorPerfil() {
 
       <section>
         <h3 className="mb-3 font-display text-lg font-semibold uppercase tracking-wide text-texto">Utilitária</h3>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-8">
           <StatTile
             rotulo="Smokes"
             valor={stats.smokesThrown}
@@ -165,22 +165,28 @@ export default function JogadorPerfil() {
             title="Flashes jogadas e a média de quantos inimigos cada uma cegou (não é %, uma flash pode cegar vários de uma vez)."
           />
           <StatTile
+            rotulo="Flash assist"
+            valor={stats.flashAssists}
+            sub={`${stats.flashAssistPct}% das flashes`}
+            title="Flash que cegou um inimigo morto por um colega (ou por você mesmo) logo em seguida, ainda cego. Mesmo conceito do 'Flash Assist' do Leetify/HLTV."
+          />
+          <StatTile
             rotulo="HEs"
             valor={stats.heThrown}
-            sub={`${stats.heDamage} dano`}
-            title="HEs jogadas e o dano total causado por elas."
+            sub={`${stats.avgHeDamage} dano/HE`}
+            title={`Dano total em inimigo: ${stats.heDamage}${stats.heTeamDamage ? ` (+ ${stats.heTeamDamage} de fogo amigo, não conta aqui)` : ''}. A média é por HE jogada, não por partida.`}
           />
           <StatTile
             rotulo="Molotov/Incend."
             valor={stats.molotovsThrown}
-            sub={`${stats.molotovDamage} dano`}
-            title="Molotov/incendiary jogadas e o dano total (queimadura) causado."
+            sub={`${stats.avgMolotovDamage} dano/molotov`}
+            title={`Dano total em inimigo: ${stats.molotovDamage}${stats.molotovTeamDamage ? ` (+ ${stats.molotovTeamDamage} de fogo amigo, não conta aqui)` : ''}. A média é por molotov jogado, não por partida.`}
           />
           <StatTile
             rotulo="Cegou inimigo"
             valor={stats.enemiesFlashed}
-            sub={`${stats.enemyFlashDuration}s no total`}
-            title="Quantas vezes flashou um inimigo, e a soma de segundos de cegueira causada neles."
+            sub={`${stats.avgBlindDuration}s em média`}
+            title="Quantas vezes flashou um inimigo, e a duração média de cegueira por vez (não o total)."
           />
           <StatTile
             rotulo="Cegou aliado"
@@ -188,6 +194,12 @@ export default function JogadorPerfil() {
             sub={`${stats.teammateFlashDuration}s no total`}
             destaque={stats.teammatesFlashed > 0 ? 'text-perigo' : undefined}
             title="Flash de time: quantas vezes cegou um aliado (não conta auto-flash), e os segundos totais."
+          />
+          <StatTile
+            rotulo="Fogo amigo (HE+fogo)"
+            valor={stats.heTeamDamage + stats.molotovTeamDamage}
+            destaque={(stats.heTeamDamage + stats.molotovTeamDamage) > 0 ? 'text-perigo' : undefined}
+            title="Dano de HE + molotov no PRÓPRIO time — não entra no 'Dano HE'/'Dano fogo' de cima, que é só inimigo."
           />
         </div>
       </section>

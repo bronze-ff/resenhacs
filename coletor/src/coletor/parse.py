@@ -257,10 +257,15 @@ def parse_demo(path):
 
     # Dano por atacante, separando bala de utilitária (granada/molotov — "inferno" no
     # weapon é o dano de queimadura do molotov/incendiary, descoberto empiricamente).
-    # he_damage/molotov_damage: mesmo split, granular (utility_damage continua sendo a
-    # soma dos dois, pro stat tile antigo "Dano utilitária" não mudar de significado).
+    # he_damage/molotov_damage: SÓ dano em INIMIGO (comparação com o Leetify, 2026-07-11,
+    # mostrou que eles separam "Avg HE damage" de "Avg HE team damage" — dano em time
+    # (fogo amigo) vai pros campos _team_damage à parte; sem essa separação um jogador
+    # que só acerta granada no próprio time parecia "bom com HE" igual quem acerta
+    # inimigo). utility_damage continua sendo a soma de TUDO (inimigo + time), pro
+    # stat tile antigo "Dano utilitária" não mudar de significado.
     damage, utility_damage, shots_hit = {}, {}, {}
     he_damage, molotov_damage = {}, {}
+    he_team_damage, molotov_team_damage = {}, {}
     for r in hurt.to_dict("records"):
         atk = _sid(r.get("attacker_steamid"))
         if not atk:
@@ -270,10 +275,18 @@ def parse_demo(path):
         arma = r.get("weapon")
         if arma in _ARMAS_UTILITARIAS:
             utility_damage[atk] = utility_damage.get(atk, 0) + dmg
+            vic = _sid(r.get("user_steamid"))
+            time_kill = bool(vic and fixed.get(atk) == fixed.get(vic))
             if arma == "hegrenade":
-                he_damage[atk] = he_damage.get(atk, 0) + dmg
+                if time_kill:
+                    he_team_damage[atk] = he_team_damage.get(atk, 0) + dmg
+                else:
+                    he_damage[atk] = he_damage.get(atk, 0) + dmg
             elif arma == "inferno":
-                molotov_damage[atk] = molotov_damage.get(atk, 0) + dmg
+                if time_kill:
+                    molotov_team_damage[atk] = molotov_team_damage.get(atk, 0) + dmg
+                else:
+                    molotov_damage[atk] = molotov_damage.get(atk, 0) + dmg
         elif _eh_arma_de_fogo(arma):
             shots_hit[atk] = shots_hit.get(atk, 0) + 1
             slot = weapon_slot(atk, _arma_limpa(arma))
@@ -331,6 +344,25 @@ def parse_demo(path):
             enemies_flashed[atk] = enemies_flashed.get(atk, 0) + 1
             enemy_flash_duration[atk] = enemy_flash_duration.get(atk, 0.0) + dur
 
+    # Flash assist (comparação com o Leetify, 2026-07-11 — não tínhamos essa métrica):
+    # jogou uma flash que cegou um inimigo, e esse inimigo morreu ENQUANTO ainda estava
+    # cego pra mão de alguém do MEU time (pode ser eu mesmo). Crédito vai pro lançador
+    # da flash, não pro autor do kill.
+    flash_assists = {}
+    TICK_RATE = 64
+    for b in blind_records:
+        thrower, vic = _sid(b.get("attacker_steamid")), _sid(b.get("user_steamid"))
+        if not thrower or not vic or thrower == vic or fixed.get(thrower) == fixed.get(vic):
+            continue  # só flash em INIMIGO conta assist
+        tick0 = int(b["tick"])
+        janela_fim = tick0 + (_flt(b.get("blind_duration")) or 0.0) * TICK_RATE
+        for k in kills:
+            if k["team_kill"] or k["victim"] != vic or not (tick0 <= k["tick"] <= janela_fim):
+                continue
+            if fixed.get(k["attacker"]) == fixed.get(thrower):
+                flash_assists[thrower] = flash_assists.get(thrower, 0) + 1
+                break  # 1 assist por flash mesmo se por algum motivo casasse mais de 1 kill
+
     players = [
         {
             "steam_id64": sid,
@@ -346,6 +378,9 @@ def parse_demo(path):
             "shots_hit": shots_hit.get(sid, 0),
             "he_damage": he_damage.get(sid, 0),
             "molotov_damage": molotov_damage.get(sid, 0),
+            "he_team_damage": he_team_damage.get(sid, 0),
+            "molotov_team_damage": molotov_team_damage.get(sid, 0),
+            "flash_assists": flash_assists.get(sid, 0),
             "smokes_thrown": smokes_thrown.get(sid, 0),
             "flashes_thrown": flashes_thrown.get(sid, 0),
             "he_thrown": he_thrown.get(sid, 0),

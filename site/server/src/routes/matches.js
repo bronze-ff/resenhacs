@@ -83,7 +83,8 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket }) {
                 damage, rounds_played, rating, won, is_tracked, team_kills,
                 he_damage, molotov_damage, smokes_thrown, flashes_thrown,
                 he_thrown, molotovs_thrown, enemies_flashed, teammates_flashed,
-                enemy_flash_duration, teammate_flash_duration
+                enemy_flash_duration, teammate_flash_duration,
+                he_team_damage, molotov_team_damage, flash_assists
          from match_players where match_id = $1
          order by team, rating desc nulls last, kills desc`,
         [id],
@@ -149,6 +150,9 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket }) {
           teammatesFlashed: p.teammates_flashed,
           enemyFlashDuration: Number(p.enemy_flash_duration),
           teammateFlashDuration: Number(p.teammate_flash_duration),
+          heTeamDamage: p.he_team_damage,
+          molotovTeamDamage: p.molotov_team_damage,
+          flashAssists: p.flash_assists,
         },
       })),
       rounds: rounds.rows.map((r) => ({

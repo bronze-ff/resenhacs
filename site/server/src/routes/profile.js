@@ -56,6 +56,9 @@ async function statsAgregados(db, steamId, from, to) {
             coalesce(sum(mp.teammates_flashed), 0)::int as teammates_flashed,
             coalesce(sum(mp.enemy_flash_duration), 0)::numeric as enemy_flash_duration,
             coalesce(sum(mp.teammate_flash_duration), 0)::numeric as teammate_flash_duration,
+            coalesce(sum(mp.he_team_damage), 0)::int as he_team_damage,
+            coalesce(sum(mp.molotov_team_damage), 0)::int as molotov_team_damage,
+            coalesce(sum(mp.flash_assists), 0)::int as flash_assists,
             coalesce((select count(*) from highlights h join matches mh on mh.id = h.match_id
                       where h.steam_id64 = $1 and h.kind = 'ace'${periodo.replaceAll('m.', 'mh.')}), 0)::int as aces
      from match_players mp join matches m on m.id = mp.match_id
@@ -105,6 +108,16 @@ async function statsAgregados(db, steamId, from, to) {
     // "Sucesso" da flash = quantos inimigos cegados por flash jogada (não é % porque
     // uma flash pode cegar 0 a 5 inimigos de uma vez).
     enemiesFlashedPerFlash: a.flashes_thrown ? Math.round((a.enemies_flashed / a.flashes_thrown) * 100) / 100 : 0,
+    // Comparação com o Leetify (2026-07-11): eles separam dano de HE/molotov em
+    // inimigo vs próprio time (fogo amigo) e têm "Flash Assists" — adicionamos os três.
+    heTeamDamage: a.he_team_damage,
+    molotovTeamDamage: a.molotov_team_damage,
+    flashAssists: a.flash_assists,
+    flashAssistPct: pct(a.flash_assists, a.flashes_thrown),
+    // Médias por arremesso — mesmo recorte do "Avg HE damage" / "Avg blind time" do Leetify.
+    avgHeDamage: a.he_thrown ? Math.round((a.he_damage / a.he_thrown) * 10) / 10 : 0,
+    avgMolotovDamage: a.molotovs_thrown ? Math.round((a.molotov_damage / a.molotovs_thrown) * 10) / 10 : 0,
+    avgBlindDuration: a.enemies_flashed ? Math.round((Number(a.enemy_flash_duration) / a.enemies_flashed) * 10) / 10 : 0,
   }
 }
 

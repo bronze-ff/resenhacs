@@ -66,7 +66,13 @@ describe('GET /api/profile/:steamId', () => {
         { steam_id64: '765', partidas: 10, entry_kills: 30, entry_deaths: 5, utility_damage: 200, rounds: 200, clutch_wins: 2, clutch_attempts: 3, shots_fired: 300, shots_hit: 90 },
         { steam_id64: '999', partidas: 10, entry_kills: 2, entry_deaths: 2, utility_damage: 50, rounds: 200, clutch_wins: 0, clutch_attempts: 1, shots_fired: 300, shots_hit: 60 },
       ]],
-      ['count(*)::int as partidas', [{ partidas: 10, vitorias: 6, kills: 200, deaths: 150, assists: 40, hs: 100, damage: 3300, rounds: 220, rating: '1.15' }]],
+      ['count(*)::int as partidas', [{
+        partidas: 10, vitorias: 6, kills: 200, deaths: 150, assists: 40, hs: 100, damage: 3300, rounds: 220, rating: '1.15',
+        he_thrown: 20, he_damage: 800, he_team_damage: 100,
+        molotovs_thrown: 10, molotov_damage: 300, molotov_team_damage: 50,
+        flashes_thrown: 40, enemies_flashed: 30, enemy_flash_duration: '90',
+        flash_assists: 8,
+      }]],
       ['group by m.map', [{ map: 'de_mirage', partidas: 5, vitorias: 3, rating: '1.2' }]],
       ['m.score_a, m.score_b', [{ id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9, kills: 20, deaths: 15, rating: '1.1', won: true }]],
       ['from synergy_pairs', [{ steam_id64: '999', nick: 'parça', avatar_url: null, partidas: 8, vitorias: 6 }]],
@@ -91,6 +97,15 @@ describe('GET /api/profile/:steamId', () => {
     expect(res.body.stats.kd).toBeCloseTo(1.33, 2)
     expect(res.body.stats.hsPct).toBe(50)
     expect(res.body.stats.adr).toBe(15) // 3300/220
+    // comparação com o Leetify (2026-07-11): dano de HE/molotov em inimigo vs time,
+    // flash assists, e as médias por arremesso (não por partida).
+    expect(res.body.stats.heTeamDamage).toBe(100)
+    expect(res.body.stats.molotovTeamDamage).toBe(50)
+    expect(res.body.stats.flashAssists).toBe(8)
+    expect(res.body.stats.flashAssistPct).toBe(20) // 8/40
+    expect(res.body.stats.avgHeDamage).toBe(40) // 800/20
+    expect(res.body.stats.avgMolotovDamage).toBe(30) // 300/10
+    expect(res.body.stats.avgBlindDuration).toBe(3) // 90/30
     expect(res.body.sinergia[0]).toMatchObject({ nick: 'parça', partidas: 8, vitorias: 6, winrate: 75 })
     // fixture simula "order by played_at desc" (m1 é o mais recente); evolucaoRating inverte pra cronológico
     expect(res.body.evolucao).toEqual([{ matchId: 'm2', playedAt: null, rating: 1.4 }, { matchId: 'm1', playedAt: null, rating: 1.1 }])

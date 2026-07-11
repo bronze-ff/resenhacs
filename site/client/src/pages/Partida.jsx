@@ -225,8 +225,9 @@ function TabelaUtilitaria({ jogadores }) {
             <th className="px-2 py-2 text-right" title="Smokes / Flashes / HEs / Molotovs jogadas">Granadas</th>
             <th className="px-2 py-2 text-right" title="Inimigos cegados (vezes) e segundos totais de cegueira">Cegou inimigo</th>
             <th className="px-2 py-2 text-right" title="Aliados cegados (vezes) e segundos totais — flash de time">Cegou aliado</th>
-            <th className="px-2 py-2 text-right" title="Dano de HE">Dano HE</th>
-            <th className="px-2 py-2 text-right" title="Dano de molotov/incendiary">Dano fogo</th>
+            <th className="px-2 py-2 text-right" title="Flash que cegou um inimigo morto por um colega logo em seguida, ainda cego (crédito pra quem jogou a flash)">Flash assist</th>
+            <th className="px-2 py-2 text-right" title="Dano de HE em inimigo (fogo amigo à parte, entre parênteses)">Dano HE</th>
+            <th className="px-2 py-2 text-right" title="Dano de molotov/incendiary em inimigo (fogo amigo à parte, entre parênteses)">Dano fogo</th>
           </tr>
         </thead>
         <tbody>
@@ -246,8 +247,15 @@ function TabelaUtilitaria({ jogadores }) {
                   {u.teammatesFlashed ?? 0}
                   <span className="ml-1 text-xs text-texto-fraco">({(u.teammateFlashDuration ?? 0).toFixed(1)}s)</span>
                 </td>
-                <td className="px-2 py-2 text-right tabular-nums">{u.heDamage ?? 0}</td>
-                <td className="px-2 py-2 text-right tabular-nums">{u.molotovDamage ?? 0}</td>
+                <td className="px-2 py-2 text-right tabular-nums">{u.flashAssists ?? 0}</td>
+                <td className="px-2 py-2 text-right tabular-nums">
+                  {u.heDamage ?? 0}
+                  {u.heTeamDamage > 0 && <span className="ml-1 text-xs text-perigo">({u.heTeamDamage})</span>}
+                </td>
+                <td className="px-2 py-2 text-right tabular-nums">
+                  {u.molotovDamage ?? 0}
+                  {u.molotovTeamDamage > 0 && <span className="ml-1 text-xs text-perigo">({u.molotovTeamDamage})</span>}
+                </td>
               </tr>
             )
           })}
@@ -255,7 +263,8 @@ function TabelaUtilitaria({ jogadores }) {
       </table>
       <p className="border-t border-borda bg-superficie px-3 py-2 font-mono text-[11px] leading-relaxed text-texto-fraco">
         Granadas = smokes/flashes/HEs/molotovs jogadas (não necessariamente acertaram alguém).{' '}
-        Cegou = vezes que a flash pegou alguém, com o total de segundos de cegueira causada.
+        Cegou = vezes que a flash pegou alguém, com o total de segundos de cegueira causada.{' '}
+        Dano HE/fogo = só em inimigo; número em <span className="text-perigo">vermelho entre parênteses</span> é fogo amigo.
       </p>
     </div>
   )
