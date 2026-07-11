@@ -2,8 +2,13 @@ name: Coletor
 
 on:
   schedule:
-    - cron: '17 * * * *' # de hora em hora (minuto 17 para evitar o pico do topo da hora)
+    - cron: '*/30 * * * *' # de 30 em 30 min — o máximo seguro dentro da cota grátis
+                            # do GitHub Actions (2000 min/mês); ver coletor/README ou
+                            # o histórico do commit que mudou isso pra conta exata.
   workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths: ['coletor/**', 'bot/**', '.github/workflows/coletor.yml']
 
 # Evita duas rodadas simultâneas (a conta-bot só pode ter UMA sessão de CS2 por vez —
 # a Steam derruba a segunda com LoggedInElsewhere).
@@ -12,27 +17,11 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  discover:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Instalar psycopg
-        run: pip install "psycopg[binary]>=3.2"
-      - name: Descobrir Partidas novas (corrente de share codes)
-        working-directory: coletor
-        env:
-          PYTHONPATH: src
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          STEAM_API_KEY: ${{ secrets.STEAM_API_KEY }}
-        run: python -m coletor.main discover
-
-  fetch:
-    # Baixa e ingere as pendentes: bot (GC) resolve o link do .dem, o Coletor baixa,
-    # parseia e sobe stats + replay + demo pro R2/banco.
-    needs: discover
+  # discover + fetch num job SÓ (não dois): a Actions fatura por job, arredondando pra
+  # cima pro minuto cheio — dois jobs custam no mínimo 2 min faturados por execução
+  # mesmo rodando 20s cada; um job só custa 1. Como isso roda de 30 em 30 min o dia
+  # inteiro, esse é o maior fator de custo — vale mais que qualquer outra otimização.
+  sincroniza:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -40,15 +29,26 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: coletor/requirements.txt
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: bot/package-lock.json
       - name: Instalar dependências do Coletor
         working-directory: coletor
         run: pip install -r requirements.txt
       - name: Instalar dependências do bot
         working-directory: bot
         run: npm ci
+      - name: Descobrir Partidas novas (corrente de share codes)
+        working-directory: coletor
+        env:
+          PYTHONPATH: src
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          STEAM_API_KEY: ${{ secrets.STEAM_API_KEY }}
+        run: python -m coletor.main discover
       - name: Baixar e ingerir Partidas pendentes
         working-directory: coletor
         env:
@@ -62,13 +62,18 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
         run: python -m coletor.main fetch
 
+  # Só em push/manual — rodar isso a cada 30 min sem mudança de código é dinheiro
+  # (minutos) jogado fora, e é a maior fatia do orçamento se ficasse no agendamento.
   tests:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: coletor/dev-requirements.txt
       - name: Testes do Coletor
         working-directory: coletor
         run: |
