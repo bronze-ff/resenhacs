@@ -510,7 +510,7 @@ def extract_replay(path, target_hz=8, demo_tick_rate=64):
         for t in range(ini, fim, passo):
             alvo.append(t)
     if not alvo:
-        return {"ticks": [], "kills": []}
+        return {"ticks": [], "kills": [], "hits": []}
 
     def round_do_tick(t):
         for rnd, ini, fim in limites:
@@ -567,6 +567,34 @@ def extract_replay(path, target_hz=8, demo_tick_rate=64):
                 "victim": victim,
                 "weapon": r.get("weapon") or "",
                 "headshot": bool(r.get("headshot")),
+            }
+        )
+
+    # Tiros que ACERTARAM alguém mas não mataram (pedido do usuário: traçado de bala
+    # em todo tiro, não só nos kills — miss não dá pra traçar sem simular física de
+    # bala contra o mapa, que não temos; hit é o que dá pra mostrar de verdade).
+    # Dedupe do hit fatal: mesmo (vítima, tick) já vem em `kills` (player_death e
+    # player_hurt disparam no MESMO tick pro dano que mata, confirmado empírico).
+    kills_por_vitima_tick = {(k["victim"], k["tick"]) for k in kills}
+    hurt = parser.parse_event("player_hurt", other=["weapon", "hitgroup"])
+    hits = []
+    for r in hurt.to_dict("records"):
+        atk, vic = _sid(r.get("attacker_steamid")), _sid(r.get("user_steamid"))
+        if not atk or not vic or atk == vic:
+            continue
+        if not _eh_arma_de_fogo(r.get("weapon")):
+            continue  # HE/molotov (dano por tick) e faca não são "disparo" — sem bala pra traçar
+        tk = int(r["tick"])
+        if (vic, tk) in kills_por_vitima_tick:
+            continue  # já é o hit fatal, coberto por `kills`
+        hits.append(
+            {
+                "round": round_do_tick(tk),
+                "tick": tk,
+                "killer": atk,
+                "victim": vic,
+                "weapon": r.get("weapon") or "",
+                "headshot": r.get("hitgroup") == "head",
             }
         )
 
@@ -640,6 +668,7 @@ def extract_replay(path, target_hz=8, demo_tick_rate=64):
     return {
         "ticks": ticks,
         "kills": kills,
+        "hits": hits,
         "smokes": smokes,
         "fires": fires,
         "flashes": flashes,

@@ -14,92 +14,124 @@ function janelaAtiva(itens, f, campoIni = 'tStart', campoFim = 'tEnd') {
 
 // Ícone simples (desenhado, não é imagem) por categoria de arma, sempre apontando pra
 // "direita" antes da rotação — desenharTracadoDeBala rotaciona pra alinhar com o tiro.
+// Bug real (2026-07-11, achado pelo usuário): o ícone desenhava na MESMA cor do
+// traçado (a cor do time) e do mesmo tamanho fino da linha — visualmente se perdia
+// dentro da própria linha, parecia que não tinha ícone nenhum. Corrigido com uma
+// "plaquinha" de fundo escuro contrastando com o mapa + contorno branco na silhueta,
+// tamanho maior — fica destacado não importa a cor do traçado por baixo.
 function desenharIconeArma(ctx, categoria, x, y, anguloRad, cor) {
+  ctx.save()
+  ctx.globalAlpha = 1
+  // fundo (plaquinha escura semi-opaca) pra destacar contra o traçado/mapa
+  ctx.fillStyle = 'rgba(10,13,18,0.85)'
+  ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2); ctx.fill()
+  ctx.strokeStyle = cor; ctx.lineWidth = 1.5
+  ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2); ctx.stroke()
+  ctx.restore()
+
   ctx.save()
   ctx.translate(x, y)
   ctx.rotate(anguloRad)
-  ctx.fillStyle = cor
-  ctx.strokeStyle = cor
-  ctx.lineWidth = 1.5
+  ctx.fillStyle = '#fff'
+  ctx.strokeStyle = '#fff'
+  ctx.lineWidth = 2
   ctx.lineCap = 'round'
   switch (categoria) {
     case 'sniper':
-      ctx.fillRect(-11, -1, 20, 2)
-      ctx.beginPath(); ctx.arc(-3, -3, 2, 0, Math.PI * 2); ctx.fill() // luneta
+      ctx.fillRect(-8, -1, 16, 2)
+      ctx.beginPath(); ctx.arc(-2, -2.5, 1.8, 0, Math.PI * 2); ctx.fill() // luneta
       break
     case 'rifle':
-      ctx.fillRect(-9, -1.5, 16, 3)
-      ctx.fillRect(-9, -4, 4, 3) // coronha
+      ctx.fillRect(-7, -1.3, 13, 2.6)
+      ctx.fillRect(-7, -3.3, 3.5, 2.6) // coronha
       break
     case 'smg':
-      ctx.fillRect(-6, -1.5, 12, 3)
-      ctx.beginPath(); ctx.moveTo(-1, 1.5); ctx.quadraticCurveTo(-3, 6, -5, 7); ctx.lineWidth = 2; ctx.stroke() // carregador curvo
+      ctx.fillRect(-5, -1.3, 10, 2.6)
+      ctx.beginPath(); ctx.moveTo(-1, 1.3); ctx.quadraticCurveTo(-2.5, 5, -4, 5.5); ctx.stroke() // carregador curvo
       break
     case 'shotgun':
-      ctx.fillRect(-7, -2, 12, 4)
-      ctx.fillRect(-4, 2, 6, 2) // bomba
+      ctx.fillRect(-6, -1.8, 10, 3.6)
+      ctx.fillRect(-3.5, 1.8, 5, 1.8) // bomba
       break
     case 'heavy':
-      ctx.fillRect(-10, -2.5, 18, 5)
-      ctx.beginPath(); ctx.moveTo(8, 2); ctx.lineTo(11, 5); ctx.moveTo(8, -2); ctx.lineTo(11, -5); ctx.stroke() // bipé
+      ctx.fillRect(-8, -2.2, 15, 4.4)
+      ctx.beginPath(); ctx.moveTo(6, 1.8); ctx.lineTo(9, 4.5); ctx.moveTo(6, -1.8); ctx.lineTo(9, -4.5); ctx.stroke() // bipé
       break
     case 'knife':
-      ctx.beginPath(); ctx.moveTo(-4, 0); ctx.lineTo(6, -2); ctx.lineTo(6, 2); ctx.closePath(); ctx.fill()
+      ctx.beginPath(); ctx.moveTo(-3, 0); ctx.lineTo(5, -1.8); ctx.lineTo(5, 1.8); ctx.closePath(); ctx.fill()
       break
     case 'nade':
-      ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI * 2); ctx.fill()
+      ctx.fillStyle = cor
+      ctx.beginPath(); ctx.arc(0, 0, 3.5, 0, Math.PI * 2); ctx.fill()
       break
     default: // pistol
-      ctx.fillRect(-5, -1.5, 8, 3)
-      ctx.fillRect(-3, 1, 3, 4) // cabo
+      ctx.fillRect(-4, -1.3, 7, 2.6)
+      ctx.fillRect(-2.5, 1, 2.5, 3.5) // cabo
   }
   ctx.restore()
 }
 
-// Traçado da bala: linha atirador→vítima no MOMENTO do kill (posições fixas naquele
-// frame, não seguem o movimento), some aos poucos. Ícone da arma no meio do traçado,
-// caveira na vítima — mesmo conceito visual do card de round do Leetify, só que
-// disparado ao vivo durante a reprodução em vez de ser um resumo estático do round.
-function desenharTracadoDeBala(ctx, round, f, replay, hz) {
-  for (const k of round.kills || []) {
-    if (k.t == null || f < k.t) continue
-    const dt = (f - k.t) / hz
-    if (dt > DURACAO_TRACADO_S) continue
-    const alpha = 1 - dt / DURACAO_TRACADO_S
-    const frameDoKill = round.frames[k.t]
-    if (!frameDoKill) continue
-    const atirador = k.killer ? frameDoKill.players.find((p) => p.id === k.killer) : null
-    const vitima = frameDoKill.players.find((p) => p.id === k.victim)
-    if (!vitima) continue
-    const vx = vitima.x * TAM, vy = vitima.y * TAM
-    const corTiro = COR_TIME[replay.teams?.[k.killer]] ?? '#e6edf3'
+// Traçado da bala: linha atirador→vítima no MOMENTO do tiro (posições fixas naquele
+// frame, não seguem o movimento), some aos poucos. Ícone da arma no meio do traçado —
+// mesmo conceito visual do card de round do Leetify, só que ao vivo durante a
+// reprodução em vez de ser um resumo estático do round.
+//
+// `fatal` diferencia kill (round.kills — caveira, "HS" em vermelho, entra no kill feed
+// da lateral) de hit sem morte (round.hits — só a marca de acerto). Miss não dá pra
+// traçar sem simular física de bala contra o mapa (não temos essa geometria), então
+// só cobre tiro que ACERTOU alguém — é a versão honesta de "todo tiro" que dá pra fazer.
+function desenharUmTiro(ctx, t, evento, round, f, replay, hz, fatal) {
+  if (t == null || f < t) return
+  const dt = (f - t) / hz
+  if (dt > DURACAO_TRACADO_S) return
+  const alpha = 1 - dt / DURACAO_TRACADO_S
+  const frameDoTiro = round.frames[t]
+  if (!frameDoTiro) return
+  const atirador = evento.killer ? frameDoTiro.players.find((p) => p.id === evento.killer) : null
+  const vitima = frameDoTiro.players.find((p) => p.id === evento.victim)
+  if (!vitima) return
+  const vx = vitima.x * TAM, vy = vitima.y * TAM
+  const corTiro = COR_TIME[replay.teams?.[evento.killer]] ?? '#e6edf3'
 
-    if (atirador) {
-      const ax = atirador.x * TAM, ay = atirador.y * TAM
-      ctx.globalAlpha = alpha * 0.85
-      ctx.strokeStyle = corTiro
-      ctx.lineWidth = k.headshot ? 2 : 1.3
-      ctx.setLineDash(k.weapon && categoriaArma(k.weapon) === 'sniper' ? [] : [5, 3])
-      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(vx, vy); ctx.stroke()
-      ctx.setLineDash([])
+  if (atirador) {
+    const ax = atirador.x * TAM, ay = atirador.y * TAM
+    ctx.globalAlpha = alpha * (fatal ? 0.85 : 0.55)
+    ctx.strokeStyle = corTiro
+    ctx.lineWidth = evento.headshot ? 2 : 1.3
+    ctx.setLineDash(evento.weapon && categoriaArma(evento.weapon) === 'sniper' ? [] : [5, 3])
+    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(vx, vy); ctx.stroke()
+    ctx.setLineDash([])
 
-      const angulo = Math.atan2(vy - ay, vx - ax)
-      ctx.globalAlpha = alpha
-      desenharIconeArma(ctx, categoriaArma(k.weapon), ax + (vx - ax) * 0.5, ay + (vy - ay) * 0.5, angulo, corTiro)
-    }
+    const angulo = Math.atan2(vy - ay, vx - ax)
+    ctx.globalAlpha = alpha * (fatal ? 1 : 0.7)
+    desenharIconeArma(ctx, categoriaArma(evento.weapon), ax + (vx - ax) * 0.5, ay + (vy - ay) * 0.5, angulo, corTiro)
+  }
 
-    // Caveira na vítima.
-    ctx.globalAlpha = alpha
-    ctx.textAlign = 'center'
-    ctx.font = `${14}px system-ui, sans-serif`
+  ctx.globalAlpha = alpha
+  ctx.textAlign = 'center'
+  if (fatal) {
+    // Caveira na vítima (só kill mata de verdade).
+    ctx.font = '14px system-ui, sans-serif'
     ctx.fillText('💀', vx, vy + 5)
-    if (k.headshot) {
+    if (evento.headshot) {
       ctx.font = '700 8px system-ui'
       ctx.fillStyle = '#f87171'
       ctx.fillText('HS', vx, vy - 10)
     }
-    ctx.globalAlpha = 1
+  } else {
+    // Hit sem morte: marca de acerto (x pequeno), sem caveira.
+    ctx.strokeStyle = '#f87171'; ctx.lineWidth = 1.5
+    ctx.beginPath()
+    ctx.moveTo(vx - 3, vy - 3); ctx.lineTo(vx + 3, vy + 3)
+    ctx.moveTo(vx + 3, vy - 3); ctx.lineTo(vx - 3, vy + 3)
+    ctx.stroke()
   }
+  ctx.globalAlpha = 1
+}
+
+function desenharTracadoDeBala(ctx, round, f, replay, hz) {
+  for (const k of round.kills || []) desenharUmTiro(ctx, k.t, k, round, f, replay, hz, true)
+  for (const h of round.hits || []) desenharUmTiro(ctx, h.t, h, round, f, replay, hz, false)
 }
 
 function desenharFrame(ctx, round, f, radar, replay) {

@@ -114,6 +114,7 @@ def build_replay(map_name, ticks, kills=None, extras=None, target_hz=8):
         return g
 
     kills_g = por_round_group(kills or [])
+    hits_g = por_round_group(extras.get("hits", []))
     smokes_g = por_round_group(extras.get("smokes", []))
     fires_g = por_round_group(extras.get("fires", []))
     flashes_g = por_round_group(extras.get("flashes", []))
@@ -131,6 +132,14 @@ def build_replay(map_name, ticks, kills=None, extras=None, target_hz=8):
             {"t": idx(r, k["tick"]), "killer": k["killer"], "victim": k["victim"],
              "weapon": k.get("weapon", ""), "headshot": bool(k.get("headshot"))}
             for k in rk
+        ]
+        # Tiros que acertaram mas não mataram (traçado de bala em todo hit, não só
+        # kill — pedido do usuário). Mesmo formato de kills_round pro client tratar
+        # igual, só sem gerar caveira/entrar no kill feed.
+        hits_round = [
+            {"t": idx(r, h["tick"]), "killer": h["killer"], "victim": h["victim"],
+             "weapon": h.get("weapon", ""), "headshot": bool(h.get("headshot"))}
+            for h in sorted(hits_g.get(r, []), key=lambda h: h["tick"])
         ]
 
         def janela(e):
@@ -183,7 +192,7 @@ def build_replay(map_name, ticks, kills=None, extras=None, target_hz=8):
         clutch_out = {"steamid": clutch["steamid"], "vs": clutch["vs"], "t": idx(r, clutch["tick"])} if clutch else None
 
         rounds_out.append({
-            "round": r, "frames": frames, "kills": kills_round,
+            "round": r, "frames": frames, "kills": kills_round, "hits": hits_round,
             "smokes": smokes, "fires": fires, "flashes": flashes, "hes": hes,
             "blinds": blinds, "bomb": bomba, "bombPlant": plant, "clutch": clutch_out,
         })
