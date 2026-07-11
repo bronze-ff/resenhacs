@@ -223,8 +223,8 @@ function TabelaUtilitaria({ jogadores }) {
           <tr className="bg-superficie text-left font-mono text-[10px] uppercase tracking-wider text-texto-fraco">
             <th className="px-3 py-2">Jogador</th>
             <th className="px-2 py-2 text-right" title="Smokes / Flashes / HEs / Molotovs jogadas">Granadas</th>
-            <th className="px-2 py-2 text-right" title="Inimigos cegados (vezes) e segundos totais de cegueira">Cegou inimigo</th>
-            <th className="px-2 py-2 text-right" title="Aliados cegados (vezes) e segundos totais — flash de time">Cegou aliado</th>
+            <th className="px-2 py-2 text-right" title="Inimigos cegados por mais de 1.1s (vezes) e segundos totais — cegueira rápida/de raspão não conta">Cegou inimigo</th>
+            <th className="px-2 py-2 text-right" title="Aliados cegados por mais de 1.1s (vezes) e segundos totais — inclui auto-flash">Cegou aliado</th>
             <th className="px-2 py-2 text-right" title="Flash que cegou um inimigo morto por um colega logo em seguida, ainda cego (crédito pra quem jogou a flash)">Flash assist</th>
             <th className="px-2 py-2 text-right" title="Dano de HE em inimigo (fogo amigo à parte, entre parênteses)">Dano HE</th>
             <th className="px-2 py-2 text-right" title="Dano de molotov/incendiary em inimigo (fogo amigo à parte, entre parênteses)">Dano fogo</th>
@@ -263,7 +263,7 @@ function TabelaUtilitaria({ jogadores }) {
       </table>
       <p className="border-t border-borda bg-superficie px-3 py-2 font-mono text-[11px] leading-relaxed text-texto-fraco">
         Granadas = smokes/flashes/HEs/molotovs jogadas (não necessariamente acertaram alguém).{' '}
-        Cegou = vezes que a flash pegou alguém, com o total de segundos de cegueira causada.{' '}
+        Cegou = vezes que a flash pegou alguém por mais de 1.1s (cegueira de raspão não conta — mesmo critério do Leetify), com o total de segundos causados. Auto-flash conta como "cegou aliado".{' '}
         Dano HE/fogo = só em inimigo; número em <span className="text-perigo">vermelho entre parênteses</span> é fogo amigo.
       </p>
     </div>

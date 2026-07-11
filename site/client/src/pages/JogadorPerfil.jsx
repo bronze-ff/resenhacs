@@ -186,14 +186,14 @@ export default function JogadorPerfil() {
             rotulo="Cegou inimigo"
             valor={stats.enemiesFlashed}
             sub={`${stats.avgBlindDuration}s em média`}
-            title="Quantas vezes flashou um inimigo, e a duração média de cegueira por vez (não o total)."
+            title="Quantas vezes flashou um inimigo por mais de 1.1s (cegueira rápida/de raspão não conta — mesmo critério do Leetify), e a duração média de cegueira por vez."
           />
           <StatTile
             rotulo="Cegou aliado"
             valor={stats.teammatesFlashed}
             sub={`${stats.teammateFlashDuration}s no total`}
             destaque={stats.teammatesFlashed > 0 ? 'text-perigo' : undefined}
-            title="Flash de time: quantas vezes cegou um aliado (não conta auto-flash), e os segundos totais."
+            title="Flash de time (mais de 1.1s de cegueira) — auto-flash (cegar a si mesmo) CONTA aqui, é fogo amigo também."
           />
           <StatTile
             rotulo="Fogo amigo (HE+fogo)"

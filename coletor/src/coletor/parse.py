@@ -322,46 +322,66 @@ def parse_demo(path):
         if contador is not None:
             contador[sid] = contador.get(sid, 0) + 1
 
-    # Cegueira: quem flashou quem, inimigo ou aliado (auto-flash não conta em nenhum
-    # dos dois — nem ele "flashou o time", nem "flashou o inimigo").
-    enemies_flashed, teammates_flashed = {}, {}
-    enemy_flash_duration, teammate_flash_duration = {}, {}
+    # Cegueira — metodologia igual ao Leetify (glossário oficial, pesquisado 2026-07-11,
+    # pra bater os números com o que o usuário via lá): "meio-cego" (duração <= 1.1s)
+    # NÃO conta nem pra inimigo nem pra aliado — é o que fazia nosso total vir bem
+    # mais alto que o deles pro mesmo jogador/partida. flash_assist conta no MÁXIMO
+    # 1 vez por FLASHBANG (não por vítima): se a mesma flash cega 2 inimigos e os
+    # dois morrem em seguida, ainda é 1 assist, não 2.
+    #
+    # Agrupamos os eventos por (quem jogou, tick) — cada flashbang detona uma vez só;
+    # todo mundo que ela pega recebe um player_blind NO MESMO TICK (confirmado num
+    # demo real), então essa chave identifica "uma flashbang" sem precisar de um id
+    # de entidade que o parser não expõe pra esse evento.
+    LIMIAR_CEGUEIRA_S = 1.1
+    TICK_RATE = 64
     try:
         blind = parser.parse_event("player_blind")
         blind = blind[blind["tick"] >= first_freeze]
         blind_records = blind.to_dict("records")
     except Exception:  # noqa: BLE001
         blind_records = []
+
+    # Auto-flash CONTA como "cegou aliado" (é a própria definição de fogo amigo mais
+    # clássica — o Leetify confirma isso: comparado round a round contra um demo real,
+    # só bate com o "friends flashed" deles se auto-flash entrar nessa conta).
+    flashbangs = {}  # (lançador, tick) -> [{"vitima", "duracao", "aliado"}, ...]
     for r in blind_records:
         atk, vic = _sid(r.get("attacker_steamid")), _sid(r.get("user_steamid"))
-        if not atk or not vic or atk == vic:
+        if not atk or not vic:
             continue
-        dur = _flt(r.get("blind_duration")) or 0.0
-        if fixed.get(atk) == fixed.get(vic):
-            teammates_flashed[atk] = teammates_flashed.get(atk, 0) + 1
-            teammate_flash_duration[atk] = teammate_flash_duration.get(atk, 0.0) + dur
-        else:
-            enemies_flashed[atk] = enemies_flashed.get(atk, 0) + 1
-            enemy_flash_duration[atk] = enemy_flash_duration.get(atk, 0.0) + dur
+        flashbangs.setdefault((atk, int(r["tick"])), []).append(
+            {
+                "vitima": vic,
+                "duracao": _flt(r.get("blind_duration")) or 0.0,
+                "aliado": atk == vic or fixed.get(atk) == fixed.get(vic),
+            }
+        )
 
-    # Flash assist (comparação com o Leetify, 2026-07-11 — não tínhamos essa métrica):
-    # jogou uma flash que cegou um inimigo, e esse inimigo morreu ENQUANTO ainda estava
-    # cego pra mão de alguém do MEU time (pode ser eu mesmo). Crédito vai pro lançador
-    # da flash, não pro autor do kill.
+    enemies_flashed, teammates_flashed = {}, {}
+    enemy_flash_duration, teammate_flash_duration = {}, {}
     flash_assists = {}
-    TICK_RATE = 64
-    for b in blind_records:
-        thrower, vic = _sid(b.get("attacker_steamid")), _sid(b.get("user_steamid"))
-        if not thrower or not vic or thrower == vic or fixed.get(thrower) == fixed.get(vic):
-            continue  # só flash em INIMIGO conta assist
-        tick0 = int(b["tick"])
-        janela_fim = tick0 + (_flt(b.get("blind_duration")) or 0.0) * TICK_RATE
-        for k in kills:
-            if k["team_kill"] or k["victim"] != vic or not (tick0 <= k["tick"] <= janela_fim):
+    for (thrower, tick0), vitimas in flashbangs.items():
+        creditou_assist = False
+        for v in vitimas:
+            if v["duracao"] <= LIMIAR_CEGUEIRA_S:
+                continue  # meio-cego não conta em nada (nem contagem, nem assist)
+            if v["aliado"]:
+                teammates_flashed[thrower] = teammates_flashed.get(thrower, 0) + 1
+                teammate_flash_duration[thrower] = teammate_flash_duration.get(thrower, 0.0) + v["duracao"]
                 continue
-            if fixed.get(k["attacker"]) == fixed.get(thrower):
-                flash_assists[thrower] = flash_assists.get(thrower, 0) + 1
-                break  # 1 assist por flash mesmo se por algum motivo casasse mais de 1 kill
+            enemies_flashed[thrower] = enemies_flashed.get(thrower, 0) + 1
+            enemy_flash_duration[thrower] = enemy_flash_duration.get(thrower, 0.0) + v["duracao"]
+            if creditou_assist:
+                continue
+            janela_fim = tick0 + v["duracao"] * TICK_RATE
+            for k in kills:
+                if k["team_kill"] or k["victim"] != v["vitima"] or not (tick0 <= k["tick"] <= janela_fim):
+                    continue
+                if fixed.get(k["attacker"]) == fixed.get(thrower):
+                    flash_assists[thrower] = flash_assists.get(thrower, 0) + 1
+                    creditou_assist = True
+                    break
 
     players = [
         {
