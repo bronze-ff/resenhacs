@@ -56,6 +56,25 @@ export function nomeArma(weapon) {
   return NOMES_ARMA[weapon] ?? weapon
 }
 
+// Categoria da arma → usado pro ícone no Replay 2D (formato/tamanho do desenho).
+const CATEGORIA_ARMA = {
+  ak47: 'rifle', m4a1: 'rifle', m4a1_silencer: 'rifle', aug: 'rifle', sg556: 'rifle',
+  galilar: 'rifle', famas: 'rifle',
+  awp: 'sniper', ssg08: 'sniper', scar20: 'sniper', g3sg1: 'sniper',
+  deagle: 'pistol', usp_silencer: 'pistol', glock: 'pistol', p250: 'pistol',
+  tec9: 'pistol', fiveseven: 'pistol', cz75a: 'pistol', elite: 'pistol',
+  revolver: 'pistol', hkp2000: 'pistol',
+  mac10: 'smg', mp9: 'smg', mp7: 'smg', ump45: 'smg', p90: 'smg', bizon: 'smg', mp5sd: 'smg',
+  nova: 'shotgun', xm1014: 'shotgun', mag7: 'shotgun', sawedoff: 'shotgun',
+  m249: 'heavy', negev: 'heavy',
+  knife: 'knife', knife_t: 'knife', knife_ct: 'knife', knife_css: 'knife', knife_kukri: 'knife',
+  hegrenade: 'nade', molotov: 'nade', incgrenade: 'nade', inferno: 'nade',
+  flashbang: 'nade', smokegrenade: 'nade', decoy: 'nade',
+}
+export function categoriaArma(weapon) {
+  return CATEGORIA_ARMA[weapon] ?? 'pistol'
+}
+
 // Rótulo do tipo de compra (eco/forçado/semi/full), cor incluída.
 export const TIPO_COMPRA = {
   eco: { label: 'Eco', cor: 'text-texto-fraco' },
