@@ -361,9 +361,18 @@ def parse_demo(path):
     enemies_flashed, teammates_flashed = {}, {}
     enemy_flash_duration, teammate_flash_duration = {}, {}
     flash_assists = {}
+    # "Tempo médio de cegueira" do Leetify NÃO é a média de todo blind evento — é a
+    # duração do inimigo que ficou MAIS TEMPO cego POR FLASHBANG (ignora os outros
+    # atingidos pela mesma flash), média só sobre as flashbangs que cegaram alguém.
+    # Sem isso nosso "tempo médio" saía sistematicamente mais alto (contava todo mundo
+    # que a flash pegou, não só o pior caso de cada uma).
+    enemy_flash_landed_count, enemy_flash_landed_duration_sum = {}, {}
     for (thrower, tick0), vitimas in flashbangs.items():
         creditou_assist = False
+        maior_duracao_inimigo = 0.0
         for v in vitimas:
+            if not v["aliado"]:
+                maior_duracao_inimigo = max(maior_duracao_inimigo, v["duracao"])
             if v["duracao"] <= LIMIAR_CEGUEIRA_S:
                 continue  # meio-cego não conta em nada (nem contagem, nem assist)
             if v["aliado"]:
@@ -382,6 +391,11 @@ def parse_demo(path):
                     flash_assists[thrower] = flash_assists.get(thrower, 0) + 1
                     creditou_assist = True
                     break
+        if maior_duracao_inimigo > 0:
+            enemy_flash_landed_count[thrower] = enemy_flash_landed_count.get(thrower, 0) + 1
+            enemy_flash_landed_duration_sum[thrower] = (
+                enemy_flash_landed_duration_sum.get(thrower, 0.0) + maior_duracao_inimigo
+            )
 
     players = [
         {
@@ -401,6 +415,8 @@ def parse_demo(path):
             "he_team_damage": he_team_damage.get(sid, 0),
             "molotov_team_damage": molotov_team_damage.get(sid, 0),
             "flash_assists": flash_assists.get(sid, 0),
+            "enemy_flash_landed_count": enemy_flash_landed_count.get(sid, 0),
+            "enemy_flash_landed_duration_sum": round(enemy_flash_landed_duration_sum.get(sid, 0.0), 2),
             "smokes_thrown": smokes_thrown.get(sid, 0),
             "flashes_thrown": flashes_thrown.get(sid, 0),
             "he_thrown": he_thrown.get(sid, 0),

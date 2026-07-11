@@ -59,6 +59,8 @@ async function statsAgregados(db, steamId, from, to) {
             coalesce(sum(mp.he_team_damage), 0)::int as he_team_damage,
             coalesce(sum(mp.molotov_team_damage), 0)::int as molotov_team_damage,
             coalesce(sum(mp.flash_assists), 0)::int as flash_assists,
+            coalesce(sum(mp.enemy_flash_landed_count), 0)::int as enemy_flash_landed_count,
+            coalesce(sum(mp.enemy_flash_landed_duration_sum), 0)::numeric as enemy_flash_landed_duration_sum,
             coalesce((select count(*) from highlights h join matches mh on mh.id = h.match_id
                       where h.steam_id64 = $1 and h.kind = 'ace'${periodo.replaceAll('m.', 'mh.')}), 0)::int as aces
      from match_players mp join matches m on m.id = mp.match_id
@@ -117,7 +119,12 @@ async function statsAgregados(db, steamId, from, to) {
     // Médias por arremesso — mesmo recorte do "Avg HE damage" / "Avg blind time" do Leetify.
     avgHeDamage: a.he_thrown ? Math.round((a.he_damage / a.he_thrown) * 10) / 10 : 0,
     avgMolotovDamage: a.molotovs_thrown ? Math.round((a.molotov_damage / a.molotovs_thrown) * 10) / 10 : 0,
-    avgBlindDuration: a.enemies_flashed ? Math.round((Number(a.enemy_flash_duration) / a.enemies_flashed) * 10) / 10 : 0,
+    // Tempo médio de cegueira "estilo Leetify": duração do inimigo mais atingido POR
+    // FLASHBANG (não a média de todo blind evento) — média só sobre flashbangs que
+    // acertaram alguém. Ver enemy_flash_landed_count/_duration_sum no parser.
+    avgBlindDuration: a.enemy_flash_landed_count
+      ? Math.round((Number(a.enemy_flash_landed_duration_sum) / a.enemy_flash_landed_count) * 10) / 10
+      : 0,
   }
 }
 

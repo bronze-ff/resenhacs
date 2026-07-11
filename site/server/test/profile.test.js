@@ -71,7 +71,7 @@ describe('GET /api/profile/:steamId', () => {
         he_thrown: 20, he_damage: 800, he_team_damage: 100,
         molotovs_thrown: 10, molotov_damage: 300, molotov_team_damage: 50,
         flashes_thrown: 40, enemies_flashed: 30, enemy_flash_duration: '90',
-        flash_assists: 8,
+        flash_assists: 8, enemy_flash_landed_count: 20, enemy_flash_landed_duration_sum: '60',
       }]],
       ['group by m.map', [{ map: 'de_mirage', partidas: 5, vitorias: 3, rating: '1.2' }]],
       ['m.score_a, m.score_b', [{ id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9, kills: 20, deaths: 15, rating: '1.1', won: true }]],
@@ -105,7 +105,7 @@ describe('GET /api/profile/:steamId', () => {
     expect(res.body.stats.flashAssistPct).toBe(20) // 8/40
     expect(res.body.stats.avgHeDamage).toBe(40) // 800/20
     expect(res.body.stats.avgMolotovDamage).toBe(30) // 300/10
-    expect(res.body.stats.avgBlindDuration).toBe(3) // 90/30
+    expect(res.body.stats.avgBlindDuration).toBe(3) // 60/20 (landed_count/duration, não enemies_flashed)
     expect(res.body.sinergia[0]).toMatchObject({ nick: 'parça', partidas: 8, vitorias: 6, winrate: 75 })
     // fixture simula "order by played_at desc" (m1 é o mais recente); evolucaoRating inverte pra cronológico
     expect(res.body.evolucao).toEqual([{ matchId: 'm2', playedAt: null, rating: 1.4 }, { matchId: 'm1', playedAt: null, rating: 1.1 }])
