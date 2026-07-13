@@ -83,29 +83,58 @@ def _eh_arma_de_fogo(weapon):
     return w not in _NAO_ARMA_DE_FOGO and not w.startswith("knife")
 
 
-# Descoberta empírica (mesmo demo real, 2026-07-11): player_hurt NÃO distingue essas
-# 3 duplas de arma — os hits/dano de QUALQUER uma das duas vêm com o nome do lado
-# direito, mesmo quando o kill (player_death, que distingue certinho) foi com a da
-# esquerda. Sem esse alias, a arma "perdedora" do par ficava com kills>0 mas
-# shots_hit=0/damage=0 (accuracy quebrada) e a outra ficava com hits sobrando sem
-# kill nenhum. Rastreado round a round contra um duelo real pra confirmar (não é
-# achismo): kill m4a1_silencer <- hurt correspondente chega como "m4a1"; kill
-# usp_silencer <- hurt chega como "hkp2000"; kill revolver <- hurt chega como "deagle".
-_ALIAS_ARMA_POR_HURT = {
-    "m4a1_silencer": "m4a1",
-    "usp_silencer": "hkp2000",
-    "revolver": "deagle",
-}
-
-
 def _arma_limpa(weapon):
-    """Nome canônico da arma (sem o prefixo 'weapon_' que só o weapon_fire traz, e com
-    o alias de _ALIAS_ARMA_POR_HURT aplicado — ver o comentário acima). player_death/
-    player_hurt já vêm sem prefixo; None quando não há arma."""
+    """Nome cru da arma sem o prefixo 'weapon_' (só o weapon_fire traz o prefixo;
+    player_death/player_hurt já vêm sem). None quando não há arma. NÃO resolve a
+    ambiguidade das duplas abaixo — isso depende do round de quem disparou, não dá
+    pra fazer numa função pura de string (ver _mapa_variante_ambigua/_resolver_arma_hurt)."""
     if not weapon:
         return None
-    limpo = str(weapon).replace("weapon_", "")
-    return _ALIAS_ARMA_POR_HURT.get(limpo, limpo) or None
+    return str(weapon).replace("weapon_", "") or None
+
+
+# Descoberta empírica (mesmo demo real, 2026-07-11): player_hurt NÃO distingue essas
+# 3 duplas de arma — os hits/dano de QUALQUER uma das duas vêm com o nome do lado
+# direito (genérico), mesmo quando o kill (player_death) ou o tiro (weapon_fire, que
+# TAMBÉM distingue certinho) foi com a da esquerda (precisa). Rastreado round a round
+# contra um duelo real pra confirmar (não é achismo): kill m4a1_silencer <- hurt
+# correspondente chega como "m4a1"; kill usp_silencer <- hurt chega como "hkp2000";
+# kill revolver <- hurt chega como "deagle".
+#
+# Bug antigo (achado pelo usuário, 2026-07-13): a correção rodava num _arma_limpa()
+# aplicado também em KILLS e shots_fired — que já vêm certos (player_death/weapon_fire
+# distinguem a dupla direitinho) — e "achatava" tudo pro nome genérico. Resultado: todo
+# kill de USP-S aparecia como P2000 nas stats do jogador (e no ícone do Replay 2D).
+# A correção agora só entra pro HIT/DANO ambíguo, e usa o weapon_fire do mesmo round
+# (que sabe distinguir) pra descobrir qual das duas o jogador realmente segurava —
+# um jogador só carrega uma variante do par por vez.
+_GENERICA_POR_PRECISA = {"m4a1_silencer": "m4a1", "usp_silencer": "hkp2000", "revolver": "deagle"}
+_PRECISAS_AMBIGUAS = set(_GENERICA_POR_PRECISA)
+_GENERICAS_AMBIGUAS = set(_GENERICA_POR_PRECISA.values())
+
+
+def _mapa_variante_ambigua(disparos):
+    """dict (steamid, round, arma_genérica) -> arma_precisa, a partir de `disparos`
+    ([{user_steamid, weapon, round}], vindo do weapon_fire). Só grava quando a PRECISA
+    foi de fato disparada naquele round — ausência não significa nada (fica pro
+    _resolver_arma_hurt manter o nome genérico como já vinha)."""
+    mapa = {}
+    for d in disparos:
+        sid = _sid(d.get("user_steamid"))
+        arma = _arma_limpa(d.get("weapon"))
+        if not sid or arma not in _PRECISAS_AMBIGUAS:
+            continue
+        mapa[(sid, d["round"], _GENERICA_POR_PRECISA[arma])] = arma
+    return mapa
+
+
+def _resolver_arma_hurt(mapa_variante, sid, round_no, arma):
+    """Corrige o nome genérico de um hit/dano (player_hurt) pra variante precisa de
+    fato usada naquele round, se soubermos (ver _mapa_variante_ambigua). Arma que não
+    é uma das genéricas ambíguas passa direto — nada a corrigir."""
+    if arma not in _GENERICAS_AMBIGUAS:
+        return arma
+    return mapa_variante.get((sid, round_no, arma), arma)
 
 
 def parse_demo(path):
@@ -124,8 +153,16 @@ def parse_demo(path):
     hurt = parser.parse_event("player_hurt", other=["total_rounds_played", "weapon"])
     hurt = hurt[hurt["tick"] >= first_freeze]
 
-    fogo = parser.parse_event("weapon_fire")
+    fogo = parser.parse_event("weapon_fire", other=["total_rounds_played"])
     fogo = fogo[fogo["tick"] >= first_freeze]
+
+    # weapon_fire DISTINGUE as duplas ambíguas (m4a1/m4a1_silencer etc.) certinho —
+    # usado só pra corrigir o hit/dano ambíguo do player_hurt (ver _resolver_arma_hurt).
+    mapa_variante = _mapa_variante_ambigua(
+        {"user_steamid": r.get("user_steamid"), "weapon": r.get("weapon"),
+         "round": int(r["total_rounds_played"]) + 1}
+        for r in fogo.to_dict("records")
+    )
 
     win_panel = parser.parse_event("cs_win_panel_match")
     end_tick = (
@@ -289,7 +326,9 @@ def parse_demo(path):
                     molotov_damage[atk] = molotov_damage.get(atk, 0) + dmg
         elif _eh_arma_de_fogo(arma):
             shots_hit[atk] = shots_hit.get(atk, 0) + 1
-            slot = weapon_slot(atk, _arma_limpa(arma))
+            round_no = int(r["total_rounds_played"]) + 1
+            arma_resolvida = _resolver_arma_hurt(mapa_variante, atk, round_no, _arma_limpa(arma))
+            slot = weapon_slot(atk, arma_resolvida)
             slot["shots_hit"] += 1
             slot["damage"] += dmg
 
@@ -313,10 +352,9 @@ def parse_demo(path):
         arma = str(r.get("weapon") or "").replace("weapon_", "")
         if _eh_arma_de_fogo(r.get("weapon")):
             shots_fired[sid] = shots_fired.get(sid, 0) + 1
-            # _arma_limpa (não só o strip de "weapon_" já feito acima) porque o
-            # weapon_fire DISTINGUE m4a1/m4a1_silencer (etc.) mas o player_hurt não —
-            # sem o alias aqui, sobraria um bucket de "shots_fired" órfão sem hit/kill.
-            weapon_slot(sid, _arma_limpa(arma))["shots_fired"] += 1
+            # weapon_fire distingue m4a1/m4a1_silencer (etc.) certinho — sem alias
+            # nenhum aqui, `arma` (já sem prefixo) é o bucket certo direto.
+            weapon_slot(sid, arma)["shots_fired"] += 1
             continue
         contador = _CONTADOR_POR_ARMA.get(arma)
         if contador is not None:
@@ -570,7 +608,11 @@ def extract_replay(path, target_hz=8, demo_tick_rate=64):
                 "tick": tk,
                 "killer": killer,
                 "victim": victim,
-                "weapon": r.get("weapon") or "",
+                # _arma_limpa por segurança (remove prefixo "weapon_" se vier — sem
+                # isso, categoriaArma() no client não bate nenhuma arma no dicionário e
+                # o ícone do Replay 2D cai sempre no formato de pistola por padrão,
+                # não importa a arma real; achado pelo usuário, 2026-07-13).
+                "weapon": _arma_limpa(r.get("weapon")) or "",
                 "headshot": bool(r.get("headshot")),
             }
         )
@@ -581,6 +623,22 @@ def extract_replay(path, target_hz=8, demo_tick_rate=64):
     # Dedupe do hit fatal: mesmo (vítima, tick) já vem em `kills` (player_death e
     # player_hurt disparam no MESMO tick pro dano que mata, confirmado empírico).
     kills_por_vitima_tick = {(k["victim"], k["tick"]) for k in kills}
+
+    # weapon_fire distingue as duplas ambíguas (m4a1/m4a1_silencer, usp_silencer/
+    # hkp2000, revolver/deagle) certinho — o player_hurt abaixo não (ver comentário
+    # de _GENERICA_POR_PRECISA em cima). Usado só pra corrigir o ícone/traçado do hit.
+    fogo = parser.parse_event("weapon_fire")
+    if inicios:
+        # Sem esse corte, tiro de warmup (fora de qualquer round real) cairia no
+        # ÚLTIMO round via o fallback de round_do_tick — podendo poluir o mapa da
+        # dupla ambígua nesse round com uma arma que só foi testada no warmup.
+        fogo = fogo[fogo["tick"] >= inicios[0]]
+    mapa_variante = _mapa_variante_ambigua(
+        {"user_steamid": r.get("user_steamid"), "weapon": r.get("weapon"),
+         "round": round_do_tick(int(r["tick"]))}
+        for r in fogo.to_dict("records")
+    )
+
     hurt = parser.parse_event("player_hurt", other=["weapon", "hitgroup"])
     hits = []
     for r in hurt.to_dict("records"):
@@ -592,13 +650,15 @@ def extract_replay(path, target_hz=8, demo_tick_rate=64):
         tk = int(r["tick"])
         if (vic, tk) in kills_por_vitima_tick:
             continue  # já é o hit fatal, coberto por `kills`
+        rn = round_do_tick(tk)
+        arma = _resolver_arma_hurt(mapa_variante, atk, rn, _arma_limpa(r.get("weapon")) or "")
         hits.append(
             {
-                "round": round_do_tick(tk),
+                "round": rn,
                 "tick": tk,
                 "killer": atk,
                 "victim": vic,
-                "weapon": r.get("weapon") or "",
+                "weapon": arma,
                 "headshot": r.get("hitgroup") == "head",
             }
         )

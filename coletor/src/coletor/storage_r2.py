@@ -20,6 +20,20 @@ def upload_bytes(client, bucket, key, data, content_type="application/octet-stre
     return key
 
 
+def download_bytes(client, bucket, key):
+    """Baixa um objeto de volta (reprocessamento: pega o .dem já arquivado sem
+    precisar re-baixar da Valve, que expira o link em poucos minutos)."""
+    return client.get_object(Bucket=bucket, Key=key)["Body"].read()
+
+
+def key_from_url(url, bucket):
+    """Extrai a key de um demo_url/replay_url já gravado (endpoint/bucket/key) —
+    usado no reprocessamento pra saber qual objeto baixar/sobrescrever sem depender
+    de recalcular o nome (que pode mudar; ver ids['match_id'] em ingest_demo)."""
+    marker = f"/{bucket}/"
+    return url.split(marker, 1)[1] if marker in url else None
+
+
 def delete_object(client, bucket, key):
     client.delete_object(Bucket=bucket, Key=key)
 

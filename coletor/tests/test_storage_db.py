@@ -8,16 +8,31 @@ from coletor import storage_r2, db
 
 # ---- storage ----
 
+class FakeBody:
+    def __init__(self, data):
+        self._data = data
+
+    def read(self):
+        return self._data
+
+
 class FakeS3:
     def __init__(self):
         self.puts = []
         self.deletes = []
+        self.gets = []
+        self.objetos = {}  # key -> bytes, pro get_object devolver de volta
 
     def put_object(self, **kw):
         self.puts.append(kw)
+        self.objetos[kw["Key"]] = kw["Body"]
 
     def delete_object(self, **kw):
         self.deletes.append(kw)
+
+    def get_object(self, **kw):
+        self.gets.append(kw)
+        return {"Body": FakeBody(self.objetos[kw["Key"]])}
 
 
 def test_keys():
@@ -37,6 +52,19 @@ def test_delete_object():
     s3 = FakeS3()
     storage_r2.delete_object(s3, "bucket", "demos/1.dem.bz2")
     assert s3.deletes[0] == {"Bucket": "bucket", "Key": "demos/1.dem.bz2"}
+
+
+def test_download_bytes_devolve_o_que_foi_upado():
+    s3 = FakeS3()
+    storage_r2.upload_bytes(s3, "bucket", "demos/1.dem.bz2", b"conteudo-da-demo")
+    assert storage_r2.download_bytes(s3, "bucket", "demos/1.dem.bz2") == b"conteudo-da-demo"
+
+
+def test_key_from_url_extrai_a_key_do_bucket_configurado():
+    url = "https://abc.r2.cloudflarestorage.com/resenha-demos/replays/42.json"
+    assert storage_r2.key_from_url(url, "resenha-demos") == "replays/42.json"
+    # bucket errado (ou url de outro provedor) -> não sabe extrair, não inventa
+    assert storage_r2.key_from_url(url, "outro-bucket") is None
 
 
 # ---- db ----

@@ -190,9 +190,9 @@ def cmd_cleanup(config, conn, days=90):
     client = storage_r2.make_client(config)
     total = 0
     for match_id, demo_url in rows:
-        if f"/{config.r2_bucket}/" not in demo_url:
+        key = storage_r2.key_from_url(demo_url, config.r2_bucket)
+        if not key:
             continue
-        key = demo_url.split(f"/{config.r2_bucket}/", 1)[1]
         try:
             storage_r2.delete_object(client, config.r2_bucket, key)
             with conn.cursor() as cur:
@@ -204,6 +204,83 @@ def cmd_cleanup(config, conn, days=90):
             conn.rollback()
             print(f"  {match_id}: falha ao apagar ({e})")
     print(f"cleanup: {total} demo(s) apagado(s)")
+    return total
+
+
+def cmd_reprocess(config, conn, match_id=None):
+    """Reprocessa Partida(s) já gravadas cujo .dem ainda está no R2 (janela de 90 dias
+    do cleanup) — baixa de novo, roda o parser ATUAL (com fixes já aplicados) e regrava
+    stats + replay.json no MESMO match_id (store_parsed é idempotente por fingerprint,
+    e aqui nem precisa disso: já sabemos o id). Não usa ingest_demo: aquele resolve a
+    key do R2 por share_code/hash de path, que pra upload manual sem share_code muda a
+    cada chamada — aqui reaproveita a key já gravada em demo_url/replay_url, garantindo
+    que sobrescreve o objeto certo em vez de deixar um novo órfão.
+
+    `match_id` (opcional, uuid): reprocessa só essa Partida; sem isso, todas que ainda
+    têm demo_url (pending/failed não têm o que reprocessar).
+    """
+    import tempfile
+    from pathlib import Path
+
+    with conn.cursor() as cur:
+        if match_id:
+            cur.execute(
+                "select id, share_code, source, demo_url, replay_url, played_at from matches "
+                "where id = %s and demo_url is not null",
+                (match_id,),
+            )
+        else:
+            cur.execute(
+                "select id, share_code, source, demo_url, replay_url, played_at from matches "
+                "where status = 'parsed' and demo_url is not null"
+            )
+        rows = cur.fetchall()
+    if not rows:
+        print("reprocess: nenhuma Partida com demo ainda arquivado")
+        return 0
+
+    client = storage_r2.make_client(config)
+    total = 0
+    for mid, share_code, source, demo_url, replay_url, played_at in rows:
+        demo_key = storage_r2.key_from_url(demo_url, config.r2_bucket)
+        if not demo_key:
+            print(f"  {mid}: demo_url fora do bucket configurado — pulando")
+            continue
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                dem = Path(tmp) / "match.dem"
+                dem.write_bytes(storage_r2.download_bytes(client, config.r2_bucket, demo_key))
+
+                parsed = parsemod.parse_demo(dem)
+                parsed["players"] = transform.fill_kd_from_kills(parsed["players"], parsed["kills"])
+                parsed = transform.enrich(parsed)
+                parsed["played_at"] = played_at.isoformat() if played_at else parsed.get("played_at")
+
+                rdata = parsemod.extract_replay(dem)
+                replay_json = replaymod.build_replay(
+                    parsed["map"], rdata["ticks"], kills=rdata["kills"], extras=rdata
+                )
+                parsed["highlights"] = transform.attach_replay_frames(parsed["highlights"], replay_json["rounds"])
+
+                # Sobrescreve o MESMO objeto (key extraída do replay_url já gravado) —
+                # não recalcula um novo, senão o antigo fica órfão e o link salvo quebra.
+                replay_key = storage_r2.key_from_url(replay_url, config.r2_bucket) if replay_url else None
+                if replay_key:
+                    storage_r2.upload_bytes(
+                        client, config.r2_bucket, replay_key,
+                        json.dumps(replay_json).encode("utf-8"), content_type="application/json",
+                    )
+
+                dbmod.store_parsed(
+                    conn, parsed, share_code=share_code, source=source or "valve_mm",
+                    demo_url=demo_url, replay_url=replay_url, prefer_new_played_at=False,
+                )
+                print(f"  {mid}: reprocessada")
+                total += 1
+        except Exception as e:  # noqa: BLE001
+            conn.rollback()
+            print(f"  {mid}: FALHOU ({e})")
+    print(f"reprocess: {total} Partida(s) reprocessada(s)")
     return total
 
 
@@ -288,6 +365,11 @@ def main(argv=None):
     p_fetch.add_argument("--node", default="node", help="Executável do Node (default: node no PATH).")
     p_cleanup = sub.add_parser("cleanup", help="Apaga do R2 o .dem bruto de Partidas processadas há mais de N dias (mantém o replay.json).")
     p_cleanup.add_argument("--days", type=int, default=90, help="Idade mínima em dias (default: 90).")
+    p_reproc = sub.add_parser(
+        "reprocess",
+        help="Re-roda o parser atual em cima do .dem já arquivado no R2 (bug corrigido depois do ingest original) e regrava stats/replay.json.",
+    )
+    p_reproc.add_argument("--match-id", default=None, help="Reprocessa só essa Partida (uuid); sem isso, todas com demo ainda no R2.")
 
     args = ap.parse_args(argv)
     config = Config()
@@ -312,6 +394,8 @@ def main(argv=None):
             cmd_fetch(config, conn, since=args.since, bot_dir=bot_dir, node_bin=args.node)
         elif args.cmd == "cleanup":
             cmd_cleanup(config, conn, days=args.days)
+        elif args.cmd == "reprocess":
+            cmd_reprocess(config, conn, match_id=args.match_id)
     finally:
         conn.close()
 
