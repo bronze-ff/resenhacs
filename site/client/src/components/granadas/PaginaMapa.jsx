@@ -1,26 +1,36 @@
 import { useEffect, useMemo, useState } from 'react'
 import { nomeMapa } from '../../lib/format.js'
+import { useAuth } from '../../auth/AuthContext.jsx'
 import { MAPAS_POOL } from './ExplorarMapas.jsx'
 import RadarGranadas from './RadarGranadas.jsx'
 import DetalheGranada from './DetalheGranada.jsx'
+import FormGranada from './FormGranada.jsx'
 
 const TIPOS = [['smoke', 'Smoke'], ['flash', 'Flash'], ['molotov', 'Molotov'], ['he', 'HE']]
 const NIVEIS_CALLOUT = [['sem', 'Sem'], ['noob', 'Noob'], ['pro', 'Pro']]
 
 export default function PaginaMapa({ mapa, onTrocarMapa }) {
+  const { jogador } = useAuth()
+  const isAdmin = !!jogador?.isAdmin
   const [lado, setLado] = useState('T')
   const [tipo, setTipo] = useState('smoke')
   const [lineups, setLineups] = useState(null)
   const [selecionada, setSelecionada] = useState(null)
   const [nivelCallouts, setNivelCallouts] = useState('sem')
   const [callouts, setCallouts] = useState([])
+  const [modoMarcacao, setModoMarcacao] = useState(null) // null | {arremesso?, alvo?}
+  const [formAberto, setFormAberto] = useState(null)     // null | {posicoes, inicial?}
 
-  useEffect(() => {
+  function recarregar() {
     setLineups(null)
     fetch(`/api/granadas?map=${mapa}&lado=${lado}`)
       .then((r) => r.json())
       .then(setLineups)
       .catch(() => setLineups([]))
+  }
+
+  useEffect(() => {
+    recarregar()
   }, [mapa, lado])
 
   useEffect(() => {
@@ -37,6 +47,13 @@ export default function PaginaMapa({ mapa, onTrocarMapa }) {
   }, [lineups])
 
   const visiveis = (lineups ?? []).filter((l) => l.tipo === tipo)
+
+  function aoCliqueMarcacao(p) {
+    if (!modoMarcacao.arremesso) return setModoMarcacao({ arremesso: p })
+    const marcado = { ...modoMarcacao, alvo: p }
+    setModoMarcacao(marcado)
+    setFormAberto({ posicoes: marcado })
+  }
 
   return (
     <div className="flex flex-col gap-4 lg:flex-row">
@@ -104,6 +121,21 @@ export default function PaginaMapa({ mapa, onTrocarMapa }) {
             ))}
           </div>
         </div>
+
+        {isAdmin && (
+          <button
+            onClick={() => setModoMarcacao({})}
+            className="panel-cut-sm w-full border border-destaque bg-destaque px-3 py-2 font-display text-sm font-semibold uppercase text-fundo"
+          >
+            Adicionar granada
+          </button>
+        )}
+        {modoMarcacao && (
+          <p className="font-mono text-xs text-destaque">
+            {!modoMarcacao.arremesso ? '1º clique: de onde LANÇA' : !modoMarcacao.alvo ? '2º clique: onde CAI' : ''}
+            <button onClick={() => setModoMarcacao(null)} className="ml-2 underline">cancelar</button>
+          </p>
+        )}
       </aside>
 
       <div className="min-w-0 flex-1">
@@ -116,6 +148,8 @@ export default function PaginaMapa({ mapa, onTrocarMapa }) {
             onSelecionar={setSelecionada}
             callouts={callouts}
             nivelCallouts={nivelCallouts}
+            modoMarcacao={modoMarcacao}
+            onCliqueMarcacao={aoCliqueMarcacao}
           />
         )}
         {lineups?.length === 0 && (
@@ -123,7 +157,43 @@ export default function PaginaMapa({ mapa, onTrocarMapa }) {
         )}
       </div>
 
-      {selecionada && <DetalheGranada granada={selecionada} onFechar={() => setSelecionada(null)} />}
+      {formAberto && (
+        <FormGranada
+          mapa={mapa} lado={lado}
+          posicoes={formAberto.posicoes}
+          inicial={formAberto.inicial}
+          onSalvo={() => { setFormAberto(null); setModoMarcacao(null); recarregar() }}
+          onCancelar={() => { setFormAberto(null); setModoMarcacao(null) }}
+        />
+      )}
+
+      {selecionada && (
+        <DetalheGranada
+          granada={selecionada}
+          onFechar={() => setSelecionada(null)}
+          acoesAdmin={isAdmin && (
+            <div className="mt-4 flex justify-end gap-2 border-t border-borda pt-3">
+              <button
+                onClick={() => {
+                  setFormAberto({
+                    posicoes: { arremesso: { x: selecionada.arremessoX, y: selecionada.arremessoY }, alvo: { x: selecionada.alvoX, y: selecionada.alvoY } },
+                    inicial: selecionada,
+                  })
+                  setSelecionada(null)
+                }}
+                className="px-3 py-1.5 font-mono text-xs uppercase text-texto-fraco hover:text-texto"
+              >Editar</button>
+              <button
+                onClick={async () => {
+                  const res = await fetch(`/api/granadas/${selecionada.id}`, { method: 'DELETE' }).catch(() => null)
+                  if (res?.ok) { setSelecionada(null); recarregar() }
+                }}
+                className="px-3 py-1.5 font-mono text-xs uppercase text-perigo hover:brightness-125"
+              >Excluir</button>
+            </div>
+          )}
+        />
+      )}
     </div>
   )
 }
