@@ -36,6 +36,8 @@ jobs:
           node-version: '22'
           cache: 'npm'
           cache-dependency-path: bot/package-lock.json
+      - name: Instalar unar (extração de .rar)
+        run: sudo apt-get update && sudo apt-get install -y unar
       - name: Instalar dependências do Coletor
         working-directory: coletor
         run: pip install -r requirements.txt
@@ -75,6 +77,16 @@ jobs:
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
         run: python -m coletor.main cleanup
+      - name: Processar fila de partidas profissionais (HLTV)
+        working-directory: coletor
+        env:
+          PYTHONPATH: src
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: python -m coletor.main processar-fila-pro
 
   # Só em push/manual — rodar isso a cada 30 min sem mudança de código é dinheiro
   # (minutos) jogado fora, e é a maior fatia do orçamento se ficasse no agendamento.
