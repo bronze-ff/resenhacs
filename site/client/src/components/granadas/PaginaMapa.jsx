@@ -32,6 +32,7 @@ export default function PaginaMapa({ mapa, onTrocarMapa }) {
   }
 
   async function abrirSugestoes() {
+    setSugestoes([])  // Previne duplo clique (botão desaparece imediatamente)
     const res = await fetch(`/api/granadas/sugestoes?map=${mapa}`).catch(() => null)
     setSugestoes(res?.ok ? await res.json() : [])
   }
@@ -45,6 +46,11 @@ export default function PaginaMapa({ mapa, onTrocarMapa }) {
     import(`../../data/callouts/${mapa}.json`)
       .then((m) => setCallouts(m.default ?? []))
       .catch(() => setCallouts([]))
+  }, [mapa])
+
+  useEffect(() => {
+    setSugestoes(null)
+    setSugestaoHover(null)
   }, [mapa])
 
   const porTipo = useMemo(() => {
