@@ -15,3 +15,8 @@ export function embedYoutube(url) {
   const id = extrairYoutubeId(url)
   return id ? `https://www.youtube-nocookie.com/embed/${id}` : null
 }
+
+// Link pronto de busca no YouTube (usado quando ainda não há vídeo cadastrado).
+export function linkBuscaYoutube(query) {
+  return `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`
+}

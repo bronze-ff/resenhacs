@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { linkBuscaYoutube } from '../../lib/youtube.js'
+import { nomeMapa } from '../../lib/format.js'
 
 const TIPOS = [['smoke', 'Smoke'], ['flash', 'Flash'], ['molotov', 'Molotov'], ['he', 'HE']]
 const TECNICAS = [
@@ -55,6 +57,14 @@ export default function FormGranada({ mapa, lado, posicoes, inicial = null, onSa
           className="w-full rounded border border-borda bg-fundo px-3 py-2 font-mono text-sm" />
         <input value={videoUrl} onChange={(e) => setVideoUrl(e.target.value)} placeholder="Link do YouTube (opcional)"
           className="w-full rounded border border-borda bg-fundo px-3 py-2 font-mono text-sm" />
+        <a
+          href={linkBuscaYoutube(`${nomeMapa(mapa)} ${tipo} ${titulo}`)}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-block font-mono text-xs uppercase text-destaque hover:brightness-125"
+        >
+          Buscar vídeo no YouTube
+        </a>
         <div className="grid grid-cols-3 gap-2">
           <select value={tipo} onChange={(e) => setTipo(e.target.value)} className="rounded border border-borda bg-fundo px-2 py-1.5 font-mono text-xs">
             {TIPOS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}

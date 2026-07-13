@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { embedYoutube } from '../../lib/youtube.js'
+import { embedYoutube, linkBuscaYoutube } from '../../lib/youtube.js'
+import { nomeMapa } from '../../lib/format.js'
 
 const ROTULO_TECNICA = {
   normal: 'lançar parado', jumpthrow: 'lançar com salto', walkthrow: 'andando',
@@ -52,7 +53,17 @@ export default function DetalheGranada({ granada, onFechar, acoesAdmin = null })
               />
             </div>
           ) : (
-            <p className="mt-3 font-mono text-sm text-texto-fraco">Sem vídeo cadastrado pra esse lineup ainda.</p>
+            <div className="mt-3 space-y-1">
+              <p className="font-mono text-sm text-texto-fraco">Sem vídeo cadastrado pra esse lineup ainda.</p>
+              <a
+                href={linkBuscaYoutube(`${nomeMapa(granada.map)} ${granada.tipo} ${granada.titulo}`)}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-block font-mono text-xs uppercase text-destaque hover:brightness-125"
+              >
+                Buscar vídeo no YouTube
+              </a>
+            </div>
           )
         )}
         {aba === 'passos' && (
