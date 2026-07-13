@@ -313,6 +313,27 @@ def ingest_demo(config, conn, path, share_code=None, source="upload", upload=Tru
         # de replay.py aqui, que tinha critério mais permissivo (elimina todo mundo =
         # "clutch", mesmo perdendo o round por outro motivo — bomba explode depois).
         parsed["highlights"] = transform.attach_replay_frames(parsed["highlights"], replay_json["rounds"])
+
+        # Lineups de granada (Task 4/db._write_lineups) — só entra item com thrower
+        # correlacionado ao weapon_fire (sem correlação = sem posição útil pra biblioteca,
+        # mas a granada ainda conta no mapa de calor via rdata normalmente).
+        TIPO_POR_CHAVE = {"smokes": "smoke", "fires": "molotov", "flashes": "flash", "hes": "he"}
+        lineups = []
+        for chave, tipo in TIPO_POR_CHAVE.items():
+            for g in rdata.get(chave, []):
+                if not g.get("thrower"):
+                    continue
+                lineups.append({
+                    "round_number": g["round"], "map": parsed["map"], "tipo": tipo,
+                    "thrower_steam_id": g["thrower"],
+                    "thrower_nick": replay_json["names"].get(g["thrower"], "") if replay_json else "",
+                    "thrower_x": g["throwerX"], "thrower_y": g["throwerY"],
+                    "thrower_yaw": g.get("throwerYaw", 0), "thrower_pitch": g.get("throwerPitch", 0),
+                    "target_x": g["x"], "target_y": g["y"],
+                    "tick": g.get("tickStart", g.get("tick")),
+                    "origem": "pro" if source == "pro" else "grupo",
+                })
+        parsed["lineups"] = lineups
     except Exception as e:  # noqa: BLE001
         print(f"aviso: replay 2D / clutch não gerado ({e})")
 
