@@ -14,6 +14,7 @@ import Ranking from './pages/Ranking.jsx'
 import EnviarDemo from './pages/EnviarDemo.jsx'
 import Perfil from './pages/Perfil.jsx'
 import Admin from './pages/Admin.jsx'
+import PartidasPro from './pages/PartidasPro.jsx'
 import ReplayDemo from './pages/ReplayDemo.jsx'
 
 function RotaProtegida({ children }) {
@@ -42,6 +43,7 @@ export default function App() {
           <Route path="/taticas" element={<RotaProtegida><Taticas /></RotaProtegida>} />
           <Route path="/perfil" element={<RotaProtegida><Perfil /></RotaProtegida>} />
           <Route path="/admin" element={<RotaProtegida><Admin /></RotaProtegida>} />
+          <Route path="/partidas-pro" element={<RotaProtegida><PartidasPro /></RotaProtegida>} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

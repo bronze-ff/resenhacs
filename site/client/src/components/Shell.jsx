@@ -49,10 +49,16 @@ export default function Shell({ children }) {
             </NavLink>
           ))}
           {jogador?.isAdmin && (
-            <NavLink to="/admin" className={itemClasse}>
-              <span className="font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque">09</span>
-              Admin
-            </NavLink>
+            <>
+              <NavLink to="/admin" className={itemClasse}>
+                <span className="font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque">09</span>
+                Admin
+              </NavLink>
+              <NavLink to="/partidas-pro" className={itemClasse}>
+                <span className="font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque">10</span>
+                Partidas pro
+              </NavLink>
+            </>
           )}
         </nav>
       </aside>
