@@ -123,11 +123,89 @@ function Scoreboard({ time, jogadores, podePromover, onPromover, promovendo }) {
   )
 }
 
+// Popover local (nome + descrição) pra sugerir um round como Tática — abre ao clicar num
+// round sem highlight na linha do tempo. Fica pendente de aprovação (Task 10/14 cuidam do
+// fluxo de aprovação); aqui só dispara o POST e mostra confirmação.
+function SugerirTatica({ matchId, map, roundNumber, onFechar }) {
+  const [nome, setNome] = useState('')
+  const [descricao, setDescricao] = useState('')
+  const [enviando, setEnviando] = useState(false)
+  const [erro, setErro] = useState(null)
+  const [sucesso, setSucesso] = useState(false)
+
+  async function enviar(e) {
+    e.preventDefault()
+    setEnviando(true)
+    setErro(null)
+    try {
+      const res = await fetch('/api/taticas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nome, descricao, map, matchId, roundNumber }),
+      })
+      if (res.ok) {
+        setSucesso(true)
+      } else {
+        const b = await res.json().catch(() => ({}))
+        setErro(b.erro ?? 'Erro ao sugerir tática.')
+      }
+    } finally {
+      setEnviando(false)
+    }
+  }
+
+  if (sucesso) {
+    return (
+      <div className="panel-cut absolute left-0 top-full z-10 mt-1 w-56 border border-sucesso/40 bg-superficie p-3 font-mono text-xs text-sucesso">
+        Tática sugerida! Aguardando aprovação.
+      </div>
+    )
+  }
+
+  return (
+    <form
+      onSubmit={enviar}
+      onClick={(e) => e.stopPropagation()}
+      className="panel-cut absolute left-0 top-full z-10 mt-1 w-64 space-y-2 border border-borda bg-superficie p-3 text-left"
+    >
+      <p className="font-mono text-[10px] uppercase tracking-widest text-texto-fraco">Sugerir tática · round {roundNumber}</p>
+      <input
+        value={nome}
+        onChange={(e) => setNome(e.target.value)}
+        placeholder="Nome curto"
+        required
+        className="w-full rounded border border-borda bg-fundo px-2 py-1.5 font-mono text-xs"
+      />
+      <textarea
+        value={descricao}
+        onChange={(e) => setDescricao(e.target.value)}
+        placeholder="Descrição"
+        rows={2}
+        className="w-full rounded border border-borda bg-fundo px-2 py-1.5 font-mono text-xs"
+      />
+      {erro && <p className="font-mono text-xs text-perigo">{erro}</p>}
+      <div className="flex justify-end gap-2">
+        <button type="button" onClick={onFechar} className="font-mono text-xs text-texto-fraco hover:text-texto">
+          cancelar
+        </button>
+        <button
+          type="submit"
+          disabled={enviando}
+          className="panel-cut-sm border border-destaque bg-destaque px-2 py-1 font-mono text-xs font-semibold uppercase text-fundo disabled:opacity-50"
+        >
+          {enviando ? '…' : 'sugerir'}
+        </button>
+      </div>
+    </form>
+  )
+}
+
 // Linha do tempo dos rounds: quem venceu cada um e o que aconteceu de notável nele
 // (ace/multikill/clutch já detectados). Não é uma decomposição de rating round a round
 // (isso exigiria guardar win-probability por kill, que não persistimos hoje) — é o
 // "o que rolou em cada round" que dá pra montar com o que já temos.
-function LinhaDoTempoRounds({ rounds, highlights, timeDoGrupo, onClicarHighlight, replayDisponivel }) {
+function LinhaDoTempoRounds({ rounds, highlights, timeDoGrupo, onClicarHighlight, replayDisponivel, matchId, map }) {
+  const [roundAberto, setRoundAberto] = useState(null)
   if (!rounds || rounds.length === 0) return null
   const porRound = new Map()
   for (const h of highlights) {
@@ -154,12 +232,23 @@ function LinhaDoTempoRounds({ rounds, highlights, timeDoGrupo, onClicarHighlight
               {conteudo}
             </button>
           ) : (
-            <div key={r.roundNumber} title={r.winReason ?? ''}>{conteudo}</div>
+            <div key={r.roundNumber} className="relative">
+              <button
+                title={`${r.winReason ?? ''} — clique pra sugerir como tática`.trim()}
+                onClick={() => setRoundAberto((v) => (v === r.roundNumber ? null : r.roundNumber))}
+              >
+                {conteudo}
+              </button>
+              {roundAberto === r.roundNumber && (
+                <SugerirTatica matchId={matchId} map={map} roundNumber={r.roundNumber} onFechar={() => setRoundAberto(null)} />
+              )}
+            </div>
           )
         })}
       </div>
       <p className="mt-2 font-mono text-[11px] text-texto-fraco">
-        Verde/vermelho = round vencido/perdido pelo grupo. ● = teve highlight nesse round (clique pra assistir).
+        Verde/vermelho = round vencido/perdido pelo grupo. ● = teve highlight nesse round (clique pra assistir). Rounds sem
+        highlight: clique pra sugerir como tática.
       </p>
     </div>
   )
@@ -613,6 +702,8 @@ export default function Partida() {
           timeDoGrupo={timeDoGrupo}
           onClicarHighlight={irParaHighlight}
           replayDisponivel={!!m.replayUrl}
+          matchId={m.id}
+          map={m.map}
         />
       </section>
 

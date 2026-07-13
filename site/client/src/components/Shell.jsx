@@ -8,7 +8,8 @@ const ITENS = [
   { to: '/jogadores', label: 'Jogadores', num: '04' },
   { to: '/comparar', label: 'Comparar', num: '05' },
   { to: '/granadas', label: 'Granadas', num: '06' },
-  { to: '/perfil', label: 'Meu perfil', num: '07' },
+  { to: '/taticas', label: 'Táticas', num: '07' },
+  { to: '/perfil', label: 'Meu perfil', num: '08' },
 ]
 
 function itemClasse({ isActive }) {
@@ -49,7 +50,7 @@ export default function Shell({ children }) {
           ))}
           {jogador?.isAdmin && (
             <NavLink to="/admin" className={itemClasse}>
-              <span className="font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque">08</span>
+              <span className="font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque">09</span>
               Admin
             </NavLink>
           )}
