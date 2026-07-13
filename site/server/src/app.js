@@ -10,6 +10,7 @@ import { createRankingRouter } from './routes/ranking.js'
 import { createSessionsRouter } from './routes/sessions.js'
 import { createUploadRouter } from './routes/upload.js'
 import { createLineupsRouter } from './routes/lineups.js'
+import { createTaticasRouter } from './routes/taticas.js'
 import { createRequireAuth } from './auth/middleware.js'
 import { createR2Client } from './r2.js'
 
@@ -66,6 +67,7 @@ export function createApp({ config, db, verifySteamLogin, fetchPersona, fetchBan
   app.use('/api/ranking', createRankingRouter({ db, requireAuth }))
   app.use('/api/sessions', createSessionsRouter({ db, requireAuth }))
   app.use('/api/lineups', createLineupsRouter({ db, requireAuth }))
+  app.use('/api/taticas', createTaticasRouter({ db, requireAuth }))
 
   // Upload manual via web só existe quando o Coletor Python está no mesmo host
   // (dev/self-hosted). Na Vercel (serverless) config.coletorDir/pythonBin ficam
