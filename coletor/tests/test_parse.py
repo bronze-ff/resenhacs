@@ -94,3 +94,45 @@ def test_nomes_de_time_ausente_ou_vazio_vira_none():
     fixed = {"1": "A"}
     assert parse._nomes_de_time([{"steamid": 1, "team_clan_name": ""}], fixed) == (None, None)
     assert parse._nomes_de_time([], fixed) == (None, None)
+
+
+def test_casa_arremesso_mais_proximo_do_mesmo_jogador():
+    # Confirmado empírico (demo real, 2026-07-13): weapon_fire NÃO tem entityid — a
+    # correlação é por (thrower, weapon_fire mais próximo e anterior ao detonate),
+    # nunca por entityid. Delta de tick observado: 15-473 (smoke), 41-143 (molotov/inc),
+    # 0-118 (flash), 109-118 (HE) — janela de 200 (sugestão original do plano) já teria
+    # perdido 21/109 smokes; usamos 600 de folga.
+    fires = [
+        {"tick": 1000, "thrower": "A", "weapon": "smokegrenade"},
+        {"tick": 1500, "thrower": "B", "weapon": "smokegrenade"},
+    ]
+    detonates = [
+        {"tick": 1130, "thrower": "A"},  # ~130 ticks depois do fire de A (voo da granada)
+        {"tick": 1620, "thrower": "B"},
+    ]
+    casados = parse._casar_arremesso_com_detonacao(fires, detonates)
+    assert casados[(1130, "A")] == 1000
+    assert casados[(1620, "B")] == 1500
+
+
+def test_casa_pelo_fire_mais_recente_quando_ha_varios_do_mesmo_jogador():
+    # Jogador dá fire duas vezes antes do detonate mais antigo "expirar" da lista — o
+    # casamento deve pegar o MAIS RECENTE fire anterior ao detonate, não o primeiro.
+    fires = [
+        {"tick": 1000, "thrower": "A", "weapon": "hegrenade"},
+        {"tick": 1050, "thrower": "A", "weapon": "hegrenade"},
+    ]
+    detonates = [{"tick": 1160, "thrower": "A"}]
+    casados = parse._casar_arremesso_com_detonacao(fires, detonates)
+    assert casados[(1160, "A")] == 1050
+
+
+def test_fire_fora_da_janela_fica_de_fora():
+    fires = [{"tick": 1000, "thrower": "A", "weapon": "smokegrenade"}]
+    detonates = [{"tick": 1000 + 601, "thrower": "A"}]  # além da janela padrão (600)
+    assert parse._casar_arremesso_com_detonacao(fires, detonates) == {}
+
+
+def test_sem_fire_correspondente_fica_de_fora():
+    detonates = [{"tick": 1130, "thrower": "A"}]
+    assert parse._casar_arremesso_com_detonacao([], detonates) == {}

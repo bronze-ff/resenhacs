@@ -108,6 +108,40 @@ def _arma_limpa(weapon):
     return str(weapon).replace("weapon_", "") or None
 
 
+def _casar_arremesso_com_detonacao(fires, detonates, janela_ticks=600):
+    """{(detonate_tick, thrower): fire_tick} — casa cada detonação com o weapon_fire mais
+    recente (e anterior) do MESMO jogador, dentro de uma janela.
+
+    Descoberta empírica (demo real de matchmaking, 2026-07-13): `weapon_fire` NÃO traz
+    `entityid` (só existe no evento de detonação) — não dá pra casar por entityid, só por
+    (thrower, tick). Testado nos 4 tipos de granada (450 fires / 456 detonates no total):
+    correlação por "fire mais recente e anterior ao detonate, do mesmo user_steamid" bateu
+    100% (0 detonates órfãos). Delta de tick observado: smoke 15-473, HE 109-118, flash
+    0-118, molotov/incendiary 41-143 — janela de 200 (do rascunho original) já teria perdido
+    21/109 smokes; usamos 600 (~9.4s a 64 ticks) de folga confortável acima do máximo
+    observado (473), sem abrir espaço demais pra casar com o fire de um arremesso anterior
+    do mesmo jogador (fires do mesmo tipo tendem a ficar bem mais que 600 ticks distantes
+    entre si numa partida real). Detonação sem fire correspondente (raro, ex.: round
+    cortado) fica de fora — nesse caso o lineup não tem posição de arremesso, só de
+    aterrissagem."""
+    por_thrower = {}
+    for f in fires:
+        por_thrower.setdefault(f["thrower"], []).append(f["tick"])
+    for ticks in por_thrower.values():
+        ticks.sort()
+
+    casados = {}
+    for d in detonates:
+        candidatos = por_thrower.get(d["thrower"], [])
+        melhor = None
+        for t in candidatos:
+            if t <= d["tick"] and d["tick"] - t <= janela_ticks:
+                melhor = t
+        if melhor is not None:
+            casados[(d["tick"], d["thrower"])] = melhor
+    return casados
+
+
 # Descoberta empírica (mesmo demo real, 2026-07-11): player_hurt NÃO distingue essas
 # 3 duplas de arma — os hits/dano de QUALQUER uma das duas vêm com o nome do lado
 # direito (genérico), mesmo quando o kill (player_death) ou o tiro (weapon_fire, que
@@ -692,28 +726,113 @@ def extract_replay(path, target_hz=8, demo_tick_rate=64):
     def _xy(r):
         return _flt(r.get("x")) or 0.0, _flt(r.get("y")) or 0.0
 
+    # Posição/ângulo de ORIGEM do arremesso (base pra biblioteca de lineup): o evento de
+    # detonação só traz onde a granada explodiu, não de onde foi jogada. Pra isso casamos
+    # com o weapon_fire do MESMO jogador (weapon_fire não tem entityid — ver
+    # _casar_arremesso_com_detonacao pro critério de correlação, confirmado contra demo
+    # real) e depois consultamos a posição dele no tick do fire.
+    _fogo_de_granada = evento("weapon_fire")
+
+    def _fires_de(*armas):
+        saida = []
+        for r in _fogo_de_granada:
+            if r.get("weapon") not in armas:
+                continue
+            sid = _sid(r.get("user_steamid"))
+            if not sid:
+                continue
+            saida.append({"tick": int(r["tick"]), "thrower": sid})
+        return saida
+
+    fires_por_tipo = {
+        "smokegrenade_detonate": _fires_de("weapon_smokegrenade"),
+        "inferno_startburn": _fires_de("weapon_molotov", "weapon_incgrenade"),
+        "flashbang_detonate": _fires_de("weapon_flashbang"),
+        "hegrenade_detonate": _fires_de("weapon_hegrenade"),
+    }
+    fire_ticks_unicos = sorted({f["tick"] for lst in fires_por_tipo.values() for f in lst})
+    # Snapshot batched (uma chamada só) da posição/ângulo do arremessador em cada tick de
+    # fire — mesmo padrão de performance já usado pro snapshot de team_num acima.
+    snap_fire = {}
+    if fire_ticks_unicos:
+        df_fire = parser.parse_ticks(["X", "Y", "yaw", "pitch"], ticks=fire_ticks_unicos)
+        for r in df_fire.to_dict("records"):
+            sid = _sid(r.get("steamid"))
+            if not sid:
+                continue
+            snap_fire[(int(r["tick"]), sid)] = {
+                "x": _flt(r.get("X")),
+                "y": _flt(r.get("Y")),
+                "yaw": _flt(r.get("yaw")),
+                "pitch": _flt(r.get("pitch")),
+            }
+
+    def _dados_arremesso(ev_detonate, detonates):
+        """{(detonate_tick, thrower): {thrower, throwerX, throwerY, throwerYaw,
+        throwerPitch}} — None nos campos quando não achou fire correspondente ou a posição
+        dele naquele tick (ex.: desconectado)."""
+        casados = _casar_arremesso_com_detonacao(fires_por_tipo[ev_detonate], detonates)
+        saida = {}
+        for d in detonates:
+            chave = (d["tick"], d["thrower"])
+            fire_tick = casados.get(chave)
+            pos = snap_fire.get((fire_tick, d["thrower"])) if fire_tick is not None else None
+            saida[chave] = {
+                "thrower": d["thrower"],
+                "throwerX": pos["x"] if pos else None,
+                "throwerY": pos["y"] if pos else None,
+                "throwerYaw": pos["yaw"] if pos else None,
+                "throwerPitch": pos["pitch"] if pos else None,
+            }
+        return saida
+
+    _SEM_ARREMESSO = {"thrower": None, "throwerX": None, "throwerY": None, "throwerYaw": None, "throwerPitch": None}
+
     # Smokes e fogo: casa detonate/startburn com expired pelo entityid (duração real).
     def granadas_com_duracao(ev_ini, ev_fim, dur_padrao_s):
         fins = {}
         for r in evento(ev_fim):
             fins[r.get("entityid")] = int(r["tick"])
+
+        regs_ini = evento(ev_ini)
+        detonates = []
+        for r in regs_ini:
+            sid = _sid(r.get("user_steamid"))
+            if sid:
+                detonates.append({"tick": int(r["tick"]), "thrower": sid})
+        arremessos = _dados_arremesso(ev_ini, detonates)
+
         saida = []
-        for r in evento(ev_ini):
+        for r in regs_ini:
             x, y = _xy(r)
             t0 = int(r["tick"])
             t1 = fins.get(r.get("entityid"), t0 + int(dur_padrao_s * 64))
-            saida.append({"round": round_do_tick(t0), "x": x, "y": y, "tickStart": t0, "tickEnd": t1})
+            sid = _sid(r.get("user_steamid"))
+            item = {"round": round_do_tick(t0), "x": x, "y": y, "tickStart": t0, "tickEnd": t1}
+            item.update(arremessos.get((t0, sid), _SEM_ARREMESSO))
+            saida.append(item)
         return saida
 
     smokes = granadas_com_duracao("smokegrenade_detonate", "smokegrenade_expired", 18)
     fires = granadas_com_duracao("inferno_startburn", "inferno_expire", 7)
 
     def granadas_instantaneas(nome):
+        regs = evento(nome)
+        detonates = []
+        for r in regs:
+            sid = _sid(r.get("user_steamid"))
+            if sid:
+                detonates.append({"tick": int(r["tick"]), "thrower": sid})
+        arremessos = _dados_arremesso(nome, detonates)
+
         saida = []
-        for r in evento(nome):
+        for r in regs:
             x, y = _xy(r)
             t0 = int(r["tick"])
-            saida.append({"round": round_do_tick(t0), "x": x, "y": y, "tick": t0})
+            sid = _sid(r.get("user_steamid"))
+            item = {"round": round_do_tick(t0), "x": x, "y": y, "tick": t0}
+            item.update(arremessos.get((t0, sid), _SEM_ARREMESSO))
+            saida.append(item)
         return saida
 
     flashes = granadas_instantaneas("flashbang_detonate")
