@@ -49,6 +49,8 @@ export default function PaginaMapa({ mapa, onTrocarMapa }) {
   // próximo. Pula clusters sem lado identificado (demos antigas) e os que já
   // têm entrada curada equivalente (mesmo tipo/lado, alvo bem próximo).
   async function gerarBiblioteca() {
+    if (gerando) return
+    setGerando('preparando…')
     setResumoGeracao(null)
     const clusters = (sugestoes ?? []).slice(0, 15)
     const semLado = clusters.filter((s) => !s.lado).length
@@ -64,6 +66,7 @@ export default function PaginaMapa({ mapa, onTrocarMapa }) {
 
     setGerando({ atual: 0, total: paraCriar.length })
     let criados = 0
+    let falhas = 0
     for (let i = 0; i < paraCriar.length; i++) {
       const s = paraCriar[i]
       const titulo = nomeAutomatico(s.tipo, callouts, s.alvoX, s.alvoY, s.arremessoX, s.arremessoY)
@@ -79,6 +82,7 @@ export default function PaginaMapa({ mapa, onTrocarMapa }) {
         }),
       }).catch(() => null)
       if (res?.ok) criados += 1
+      else falhas += 1
       setGerando({ atual: i + 1, total: paraCriar.length })
     }
 
@@ -86,6 +90,7 @@ export default function PaginaMapa({ mapa, onTrocarMapa }) {
     const jaExistiam = candidatos.length - paraCriar.length
     const partes = [`${criados} granada(s) cadastrada(s)`]
     if (jaExistiam > 0) partes.push(`${jaExistiam} já existia(m)`)
+    if (falhas > 0) partes.push(`${falhas} falharam`)
     if (semLado > 0) partes.push(`${semLado} sem lado identificado (demos antigas)`)
     setResumoGeracao(`${partes.join(' · ')}.`)
     setSugestoes(null)
