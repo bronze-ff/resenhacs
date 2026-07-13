@@ -45,7 +45,10 @@ export default function RadarGranadas({
     : callouts.filter((c) => nivelCallouts === 'pro' || c.nivel === 'noob')
 
   return (
-    <div className="relative">
+    // O radar é quadrado: em tela larga, ocupar 100% da coluna deixa ele mais ALTO
+    // que a janela (obriga a scrollar pra ver a metade de baixo do mapa). O teto
+    // em 100vh menos o header/paddings garante o mapa inteiro visível sem scroll.
+    <div className="relative mx-auto w-full max-w-[calc(100vh-9rem)]">
       <svg
         ref={svgRef}
         viewBox="0 0 100 100"
