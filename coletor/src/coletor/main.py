@@ -594,6 +594,10 @@ def main(argv=None):
         "processar-fila-pro",
         help="Processa a fila de partidas profissionais: baixa .rar do HLTV, extrai o .dem e ingere (source='pro').",
     )
+    sub.add_parser(
+        "configurar-cors",
+        help="Configura CORS no bucket R2 (uma vez) pra aceitar upload direto do navegador.",
+    )
 
     args = ap.parse_args(argv)
     config = Config()
@@ -622,6 +626,18 @@ def main(argv=None):
             cmd_reprocess(config, conn, match_id=args.match_id)
         elif args.cmd == "processar-fila-pro":
             cmd_processar_fila_pro(config, conn)
+        elif args.cmd == "configurar-cors":
+            client = storage_r2.make_client(config)
+            storage_r2.configurar_cors(
+                client,
+                config.r2_bucket,
+                [
+                    "https://resenha-phi.vercel.app",
+                    "https://resenhacs.vercel.app",
+                    "http://localhost:5173",
+                ],
+            )
+            print(f"configurar-cors: regra aplicada no bucket {config.r2_bucket}")
     finally:
         conn.close()
 

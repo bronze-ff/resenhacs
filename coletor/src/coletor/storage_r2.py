@@ -38,6 +38,24 @@ def delete_object(client, bucket, key):
     client.delete_object(Bucket=bucket, Key=key)
 
 
+def configurar_cors(client, bucket, origens):
+    """Regra de CORS pro bucket — sem ela o R2 recusa o PUT pré-assinado vindo de
+    navegador (upload manual de demo pro na página Partidas Pro). Rodar uma vez."""
+    client.put_bucket_cors(
+        Bucket=bucket,
+        CORSConfiguration={
+            "CORSRules": [
+                {
+                    "AllowedOrigins": list(origens),
+                    "AllowedMethods": ["PUT", "GET"],
+                    "AllowedHeaders": ["content-type"],
+                    "MaxAgeSeconds": 3600,
+                }
+            ]
+        },
+    )
+
+
 def make_client(config):
     import boto3
 

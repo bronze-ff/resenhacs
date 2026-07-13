@@ -22,6 +22,7 @@ class FakeS3:
         self.deletes = []
         self.gets = []
         self.objetos = {}  # key -> bytes, pro get_object devolver de volta
+        self.cors = []
 
     def put_object(self, **kw):
         self.puts.append(kw)
@@ -33,6 +34,9 @@ class FakeS3:
     def get_object(self, **kw):
         self.gets.append(kw)
         return {"Body": FakeBody(self.objetos[kw["Key"]])}
+
+    def put_bucket_cors(self, **kw):
+        self.cors.append(kw)
 
 
 def test_keys():
@@ -58,6 +62,17 @@ def test_download_bytes_devolve_o_que_foi_upado():
     s3 = FakeS3()
     storage_r2.upload_bytes(s3, "bucket", "demos/1.dem.bz2", b"conteudo-da-demo")
     assert storage_r2.download_bytes(s3, "bucket", "demos/1.dem.bz2") == b"conteudo-da-demo"
+
+
+def test_configurar_cors_manda_regra_pro_bucket():
+    s3 = FakeS3()
+    storage_r2.configurar_cors(s3, "bucket", ["https://a.com", "http://localhost:5173"])
+    assert s3.cors[0]["Bucket"] == "bucket"
+    regra = s3.cors[0]["CORSConfiguration"]["CORSRules"][0]
+    assert regra["AllowedOrigins"] == ["https://a.com", "http://localhost:5173"]
+    assert regra["AllowedMethods"] == ["PUT", "GET"]
+    assert regra["AllowedHeaders"] == ["content-type"]
+    assert regra["MaxAgeSeconds"] == 3600
 
 
 def test_key_from_url_extrai_a_key_do_bucket_configurado():
