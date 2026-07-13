@@ -105,7 +105,7 @@ export function createGranadasRouter({ db, requireAuth }) {
               round(avg(thrower_x)::numeric, 3) as arremesso_x,
               round(avg(thrower_y)::numeric, 3) as arremesso_y
        from lineups
-       where map = $1
+       where map = $1 and lado is not null
        group by tipo, origem, lado, round(target_x::numeric * 40), round(target_y::numeric * 40)
        order by total desc
        limit 50`,

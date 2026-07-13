@@ -159,16 +159,13 @@ describe('GET /api/granadas/sugestoes', () => {
     expect(db.query.mock.calls[0][1]).toEqual(['de_mirage'])
   })
 
-  it('lado null (demo antiga, sem coleta de team_num) nao quebra a resposta', async () => {
-    const { app } = appWith([['from lineups', [{
-      tipo: 'flash', origem: 'grupo', lado: null, total: '3', alvo_x: '0.1', alvo_y: '0.9',
-      arremesso_x: '0.5', arremesso_y: '0.5',
-    }]]])
+  it('exclui granadas sem lado (demo antiga) direto na query', async () => {
+    // Cluster sem lado nao serve pra gerar biblioteca (o cadastro exige T/CT) —
+    // dominava o top-15 e fazia o "Gerar biblioteca" pular quase tudo.
+    const { app, db } = appWith([['from lineups', []]])
     const res = await request(app).get('/api/granadas/sugestoes?map=de_mirage').set('Cookie', cookieAdmin)
     expect(res.status).toBe(200)
-    expect(res.body[0]).toEqual({
-      tipo: 'flash', origem: 'grupo', lado: null, total: 3, alvoX: 0.1, alvoY: 0.9, arremessoX: 0.5, arremessoY: 0.5,
-    })
+    expect(db.query.mock.calls[0][0]).toContain('lado is not null')
   })
 
   it('sem map valido: 400', async () => {
