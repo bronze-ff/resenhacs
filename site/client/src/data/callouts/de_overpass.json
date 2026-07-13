@@ -1,1 +1,152 @@
-[]
+[
+  {
+    "nome": "A",
+    "x": 0.3392,
+    "y": 0.196,
+    "nivel": "noob"
+  },
+  {
+    "nome": "B",
+    "x": 0.7688,
+    "y": 0.3204,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Banheiro",
+    "x": 0.4049,
+    "y": 0.3626,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Base T",
+    "x": 0.8016,
+    "y": 0.8063,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Beco",
+    "x": 0.8345,
+    "y": 0.7335,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Conector",
+    "x": 0.5739,
+    "y": 0.5434,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Escada",
+    "x": 0.5716,
+    "y": 0.1232,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Fonte",
+    "x": 0.5434,
+    "y": 0.811,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Ponte",
+    "x": 0.649,
+    "y": 0.3767,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Agua",
+    "x": 0.5974,
+    "y": 0.4213,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Beco Lateral",
+    "x": 0.8462,
+    "y": 0.703,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Canal",
+    "x": 0.8791,
+    "y": 0.6091,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Cano",
+    "x": 0.7735,
+    "y": 0.5129,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Construcao",
+    "x": 0.7335,
+    "y": 0.4002,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Deposito",
+    "x": 0.4589,
+    "y": 0.1396,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Embaixo do A",
+    "x": 0.4941,
+    "y": 0.2969,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Escada T",
+    "x": 0.7617,
+    "y": 0.7641,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Fundo do A",
+    "x": 0.5692,
+    "y": 0.0974,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Lobby",
+    "x": 0.4425,
+    "y": 0.1185,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Ninho do Sniper",
+    "x": 0.581,
+    "y": 0.2617,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Parque de Baixo",
+    "x": 0.419,
+    "y": 0.6537,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Parque de Cima",
+    "x": 0.2758,
+    "y": 0.7664,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Passarela",
+    "x": 0.5551,
+    "y": 0.4401,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Playground",
+    "x": 0.3321,
+    "y": 0.7805,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Tuneis",
+    "x": 0.6983,
+    "y": 0.7359,
+    "nivel": "pro"
+  }
+]

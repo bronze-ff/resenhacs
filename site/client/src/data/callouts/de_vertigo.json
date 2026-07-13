@@ -1,1 +1,140 @@
-[]
+[
+  {
+    "nome": "A",
+    "x": 0.6797,
+    "y": 0.6164,
+    "nivel": "noob"
+  },
+  {
+    "nome": "B",
+    "x": 0.2207,
+    "y": 0.2915,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Base CT",
+    "x": 0.5267,
+    "y": 0.3,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Base T",
+    "x": 0.2693,
+    "y": 0.7058,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Conector",
+    "x": 0.3523,
+    "y": 0.5706,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Elevador",
+    "x": 0.5059,
+    "y": 0.4914,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Mid",
+    "x": 0.332,
+    "y": 0.4849,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Rampa A",
+    "x": 0.6123,
+    "y": 0.7388,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Andaime",
+    "x": 0.5312,
+    "y": 0.6411,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Corredor T de Cima",
+    "x": 0.3021,
+    "y": 0.5513,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Fundo do A",
+    "x": 0.6575,
+    "y": 0.3844,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Fundo do B",
+    "x": 0.4072,
+    "y": 0.2043,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Guindaste",
+    "x": 0.6636,
+    "y": 0.6926,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Lateral",
+    "x": 0.5059,
+    "y": 0.6333,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Pe da Escada",
+    "x": 0.4286,
+    "y": 0.5736,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Pit",
+    "x": 0.157,
+    "y": 0.4149,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Plataforma A",
+    "x": 0.5385,
+    "y": 0.7872,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Plataforma B",
+    "x": 0.4103,
+    "y": 0.2898,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Ponte",
+    "x": 0.4792,
+    "y": 0.4497,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Porta dos Fundos",
+    "x": 0.5846,
+    "y": 0.3937,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Topo da Escada",
+    "x": 0.392,
+    "y": 0.5828,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Topo do Mid",
+    "x": 0.5507,
+    "y": 0.4027,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Tuneis",
+    "x": 0.3031,
+    "y": 0.5204,
+    "nivel": "pro"
+  }
+]
