@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import ExplorarMapas, { MAPAS_POOL } from '../components/granadas/ExplorarMapas.jsx'
+import PaginaMapa from '../components/granadas/PaginaMapa.jsx'
 
 export default function Granadas() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -18,9 +19,5 @@ export default function Granadas() {
     return <ExplorarMapas contagens={contagens} onEscolher={(m) => setSearchParams({ map: m })} />
   }
 
-  return (
-    <div className="font-mono text-sm text-texto-fraco">
-      Mapa selecionado: {mapa} (página do mapa chega na próxima task)
-    </div>
-  )
+  return <PaginaMapa mapa={mapa} onTrocarMapa={(m) => setSearchParams({ map: m })} />
 }
