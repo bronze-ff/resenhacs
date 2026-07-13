@@ -362,6 +362,7 @@ def _montar_lineups(rdata, replay_json, mapa, source):
                 "target_x": ax, "target_y": ay,
                 "tick": g.get("tickStart", g.get("tick")),
                 "origem": "pro" if source == "pro" else "grupo",
+                "lado": g.get("throwerLado"),
             })
     return lineups
 

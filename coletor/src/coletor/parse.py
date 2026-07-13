@@ -24,6 +24,17 @@ def _team_letter(team_number):
     return "A" if team_number == 2 else "B"
 
 
+def _lado_de_team_num(team_number):
+    """team_num (lado ATUAL, troca no intervalo) → 'T'/'CT' — convenção 2=T/3=CT já
+    usada pro "side" do Replay 2D. None pra qualquer outro valor (ex.: espectador,
+    desconhecido) — não confundir com `_team_letter`, que devolve o time FIXO A/B."""
+    if team_number == 2:
+        return "T"
+    if team_number == 3:
+        return "CT"
+    return None
+
+
 def _nomes_de_time(registros, fixed):
     """(nome_time_a, nome_time_b) a partir de um snapshot de tick com team_clan_name —
     None quando a demo não traz nome de clã (comum em partida de matchmaking do grupo,
@@ -927,22 +938,26 @@ def extract_replay(path, target_hz=8, demo_tick_rate=64):
     # fire — mesmo padrão de performance já usado pro snapshot de team_num acima.
     snap_fire = {}
     if fire_ticks_unicos:
-        df_fire = parser.parse_ticks(["X", "Y", "yaw", "pitch"], ticks=fire_ticks_unicos)
+        df_fire = parser.parse_ticks(["X", "Y", "yaw", "pitch", "team_num"], ticks=fire_ticks_unicos)
         for r in df_fire.to_dict("records"):
             sid = _sid(r.get("steamid"))
             if not sid:
                 continue
+            # Lado REAL (T/CT) no momento do arremesso — team_num aqui é o lado atual
+            # daquele tick (não o time fixo A/B).
+            lado = _lado_de_team_num(_num(r.get("team_num")))
             snap_fire[(int(r["tick"]), sid)] = {
                 "x": _flt(r.get("X")),
                 "y": _flt(r.get("Y")),
                 "yaw": _flt(r.get("yaw")),
                 "pitch": _flt(r.get("pitch")),
+                "lado": lado,
             }
 
     def _dados_arremesso(ev_detonate, detonates):
         """{(detonate_tick, thrower): {thrower, throwerX, throwerY, throwerYaw,
-        throwerPitch}} — None nos campos quando não achou fire correspondente ou a posição
-        dele naquele tick (ex.: desconectado)."""
+        throwerPitch, throwerLado}} — None nos campos quando não achou fire
+        correspondente ou a posição dele naquele tick (ex.: desconectado)."""
         casados = _casar_arremesso_com_detonacao(fires_por_tipo[ev_detonate], detonates)
         saida = {}
         for d in detonates:
@@ -955,10 +970,18 @@ def extract_replay(path, target_hz=8, demo_tick_rate=64):
                 "throwerY": pos["y"] if pos else None,
                 "throwerYaw": pos["yaw"] if pos else None,
                 "throwerPitch": pos["pitch"] if pos else None,
+                "throwerLado": pos["lado"] if pos else None,
             }
         return saida
 
-    _SEM_ARREMESSO = {"thrower": None, "throwerX": None, "throwerY": None, "throwerYaw": None, "throwerPitch": None}
+    _SEM_ARREMESSO = {
+        "thrower": None,
+        "throwerX": None,
+        "throwerY": None,
+        "throwerYaw": None,
+        "throwerPitch": None,
+        "throwerLado": None,
+    }
 
     # Smokes e fogo: casa detonate/startburn com expired pelo entityid (duração real).
     def granadas_com_duracao(ev_ini, ev_fim, dur_padrao_s):

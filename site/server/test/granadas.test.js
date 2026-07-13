@@ -148,15 +148,27 @@ describe('GET /api/granadas/sugestoes', () => {
 
   it('admin ve clusters agregados', async () => {
     const { app, db } = appWith([['from lineups', [{
-      tipo: 'smoke', origem: 'pro', total: '12', alvo_x: '0.4', alvo_y: '0.3',
+      tipo: 'smoke', origem: 'pro', lado: 'T', total: '12', alvo_x: '0.4', alvo_y: '0.3',
       arremesso_x: '0.2', arremesso_y: '0.8',
     }]]])
     const res = await request(app).get('/api/granadas/sugestoes?map=de_mirage').set('Cookie', cookieAdmin)
     expect(res.status).toBe(200)
     expect(res.body[0]).toEqual({
-      tipo: 'smoke', origem: 'pro', total: 12, alvoX: 0.4, alvoY: 0.3, arremessoX: 0.2, arremessoY: 0.8,
+      tipo: 'smoke', origem: 'pro', lado: 'T', total: 12, alvoX: 0.4, alvoY: 0.3, arremessoX: 0.2, arremessoY: 0.8,
     })
     expect(db.query.mock.calls[0][1]).toEqual(['de_mirage'])
+  })
+
+  it('lado null (demo antiga, sem coleta de team_num) nao quebra a resposta', async () => {
+    const { app } = appWith([['from lineups', [{
+      tipo: 'flash', origem: 'grupo', lado: null, total: '3', alvo_x: '0.1', alvo_y: '0.9',
+      arremesso_x: '0.5', arremesso_y: '0.5',
+    }]]])
+    const res = await request(app).get('/api/granadas/sugestoes?map=de_mirage').set('Cookie', cookieAdmin)
+    expect(res.status).toBe(200)
+    expect(res.body[0]).toEqual({
+      tipo: 'flash', origem: 'grupo', lado: null, total: 3, alvoX: 0.1, alvoY: 0.9, arremessoX: 0.5, arremessoY: 0.5,
+    })
   })
 
   it('sem map valido: 400', async () => {

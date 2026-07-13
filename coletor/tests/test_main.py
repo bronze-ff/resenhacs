@@ -13,12 +13,14 @@ def _rdata_com_lineups():
             {
                 "round": 1, "x": 100.0, "y": 200.0, "tickStart": 1000, "tickEnd": 1500,
                 "thrower": "A", "throwerX": -3230, "throwerY": 1713, "throwerYaw": 90.0, "throwerPitch": 0.0,
+                "throwerLado": "T",
             },
             # detonação sem fire correspondente (thrower setado, posição não) — deve
             # ser descartada, não gerar um dict com thrower_x/y = None.
             {
                 "round": 2, "x": 50.0, "y": 60.0, "tickStart": 2000, "tickEnd": 2500,
                 "thrower": "B", "throwerX": None, "throwerY": None, "throwerYaw": None, "throwerPitch": None,
+                "throwerLado": None,
             },
         ],
         "fires": [],
@@ -31,6 +33,11 @@ def test_montar_lineups_descarta_item_sem_posicao_de_arremesso():
     lineups = main._montar_lineups(_rdata_com_lineups(), None, "de_mirage", "upload")
     assert len(lineups) == 1
     assert all(l["thrower_x"] is not None and l["thrower_y"] is not None for l in lineups)
+
+
+def test_montar_lineups_propaga_lado_do_arremessador():
+    lineups = main._montar_lineups(_rdata_com_lineups(), None, "de_mirage", "upload")
+    assert lineups[0]["lado"] == "T"
 
 
 def test_montar_lineups_normaliza_mundo_para_radar_quando_mapa_calibrado():

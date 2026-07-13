@@ -227,13 +227,13 @@ def test_store_parsed_grava_lineups():
         "round_number": 5, "map": "de_mirage", "tipo": "smoke",
         "thrower_steam_id": "A", "thrower_nick": "bronze",
         "thrower_x": 100.0, "thrower_y": 200.0, "thrower_yaw": 45.0, "thrower_pitch": -10.0,
-        "target_x": 300.0, "target_y": 400.0, "tick": 5000, "origem": "grupo",
+        "target_x": 300.0, "target_y": 400.0, "tick": 5000, "origem": "grupo", "lado": "T",
     }]
     db.store_parsed(conn, parsed, share_code="CSGO-x", source="upload")
     insert = next(c for c in conn.calls if c[0].startswith("insert into lineups"))
     assert insert[1] == (
         "00000000-0000-0000-0000-000000000001", 5, "de_mirage", "smoke",
-        "A", "bronze", 100.0, 200.0, 45.0, -10.0, 300.0, 400.0, 5000, "grupo",
+        "A", "bronze", 100.0, 200.0, 45.0, -10.0, 300.0, 400.0, 5000, "grupo", "T",
     )
 
 

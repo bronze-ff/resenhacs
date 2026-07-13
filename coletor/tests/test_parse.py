@@ -138,6 +138,15 @@ def test_sem_fire_correspondente_fica_de_fora():
     assert parse._casar_arremesso_com_detonacao([], detonates) == {}
 
 
+def test_lado_de_team_num_converte_2_e_3_e_devolve_none_pro_resto():
+    # Convenção CS2 (valve_demo_2): team_num 2=T, 3=CT — usada no snapshot batched de
+    # weapon_fire (snap_fire) pra gravar o lado real do arremessador em `lineups.lado`.
+    assert parse._lado_de_team_num(2) == "T"
+    assert parse._lado_de_team_num(3) == "CT"
+    assert parse._lado_de_team_num(1) is None  # espectador
+    assert parse._lado_de_team_num(None) is None  # sem correlação/desconectado
+
+
 # ---- fundir_partes_mesmo_mapa (reinício técnico: 1 mapa vira 2+ .dem) ----
 
 

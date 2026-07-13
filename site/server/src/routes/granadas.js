@@ -99,20 +99,20 @@ export function createGranadasRouter({ db, requireAuth }) {
     const map = String(req.query?.map ?? '')
     if (!MAP_RE.test(map)) return res.status(400).json({ erro: 'map é obrigatório' })
     const { rows } = await db.query(
-      `select tipo, origem, count(*) as total,
+      `select tipo, origem, lado, count(*) as total,
               round(avg(target_x)::numeric, 3) as alvo_x,
               round(avg(target_y)::numeric, 3) as alvo_y,
               round(avg(thrower_x)::numeric, 3) as arremesso_x,
               round(avg(thrower_y)::numeric, 3) as arremesso_y
        from lineups
        where map = $1
-       group by tipo, origem, round(target_x::numeric * 40), round(target_y::numeric * 40)
+       group by tipo, origem, lado, round(target_x::numeric * 40), round(target_y::numeric * 40)
        order by total desc
        limit 50`,
       [map],
     )
     res.json(rows.map((r) => ({
-      tipo: r.tipo, origem: r.origem, total: Number(r.total),
+      tipo: r.tipo, origem: r.origem, lado: r.lado, total: Number(r.total),
       alvoX: Number(r.alvo_x), alvoY: Number(r.alvo_y),
       arremessoX: Number(r.arremesso_x), arremessoY: Number(r.arremesso_y),
     })))
