@@ -52,6 +52,24 @@ URL do demo entraria.
 - `STEAM_API_KEY` — https://steamcommunity.com/dev/apikey.
 - `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` — Cloudflare R2 (para `ingest`).
 
+## Dependência de sistema: `unar` (extração de `.rar` do HLTV)
+
+`coletor/src/coletor/rar_extract.py` usa a biblioteca Python `rarfile` (ver
+`requirements.txt`) pra extrair o `.dem` de dentro do `.rar` que o HLTV distribui pra
+demos de partida profissional. `rarfile` não descompacta sozinha — ela chama uma
+ferramenta externa. Usamos `unar` (The Unarchiver, licença BSD) em vez do `unrar`
+proprietário, pra não ter restrição de licença no runner do GitHub Actions.
+
+- **CI (GitHub Actions, Ubuntu):** `apt-get install -y unar` (ver workflow — Task 8).
+- **Local (Linux):** `apt-get install unar` (Debian/Ubuntu) ou equivalente da distro.
+- **Local (macOS):** `brew install unar`.
+- **Local (Windows):** não há build oficial de `unar`; `test_extrai_dem_do_rar` pode
+  falhar localmente por falta dessa ferramenta no PATH — funciona normalmente no CI
+  (Ubuntu), que é o ambiente de execução real do coletor. Fixtures pequenas e sem
+  compressão (`store`, gravadas por `WinRAR`/`7-Zip`) às vezes passam mesmo sem `unar`
+  porque `rarfile` sabe ler esse caso em Python puro, mas isso não é garantido pra
+  `.rar` reais (comprimidos) do HLTV.
+
 ## Testes
 
 ```

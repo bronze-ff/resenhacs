@@ -3,3 +3,4 @@
 demoparser2>=0.41,<1
 boto3>=1.34
 psycopg[binary]>=3.2
+rarfile
