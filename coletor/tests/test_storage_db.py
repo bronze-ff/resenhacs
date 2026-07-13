@@ -91,12 +91,18 @@ class FakeCursor:
             return self.conn.fingerprint_row
         return ["00000000-0000-0000-0000-000000000001"]
 
+    def fetchall(self):
+        if self._last.startswith("select id, hltv_url from partidas_pro_fila"):
+            return self.conn.fila_rows
+        return []
+
 
 class FakeConn:
     def __init__(self, fingerprint_row=None):
         self.calls = []
         self.commits = 0
         self.fingerprint_row = fingerprint_row
+        self.fila_rows = []
 
     def cursor(self):
         return FakeCursor(self)
@@ -170,6 +176,24 @@ def test_store_parsed_grava_stats_por_arma():
     db.store_parsed(conn, parsed, share_code="CSGO-x", source="upload")
     insert = next(c for c in conn.calls if c[0].startswith("insert into match_player_weapons"))
     assert insert[1] == ("00000000-0000-0000-0000-000000000001", "A", "ak47", 10, 5, 80, 30, 1500)
+
+
+# ---- fila pro ----
+
+def test_listar_fila_pro_pendente():
+    conn = FakeConn()
+    conn.fila_rows = [("f1", "https://hltv.org/download/demo/123")]
+    resultado = db.listar_fila_pro_pendente(conn)
+    assert resultado == [("f1", "https://hltv.org/download/demo/123")]
+    assert any("partidas_pro_fila" in c[0] and "pendente" in c[0] for c in conn.calls)
+
+
+def test_atualizar_fila_pro_concluida():
+    conn = FakeConn()
+    db.atualizar_fila_pro(conn, "f1", "concluida", match_id="m1")
+    update = next(c for c in conn.calls if c[0].startswith("update partidas_pro_fila"))
+    assert update[1] == ("concluida", "m1", None, "f1")
+    assert conn.commits == 1
 
 
 def test_store_parsed_grava_lineups():

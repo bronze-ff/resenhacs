@@ -381,6 +381,23 @@ def set_last_share_code(conn, steam_id64, share_code):
     conn.commit()
 
 
+def listar_fila_pro_pendente(conn):
+    with conn.cursor() as cur:
+        cur.execute(
+            "select id, hltv_url from partidas_pro_fila where status = 'pendente' order by adicionado_em"
+        )
+        return cur.fetchall()
+
+
+def atualizar_fila_pro(conn, fila_id, status, match_id=None, erro=None):
+    with conn.cursor() as cur:
+        cur.execute(
+            "update partidas_pro_fila set status = %s, match_id = %s, erro = %s where id = %s",
+            (status, match_id, erro, fila_id),
+        )
+    conn.commit()
+
+
 def connect(database_url):
     import psycopg
 

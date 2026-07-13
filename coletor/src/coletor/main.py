@@ -207,6 +207,48 @@ def cmd_cleanup(config, conn, days=90):
     return total
 
 
+def cmd_processar_fila_pro(config, conn):
+    """Processa a fila de partida profissional: baixa .rar do HLTV, extrai o .dem,
+    ingere pelo mesmo pipeline de sempre (source='pro'). Roda no job agendado (não numa
+    request HTTP do site — a Vercel não aguenta baixar/parsear demo grande síncrono)."""
+    import tempfile
+    import urllib.request
+    from pathlib import Path
+
+    from . import rar_extract
+
+    pendentes = dbmod.listar_fila_pro_pendente(conn)
+    if not pendentes:
+        print("processar-fila-pro: nenhuma partida pendente")
+        return 0
+
+    total = 0
+    for fila_id, hltv_url in pendentes:
+        dbmod.atualizar_fila_pro(conn, fila_id, "baixando")
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                tmp = Path(tmp)
+                rar_path = tmp / "demo.rar"
+                print(f"  {fila_id}: baixando {hltv_url}")
+                with urllib.request.urlopen(hltv_url, timeout=120) as resp, open(rar_path, "wb") as out:
+                    out.write(resp.read())
+
+                dbmod.atualizar_fila_pro(conn, fila_id, "processando")
+                dem_path = rar_extract.extrair_dem_de_rar(rar_path, tmp / "extraido")
+                mid = ingest_demo(config, conn, dem_path, source="pro", upload=True)
+
+                dbmod.atualizar_fila_pro(conn, fila_id, "concluida", match_id=mid)
+                print(f"  {fila_id}: concluida ({mid})")
+                total += 1
+        except Exception as e:  # noqa: BLE001
+            conn.rollback()
+            dbmod.atualizar_fila_pro(conn, fila_id, "falhou", erro=str(e)[:500])
+            print(f"  {fila_id}: FALHOU ({e})")
+
+    print(f"processar-fila-pro: {total} partida(s) processada(s)")
+    return total
+
+
 def cmd_reprocess(config, conn, match_id=None):
     """Reprocessa Partida(s) já gravadas cujo .dem ainda está no R2 (janela de 90 dias
     do cleanup) — baixa de novo, roda o parser ATUAL (com fixes já aplicados) e regrava
@@ -391,6 +433,10 @@ def main(argv=None):
         help="Re-roda o parser atual em cima do .dem já arquivado no R2 (bug corrigido depois do ingest original) e regrava stats/replay.json.",
     )
     p_reproc.add_argument("--match-id", default=None, help="Reprocessa só essa Partida (uuid); sem isso, todas com demo ainda no R2.")
+    sub.add_parser(
+        "processar-fila-pro",
+        help="Processa a fila de partidas profissionais: baixa .rar do HLTV, extrai o .dem e ingere (source='pro').",
+    )
 
     args = ap.parse_args(argv)
     config = Config()
@@ -417,6 +463,8 @@ def main(argv=None):
             cmd_cleanup(config, conn, days=args.days)
         elif args.cmd == "reprocess":
             cmd_reprocess(config, conn, match_id=args.match_id)
+        elif args.cmd == "processar-fila-pro":
+            cmd_processar_fila_pro(config, conn)
     finally:
         conn.close()
 
