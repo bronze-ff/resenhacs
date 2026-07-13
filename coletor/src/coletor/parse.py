@@ -24,6 +24,21 @@ def _team_letter(team_number):
     return "A" if team_number == 2 else "B"
 
 
+def _nomes_de_time(registros, fixed):
+    """(nome_time_a, nome_time_b) a partir de um snapshot de tick com team_clan_name —
+    None quando a demo não traz nome de clã (comum em partida de matchmaking do grupo,
+    só partida de pro/LAN costuma ter). `registros` é uma lista de dict/records (mesmo
+    formato de parser.parse_ticks(...).to_dict("records"))."""
+    nomes = {"A": None, "B": None}
+    for r in registros:
+        sid = _sid(r.get("steamid"))
+        lado = fixed.get(sid)
+        nome = (r.get("team_clan_name") or "").strip()
+        if lado and nome and not nomes[lado]:
+            nomes[lado] = nome
+    return nomes["A"], nomes["B"]
+
+
 def _sid(v):
     import pandas as pd
 
@@ -169,14 +184,16 @@ def parse_demo(path):
         int(win_panel["tick"].iloc[0]) - 100 if len(win_panel) else int(deaths["tick"].max())
     )
 
-    # Times fixos A/B pelo primeiro freeze_end.
-    snap0 = parser.parse_ticks(["team_num"], ticks=[first_freeze])
+    # Times fixos A/B pelo primeiro freeze_end. team_clan_name vem junto (só partida de
+    # pro/LAN costuma trazer nome de clã) pra extrair o nome de cada lado (_nomes_de_time).
+    snap0 = parser.parse_ticks(["team_num", "team_clan_name"], ticks=[first_freeze])
     fixed = {}
     for r in snap0.to_dict("records"):
         team_num = _num(r.get("team_num"))
         sid = _sid(r.get("steamid"))
         if sid and team_num is not None:
             fixed[sid] = _team_letter(team_num)
+    nome_a, nome_b = _nomes_de_time(snap0.to_dict("records"), fixed)
 
     # Economia por round×time: soma do equipamento dos 5 jogadores no fim do freezetime
     # (current_equip_value), classificada no esquema HLTV (_tipo_de_compra). Best-effort:
@@ -501,6 +518,8 @@ def parse_demo(path):
         "map": mapa,
         "score_a": score["A"],
         "score_b": score["B"],
+        "team_a_name": nome_a,
+        "team_b_name": nome_b,
         "played_at": played_at,
         "rounds": rounds,
         "players": players,

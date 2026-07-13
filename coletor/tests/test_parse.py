@@ -75,3 +75,22 @@ def test_eh_arma_de_fogo_exclui_faca_e_granada():
     assert parse._eh_arma_de_fogo("hegrenade") is False
     assert parse._eh_arma_de_fogo("c4") is False
     assert parse._eh_arma_de_fogo(None) is False
+
+
+def test_nomes_de_time_extrai_dos_dois_lados():
+    fixed = {"1": "A", "2": "A", "3": "B", "4": "B"}
+    registros = [
+        {"steamid": 1, "team_clan_name": "FaZe"},
+        {"steamid": 2, "team_clan_name": "FaZe"},
+        {"steamid": 3, "team_clan_name": "Vitality"},
+        {"steamid": 4, "team_clan_name": "Vitality"},
+    ]
+    nome_a, nome_b = parse._nomes_de_time(registros, fixed)
+    assert nome_a == "FaZe"
+    assert nome_b == "Vitality"
+
+
+def test_nomes_de_time_ausente_ou_vazio_vira_none():
+    fixed = {"1": "A"}
+    assert parse._nomes_de_time([{"steamid": 1, "team_clan_name": ""}], fixed) == (None, None)
+    assert parse._nomes_de_time([], fixed) == (None, None)
