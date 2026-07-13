@@ -274,6 +274,46 @@ def cmd_processar_fila_pro(config, conn):
     return total
 
 
+TIPO_POR_CHAVE = {"smokes": "smoke", "fires": "molotov", "flashes": "flash", "hes": "he"}
+
+
+def _montar_lineups(rdata, replay_json, mapa, source):
+    """Monta a lista de lineups de granada (Task 4/db._write_lineups) a partir do rdata
+    cru de extract_replay — usada tanto por ingest_demo quanto por cmd_reprocess, já que
+    _write_lineups sempre apaga os lineups existentes antes de inserir (reprocess sem
+    recriar a lista perderia tudo silenciosamente).
+
+    Só entra item com posição de arremesso conhecida (throwerX/Y — pode faltar quando não
+    há weapon_fire correlacionado, ver parse.py); checa a posição, não o thrower (que o
+    parser sempre preenche, mesmo sem posição). Normaliza thrower_x/y e target_x/y pra
+    0..1 (mesmo world_to_radar do Replay 2D) — sem calibração do mapa, mantém cru, mesma
+    postura defensiva que replay.build_replay já tem.
+    """
+    cal = replaymod.MAP_CALIBRATION.get(mapa)
+
+    def norm(x, y):
+        return replaymod.world_to_radar(x, y, cal) if cal else (x, y)
+
+    lineups = []
+    for chave, tipo in TIPO_POR_CHAVE.items():
+        for g in rdata.get(chave, []):
+            if g.get("throwerX") is None or g.get("throwerY") is None:
+                continue
+            tx, ty = norm(g["throwerX"], g["throwerY"])
+            ax, ay = norm(g["x"], g["y"])
+            lineups.append({
+                "round_number": g["round"], "map": mapa, "tipo": tipo,
+                "thrower_steam_id": g["thrower"],
+                "thrower_nick": replay_json["names"].get(g["thrower"], "") if replay_json else "",
+                "thrower_x": tx, "thrower_y": ty,
+                "thrower_yaw": g.get("throwerYaw", 0), "thrower_pitch": g.get("throwerPitch", 0),
+                "target_x": ax, "target_y": ay,
+                "tick": g.get("tickStart", g.get("tick")),
+                "origem": "pro" if source == "pro" else "grupo",
+            })
+    return lineups
+
+
 def cmd_reprocess(config, conn, match_id=None):
     """Reprocessa Partida(s) já gravadas cujo .dem ainda está no R2 (janela de 90 dias
     do cleanup) — baixa de novo, roda o parser ATUAL (com fixes já aplicados) e regrava
@@ -328,6 +368,7 @@ def cmd_reprocess(config, conn, match_id=None):
                     parsed["map"], rdata["ticks"], kills=rdata["kills"], extras=rdata
                 )
                 parsed["highlights"] = transform.attach_replay_frames(parsed["highlights"], replay_json["rounds"])
+                parsed["lineups"] = _montar_lineups(rdata, replay_json, parsed["map"], source or "valve_mm")
 
                 # Sobrescreve o MESMO objeto (key extraída do replay_url já gravado) —
                 # não recalcula um novo, senão o antigo fica órfão e o link salvo quebra.
@@ -380,27 +421,7 @@ def ingest_demo(config, conn, path, share_code=None, source="upload", upload=Tru
         # de replay.py aqui, que tinha critério mais permissivo (elimina todo mundo =
         # "clutch", mesmo perdendo o round por outro motivo — bomba explode depois).
         parsed["highlights"] = transform.attach_replay_frames(parsed["highlights"], replay_json["rounds"])
-
-        # Lineups de granada (Task 4/db._write_lineups) — só entra item com thrower
-        # correlacionado ao weapon_fire (sem correlação = sem posição útil pra biblioteca,
-        # mas a granada ainda conta no mapa de calor via rdata normalmente).
-        TIPO_POR_CHAVE = {"smokes": "smoke", "fires": "molotov", "flashes": "flash", "hes": "he"}
-        lineups = []
-        for chave, tipo in TIPO_POR_CHAVE.items():
-            for g in rdata.get(chave, []):
-                if not g.get("thrower"):
-                    continue
-                lineups.append({
-                    "round_number": g["round"], "map": parsed["map"], "tipo": tipo,
-                    "thrower_steam_id": g["thrower"],
-                    "thrower_nick": replay_json["names"].get(g["thrower"], "") if replay_json else "",
-                    "thrower_x": g["throwerX"], "thrower_y": g["throwerY"],
-                    "thrower_yaw": g.get("throwerYaw", 0), "thrower_pitch": g.get("throwerPitch", 0),
-                    "target_x": g["x"], "target_y": g["y"],
-                    "tick": g.get("tickStart", g.get("tick")),
-                    "origem": "pro" if source == "pro" else "grupo",
-                })
-        parsed["lineups"] = lineups
+        parsed["lineups"] = _montar_lineups(rdata, replay_json, parsed["map"], source)
     except Exception as e:  # noqa: BLE001
         print(f"aviso: replay 2D / clutch não gerado ({e})")
 
