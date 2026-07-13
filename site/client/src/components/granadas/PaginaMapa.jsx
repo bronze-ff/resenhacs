@@ -159,7 +159,7 @@ export default function PaginaMapa({ mapa, onTrocarMapa }) {
 
       {formAberto && (
         <FormGranada
-          mapa={mapa} lado={lado}
+          mapa={mapa} lado={formAberto.inicial?.lado ?? lado}
           posicoes={formAberto.posicoes}
           inicial={formAberto.inicial}
           onSalvo={() => { setFormAberto(null); setModoMarcacao(null); recarregar() }}
@@ -185,6 +185,7 @@ export default function PaginaMapa({ mapa, onTrocarMapa }) {
               >Editar</button>
               <button
                 onClick={async () => {
+                  if (!window.confirm(`Excluir "${selecionada.titulo}"?`)) return
                   const res = await fetch(`/api/granadas/${selecionada.id}`, { method: 'DELETE' }).catch(() => null)
                   if (res?.ok) { setSelecionada(null); recarregar() }
                 }}
