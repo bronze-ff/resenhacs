@@ -35,9 +35,12 @@ def _tool_setup_sem_unrar(unrar=True, unar=True, bsdtar=True, sevenzip=True, sev
 rarfile.tool_setup = _tool_setup_sem_unrar
 
 
-def extrair_dem_de_rar(caminho_rar, destino_dir):
-    """Extrai o primeiro .dem de dentro do .rar em `caminho_rar` pra `destino_dir`.
-    Devolve o Path do .dem extraído. Levanta RuntimeError se não achar nenhum .dem."""
+def extrair_dems_de_rar(caminho_rar, destino_dir):
+    """Extrai TODOS os .dem de dentro do .rar em `caminho_rar` pra `destino_dir`.
+
+    Uma demo profissional do HLTV normalmente vem num único .rar com vários .dem —
+    um por mapa de uma série Bo3/Bo5. Devolve a lista de Path extraídos, na mesma
+    ordem em que aparecem dentro do .rar. Levanta RuntimeError se não achar nenhum .dem."""
     destino_dir = Path(destino_dir)
     destino_dir.mkdir(parents=True, exist_ok=True)
 
@@ -45,5 +48,8 @@ def extrair_dem_de_rar(caminho_rar, destino_dir):
         dem_nomes = [n for n in rf.namelist() if n.lower().endswith(".dem")]
         if not dem_nomes:
             raise RuntimeError(f"nenhum .dem encontrado dentro de {caminho_rar}")
-        rf.extract(dem_nomes[0], path=str(destino_dir))
-        return destino_dir / dem_nomes[0]
+        caminhos = []
+        for nome in dem_nomes:
+            rf.extract(nome, path=str(destino_dir))
+            caminhos.append(destino_dir / nome)
+        return caminhos

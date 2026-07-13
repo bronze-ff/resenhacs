@@ -192,7 +192,16 @@ def test_atualizar_fila_pro_concluida():
     conn = FakeConn()
     db.atualizar_fila_pro(conn, "f1", "concluida", match_id="m1")
     update = next(c for c in conn.calls if c[0].startswith("update partidas_pro_fila"))
-    assert update[1] == ("concluida", "m1", None, "f1")
+    assert update[1] == ("concluida", "m1", None, [], "f1")
+    assert conn.commits == 1
+
+
+def test_atualizar_fila_pro_com_match_ids():
+    # Série Bo3/Bo5: vários mapas processados de um único item da fila.
+    conn = FakeConn()
+    db.atualizar_fila_pro(conn, "f1", "concluida", match_id="m1", match_ids=["m1", "m2", "m3"])
+    update = next(c for c in conn.calls if c[0].startswith("update partidas_pro_fila"))
+    assert update[1] == ("concluida", "m1", None, ["m1", "m2", "m3"], "f1")
     assert conn.commits == 1
 
 

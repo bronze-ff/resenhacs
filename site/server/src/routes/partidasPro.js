@@ -6,12 +6,13 @@ export function createPartidasProRouter({ db, requireAuth }) {
 
   router.get('/', requireAuth, requireAdmin, async (req, res) => {
     const { rows } = await db.query(
-      'select id, hltv_url, status, match_id, erro, adicionado_por, adicionado_em from partidas_pro_fila order by adicionado_em desc',
+      'select id, hltv_url, status, match_id, match_ids, erro, adicionado_por, adicionado_em from partidas_pro_fila order by adicionado_em desc',
     )
     res.json(
       rows.map((f) => ({
         id: f.id, hltvUrl: f.hltv_url, status: f.status,
-        matchId: f.match_id, erro: f.erro,
+        matchId: f.match_id, matchIds: f.match_ids ?? [],
+        erro: f.erro,
         adicionadoPor: f.adicionado_por, adicionadoEm: f.adicionado_em,
       })),
     )

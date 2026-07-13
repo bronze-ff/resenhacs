@@ -389,11 +389,11 @@ def listar_fila_pro_pendente(conn):
         return cur.fetchall()
 
 
-def atualizar_fila_pro(conn, fila_id, status, match_id=None, erro=None):
+def atualizar_fila_pro(conn, fila_id, status, match_id=None, erro=None, match_ids=None):
     with conn.cursor() as cur:
         cur.execute(
-            "update partidas_pro_fila set status = %s, match_id = %s, erro = %s where id = %s",
-            (status, match_id, erro, fila_id),
+            "update partidas_pro_fila set status = %s, match_id = %s, erro = %s, match_ids = %s where id = %s",
+            (status, match_id, erro, match_ids if match_ids is not None else [], fila_id),
         )
     conn.commit()
 

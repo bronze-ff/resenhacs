@@ -27,11 +27,23 @@ describe('GET /api/partidas-pro-fila', () => {
 
   it('admin ve a fila', async () => {
     const { app } = appWith([
-      ['from partidas_pro_fila', [{ id: 'f1', hltv_url: 'https://hltv.org/x', status: 'pendente', match_id: null, erro: null }]],
+      ['from partidas_pro_fila', [{ id: 'f1', hltv_url: 'https://hltv.org/x', status: 'pendente', match_id: null, match_ids: [], erro: null }]],
     ])
     const res = await request(app).get('/api/partidas-pro-fila').set('Cookie', cookieAdmin)
     expect(res.status).toBe(200)
-    expect(res.body[0]).toMatchObject({ id: 'f1', status: 'pendente' })
+    expect(res.body[0]).toMatchObject({ id: 'f1', status: 'pendente', matchIds: [] })
+  })
+
+  it('devolve matchIds quando a fila tem varios mapas de uma serie', async () => {
+    const { app } = appWith([
+      ['from partidas_pro_fila', [{
+        id: 'f2', hltv_url: 'https://hltv.org/y', status: 'concluida', match_id: 'm1',
+        match_ids: ['m1', 'm2', 'm3'], erro: null,
+      }]],
+    ])
+    const res = await request(app).get('/api/partidas-pro-fila').set('Cookie', cookieAdmin)
+    expect(res.status).toBe(200)
+    expect(res.body[0]).toMatchObject({ id: 'f2', matchId: 'm1', matchIds: ['m1', 'm2', 'm3'] })
   })
 })
 

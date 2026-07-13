@@ -234,11 +234,36 @@ def cmd_processar_fila_pro(config, conn):
                     out.write(resp.read())
 
                 dbmod.atualizar_fila_pro(conn, fila_id, "processando")
-                dem_path = rar_extract.extrair_dem_de_rar(rar_path, tmp / "extraido")
-                mid = ingest_demo(config, conn, dem_path, source="pro", upload=True)
+                # Um .rar do HLTV pode trazer vários mapas de uma série Bo3/Bo5 — um
+                # .dem por mapa. Cada .dem processa (e falha) de forma isolada: um mapa
+                # com erro não deve derrubar os outros mapas da MESMA série.
+                dem_paths = rar_extract.extrair_dems_de_rar(rar_path, tmp / "extraido")
+                match_ids = []
+                erros_mapas = []
+                for dem_path in dem_paths:
+                    try:
+                        mid = ingest_demo(config, conn, dem_path, source="pro", upload=True)
+                        match_ids.append(mid)
+                    except Exception as e:  # noqa: BLE001
+                        conn.rollback()
+                        erros_mapas.append(str(e))
+                        print(f"  {fila_id}: mapa {dem_path.name} FALHOU ({e})")
 
-                dbmod.atualizar_fila_pro(conn, fila_id, "concluida", match_id=mid)
-                print(f"  {fila_id}: concluida ({mid})")
+                if not match_ids:
+                    # Nenhum mapa processou — mesmo fluxo de erro que já existia.
+                    raise RuntimeError(erros_mapas[0] if erros_mapas else "nenhum mapa processado")
+
+                erro_nota = None
+                if erros_mapas:
+                    erro_nota = (
+                        f"{len(match_ids)}/{len(dem_paths)} mapas processados; "
+                        f"falhou: {erros_mapas[0]}"
+                    )[:500]
+
+                dbmod.atualizar_fila_pro(
+                    conn, fila_id, "concluida", match_id=match_ids[0], match_ids=match_ids, erro=erro_nota
+                )
+                print(f"  {fila_id}: concluida ({len(match_ids)}/{len(dem_paths)} mapa(s))")
                 total += 1
         except Exception as e:  # noqa: BLE001
             conn.rollback()
