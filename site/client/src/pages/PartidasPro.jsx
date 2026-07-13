@@ -16,6 +16,11 @@ export default function PartidasPro() {
 
   useEffect(carregar, [])
 
+  async function tentarDeNovo(id) {
+    const res = await fetch(`/api/partidas-pro-fila/${id}/retry`, { method: 'PATCH' })
+    if (res.ok) carregar()
+  }
+
   async function adicionar(e) {
     e.preventDefault()
     setErro(null)
@@ -52,9 +57,19 @@ export default function PartidasPro() {
         {fila?.map((f) => (
           <div key={f.id} className="panel-cut-sm flex items-center justify-between border border-borda bg-superficie px-3 py-2">
             <span className="truncate font-mono text-xs text-texto-fraco">{f.hltvUrl}</span>
-            <span className={`font-mono text-xs uppercase ${CORES_STATUS[f.status]}`}>
-              {f.matchIds?.length > 1 ? `${f.matchIds.length} mapas processados` : f.status}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className={`font-mono text-xs uppercase ${CORES_STATUS[f.status]}`}>
+                {f.matchIds?.length > 1 ? `${f.matchIds.length} mapas processados` : f.status}
+              </span>
+              {f.status === 'falhou' && (
+                <button
+                  onClick={() => tentarDeNovo(f.id)}
+                  className="panel-cut-sm border border-borda px-2 py-1 font-mono text-[10px] uppercase text-texto-fraco hover:text-texto"
+                >
+                  Tentar de novo
+                </button>
+              )}
+            </div>
           </div>
         ))}
       </div>

@@ -61,3 +61,24 @@ describe('POST /api/partidas-pro-fila', () => {
     expect(res.status).toBe(400)
   })
 })
+
+describe('PATCH /api/partidas-pro-fila/:id/retry', () => {
+  it('jogador comum: 403', async () => {
+    const { app } = appWith([])
+    expect((await request(app).patch('/api/partidas-pro-fila/f1/retry').set('Cookie', cookieJogador)).status).toBe(403)
+  })
+
+  it('admin reseta item falhou pra pendente', async () => {
+    const { app, db } = appWith([['update partidas_pro_fila', [{ id: 'f1' }]]])
+    const res = await request(app).patch('/api/partidas-pro-fila/f1/retry').set('Cookie', cookieAdmin)
+    expect(res.status).toBe(200)
+    expect(res.body).toMatchObject({ ok: true, status: 'pendente' })
+    expect(db.query.mock.calls[0][1]).toEqual(['f1'])
+  })
+
+  it('item nao encontrado ou nao esta falhou: 404', async () => {
+    const { app } = appWith([['update partidas_pro_fila', []]])
+    const res = await request(app).patch('/api/partidas-pro-fila/f1/retry').set('Cookie', cookieAdmin)
+    expect(res.status).toBe(404)
+  })
+})

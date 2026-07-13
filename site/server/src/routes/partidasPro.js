@@ -30,5 +30,16 @@ export function createPartidasProRouter({ db, requireAuth }) {
     res.status(201).json({ id: rows[0].id, status: 'pendente' })
   })
 
+  router.patch('/:id/retry', requireAuth, requireAdmin, async (req, res) => {
+    const { rows } = await db.query(
+      "update partidas_pro_fila set status = 'pendente', erro = null where id = $1 and status = 'falhou' returning id",
+      [req.params.id],
+    )
+    if (rows.length === 0) {
+      return res.status(404).json({ erro: 'item não encontrado ou não está com status falhou' })
+    }
+    res.json({ ok: true, status: 'pendente' })
+  })
+
   return router
 }
