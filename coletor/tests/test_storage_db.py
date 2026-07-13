@@ -172,6 +172,34 @@ def test_store_parsed_grava_stats_por_arma():
     assert insert[1] == ("00000000-0000-0000-0000-000000000001", "A", "ak47", 10, 5, 80, 30, 1500)
 
 
+def test_store_parsed_grava_lineups():
+    conn = FakeConn()
+    parsed = _parsed()
+    parsed["lineups"] = [{
+        "round_number": 5, "map": "de_mirage", "tipo": "smoke",
+        "thrower_steam_id": "A", "thrower_nick": "bronze",
+        "thrower_x": 100.0, "thrower_y": 200.0, "thrower_yaw": 45.0, "thrower_pitch": -10.0,
+        "target_x": 300.0, "target_y": 400.0, "tick": 5000, "origem": "grupo",
+    }]
+    db.store_parsed(conn, parsed, share_code="CSGO-x", source="upload")
+    insert = next(c for c in conn.calls if c[0].startswith("insert into lineups"))
+    assert insert[1] == (
+        "00000000-0000-0000-0000-000000000001", 5, "de_mirage", "smoke",
+        "A", "bronze", 100.0, 200.0, 45.0, -10.0, 300.0, 400.0, 5000, "grupo",
+    )
+
+
+def test_store_parsed_grava_nome_de_time():
+    conn = FakeConn()
+    parsed = _parsed()
+    parsed["team_a_name"] = "FaZe"
+    parsed["team_b_name"] = "Vitality"
+    db.store_parsed(conn, parsed, share_code="CSGO-x", source="pro")
+    match_call = next(c for c in conn.calls if c[0].startswith("insert into matches"))
+    assert "FaZe" in match_call[1]
+    assert "Vitality" in match_call[1]
+
+
 def test_record_pending_match():
     conn = FakeConn()
     mid = db.record_pending_match(conn, "CSGO-novo")

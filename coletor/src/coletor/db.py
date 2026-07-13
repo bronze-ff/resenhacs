@@ -44,7 +44,8 @@ def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status,
               share_code = coalesce(%s, share_code), source = %s, map = %s,
               score_a = %s, score_b = %s, played_at = {played_expr},
               demo_url = coalesce(%s, demo_url), replay_url = coalesce(%s, replay_url),
-              status = %s
+              status = %s, team_a_name = coalesce(%s, team_a_name),
+              team_b_name = coalesce(%s, team_b_name)
             where id = %s
             """,
             (
@@ -57,6 +58,8 @@ def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status,
                 demo_url,
                 replay_url,
                 status,
+                parsed.get("team_a_name"),
+                parsed.get("team_b_name"),
                 match_id,
             ),
         )
@@ -73,8 +76,8 @@ def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status,
     )
     cur.execute(
         f"""
-        insert into matches (share_code, source, map, score_a, score_b, played_at, demo_url, replay_url, status, fingerprint)
-        values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        insert into matches (share_code, source, map, score_a, score_b, played_at, demo_url, replay_url, status, fingerprint, team_a_name, team_b_name)
+        values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         on conflict (share_code) do update set
           source = excluded.source, map = excluded.map,
           score_a = excluded.score_a, score_b = excluded.score_b,
@@ -82,7 +85,9 @@ def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status,
           demo_url = coalesce(excluded.demo_url, matches.demo_url),
           replay_url = coalesce(excluded.replay_url, matches.replay_url),
           status = excluded.status,
-          fingerprint = excluded.fingerprint
+          fingerprint = excluded.fingerprint,
+          team_a_name = coalesce(excluded.team_a_name, matches.team_a_name),
+          team_b_name = coalesce(excluded.team_b_name, matches.team_b_name)
         returning id
         """,
         (
@@ -96,6 +101,8 @@ def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status,
             replay_url,
             status,
             fingerprint,
+            parsed.get("team_a_name"),
+            parsed.get("team_b_name"),
         ),
     )
     return cur.fetchone()[0]
@@ -273,6 +280,26 @@ def _write_kill_positions(cur, match_id, kill_positions):
         )
 
 
+def _write_lineups(cur, match_id, lineups):
+    cur.execute("delete from lineups where match_id = %s", (match_id,))
+    for l in lineups:
+        cur.execute(
+            """
+            insert into lineups
+              (match_id, round_number, map, tipo, thrower_steam_id, thrower_nick,
+               thrower_x, thrower_y, thrower_yaw, thrower_pitch, target_x, target_y,
+               tick, origem)
+            values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                match_id, l["round_number"], l["map"], l["tipo"],
+                l["thrower_steam_id"], l.get("thrower_nick", ""),
+                l["thrower_x"], l["thrower_y"], l.get("thrower_yaw", 0), l.get("thrower_pitch", 0),
+                l["target_x"], l["target_y"], l["tick"], l["origem"],
+            ),
+        )
+
+
 def store_parsed(conn, parsed, share_code=None, source="valve_mm", demo_url=None,
                  replay_url=None, status="parsed", prefer_new_played_at=False):
     """Grava a Partida inteira numa transação. Devolve o match_id (uuid)."""
@@ -286,6 +313,7 @@ def store_parsed(conn, parsed, share_code=None, source="valve_mm", demo_url=None
         _write_player_weapons(cur, match_id, parsed.get("players", []))
         _write_round_econ(cur, match_id, parsed.get("round_econ", []))
         _write_kill_positions(cur, match_id, parsed.get("kill_positions", []))
+        _write_lineups(cur, match_id, parsed.get("lineups", []))
     conn.commit()
     return match_id
 
