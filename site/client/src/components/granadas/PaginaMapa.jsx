@@ -20,6 +20,8 @@ export default function PaginaMapa({ mapa, onTrocarMapa }) {
   const [callouts, setCallouts] = useState([])
   const [modoMarcacao, setModoMarcacao] = useState(null) // null | {arremesso?, alvo?}
   const [formAberto, setFormAberto] = useState(null)     // null | {posicoes, inicial?}
+  const [sugestoes, setSugestoes] = useState(null)       // null = fechado, [] = aberto vazio
+  const [sugestaoHover, setSugestaoHover] = useState(null)
 
   function recarregar() {
     setLineups(null)
@@ -27,6 +29,11 @@ export default function PaginaMapa({ mapa, onTrocarMapa }) {
       .then((r) => r.json())
       .then(setLineups)
       .catch(() => setLineups([]))
+  }
+
+  async function abrirSugestoes() {
+    const res = await fetch(`/api/granadas/sugestoes?map=${mapa}`).catch(() => null)
+    setSugestoes(res?.ok ? await res.json() : [])
   }
 
   useEffect(() => {
@@ -136,6 +143,38 @@ export default function PaginaMapa({ mapa, onTrocarMapa }) {
             <button onClick={() => setModoMarcacao(null)} className="ml-2 underline">cancelar</button>
           </p>
         )}
+
+        {isAdmin && (
+          <div>
+            <p className="mb-1 font-mono text-xs uppercase text-texto-fraco">Sugestões (das demos)</p>
+            {sugestoes === null ? (
+              <button onClick={abrirSugestoes} className="w-full rounded border border-borda px-3 py-1.5 font-mono text-xs uppercase text-texto-fraco hover:text-texto">
+                Ver granadas mais usadas
+              </button>
+            ) : sugestoes.length === 0 ? (
+              <p className="font-mono text-xs text-texto-fraco">Nenhuma granada extraída das demos desse mapa ainda.</p>
+            ) : (
+              <ul className="max-h-64 space-y-1 overflow-y-auto">
+                {sugestoes.slice(0, 15).map((s, i) => (
+                  <li
+                    key={i}
+                    onMouseEnter={() => setSugestaoHover(i)}
+                    onMouseLeave={() => setSugestaoHover(null)}
+                    className="flex items-center justify-between rounded border border-borda px-2 py-1 font-mono text-[11px] text-texto-fraco"
+                  >
+                    <span className="uppercase">{s.tipo} · {s.total}x · {s.origem}</span>
+                    <button
+                      onClick={() => setFormAberto({
+                        posicoes: { arremesso: { x: s.arremessoX, y: s.arremessoY }, alvo: { x: s.alvoX, y: s.alvoY } },
+                      })}
+                      className="text-destaque hover:brightness-125"
+                    >usar</button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
       </aside>
 
       <div className="min-w-0 flex-1">
@@ -150,6 +189,8 @@ export default function PaginaMapa({ mapa, onTrocarMapa }) {
             nivelCallouts={nivelCallouts}
             modoMarcacao={modoMarcacao}
             onCliqueMarcacao={aoCliqueMarcacao}
+            sugestoes={sugestoes ?? []}
+            sugestaoAtiva={sugestaoHover}
           />
         )}
         {lineups?.length === 0 && (
