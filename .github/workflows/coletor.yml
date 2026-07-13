@@ -32,7 +32,10 @@ jobs:
   # inteiro, esse é o maior fator de custo — vale mais que qualquer outra otimização.
   sincroniza:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # Reprocessar TODAS as Partidas (run manual) não cabe em 45 min — o timeout
+    # curto derrubou o run 29278267027 no meio. 300 min só nesse caso; o job
+    # agendado normal continua com 45 pra não segurar a fila meia hora à toa.
+    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && inputs.reprocessar_tudo && 300 || 45 }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
