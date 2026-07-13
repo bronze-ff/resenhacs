@@ -1,4 +1,5 @@
-import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
+import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { pipeline } from 'node:stream/promises'
 
 // O bucket é privado (dados reais dos participantes, sem consentimento pra ficar
@@ -24,6 +25,14 @@ export function keyFromR2Url(url, bucket) {
   const idx = url.indexOf(marcador)
   if (idx === -1) return null
   return url.slice(idx + marcador.length)
+}
+
+// URL assinada de PUT direto pro R2: o cliente sobe o arquivo sem os bytes passarem
+// pela função serverless do Express (limite de corpo ~4.5MB / 15s da Vercel não
+// aguentaria um .rar/.dem de 50-300MB).
+export async function presignUpload(client, bucket, key, contentType, expiresInSeconds = 900) {
+  const cmd = new PutObjectCommand({ Bucket: bucket, Key: key, ContentType: contentType })
+  return getSignedUrl(client, cmd, { expiresIn: expiresInSeconds })
 }
 
 export async function streamObject(client, bucket, key, res) {

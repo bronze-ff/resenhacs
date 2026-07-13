@@ -92,7 +92,7 @@ class FakeCursor:
         return ["00000000-0000-0000-0000-000000000001"]
 
     def fetchall(self):
-        if self._last.startswith("select id, hltv_url from partidas_pro_fila"):
+        if self._last.startswith("select id, hltv_url, arquivo_r2_key from partidas_pro_fila"):
             return self.conn.fila_rows
         return []
 
@@ -182,9 +182,9 @@ def test_store_parsed_grava_stats_por_arma():
 
 def test_listar_fila_pro_pendente():
     conn = FakeConn()
-    conn.fila_rows = [("f1", "https://hltv.org/download/demo/123")]
+    conn.fila_rows = [("f1", "https://hltv.org/download/demo/123", None)]
     resultado = db.listar_fila_pro_pendente(conn)
-    assert resultado == [("f1", "https://hltv.org/download/demo/123")]
+    assert resultado == [("f1", "https://hltv.org/download/demo/123", None)]
     assert any("partidas_pro_fila" in c[0] and "pendente" in c[0] for c in conn.calls)
 
 

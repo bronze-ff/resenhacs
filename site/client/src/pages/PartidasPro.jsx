@@ -9,6 +9,7 @@ export default function PartidasPro() {
   const [fila, setFila] = useState(null)
   const [url, setUrl] = useState('')
   const [erro, setErro] = useState(null)
+  const [enviando, setEnviando] = useState(false)
 
   function carregar() {
     fetch('/api/partidas-pro-fila').then((r) => r.json()).then(setFila).catch(() => setFila([]))
@@ -38,6 +39,41 @@ export default function PartidasPro() {
     }
   }
 
+  async function enviarArquivo(e) {
+    const arquivo = e.target.files?.[0]
+    e.target.value = ''
+    if (!arquivo) return
+    setErro(null)
+    setEnviando(true)
+    try {
+      const resUrl = await fetch('/api/partidas-pro-fila/upload-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: arquivo.name }),
+      })
+      if (!resUrl.ok) {
+        const body = await resUrl.json().catch(() => ({}))
+        setErro(body.erro ?? 'Erro ao preparar envio.')
+        return
+      }
+      const { uploadUrl } = await resUrl.json()
+      const resPut = await fetch(uploadUrl, {
+        method: 'PUT',
+        body: arquivo,
+        headers: { 'Content-Type': 'application/octet-stream' },
+      })
+      if (!resPut.ok) {
+        setErro('Erro ao enviar o arquivo.')
+        return
+      }
+      carregar()
+    } catch {
+      setErro('Erro ao enviar o arquivo.')
+    } finally {
+      setEnviando(false)
+    }
+  }
+
   return (
     <div className="space-y-4">
       <h2 className="font-display text-2xl font-bold uppercase tracking-wide text-texto">Partidas pro</h2>
@@ -52,6 +88,16 @@ export default function PartidasPro() {
           Adicionar
         </button>
       </form>
+      <label className="panel-cut-sm flex w-fit cursor-pointer items-center gap-2 border border-borda bg-superficie px-4 py-2 font-display text-sm font-semibold uppercase text-texto-fraco hover:text-texto">
+        {enviando ? 'Enviando...' : 'Enviar arquivo (.rar/.dem)'}
+        <input
+          type="file"
+          accept=".rar,.dem"
+          disabled={enviando}
+          onChange={enviarArquivo}
+          className="hidden"
+        />
+      </label>
       {erro && <p className="font-mono text-sm text-perigo">{erro}</p>}
       <div className="space-y-2">
         {fila?.map((f) => (

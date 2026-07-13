@@ -208,9 +208,12 @@ def cmd_cleanup(config, conn, days=90):
 
 
 def cmd_processar_fila_pro(config, conn):
-    """Processa a fila de partida profissional: baixa .rar do HLTV, extrai o .dem,
-    ingere pelo mesmo pipeline de sempre (source='pro'). Roda no job agendado (não numa
-    request HTTP do site — a Vercel não aguenta baixar/parsear demo grande síncrono)."""
+    """Processa a fila de partida profissional: baixa .rar/.dem (do HLTV ou de um
+    upload manual em staging no R2 — hltv.org bloqueia download automático atrás de
+    um desafio Cloudflare, então o caminho normal é o admin subir o arquivo pela UI),
+    extrai o .dem se necessário, ingere pelo mesmo pipeline de sempre (source='pro').
+    Roda no job agendado (não numa request HTTP do site — a Vercel não aguenta
+    baixar/parsear demo grande síncrono)."""
     import tempfile
     import urllib.request
     from pathlib import Path
@@ -222,22 +225,37 @@ def cmd_processar_fila_pro(config, conn):
         print("processar-fila-pro: nenhuma partida pendente")
         return 0
 
+    client = storage_r2.make_client(config)
     total = 0
-    for fila_id, hltv_url in pendentes:
+    for fila_id, hltv_url, arquivo_r2_key in pendentes:
         dbmod.atualizar_fila_pro(conn, fila_id, "baixando")
         try:
             with tempfile.TemporaryDirectory() as tmp:
                 tmp = Path(tmp)
-                rar_path = tmp / "demo.rar"
-                print(f"  {fila_id}: baixando {hltv_url}")
-                with urllib.request.urlopen(hltv_url, timeout=120) as resp, open(rar_path, "wb") as out:
-                    out.write(resp.read())
+                if arquivo_r2_key:
+                    print(f"  {fila_id}: baixando do R2 ({arquivo_r2_key})")
+                    dados = storage_r2.download_bytes(client, config.r2_bucket, arquivo_r2_key)
+                    ext = Path(arquivo_r2_key).suffix.lower()
+                else:
+                    print(f"  {fila_id}: baixando {hltv_url}")
+                    with urllib.request.urlopen(hltv_url, timeout=120) as resp:
+                        dados = resp.read()
+                    ext = ".rar"
 
                 dbmod.atualizar_fila_pro(conn, fila_id, "processando")
                 # Um .rar do HLTV pode trazer vários mapas de uma série Bo3/Bo5 — um
                 # .dem por mapa. Cada .dem processa (e falha) de forma isolada: um mapa
-                # com erro não deve derrubar os outros mapas da MESMA série.
-                dem_paths = rar_extract.extrair_dems_de_rar(rar_path, tmp / "extraido")
+                # com erro não deve derrubar os outros mapas da MESMA série. Upload
+                # manual de um .dem avulso pula a extração — já é o arquivo final.
+                if ext == ".dem":
+                    dem_path = tmp / "demo.dem"
+                    dem_path.write_bytes(dados)
+                    dem_paths = [dem_path]
+                else:
+                    rar_path = tmp / "demo.rar"
+                    rar_path.write_bytes(dados)
+                    dem_paths = rar_extract.extrair_dems_de_rar(rar_path, tmp / "extraido")
+
                 match_ids = []
                 erros_mapas = []
                 for dem_path in dem_paths:
@@ -265,6 +283,11 @@ def cmd_processar_fila_pro(config, conn):
                 )
                 print(f"  {fila_id}: concluida ({len(match_ids)}/{len(dem_paths)} mapa(s))")
                 total += 1
+
+                # Apaga o staging só em sucesso — numa falha o arquivo continua no R2
+                # pro botão de retry reaproveitar sem o admin subir de novo.
+                if arquivo_r2_key:
+                    storage_r2.delete_object(client, config.r2_bucket, arquivo_r2_key)
         except Exception as e:  # noqa: BLE001
             conn.rollback()
             dbmod.atualizar_fila_pro(conn, fila_id, "falhou", erro=str(e)[:500])

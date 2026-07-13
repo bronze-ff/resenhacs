@@ -384,7 +384,8 @@ def set_last_share_code(conn, steam_id64, share_code):
 def listar_fila_pro_pendente(conn):
     with conn.cursor() as cur:
         cur.execute(
-            "select id, hltv_url from partidas_pro_fila where status = 'pendente' order by adicionado_em"
+            "select id, hltv_url, arquivo_r2_key from partidas_pro_fila "
+            "where status = 'pendente' order by adicionado_em"
         )
         return cur.fetchall()
 

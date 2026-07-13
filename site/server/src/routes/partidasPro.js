@@ -1,7 +1,11 @@
+import crypto from 'node:crypto'
 import { Router } from 'express'
 import { requireAdmin } from '../auth/middleware.js'
+import { presignUpload } from '../r2.js'
 
-export function createPartidasProRouter({ db, requireAuth }) {
+const EXTENSOES_ACEITAS = ['.rar', '.dem']
+
+export function createPartidasProRouter({ db, requireAuth, r2Client, r2Bucket }) {
   const router = Router()
 
   router.get('/', requireAuth, requireAdmin, async (req, res) => {
@@ -28,6 +32,22 @@ export function createPartidasProRouter({ db, requireAuth }) {
       [hltvUrl, req.player.steamId],
     )
     res.status(201).json({ id: rows[0].id, status: 'pendente' })
+  })
+
+  router.post('/upload-url', requireAuth, requireAdmin, async (req, res) => {
+    const filename = String(req.body?.filename ?? '').trim()
+    const extensao = filename.slice(filename.lastIndexOf('.')).toLowerCase()
+    if (!filename || !EXTENSOES_ACEITAS.includes(extensao)) {
+      return res.status(400).json({ erro: 'arquivo deve ser .rar ou .dem' })
+    }
+
+    const key = `partidas-pro-pendentes/${crypto.randomUUID()}${extensao}`
+    const { rows } = await db.query(
+      'insert into partidas_pro_fila (arquivo_r2_key, adicionado_por) values ($1, $2) returning id',
+      [key, req.player.steamId],
+    )
+    const uploadUrl = await presignUpload(r2Client, r2Bucket, key, 'application/octet-stream')
+    res.json({ id: rows[0].id, uploadUrl, key })
   })
 
   router.patch('/:id/retry', requireAuth, requireAdmin, async (req, res) => {

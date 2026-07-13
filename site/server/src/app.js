@@ -69,7 +69,7 @@ export function createApp({ config, db, verifySteamLogin, fetchPersona, fetchBan
   app.use('/api/sessions', createSessionsRouter({ db, requireAuth }))
   app.use('/api/lineups', createLineupsRouter({ db, requireAuth }))
   app.use('/api/taticas', createTaticasRouter({ db, requireAuth }))
-  app.use('/api/partidas-pro-fila', createPartidasProRouter({ db, requireAuth }))
+  app.use('/api/partidas-pro-fila', createPartidasProRouter({ db, requireAuth, r2Client, r2Bucket: config.r2Bucket }))
 
   // Upload manual via web só existe quando o Coletor Python está no mesmo host
   // (dev/self-hosted). Na Vercel (serverless) config.coletorDir/pythonBin ficam
