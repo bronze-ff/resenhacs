@@ -5,7 +5,12 @@ on:
     - cron: '*/30 * * * *' # de 30 em 30 min — o máximo seguro dentro da cota grátis
                             # do GitHub Actions (2000 min/mês); ver coletor/README ou
                             # o histórico do commit que mudou isso pra conta exata.
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      reprocessar_tudo:
+        description: 'Reprocessar todas as Partidas com demo ainda no R2 (bug de parser corrigido)'
+        type: boolean
+        default: false
   push:
     branches: [main]
     paths: ['coletor/**', 'bot/**', '.github/workflows/coletor.yml']
@@ -87,6 +92,22 @@ jobs:
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
         run: python -m coletor.main processar-fila-pro
+      # Só roda quando disparado manualmente com o input marcado — reprocessa TODAS as
+      # Partidas com demo ainda no R2 (janela de 90 dias) com o parser ATUAL, pra corrigir
+      # stats já gravadas depois de um bug de parser ser corrigido (ex.: kill de USP-S
+      # virando P2000 nas stats — corrigido no commit 497e3bd, precisa reprocessar as
+      # Partidas já ingeridas antes do fix pra atualizar o que já está gravado).
+      - name: Reprocessar todas as Partidas (sob demanda)
+        if: github.event_name == 'workflow_dispatch' && inputs.reprocessar_tudo == true
+        working-directory: coletor
+        env:
+          PYTHONPATH: src
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: python -m coletor.main reprocess
 
   # Só em push/manual — rodar isso a cada 30 min sem mudança de código é dinheiro
   # (minutos) jogado fora, e é a maior fatia do orçamento se ficasse no agendamento.
