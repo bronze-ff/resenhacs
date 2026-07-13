@@ -207,6 +207,28 @@ def cmd_cleanup(config, conn, days=90):
     return total
 
 
+def _agrupar_dems_por_mapa(dem_paths):
+    """Agrupa `dem_paths` (ordem de extração do .rar = ordem real da série) por mapa,
+    só quando ADJACENTES — um reinício técnico no meio de um mapa faz o HLTV distribuir
+    esse mapa como 2+ .dem seguidos (ver docstring de ingest_demo_multiparte). O nome
+    do arquivo (-p1/-p2) é convenção, não garantia; o mapa vem do header de cada .dem
+    (parsemod.cabecalho_mapa, barato — não parseia o arquivo inteiro). Não agrupa mapas
+    iguais não-adjacentes: isso não deveria acontecer numa série real (repetir mapa).
+
+    Com 1 único .dem (caso comum) nem precisa abrir o arquivo pra descobrir o mapa —
+    não há nada pra comparar."""
+    if len(dem_paths) <= 1:
+        return [list(dem_paths)]
+    grupos = []
+    for path in dem_paths:
+        mapa = parsemod.cabecalho_mapa(path)
+        if grupos and grupos[-1][0] == mapa:
+            grupos[-1][1].append(path)
+        else:
+            grupos.append((mapa, [path]))
+    return [g[1] for g in grupos]
+
+
 def cmd_processar_fila_pro(config, conn):
     """Processa a fila de partida profissional: baixa .rar/.dem (do HLTV ou de um
     upload manual em staging no R2 — hltv.org bloqueia download automático atrás de
@@ -244,28 +266,35 @@ def cmd_processar_fila_pro(config, conn):
 
                 dbmod.atualizar_fila_pro(conn, fila_id, "processando")
                 # Um .rar do HLTV pode trazer vários mapas de uma série Bo3/Bo5 — um
-                # .dem por mapa. Cada .dem processa (e falha) de forma isolada: um mapa
-                # com erro não deve derrubar os outros mapas da MESMA série. Upload
-                # manual de um .dem avulso pula a extração — já é o arquivo final.
+                # .dem por mapa, exceto quando um reinício técnico no meio de um mapa
+                # faz o HLTV distribuir ESSE mapa em 2+ .dem seguidos (mesmo grupo,
+                # ver _agrupar_dems_por_mapa/ingest_demo_multiparte). Cada GRUPO
+                # processa (e falha) de forma isolada: um mapa com erro não deve
+                # derrubar os outros mapas da MESMA série. Upload manual de um .dem
+                # avulso pula a extração — já é o arquivo final, grupo de 1.
                 if ext == ".dem":
                     dem_path = tmp / "demo.dem"
                     dem_path.write_bytes(dados)
-                    dem_paths = [dem_path]
+                    grupos = [[dem_path]]
                 else:
                     rar_path = tmp / "demo.rar"
                     rar_path.write_bytes(dados)
                     dem_paths = rar_extract.extrair_dems_de_rar(rar_path, tmp / "extraido")
+                    grupos = _agrupar_dems_por_mapa(dem_paths)
 
                 match_ids = []
                 erros_mapas = []
-                for dem_path in dem_paths:
+                for grupo in grupos:
                     try:
-                        mid = ingest_demo(config, conn, dem_path, source="pro", upload=True)
+                        if len(grupo) == 1:
+                            mid = ingest_demo(config, conn, grupo[0], source="pro", upload=True)
+                        else:
+                            mid = ingest_demo_multiparte(config, conn, grupo, source="pro", upload=True)
                         match_ids.append(mid)
                     except Exception as e:  # noqa: BLE001
                         conn.rollback()
                         erros_mapas.append(str(e))
-                        print(f"  {fila_id}: mapa {dem_path.name} FALHOU ({e})")
+                        print(f"  {fila_id}: mapa {grupo[0].name} FALHOU ({e})")
 
                 if not match_ids:
                     # Nenhum mapa processou — mesmo fluxo de erro que já existia.
@@ -274,14 +303,14 @@ def cmd_processar_fila_pro(config, conn):
                 erro_nota = None
                 if erros_mapas:
                     erro_nota = (
-                        f"{len(match_ids)}/{len(dem_paths)} mapas processados; "
+                        f"{len(match_ids)}/{len(grupos)} mapas processados; "
                         f"falhou: {erros_mapas[0]}"
                     )[:500]
 
                 dbmod.atualizar_fila_pro(
                     conn, fila_id, "concluida", match_id=match_ids[0], match_ids=match_ids, erro=erro_nota
                 )
-                print(f"  {fila_id}: concluida ({len(match_ids)}/{len(dem_paths)} mapa(s))")
+                print(f"  {fila_id}: concluida ({len(match_ids)}/{len(grupos)} mapa(s))")
                 total += 1
 
                 # Apaga o staging só em sucesso — numa falha o arquivo continua no R2
@@ -415,6 +444,36 @@ def cmd_reprocess(config, conn, match_id=None):
     return total
 
 
+def _finalizar_ingest(config, conn, parsed, replay_json, dem_path_upload, share_code, source, upload, played_at):
+    """Cauda comum de ingest_demo/ingest_demo_multiparte: arquiva demo+replay no R2 (se
+    configurado) e grava no banco. Devolve match_id. `dem_path_upload` é o .dem cujos
+    bytes brutos sobem pro R2 (partida de arquivo único: o próprio; partida fundida de
+    várias partes: ver escolha em ingest_demo_multiparte)."""
+    demo_url = replay_url = None
+    if upload and config.r2_endpoint:
+        client = storage_r2.make_client(config)
+        ids = sharecode.decode(share_code) if share_code else {"match_id": dem_path_upload.__hash__() & 0xFFFFFFFF}
+
+        key = storage_r2.demo_key(ids["match_id"])
+        with open(dem_path_upload, "rb") as fh:
+            storage_r2.upload_bytes(client, config.r2_bucket, key, fh.read())
+        demo_url = f"{config.r2_endpoint}/{config.r2_bucket}/{key}"
+
+        if replay_json is not None:
+            rkey = storage_r2.replay_key(ids["match_id"])
+            storage_r2.upload_bytes(
+                client, config.r2_bucket, rkey,
+                json.dumps(replay_json).encode("utf-8"), content_type="application/json",
+            )
+            replay_url = f"{config.r2_endpoint}/{config.r2_bucket}/{rkey}"
+
+    return dbmod.store_parsed(
+        conn, parsed, share_code=share_code, source=source,
+        demo_url=demo_url, replay_url=replay_url,
+        prefer_new_played_at=bool(played_at),
+    )
+
+
 def ingest_demo(config, conn, path, share_code=None, source="upload", upload=True, played_at=None):
     """Parseia um .dem, arquiva no R2 (se configurado) e grava no banco. Devolve match_id.
 
@@ -448,28 +507,57 @@ def ingest_demo(config, conn, path, share_code=None, source="upload", upload=Tru
     except Exception as e:  # noqa: BLE001
         print(f"aviso: replay 2D / clutch não gerado ({e})")
 
-    demo_url = replay_url = None
-    if upload and config.r2_endpoint:
-        client = storage_r2.make_client(config)
-        ids = sharecode.decode(share_code) if share_code else {"match_id": path.__hash__() & 0xFFFFFFFF}
+    return _finalizar_ingest(config, conn, parsed, replay_json, path, share_code, source, upload, played_at)
 
-        key = storage_r2.demo_key(ids["match_id"])
-        with open(path, "rb") as fh:
-            storage_r2.upload_bytes(client, config.r2_bucket, key, fh.read())
-        demo_url = f"{config.r2_endpoint}/{config.r2_bucket}/{key}"
 
-        if replay_json is not None:
-            rkey = storage_r2.replay_key(ids["match_id"])
-            storage_r2.upload_bytes(
-                client, config.r2_bucket, rkey,
-                json.dumps(replay_json).encode("utf-8"), content_type="application/json",
+def ingest_demo_multiparte(config, conn, dem_paths, share_code=None, source="pro", upload=True, played_at=None):
+    """Ingere um GRUPO de 2+ .dem que são o MESMO mapa dividido em pedaços por um
+    reinício técnico no meio da partida (queda de servidor etc.) — o HLTV distribui
+    esse único mapa como vários .dem separados dentro do mesmo .rar da série (ex.:
+    "...-m1-anubis-p1.dem" + "...-p2.dem"). Sem essa função, cada parte viraria uma
+    Partida INDEPENDENTE (2 entradas "de_anubis", cada uma com metade do placar) — o
+    que é enganoso: é 1 mapa só, incompleto nos dois. Aqui as partes são fundidas numa
+    ÚNICA Partida coerente (rounds contínuos, placar completo, stats somadas) antes de
+    rodar o resto do pipeline (fill_kd_from_kills/enrich/build_replay/lineups) UMA VEZ
+    só — evita ter que somar/recalcular campos derivados (rating, clutch etc.) que não
+    são simplesmente somáveis entre partes, reusando 100% do código de transform.py/
+    replay.py em cima dos dados crus já fundidos (ver parse.fundir_partes_mesmo_mapa).
+    Devolve UM match_id só.
+    """
+    partes = [parsemod.parse_demo(p) for p in dem_paths]
+
+    rdatas = []
+    try:
+        rdatas = [parsemod.extract_replay(p) for p in dem_paths]
+    except Exception as e:  # noqa: BLE001
+        print(f"aviso: replay 2D não gerado pro grupo ({e})")
+        rdatas = []
+
+    parsed, rdata = parsemod.fundir_partes_mesmo_mapa(partes, rdatas or None)
+
+    parsed["players"] = transform.fill_kd_from_kills(parsed["players"], parsed["kills"])
+    parsed = transform.enrich(parsed)
+    if played_at:
+        parsed["played_at"] = played_at
+
+    replay_json = None
+    if rdata is not None:
+        try:
+            replay_json = replaymod.build_replay(
+                parsed["map"], rdata["ticks"], kills=rdata["kills"], extras=rdata
             )
-            replay_url = f"{config.r2_endpoint}/{config.r2_bucket}/{rkey}"
+            parsed["highlights"] = transform.attach_replay_frames(parsed["highlights"], replay_json["rounds"])
+            parsed["lineups"] = _montar_lineups(rdata, replay_json, parsed["map"], source)
+        except Exception as e:  # noqa: BLE001
+            print(f"aviso: replay 2D / clutch não gerado ({e})")
 
-    return dbmod.store_parsed(
-        conn, parsed, share_code=share_code, source=source,
-        demo_url=demo_url, replay_url=replay_url,
-        prefer_new_played_at=bool(played_at),
+    # .dem BRUTO arquivado pro reprocessamento (cmd_reprocess baixa de volta um único
+    # .dem pra reparsear com parse_demo, que não sabe fundir partes): sobe a ÚLTIMA
+    # parte, a escolha mais simples — um reprocessamento futuro dessa Partida ficaria
+    # incompleto (só a última parte), mesma limitação que já existiria pra qualquer
+    # .dem cortado; documentado aqui de propósito pra não surpreender no futuro.
+    return _finalizar_ingest(
+        config, conn, parsed, replay_json, dem_paths[-1], share_code, source, upload, played_at
     )
 
 

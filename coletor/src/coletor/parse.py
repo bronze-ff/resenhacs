@@ -186,6 +186,178 @@ def _resolver_arma_hurt(mapa_variante, sid, round_no, arma):
     return mapa_variante.get((sid, round_no, arma), arma)
 
 
+def cabecalho_mapa(caminho):
+    """Só o `map_name` do header do .dem — não parseia o arquivo inteiro. Usado pra
+    agrupar partes de uma mesma série (ver main.cmd_processar_fila_pro): o nome do
+    arquivo (-p1/-p2) é convenção do HLTV, não garantida; o mapa real do header é."""
+    from demoparser2 import DemoParser
+
+    return DemoParser(str(caminho)).parse_header().get("map_name")
+
+
+_LETRA_OPOSTA = {"A": "B", "B": "A"}
+
+
+def _inverter_letra_time(letra):
+    return _LETRA_OPOSTA.get(letra, letra)
+
+
+def _deve_inverter_letra(referencia_por_sid, atual_por_sid):
+    """True quando a MAIORIA dos steam_id64 em comum entre a parte de referência
+    (1ª do grupo) e `atual_por_sid` está com a letra A/B trocada — parse_demo atribui
+    a letra por arquivo (quem aparece primeiro no snapshot), sem garantia de que o
+    MESMO jogador fique com a MESMA letra em duas partes do mesmo mapa."""
+    comuns = set(referencia_por_sid) & set(atual_por_sid)
+    if not comuns:
+        return False
+    diferentes = sum(1 for sid in comuns if referencia_por_sid[sid] != atual_por_sid[sid])
+    return diferentes > len(comuns) / 2
+
+
+def _corrigir_letra_parte(parte, inverter):
+    """Cópia de `parte` (dict cru de parse_demo) com toda letra de time A/B invertida,
+    se `inverter`. steam_id64 (killer/victim/thrower/attacker) e lado CT/T não mudam —
+    só a letra A/B arbitrária. score_a/score_b não precisa: é recalculado do zero em
+    cima do `rounds` já fundido (_recontar_placar), nunca herdado de uma parte crua."""
+    if not inverter:
+        return parte
+    return {
+        **parte,
+        "team_a_name": parte.get("team_b_name"),
+        "team_b_name": parte.get("team_a_name"),
+        "players": [{**p, "team": _inverter_letra_time(p["team"])} for p in parte.get("players", [])],
+        "rounds": [
+            {**r, "winner_team": _inverter_letra_time(r.get("winner_team"))} for r in parte.get("rounds", [])
+        ],
+        "round_econ": [{**e, "team": _inverter_letra_time(e.get("team"))} for e in parte.get("round_econ", [])],
+    }
+
+
+def _corrigir_letra_rdata(rdata, inverter):
+    """Mesma correção de _corrigir_letra_parte, mas pro rdata cru de extract_replay —
+    só `ticks[].players[].team` carrega letra A/B ali (side CT/T é dado real do jogo,
+    não muda)."""
+    if not inverter:
+        return rdata
+    return {
+        **rdata,
+        "ticks": [
+            {**t, "players": [{**p, "team": _inverter_letra_time(p.get("team"))} for p in t.get("players", [])]}
+            for t in rdata.get("ticks", [])
+        ],
+    }
+
+
+def _offset_campo(items, offset, campo):
+    return [{**it, campo: it[campo] + offset} for it in items]
+
+
+def _somar_weapons(a, b):
+    saida = {arma: dict(stats) for arma, stats in a.items()}
+    for arma, stats in b.items():
+        alvo = saida.setdefault(arma, {})
+        for campo, valor in stats.items():
+            alvo[campo] = alvo.get(campo, 0) + valor
+    return saida
+
+
+def _somar_jogador(a, b):
+    """Funde as stats de UM jogador presente nas duas partes: soma todo campo
+    numérico (kills, damage, etc.), funde `weapons` campo a campo por arma, mantém
+    steam_id64/nick/team de `a` (já normalizados pra letra canônica antes de chegar
+    aqui — são o mesmo jogador nas duas partes)."""
+    saida = dict(a)
+    for k, v in b.items():
+        if k in ("steam_id64", "nick", "team", "weapons"):
+            continue
+        if isinstance(v, (int, float)) and isinstance(a.get(k), (int, float)):
+            saida[k] = a.get(k, 0) + v
+        elif k not in a:
+            saida[k] = v
+    saida["weapons"] = _somar_weapons(a.get("weapons", {}), b.get("weapons", {}))
+    return saida
+
+
+def _merge_players(partes_players):
+    por_sid, ordem = {}, []
+    for players in partes_players:
+        for p in players:
+            sid = p["steam_id64"]
+            if sid not in por_sid:
+                por_sid[sid] = dict(p)
+                ordem.append(sid)
+            else:
+                por_sid[sid] = _somar_jogador(por_sid[sid], p)
+    return [por_sid[sid] for sid in ordem]
+
+
+_CAMPOS_RDATA_POR_ROUND = (
+    "ticks", "kills", "hits", "smokes", "fires", "flashes", "hes",
+    "blinds", "bombPickups", "bombDrops", "bombPlants",
+)
+
+
+def fundir_partes_mesmo_mapa(partes, rdatas=None):
+    """Funda os dados CRUS (pré transform.enrich/replay.build_replay) de 2+ .dem que
+    são o MESMO mapa dividido em pedaços por um reinício técnico no meio da partida
+    (o HLTV distribui o mapa como .dem separados dentro do mesmo .rar da série — ver
+    main.cmd_processar_fila_pro). `partes` é a lista de dicts de parse_demo, na ordem
+    real da série; `rdatas`, se fornecido, é a lista paralela de dicts de
+    extract_replay (mesma ordem).
+
+    Grupo de 1 parte devolve a própria parte sem tocar em nada (comportamento atual,
+    sem merge). Devolve (parsed_fundido, rdata_fundido_ou_None).
+    """
+    if len(partes) == 1:
+        return partes[0], (rdatas[0] if rdatas else None)
+
+    referencia = {p["steam_id64"]: p["team"] for p in partes[0]["players"]}
+    inverter_flags = [False]
+    for parte in partes[1:]:
+        atual = {p["steam_id64"]: p["team"] for p in parte["players"]}
+        inverter_flags.append(_deve_inverter_letra(referencia, atual))
+
+    partes_corrigidas = [_corrigir_letra_parte(p, inv) for p, inv in zip(partes, inverter_flags)]
+
+    offsets = []
+    rounds_ja_contados = 0
+    for parte in partes_corrigidas:
+        offsets.append(rounds_ja_contados)
+        rounds_ja_contados += len(parte.get("rounds", []))
+
+    rounds_fundidos, kills_fundidos, econ_fundido, kill_pos_fundidas = [], [], [], []
+    for parte, offset in zip(partes_corrigidas, offsets):
+        rounds_fundidos += _offset_campo(parte.get("rounds", []), offset, "round_number")
+        kills_fundidos += _offset_campo(parte.get("kills", []), offset, "round_number")
+        econ_fundido += _offset_campo(parte.get("round_econ", []), offset, "round_number")
+        kill_pos_fundidas += _offset_campo(parte.get("kill_positions", []), offset, "round_number")
+
+    score_a = sum(1 for r in rounds_fundidos if r.get("winner_team") == "A")
+    score_b = sum(1 for r in rounds_fundidos if r.get("winner_team") == "B")
+
+    nome_a = next((p.get("team_a_name") for p in partes_corrigidas if p.get("team_a_name")), None)
+    nome_b = next((p.get("team_b_name") for p in partes_corrigidas if p.get("team_b_name")), None)
+
+    parsed_fundido = {
+        **partes_corrigidas[0],
+        "score_a": score_a, "score_b": score_b,
+        "team_a_name": nome_a, "team_b_name": nome_b,
+        "rounds": rounds_fundidos, "kills": kills_fundidos,
+        "round_econ": econ_fundido, "kill_positions": kill_pos_fundidas,
+        "players": _merge_players([p.get("players", []) for p in partes_corrigidas]),
+    }
+
+    rdata_fundido = None
+    if rdatas and len(rdatas) == len(partes):
+        rdatas_corrigidos = [_corrigir_letra_rdata(r, inv) for r, inv in zip(rdatas, inverter_flags)]
+        rdata_fundido = {campo: [] for campo in _CAMPOS_RDATA_POR_ROUND}
+        for rdata, offset in zip(rdatas_corrigidos, offsets):
+            for campo in _CAMPOS_RDATA_POR_ROUND:
+                rdata_fundido[campo] += _offset_campo(rdata.get(campo, []), offset, "round")
+
+    return parsed_fundido, rdata_fundido
+
+
 def parse_demo(path):
     import pandas as pd
     from demoparser2 import DemoParser

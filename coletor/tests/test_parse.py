@@ -136,3 +136,177 @@ def test_fire_fora_da_janela_fica_de_fora():
 def test_sem_fire_correspondente_fica_de_fora():
     detonates = [{"tick": 1130, "thrower": "A"}]
     assert parse._casar_arremesso_com_detonacao([], detonates) == {}
+
+
+# ---- fundir_partes_mesmo_mapa (reinício técnico: 1 mapa vira 2+ .dem) ----
+
+
+def _jogador(sid, team, **over):
+    base = {
+        "steam_id64": sid, "nick": f"p{sid}", "team": team,
+        "kills": 0, "deaths": 0, "assists": 0, "headshot_kills": 0, "damage": 0,
+        "utility_damage": 0, "shots_fired": 0, "shots_hit": 0,
+        "he_damage": 0, "molotov_damage": 0, "he_team_damage": 0, "molotov_team_damage": 0,
+        "flash_assists": 0, "enemy_flash_landed_count": 0, "enemy_flash_landed_duration_sum": 0.0,
+        "smokes_thrown": 0, "flashes_thrown": 0, "he_thrown": 0, "molotovs_thrown": 0,
+        "enemies_flashed": 0, "teammates_flashed": 0,
+        "enemy_flash_duration": 0.0, "teammate_flash_duration": 0.0,
+        "weapons": {},
+    }
+    base.update(over)
+    return base
+
+
+def _parte_base(**over):
+    base = {
+        "map": "de_anubis", "score_a": 0, "score_b": 0,
+        "team_a_name": None, "team_b_name": None, "played_at": "2026-07-13T00:00:00+00:00",
+        "rounds": [], "players": [], "kills": [], "round_econ": [], "kill_positions": [],
+    }
+    base.update(over)
+    return base
+
+
+def test_fundir_partes_mesmo_mapa_grupo_de_1_devolve_a_propria_parte_sem_tocar():
+    parte = _parte_base(rounds=[{"round_number": 1, "winner_team": "A", "win_reason": ""}])
+    fundido, rdata = parse.fundir_partes_mesmo_mapa([parte], [{"ticks": []}])
+    assert fundido is parte
+    assert rdata == {"ticks": []}
+
+
+def test_fundir_partes_mesmo_mapa_concatena_rounds_com_offset_recalcula_placar_e_soma_stats():
+    parte1 = _parte_base(
+        team_a_name="FaZe", team_b_name="Vitality",
+        rounds=[
+            {"round_number": 1, "winner_team": "A", "win_reason": ""},
+            {"round_number": 2, "winner_team": "B", "win_reason": ""},
+        ],
+        players=[
+            _jogador("1", "A", kills=5, deaths=3, damage=300,
+                     weapons={"ak47": {"kills": 3, "hs_kills": 1, "shots_fired": 10, "shots_hit": 5, "damage": 150}}),
+            _jogador("2", "B", kills=2, deaths=4, damage=200),
+        ],
+        kills=[{"round_number": 1, "tick": 100, "attacker": "1", "victim": "2",
+                "headshot": False, "team_kill": False, "weapon": "ak47"}],
+        round_econ=[{"round_number": 1, "team": "A", "equip_value": 4000, "buy_type": "eco"}],
+        kill_positions=[{"round_number": 1, "tick": 100, "killer": "1", "victim": "2", "weapon": "ak47",
+                          "headshot": False, "killer_x": 1.0, "killer_y": 1.0, "victim_x": 2.0, "victim_y": 2.0}],
+    )
+    parte2 = _parte_base(
+        rounds=[{"round_number": 1, "winner_team": "A", "win_reason": ""}],
+        players=[
+            _jogador("1", "A", kills=2, deaths=1, damage=100,
+                     weapons={"ak47": {"kills": 1, "hs_kills": 0, "shots_fired": 5, "shots_hit": 2, "damage": 50}}),
+            _jogador("2", "B", kills=1, deaths=2, damage=80),
+        ],
+        kills=[{"round_number": 1, "tick": 50, "attacker": "1", "victim": "2",
+                "headshot": True, "team_kill": False, "weapon": "ak47"}],
+        round_econ=[{"round_number": 1, "team": "B", "equip_value": 9000, "buy_type": "forcado"}],
+        kill_positions=[{"round_number": 1, "tick": 50, "killer": "1", "victim": "2", "weapon": "ak47",
+                          "headshot": True, "killer_x": 3.0, "killer_y": 3.0, "victim_x": 4.0, "victim_y": 4.0}],
+    )
+
+    fundido, rdata = parse.fundir_partes_mesmo_mapa([parte1, parte2])
+
+    assert rdata is None
+    assert [r["round_number"] for r in fundido["rounds"]] == [1, 2, 3]
+    assert [r["winner_team"] for r in fundido["rounds"]] == ["A", "B", "A"]
+    # placar recalculado a partir do rounds JÁ FUNDIDO (não herdado de score_a/b crus)
+    assert fundido["score_a"] == 2 and fundido["score_b"] == 1
+
+    kill_da_parte2 = next(k for k in fundido["kills"] if k["tick"] == 50)
+    assert kill_da_parte2["round_number"] == 3  # offset de 2 rounds (parte1 teve 2)
+    econ_da_parte2 = next(e for e in fundido["round_econ"] if e["equip_value"] == 9000)
+    assert econ_da_parte2["round_number"] == 3
+    pos_da_parte2 = next(p for p in fundido["kill_positions"] if p["tick"] == 50)
+    assert pos_da_parte2["round_number"] == 3
+
+    jogador1 = next(p for p in fundido["players"] if p["steam_id64"] == "1")
+    assert jogador1["kills"] == 7 and jogador1["deaths"] == 4 and jogador1["damage"] == 400
+    assert jogador1["weapons"]["ak47"] == {"kills": 4, "hs_kills": 1, "shots_fired": 15, "shots_hit": 7, "damage": 200}
+
+    assert fundido["team_a_name"] == "FaZe" and fundido["team_b_name"] == "Vitality"
+
+
+def test_fundir_partes_mesmo_mapa_detecta_e_corrige_letra_ab_invertida_na_parte_2():
+    # Parte 1: jogador "1" é A, "2" é B. Parte 2: parse_demo (arquivo diferente)
+    # atribuiu a letra oposta pros MESMOS dois jogadores — bug mais fácil de escorregar
+    # se não corrigido: fundiria o placar/stats do jogador errado com o time errado.
+    parte1 = _parte_base(
+        rounds=[{"round_number": 1, "winner_team": "A", "win_reason": ""}],
+        players=[_jogador("1", "A", kills=1), _jogador("2", "B", kills=0)],
+    )
+    parte2 = _parte_base(
+        team_a_name="Vitality", team_b_name="FaZe",  # também invertido nessa parte
+        rounds=[{"round_number": 1, "winner_team": "B", "win_reason": ""}],  # "B" na letra CRUA da parte2 == time do jogador "1"
+        players=[_jogador("1", "B", kills=3), _jogador("2", "A", kills=1)],
+    )
+
+    fundido, _ = parse.fundir_partes_mesmo_mapa([parte1, parte2])
+
+    jogador1 = next(p for p in fundido["players"] if p["steam_id64"] == "1")
+    jogador2 = next(p for p in fundido["players"] if p["steam_id64"] == "2")
+    assert jogador1["team"] == "A" and jogador1["kills"] == 4  # 1 + 3, letra corrigida antes de somar
+    assert jogador2["team"] == "B" and jogador2["kills"] == 1
+
+    # round 2 (da parte2) tinha winner_team="B" na letra crua da parte2, que corresponde
+    # ao jogador "1" (canonicamente "A") — após a correção deve virar "A".
+    assert fundido["rounds"][1]["winner_team"] == "A"
+    # nomes de time da parte2 também precisam ser corrigidos junto com a letra invertida.
+    assert fundido["team_a_name"] == "FaZe" and fundido["team_b_name"] == "Vitality"
+
+
+def test_fundir_partes_mesmo_mapa_tres_partes_acumula_offset_na_terceira():
+    partes = [
+        _parte_base(rounds=[{"round_number": 1, "winner_team": "A", "win_reason": ""}],
+                    players=[_jogador("1", "A"), _jogador("2", "B")],
+                    kills=[{"round_number": 1, "tick": 10, "attacker": "1", "victim": "2",
+                            "headshot": False, "team_kill": False, "weapon": "ak47"}]),
+        _parte_base(rounds=[{"round_number": 1, "winner_team": "B", "win_reason": ""}],
+                    players=[_jogador("1", "A"), _jogador("2", "B")],
+                    kills=[{"round_number": 1, "tick": 20, "attacker": "2", "victim": "1",
+                            "headshot": False, "team_kill": False, "weapon": "ak47"}]),
+        _parte_base(rounds=[{"round_number": 1, "winner_team": "A", "win_reason": ""}],
+                    players=[_jogador("1", "A"), _jogador("2", "B")],
+                    kills=[{"round_number": 1, "tick": 30, "attacker": "1", "victim": "2",
+                            "headshot": False, "team_kill": False, "weapon": "ak47"}]),
+    ]
+
+    fundido, _ = parse.fundir_partes_mesmo_mapa(partes)
+
+    assert [r["round_number"] for r in fundido["rounds"]] == [1, 2, 3]
+    assert [k["round_number"] for k in sorted(fundido["kills"], key=lambda k: k["tick"])] == [1, 2, 3]
+    assert fundido["score_a"] == 2 and fundido["score_b"] == 1
+
+
+def test_fundir_partes_mesmo_mapa_funde_rdata_com_mesmo_offset_e_letra():
+    parte1 = _parte_base(
+        rounds=[{"round_number": 1, "winner_team": "A", "win_reason": ""}],
+        players=[_jogador("1", "A"), _jogador("2", "B")],
+    )
+    parte2 = _parte_base(
+        rounds=[{"round_number": 1, "winner_team": "B", "win_reason": ""}],
+        players=[_jogador("1", "B"), _jogador("2", "A")],  # letra invertida na parte2
+    )
+    rdata1 = {
+        "ticks": [{"round": 1, "tick": 100, "players": [{"id": "1", "team": "A"}, {"id": "2", "team": "B"}]}],
+        "kills": [{"round": 1, "tick": 100, "killer": "1", "victim": "2", "weapon": "ak47", "headshot": False}],
+        "hits": [], "smokes": [], "fires": [], "flashes": [], "hes": [], "blinds": [],
+        "bombPickups": [], "bombDrops": [], "bombPlants": [],
+    }
+    rdata2 = {
+        "ticks": [{"round": 1, "tick": 50, "players": [{"id": "1", "team": "B"}, {"id": "2", "team": "A"}]}],
+        "kills": [{"round": 1, "tick": 50, "killer": "2", "victim": "1", "weapon": "ak47", "headshot": False}],
+        "hits": [], "smokes": [], "fires": [], "flashes": [], "hes": [], "blinds": [],
+        "bombPickups": [], "bombDrops": [], "bombPlants": [],
+    }
+
+    _, rdata_fundido = parse.fundir_partes_mesmo_mapa([parte1, parte2], [rdata1, rdata2])
+
+    assert [t["round"] for t in rdata_fundido["ticks"]] == [1, 2]
+    tick_da_parte2 = next(t for t in rdata_fundido["ticks"] if t["round"] == 2)
+    assert tick_da_parte2["tick"] == 50  # tick CRU não é tocado, só o campo "round"
+    jogador1_parte2 = next(p for p in tick_da_parte2["players"] if p["id"] == "1")
+    assert jogador1_parte2["team"] == "A"  # letra corrigida (era "B" cru na parte2)
+
+    assert [k["round"] for k in rdata_fundido["kills"]] == [1, 2]

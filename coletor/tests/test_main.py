@@ -222,3 +222,72 @@ def test_processar_fila_pro_ainda_suporta_hltv_url_via_urlopen(monkeypatch):
     assert total == 1
     assert urls_abertos == ["https://hltv.org/download/demo/999"]
     assert deletes == []  # não veio de arquivo_r2_key -> nada pra apagar do R2
+
+
+def test_processar_fila_pro_funde_partes_adjacentes_do_mesmo_mapa_num_so_match_id(monkeypatch):
+    # reinício técnico no meio do mapa 1 (anubis) -> HLTV distribui como -p1/-p2
+    # ADJACENTES no .rar; mapa 2 (inferno) é um .dem normal, grupo de 1. Devem sair
+    # 2 match_ids (1 pra série anubis fundida + 1 pra inferno), não 3.
+    conn = _FilaConn([("f1", "https://hltv.org/download/demo/999", None)])
+    config = _config_com_r2()
+
+    monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
+
+    class _FakeResp:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def read(self):
+            return b"rar-bytes"
+
+    monkeypatch.setattr("urllib.request.urlopen", lambda url, timeout=None: _FakeResp())
+
+    def _rar_extract_fake(rar_path, destino):
+        destino.mkdir(parents=True, exist_ok=True)
+        nomes = [
+            "falcons-vs-vitality-m1-anubis-p1.dem",
+            "falcons-vs-vitality-m1-anubis-p2.dem",
+            "falcons-vs-vitality-m2-inferno.dem",
+        ]
+        caminhos = []
+        for nome in nomes:
+            dem = destino / nome
+            dem.write_bytes(b"x")
+            caminhos.append(dem)
+        return caminhos
+
+    monkeypatch.setattr(rar_extract, "extrair_dems_de_rar", _rar_extract_fake)
+    monkeypatch.setattr(
+        main.parsemod, "cabecalho_mapa",
+        lambda path: "de_anubis" if "anubis" in path.name else "de_inferno",
+    )
+
+    chamadas_single, chamadas_multi = [], []
+    monkeypatch.setattr(
+        main, "ingest_demo",
+        lambda cfg, cn, dem_path, source=None, upload=None, **kw: (
+            chamadas_single.append(dem_path.name) or "m-inferno"
+        ),
+    )
+    monkeypatch.setattr(
+        main, "ingest_demo_multiparte",
+        lambda cfg, cn, dem_paths, source=None, upload=None, **kw: (
+            chamadas_multi.append([p.name for p in dem_paths]) or "m-anubis-fundido"
+        ),
+    )
+    monkeypatch.setattr(main.storage_r2, "delete_object", lambda client, bucket, key: None)
+
+    total = main.cmd_processar_fila_pro(config, conn)
+
+    assert total == 1
+    assert chamadas_single == ["falcons-vs-vitality-m2-inferno.dem"]
+    assert chamadas_multi == [
+        ["falcons-vs-vitality-m1-anubis-p1.dem", "falcons-vs-vitality-m1-anubis-p2.dem"]
+    ]
+    update = next(c for c in conn.calls if c[0].startswith("update partidas_pro_fila") and c[1][0] == "concluida")
+    match_ids = update[1][3]
+    assert match_ids == ["m-anubis-fundido", "m-inferno"]
+    assert len(match_ids) == 2
