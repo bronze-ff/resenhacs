@@ -294,6 +294,7 @@ export default function JogadorPerfil() {
                           {r.won === true ? 'V' : r.won === false ? 'D' : '—'}
                         </span>
                         <span className="font-display text-lg font-bold tabular-nums text-texto">{r.scoreA} : {r.scoreB}</span>
+                        <MapIcon map={r.map} size={18} />
                         <span className="truncate font-mono text-xs text-texto-fraco">{nomeMapa(r.map)}</span>
                       </div>
                       <div className="mt-2 grid grid-cols-4 gap-2">
@@ -357,7 +358,12 @@ export default function JogadorPerfil() {
                       <td className={`px-2 py-2 text-right font-mono tabular-nums ${Number(kd) >= 1 ? 'text-sucesso' : 'text-perigo'}`}>{kd}</td>
                       <td className="hidden px-2 py-2 text-right font-mono tabular-nums text-texto-fraco xl:table-cell">{r.adr}</td>
                       <td className="hidden px-2 py-2 text-right font-mono tabular-nums text-texto-fraco xl:table-cell">{r.hsPct}%</td>
-                      <td className="px-3 py-2 font-mono text-texto-fraco">{nomeMapa(r.map)}</td>
+                      <td className="px-3 py-2 font-mono text-texto-fraco">
+                        <span className="flex items-center gap-2">
+                          <MapIcon map={r.map} size={20} />
+                          {nomeMapa(r.map)}
+                        </span>
+                      </td>
                     </tr>
                   )
                 })}
