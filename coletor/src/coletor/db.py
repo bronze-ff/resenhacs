@@ -399,6 +399,58 @@ def atualizar_fila_pro(conn, fila_id, status, match_id=None, erro=None, match_id
     conn.commit()
 
 
+def upsert_avatares(conn, mapa):
+    """Grava/atualiza o cache de avatares (dict steam_id64 -> avatar_url). Idempotente:
+    reprocessar o mesmo id só atualiza avatar_url e atualizado_em."""
+    if not mapa:
+        return
+    with conn.cursor() as cur:
+        for steam_id64, avatar_url in mapa.items():
+            cur.execute(
+                """
+                insert into steam_avatares (steam_id64, avatar_url, atualizado_em)
+                values (%s, %s, now())
+                on conflict (steam_id64) do update set
+                  avatar_url = excluded.avatar_url, atualizado_em = excluded.atualizado_em
+                """,
+                (steam_id64, avatar_url),
+            )
+    conn.commit()
+
+
+def listar_steam_ids_sem_avatar_fresco(conn, steam_ids, dias=30):
+    """Filtra `steam_ids` mantendo só os que NÃO têm avatar em cache recente (ausente
+    ou atualizado_em mais velho que `dias`) — evita bater na Steam Web API de novo
+    pra quem já foi resolvido há pouco tempo."""
+    steam_ids = list(dict.fromkeys(s for s in steam_ids if s))
+    if not steam_ids:
+        return []
+    with conn.cursor() as cur:
+        cur.execute(
+            "select steam_id64 from steam_avatares "
+            "where steam_id64 = any(%s) and atualizado_em > now() - (%s || ' days')::interval",
+            (steam_ids, dias),
+        )
+        frescos = {r[0] for r in cur.fetchall()}
+    return [s for s in steam_ids if s not in frescos]
+
+
+def listar_steam_ids_de_match_players_sem_avatar_fresco(conn, dias=30):
+    """Todos os steam_id64 distintos que já apareceram em alguma Partida
+    (match_players) e não têm avatar em cache recente — usado pelo backfill."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            select distinct mp.steam_id64
+            from match_players mp
+            left join steam_avatares sa on sa.steam_id64 = mp.steam_id64
+            where sa.steam_id64 is null or sa.atualizado_em <= now() - (%s || ' days')::interval
+            """,
+            (dias,),
+        )
+        return [r[0] for r in cur.fetchall()]
+
+
 def connect(database_url):
     import psycopg
 

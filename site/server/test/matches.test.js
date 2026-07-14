@@ -89,6 +89,19 @@ describe('GET /api/matches/:id', () => {
     expect(res.body.demoUrl).toBeNull() // sem demo_url no fixture
   })
 
+  it('jogador sem cadastro no grupo usa o avatar em cache da steam_avatares (fallback)', async () => {
+    const { app } = appWith([
+      ['from matches where id', [{ id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9, source: 'valve_mm', status: 'parsed', demo_url: null }]],
+      ['from match_players mp', [{ steam_id64: '999', nick: 'adversario', team: 'B', kills: 10, team_kills: 0, deaths: 15, assists: 2, headshot_kills: 3, damage: 1200, rounds_played: 22, rating: '0.85', won: false, is_tracked: false, avatar_url: 'https://avatars.steamstatic.com/cache.jpg' }]],
+      ['from rounds where match_id', []],
+      ['from highlights h', []],
+      ['from clips where match_id', []],
+    ])
+    const res = await request(app).get('/api/matches/m1').set('Cookie', cookie)
+    expect(res.status).toBe(200)
+    expect(res.body.players[0]).toMatchObject({ nick: 'adversario', isTracked: false, avatarUrl: 'https://avatars.steamstatic.com/cache.jpg' })
+  })
+
   it('replayUrl aponta pro proxy do servidor, nunca pra URL crua do R2', async () => {
     const { app } = appWith([
       ['from matches where id', [{

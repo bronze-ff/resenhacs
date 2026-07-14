@@ -110,9 +110,11 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket }) {
                 mp.he_damage, mp.molotov_damage, mp.smokes_thrown, mp.flashes_thrown,
                 mp.he_thrown, mp.molotovs_thrown, mp.enemies_flashed, mp.teammates_flashed,
                 mp.enemy_flash_duration, mp.teammate_flash_duration,
-                mp.he_team_damage, mp.molotov_team_damage, mp.flash_assists, p.avatar_url
+                mp.he_team_damage, mp.molotov_team_damage, mp.flash_assists,
+                coalesce(p.avatar_url, sa.avatar_url) as avatar_url
          from match_players mp
          left join players p on p.steam_id64 = mp.steam_id64
+         left join steam_avatares sa on sa.steam_id64 = mp.steam_id64
          where mp.match_id = $1
          order by mp.team, mp.rating desc nulls last, mp.kills desc`,
         [id],

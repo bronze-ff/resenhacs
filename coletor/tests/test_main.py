@@ -3,8 +3,62 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from coletor import db as dbmod
 from coletor import main, rar_extract
 from coletor.config import Config
+
+
+# ---- avatares ----
+
+def test_atualizar_avatares_pula_sem_steam_api_key(monkeypatch):
+    config = Config(env={})
+    chamado = []
+    monkeypatch.setattr(dbmod, "listar_steam_ids_sem_avatar_fresco", lambda *a, **k: chamado.append(1))
+    main._atualizar_avatares(config, conn=None, steam_ids=["1"])
+    assert chamado == []  # nem chegou a consultar o banco
+
+
+def test_atualizar_avatares_busca_so_os_sem_cache_fresco(monkeypatch):
+    config = Config(env={"STEAM_API_KEY": "KEY", "DATABASE_URL": "x"})
+    monkeypatch.setattr(dbmod, "listar_steam_ids_sem_avatar_fresco", lambda conn, ids: ["222"])
+    monkeypatch.setattr(main.steam_api, "buscar_avatares", lambda key, ids: {"222": "https://x/2.jpg"})
+    gravados = {}
+    monkeypatch.setattr(dbmod, "upsert_avatares", lambda conn, mapa: gravados.update(mapa))
+    main._atualizar_avatares(config, conn=None, steam_ids=["111", "222"])
+    assert gravados == {"222": "https://x/2.jpg"}
+
+
+def test_atualizar_avatares_nao_derruba_em_erro_da_steam_api(monkeypatch, capsys):
+    config = Config(env={"STEAM_API_KEY": "KEY", "DATABASE_URL": "x"})
+    monkeypatch.setattr(dbmod, "listar_steam_ids_sem_avatar_fresco", lambda conn, ids: ["111"])
+
+    def _explode(key, ids):
+        raise RuntimeError("Steam fora do ar")
+
+    monkeypatch.setattr(main.steam_api, "buscar_avatares", _explode)
+    main._atualizar_avatares(config, conn=None, steam_ids=["111"])  # não deve lançar
+    assert "avatares Steam não atualizados" in capsys.readouterr().out
+
+
+def test_cmd_avatares_faz_backfill_dos_steam_ids_de_match_players(monkeypatch):
+    config = Config(env={"STEAM_API_KEY": "KEY", "DATABASE_URL": "x"})
+    monkeypatch.setattr(dbmod, "listar_steam_ids_de_match_players_sem_avatar_fresco", lambda conn: ["111", "222"])
+    monkeypatch.setattr(main.steam_api, "buscar_avatares", lambda key, ids: {"111": "https://x/1.jpg"})
+    gravados = {}
+    monkeypatch.setattr(dbmod, "upsert_avatares", lambda conn, mapa: gravados.update(mapa))
+    total = main.cmd_avatares(config, conn=None)
+    assert total == 1
+    assert gravados == {"111": "https://x/1.jpg"}
+
+
+def test_cmd_avatares_sem_pendentes_nao_chama_steam_api(monkeypatch):
+    config = Config(env={"STEAM_API_KEY": "KEY", "DATABASE_URL": "x"})
+    monkeypatch.setattr(dbmod, "listar_steam_ids_de_match_players_sem_avatar_fresco", lambda conn: [])
+    chamado = []
+    monkeypatch.setattr(main.steam_api, "buscar_avatares", lambda key, ids: chamado.append(1))
+    total = main.cmd_avatares(config, conn=None)
+    assert total == 0
+    assert chamado == []
 
 
 def _rdata_com_lineups():

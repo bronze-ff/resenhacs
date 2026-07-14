@@ -475,6 +475,23 @@ def _finalizar_ingest(config, conn, parsed, replay_json, dem_path_upload, share_
     )
 
 
+def _atualizar_avatares(config, conn, steam_ids):
+    """Busca e grava o avatar Steam de `steam_ids` que ainda não têm cache fresco
+    (steam_avatares). Best-effort: TODOS os jogadores da demo (não só os do grupo)
+    ganham avatar no scoreboard, mas uma falha da Steam Web API não pode derrubar
+    o ingest — o resto da Partida já está gravado."""
+    if not config.steam_api_key:
+        return
+    try:
+        faltando = dbmod.listar_steam_ids_sem_avatar_fresco(conn, steam_ids)
+        if not faltando:
+            return
+        mapa = steam_api.buscar_avatares(config.steam_api_key, faltando)
+        dbmod.upsert_avatares(conn, mapa)
+    except Exception as e:  # noqa: BLE001
+        print(f"aviso: avatares Steam não atualizados ({e})")
+
+
 def ingest_demo(config, conn, path, share_code=None, source="upload", upload=True, played_at=None):
     """Parseia um .dem, arquiva no R2 (se configurado) e grava no banco. Devolve match_id.
 
@@ -508,7 +525,9 @@ def ingest_demo(config, conn, path, share_code=None, source="upload", upload=Tru
     except Exception as e:  # noqa: BLE001
         print(f"aviso: replay 2D / clutch não gerado ({e})")
 
-    return _finalizar_ingest(config, conn, parsed, replay_json, path, share_code, source, upload, played_at)
+    match_id = _finalizar_ingest(config, conn, parsed, replay_json, path, share_code, source, upload, played_at)
+    _atualizar_avatares(config, conn, [p["steam_id64"] for p in parsed.get("players", [])])
+    return match_id
 
 
 def ingest_demo_multiparte(config, conn, dem_paths, share_code=None, source="pro", upload=True, played_at=None):
@@ -562,6 +581,22 @@ def ingest_demo_multiparte(config, conn, dem_paths, share_code=None, source="pro
     )
 
 
+def cmd_avatares(config, conn):
+    """Backfill: busca o avatar de TODOS os steam_id64 já vistos em alguma Partida
+    (match_players) e que ainda não têm cache fresco em steam_avatares — cobre os
+    5+ jogadores por Partida que não são do grupo e nunca tiveram avatar."""
+    config.require("steam_api_key")
+    faltando = dbmod.listar_steam_ids_de_match_players_sem_avatar_fresco(conn)
+    if not faltando:
+        print("avatares: nenhum steam_id sem avatar fresco")
+        return 0
+    print(f"avatares: buscando {len(faltando)} avatar(es)…")
+    mapa = steam_api.buscar_avatares(config.steam_api_key, faltando)
+    dbmod.upsert_avatares(conn, mapa)
+    print(f"avatares: {len(mapa)} avatar(es) gravado(s)")
+    return len(mapa)
+
+
 def main(argv=None):
     argv = argv if argv is not None else sys.argv[1:]
     ap = argparse.ArgumentParser(prog="coletor")
@@ -598,6 +633,10 @@ def main(argv=None):
     sub.add_parser(
         "configurar-cors",
         help="Configura CORS no bucket R2 (uma vez) pra aceitar upload direto do navegador.",
+    )
+    sub.add_parser(
+        "avatares",
+        help="Backfill: busca o avatar Steam de todos os jogadores já vistos em alguma Partida (inclusive fora do grupo).",
     )
 
     args = ap.parse_args(argv)
@@ -639,6 +678,8 @@ def main(argv=None):
                 ],
             )
             print(f"configurar-cors: regra aplicada no bucket {config.r2_bucket}")
+        elif args.cmd == "avatares":
+            cmd_avatares(config, conn)
     finally:
         conn.close()
 

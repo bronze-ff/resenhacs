@@ -109,6 +109,10 @@ class FakeCursor:
     def fetchall(self):
         if self._last.startswith("select id, hltv_url, arquivo_r2_key from partidas_pro_fila"):
             return self.conn.fila_rows
+        if self._last.startswith("select steam_id64 from steam_avatares"):
+            return [(s,) for s in self.conn.avatares_frescos]
+        if "distinct mp.steam_id64" in self._last:
+            return [(s,) for s in self.conn.match_players_sem_avatar]
         return []
 
 
@@ -118,6 +122,8 @@ class FakeConn:
         self.commits = 0
         self.fingerprint_row = fingerprint_row
         self.fila_rows = []
+        self.avatares_frescos = []
+        self.match_players_sem_avatar = []
 
     def cursor(self):
         return FakeCursor(self)
@@ -246,6 +252,43 @@ def test_store_parsed_grava_nome_de_time():
     match_call = next(c for c in conn.calls if c[0].startswith("insert into matches"))
     assert "FaZe" in match_call[1]
     assert "Vitality" in match_call[1]
+
+
+# ---- avatares ----
+
+def test_upsert_avatares_grava_cada_um_e_commita():
+    conn = FakeConn()
+    db.upsert_avatares(conn, {"111": "https://x/1.jpg", "222": "https://x/2.jpg"})
+    inserts = [c for c in conn.calls if c[0].startswith("insert into steam_avatares")]
+    assert len(inserts) == 2
+    assert inserts[0][1] == ("111", "https://x/1.jpg")
+    assert conn.commits == 1
+
+
+def test_upsert_avatares_mapa_vazio_nao_faz_nada():
+    conn = FakeConn()
+    db.upsert_avatares(conn, {})
+    assert conn.calls == []
+    assert conn.commits == 0
+
+
+def test_listar_steam_ids_sem_avatar_fresco_filtra_os_ja_cacheados():
+    conn = FakeConn()
+    conn.avatares_frescos = ["111"]
+    resultado = db.listar_steam_ids_sem_avatar_fresco(conn, ["111", "222", "333"])
+    assert resultado == ["222", "333"]
+
+
+def test_listar_steam_ids_sem_avatar_fresco_dedup_e_ignora_vazio():
+    conn = FakeConn()
+    resultado = db.listar_steam_ids_sem_avatar_fresco(conn, ["111", "111", None, ""])
+    assert resultado == ["111"]
+
+
+def test_listar_steam_ids_de_match_players_sem_avatar_fresco():
+    conn = FakeConn()
+    conn.match_players_sem_avatar = ["111", "222"]
+    assert db.listar_steam_ids_de_match_players_sem_avatar_fresco(conn) == ["111", "222"]
 
 
 def test_record_pending_match():

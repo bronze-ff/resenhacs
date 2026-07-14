@@ -13,6 +13,8 @@ import urllib.parse
 import urllib.request
 
 BASE = "https://api.steampowered.com/ICSGOPlayers_730/GetNextMatchSharingCode/v1/"
+BASE_PLAYER_SUMMARIES = "https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/"
+LOTE_PLAYER_SUMMARIES = 100  # limite de steamids por chamada da GetPlayerSummaries
 
 
 def build_next_code_url(api_key, steam_id64, auth_code, known_code):
@@ -51,6 +53,27 @@ def _http_get_json(url, tentativas=4, backoff=5.0, sleep=time.sleep):
                 sleep(backoff * (tentativa + 1))
                 continue
             raise
+
+
+def buscar_avatares(api_key, steam_ids, http_get_json=_http_get_json):
+    """Busca o avatar (avatarmedium, 64px) de cada steam_id64 via GetPlayerSummaries,
+    em lotes de até 100 (limite da própria API). Devolve {steam_id64: avatar_url}.
+
+    Um steamid sem perfil (banido/inexistente) simplesmente não vem na resposta —
+    não é erro, só fica de fora do dict devolvido."""
+    steam_ids = [s for s in dict.fromkeys(steam_ids) if s]  # dedup preservando ordem
+    resultado = {}
+    for i in range(0, len(steam_ids), LOTE_PLAYER_SUMMARIES):
+        lote = steam_ids[i:i + LOTE_PLAYER_SUMMARIES]
+        qs = urllib.parse.urlencode({"key": api_key, "steamids": ",".join(lote)})
+        payload = http_get_json(f"{BASE_PLAYER_SUMMARIES}?{qs}")
+        jogadores = (payload or {}).get("response", {}).get("players", [])
+        for j in jogadores:
+            steam_id = j.get("steamid")
+            avatar = j.get("avatarmedium") or j.get("avatar")
+            if steam_id and avatar:
+                resultado[steam_id] = avatar
+    return resultado
 
 
 def walk_chain(

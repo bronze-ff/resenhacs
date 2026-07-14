@@ -15,6 +15,10 @@ on:
         description: 'Configurar CORS no bucket R2 (upload de demo pro via navegador) - rodar uma vez'
         type: boolean
         default: false
+      buscar_avatares:
+        description: 'Backfill: buscar avatar Steam de todos os jogadores já vistos em alguma Partida (inclusive fora do grupo)'
+        type: boolean
+        default: false
   push:
     branches: [main]
     paths: ['coletor/**', 'bot/**', '.github/workflows/coletor.yml']
@@ -126,6 +130,14 @@ jobs:
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
         run: python -m coletor.main configurar-cors
+      - name: Buscar avatares Steam (backfill, sob demanda)
+        if: github.event_name == 'workflow_dispatch' && inputs.buscar_avatares == true
+        working-directory: coletor
+        env:
+          PYTHONPATH: src
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          STEAM_API_KEY: ${{ secrets.STEAM_API_KEY }}
+        run: python -m coletor.main avatares
 
   # Só em push/manual — rodar isso a cada 30 min sem mudança de código é dinheiro
   # (minutos) jogado fora, e é a maior fatia do orçamento se ficasse no agendamento.
