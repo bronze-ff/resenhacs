@@ -48,7 +48,7 @@ export default function FormGranada({ mapa, lado, posicoes, inicial = null, onSa
           continua fechando pelo clique fora ou pelo botão Cancelar de sempre. */}
       <button
         type="button"
-        onClick={onCancelar}
+        onClick={(e) => { e.stopPropagation(); onCancelar() }}
         aria-label="Fechar"
         className="fixed right-3 top-3 z-[60] flex min-h-10 min-w-10 items-center justify-center rounded-full border border-borda bg-superficie font-mono text-sm text-texto-fraco hover:text-texto lg:hidden"
       >✕</button>

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { thumbYoutube } from '../../lib/youtube.js'
 
 const ROTULO_TECNICA = {
@@ -35,6 +35,8 @@ export default function RadarGranadas({
   // flutuante de sempre continua e o clique já abre o modal direto.
   const semHover = useMemo(() => typeof window !== 'undefined' && window.matchMedia('(hover: none)').matches, [])
   const [destaqueId, setDestaqueId] = useState(null)
+
+  useEffect(() => { setDestaqueId(null) }, [lineups])
 
   const idDestacado = semHover ? destaqueId : hoverId
   const ativa = lineups.find((l) => l.id === (idDestacado ?? selecionadaId))
