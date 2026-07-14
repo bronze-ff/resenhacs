@@ -95,5 +95,11 @@ export function createPlayersRouter({ db, requireAuth, requireGroupMember, fetch
     res.json({ ok: true })
   })
 
+  router.put('/me/ranking-publico', requireAuth, async (req, res) => {
+    const publico = Boolean(req.body?.publico)
+    await db.query('update players set ranking_publico = $2 where steam_id64 = $1', [req.player.steamId, publico])
+    res.json({ ok: true, publico })
+  })
+
   return router
 }

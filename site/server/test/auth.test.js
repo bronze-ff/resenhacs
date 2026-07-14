@@ -15,24 +15,27 @@ const JOGADOR = {
   avatar_url: 'https://avatars.steamstatic.com/x.jpg',
   is_super_admin: true,
   grupo_ativo_id: 'g1',
+  ranking_publico: false,
 }
 
 // Fake que roteia por SQL: players devolve `rows`; o insert de nonce devolve
-// rowCount 1 (nonce novo) ou 0 (replay); qualquer outra query devolve vazio.
-function fakeDb({ rows = [], nonceReplay = false } = {}) {
+// rowCount 1 (nonce novo) ou 0 (replay); a checagem de papel no grupo ativo devolve
+// `role`; qualquer outra query devolve vazio.
+function fakeDb({ rows = [], nonceReplay = false, role = 'admin' } = {}) {
   return {
     query: vi.fn().mockImplementation((sql) => {
       if (sql.includes('used_openid_nonces')) {
         return Promise.resolve({ rows: nonceReplay ? [] : [{ nonce: 'n' }], rowCount: nonceReplay ? 0 : 1 })
       }
+      if (sql.includes('role from group_members')) return Promise.resolve({ rows: [{ role }] })
       if (sql.includes('from players')) return Promise.resolve({ rows })
       return Promise.resolve({ rows: [] })
     }),
   }
 }
 
-function appWith({ rows = [], nonceReplay = false, login = { steamId: JOGADOR.steam_id64, nonce: 'n1' } } = {}) {
-  const db = fakeDb({ rows, nonceReplay })
+function appWith({ rows = [], nonceReplay = false, role = 'admin', login = { steamId: JOGADOR.steam_id64, nonce: 'n1' } } = {}) {
+  const db = fakeDb({ rows, nonceReplay, role })
   const app = createApp({
     config,
     db,
@@ -127,7 +130,22 @@ describe('GET /api/auth/me', () => {
       avatarUrl: JOGADOR.avatar_url,
       isSuperAdmin: true,
       grupoAtivoId: 'g1',
+      rankingPublico: false,
+      souAdminDoGrupo: true,
     })
+  })
+
+  it('membro comum do grupo ativo: souAdminDoGrupo false', async () => {
+    const { app } = appWith({ rows: [JOGADOR], role: 'membro' })
+    const res = await request(app).get('/api/auth/me').set('Cookie', cookieFor())
+    expect(res.body.souAdminDoGrupo).toBe(false)
+  })
+
+  it('sem grupo ativo: souAdminDoGrupo nao aparece', async () => {
+    const { app } = appWith({ rows: [{ ...JOGADOR, grupo_ativo_id: null }] })
+    const res = await request(app).get('/api/auth/me').set('Cookie', cookieFor())
+    expect(res.body.grupoAtivoId).toBeNull()
+    expect(res.body.souAdminDoGrupo).toBeUndefined()
   })
 })
 

@@ -188,3 +188,18 @@ describe('PUT /api/players/me (onboarding)', () => {
     ])
   })
 })
+
+describe('PUT /api/players/me/ranking-publico', () => {
+  it('sem login: 401', async () => {
+    const { app } = appWith()
+    expect((await request(app).put('/api/players/me/ranking-publico').send({ publico: true })).status).toBe(401)
+  })
+
+  it('grava o proprio opt-in', async () => {
+    const { app, db } = appWith()
+    const res = await request(app).put('/api/players/me/ranking-publico').set('Cookie', memberCookie).send({ publico: true })
+    expect(res.status).toBe(200)
+    expect(res.body).toEqual({ ok: true, publico: true })
+    expect(db.query.mock.calls[0][1]).toEqual(['76561198000000002', true])
+  })
+})

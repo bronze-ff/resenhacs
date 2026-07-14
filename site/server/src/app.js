@@ -15,6 +15,8 @@ import { createTaticasCuradasRouter } from './routes/taticasCuradas.js'
 import { createPartidasProRouter } from './routes/partidasPro.js'
 import { createGranadasRouter } from './routes/granadas.js'
 import { createGroupsRouter, createConvitesRouter } from './routes/groups.js'
+import { createTeamsRouter } from './routes/teams.js'
+import { createRankingPublicoRouter } from './routes/rankingPublico.js'
 import { createRequireAuth, createRequireGroupMember } from './auth/middleware.js'
 import { createR2Client } from './r2.js'
 
@@ -68,6 +70,8 @@ export function createApp({ config, db, verifySteamLogin, fetchPersona, fetchBan
   app.use('/api/groups', requireAuth, createGroupsRouter({ db }))
   app.use('/api/convites', requireAuth, createConvitesRouter({ db }))
   app.use('/api/players', createPlayersRouter({ db, requireAuth, requireGroupMember, fetchBans }))
+  app.use('/api/teams', createTeamsRouter({ db, requireAuth, requireGroupMember }))
+  app.use('/api/ranking-publico', requireAuth, createRankingPublicoRouter({ db }))
   app.use('/api/matches', createMatchesRouter({ db, requireAuth, requireGroupMember, r2Client, r2Bucket: config.r2Bucket }))
   app.use('/api/profile', createProfileRouter({ db, requireAuth, requireGroupMember }))
   app.use('/api/clips', createClipsRouter({ db, requireAuth }))
