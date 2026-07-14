@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { Card, SectionHeader, Badge } from '../components/ui'
 
 export default function Jogadores() {
   const [jogadores, setJogadores] = useState([])
@@ -21,16 +22,13 @@ export default function Jogadores() {
 
   return (
     <div>
-      <h2 className="mb-4 font-display text-xl font-semibold uppercase tracking-wide text-texto">Jogadores</h2>
+      <SectionHeader titulo="Jogadores" />
       <ul className="space-y-2">
         {jogadores.map((j) => {
           const ban = bans?.get(j.steamId)
           return (
           <li key={j.steamId}>
-            <Link
-              to={`/jogador/${j.steamId}`}
-              className="panel-cut flex items-center gap-3 border border-borda bg-superficie p-3 transition-colors hover:border-destaque/50 hover:bg-superficie-alta"
-            >
+            <Card as={Link} interativo to={`/jogador/${j.steamId}`} className="flex items-center gap-3 p-3">
               {j.avatarUrl && (
                 <img src={j.avatarUrl} alt="" className="panel-cut-sm h-8 w-8 shrink-0 border border-borda object-cover" />
               )}
@@ -39,22 +37,16 @@ export default function Jogadores() {
                 <span className="shrink-0 font-mono text-[10px] uppercase tracking-widest text-destaque">admin</span>
               )}
               {ban?.vacBanned && (
-                <span
-                  className="panel-cut-sm shrink-0 border border-perigo/40 bg-perigo/10 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-widest text-perigo"
-                  title={`VAC ban — ${ban.numVacBans} conta(s), há ${ban.daysSinceLastBan} dias`}
-                >
+                <Badge tom="perigo" title={`VAC ban — ${ban.numVacBans} conta(s), há ${ban.daysSinceLastBan} dias`}>
                   VAC ban
-                </span>
+                </Badge>
               )}
               {!ban?.vacBanned && ban?.gameBanned && (
-                <span
-                  className="panel-cut-sm shrink-0 border border-perigo/40 bg-perigo/10 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-widest text-perigo"
-                  title={`Game ban (Overwatch/cheat) — ${ban.numGameBans} ban(s)`}
-                >
+                <Badge tom="perigo" title={`Game ban (Overwatch/cheat) — ${ban.numGameBans} ban(s)`}>
                   Game ban
-                </span>
+                </Badge>
               )}
-            </Link>
+            </Card>
           </li>
           )
         })}

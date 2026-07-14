@@ -4,6 +4,7 @@ import DetalheGranada from '../granadas/DetalheGranada.jsx'
 import { thumbYoutube } from '../../lib/youtube.js'
 import { ROTULO_TIPO_TATICA, ROTULO_ARMAS } from './CardTatica.jsx'
 import { ROTULO_TECNICA, ROTULO_BOTAO } from '../../lib/rotulos.js'
+import { Card, Badge } from '../ui'
 
 // Bloco compacto de uma granada linkada a um papel: título + badges técnica/botão
 // + thumb do YouTube, clicável — abre o DetalheGranada por cima (z-[60]).
@@ -19,13 +20,9 @@ function BlocoGranada({ granada, onAbrir }) {
       <div className="min-w-0 flex-1">
         <p className="truncate font-display text-sm font-semibold text-texto">{granada.titulo}</p>
         <div className="mt-1 flex flex-wrap gap-1">
-          <span className="panel-cut-sm border border-borda px-1.5 py-0.5 font-mono text-[10px] uppercase text-texto-fraco">
-            {ROTULO_BOTAO[granada.botao]}
-          </span>
+          <Badge tom="neutro">{ROTULO_BOTAO[granada.botao]}</Badge>
           {ROTULO_TECNICA[granada.tecnica] && (
-            <span className="panel-cut-sm border border-borda px-1.5 py-0.5 font-mono text-[10px] uppercase text-texto-fraco">
-              {ROTULO_TECNICA[granada.tecnica]}
-            </span>
+            <Badge tom="neutro">{ROTULO_TECNICA[granada.tecnica]}</Badge>
           )}
         </div>
       </div>
@@ -66,18 +63,10 @@ export default function DetalheTatica({ tatica, onFechar, acoesAdmin = null }) {
             <div className="min-w-0">
               <h3 className="font-display text-xl font-bold text-texto">{tatica.titulo}</h3>
               <div className="mt-1.5 flex flex-wrap gap-1.5">
-                <span className="panel-cut-sm border border-destaque/40 px-1.5 py-0.5 font-mono text-[10px] uppercase text-destaque">
-                  {ROTULO_TIPO_TATICA[tatica.tipo] ?? tatica.tipo}
-                </span>
-                <span className="panel-cut-sm border border-borda px-1.5 py-0.5 font-mono text-[10px] uppercase text-texto-fraco">
-                  {ROTULO_ARMAS[tatica.armas] ?? tatica.armas}
-                </span>
-                <span className="panel-cut-sm border border-borda px-1.5 py-0.5 font-mono text-[10px] uppercase text-texto-fraco">
-                  {tatica.lado} · {tatica.local}
-                </span>
-                <span className="panel-cut-sm border border-borda px-1.5 py-0.5 font-mono text-[10px] uppercase text-texto-fraco">
-                  {papeis.length} {papeis.length === 1 ? 'jogador' : 'jogadores'}
-                </span>
+                <Badge tom="destaque">{ROTULO_TIPO_TATICA[tatica.tipo] ?? tatica.tipo}</Badge>
+                <Badge tom="neutro">{ROTULO_ARMAS[tatica.armas] ?? tatica.armas}</Badge>
+                <Badge tom="neutro">{tatica.lado} · {tatica.local}</Badge>
+                <Badge tom="neutro">{papeis.length} {papeis.length === 1 ? 'jogador' : 'jogadores'}</Badge>
               </div>
             </div>
             <button
@@ -123,18 +112,15 @@ export default function DetalheTatica({ tatica, onFechar, acoesAdmin = null }) {
                       : <p className="font-mono text-sm text-texto-fraco/60">Sem descrição.</p>}
                     <div className="mt-4 space-y-2">
                       {papeis.map((p, i) => (
-                        <div key={p.id} className="panel-cut-sm border border-borda bg-fundo p-3">
+                        <Card key={p.id} className="bg-fundo p-3">
                           <div className="flex items-center justify-between gap-2">
                             <p className="font-display text-sm font-semibold uppercase text-texto">Jogador {i + 1}</p>
-                            <span className={`panel-cut-sm border px-1.5 py-0.5 font-mono text-[10px] uppercase ${
-                              p.obrigatorio ? 'border-destaque/40 text-destaque' : 'border-borda text-texto-fraco'
-                            }`}
-                            >
+                            <Badge tom={p.obrigatorio ? 'destaque' : 'neutro'}>
                               {p.obrigatorio ? 'necessário' : 'opcional'}
-                            </span>
+                            </Badge>
                           </div>
                           <p className="mt-1 font-mono text-xs text-texto-fraco">{p.descricao}</p>
-                        </div>
+                        </Card>
                       ))}
                       {papeis.length === 0 && (
                         <p className="font-mono text-xs text-texto-fraco">Nenhum papel cadastrado ainda.</p>

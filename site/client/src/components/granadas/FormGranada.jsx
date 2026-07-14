@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { linkBuscaYoutube } from '../../lib/youtube.js'
 import { nomeMapa } from '../../lib/format.js'
+import { Card } from '../ui'
 
 const TIPOS = [['smoke', 'Smoke'], ['flash', 'Flash'], ['molotov', 'Molotov'], ['he', 'HE']]
 const TECNICAS = [
@@ -52,10 +53,11 @@ export default function FormGranada({ mapa, lado, posicoes, inicial = null, onSa
         aria-label="Fechar"
         className="fixed right-3 top-3 z-[60] flex min-h-10 min-w-10 items-center justify-center rounded-full border border-borda bg-superficie font-mono text-sm text-texto-fraco hover:text-texto lg:hidden"
       >✕</button>
-      <form
+      <Card
+        as="form"
         onSubmit={salvar}
         onClick={(e) => e.stopPropagation()}
-        className="h-full w-full space-y-3 overflow-y-auto border border-borda bg-superficie p-5 lg:panel-cut lg:h-auto lg:max-h-[90vh] lg:w-full lg:max-w-lg"
+        className="h-full w-full space-y-3 overflow-y-auto p-5 lg:h-auto lg:max-h-[90vh] lg:w-full lg:max-w-lg"
       >
         <h3 className="font-display text-lg font-bold uppercase text-texto">
           {inicial ? 'Editar granada' : 'Nova granada'} — {lado}
@@ -96,7 +98,7 @@ export default function FormGranada({ mapa, lado, posicoes, inicial = null, onSa
             {salvando ? 'Salvando…' : 'Salvar'}
           </button>
         </div>
-      </form>
+      </Card>
     </div>
   )
 }

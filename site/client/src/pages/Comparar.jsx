@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { corRating, dataHora } from '../lib/format.js'
 import LinhaEvolucao from '../components/LinhaEvolucao.jsx'
 import FiltroPeriodo from '../components/FiltroPeriodo.jsx'
+import { Card, SectionHeader, StatTile } from '../components/ui'
 
 const LINHAS_STAT = [
   { rotulo: 'Rating', chave: 'rating', formato: (v) => v?.toFixed(2) ?? '–', cor: true },
@@ -84,7 +85,7 @@ export default function Comparar() {
 
       {dados && (
         <>
-          <div className="panel-cut border border-borda bg-superficie p-4">
+          <Card className="p-4">
             <div className="mb-4 flex items-start justify-between">
               <ColunaJogador p={dados.a} />
               <div className="px-2 pt-2 font-display text-xs uppercase tracking-widest text-texto-fraco">vs</div>
@@ -109,52 +110,38 @@ export default function Comparar() {
                 )
               })}
             </div>
-          </div>
+          </Card>
 
           <section>
-            <h3 className="mb-3 font-display text-lg font-semibold uppercase tracking-wide text-texto">Confronto direto</h3>
+            <SectionHeader titulo="Confronto direto" />
             {dados.confronto.partidasJuntos === 0 ? (
               <p className="font-mono text-sm text-texto-fraco">Esses dois nunca jogaram a mesma Partida ainda.</p>
             ) : (
-              <div className="panel-cut grid grid-cols-2 gap-4 border border-borda bg-superficie p-4 sm:grid-cols-4">
-                <StatConfronto rotulo="Partidas juntos" valor={dados.confronto.partidasJuntos} />
-                <StatConfronto rotulo="Mesmo time" valor={`${dados.confronto.mesmoTimeVitorias}/${dados.confronto.mesmoTime}`} sub="vitórias" />
-                <StatConfronto rotulo={`${dados.a.nick || 'A'} venceu`} valor={dados.confronto.aVenceu} sub="times opostos" />
-                <StatConfronto rotulo={`${dados.b.nick || 'B'} venceu`} valor={dados.confronto.bVenceu} sub="times opostos" />
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                <StatTile rotulo="Partidas juntos" valor={dados.confronto.partidasJuntos} />
+                <StatTile rotulo="Mesmo time" valor={`${dados.confronto.mesmoTimeVitorias}/${dados.confronto.mesmoTime}`} sub="vitórias" />
+                <StatTile rotulo={`${dados.a.nick || 'A'} venceu`} valor={dados.confronto.aVenceu} sub="times opostos" />
+                <StatTile rotulo={`${dados.b.nick || 'B'} venceu`} valor={dados.confronto.bVenceu} sub="times opostos" />
               </div>
             )}
           </section>
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <section>
-              <h3 className="mb-3 font-display text-lg font-semibold uppercase tracking-wide text-texto">
-                Evolução — {dados.a.nick || dados.a.steamId}
-              </h3>
-              <div className="panel-cut border border-borda bg-superficie p-4">
+              <SectionHeader titulo={`Evolução — ${dados.a.nick || dados.a.steamId}`} />
+              <Card className="p-4">
                 <LinhaEvolucao pontos={dados.a.evolucao.map((e) => ({ label: dataHora(e.playedAt), valor: e.rating }))} />
-              </div>
+              </Card>
             </section>
             <section>
-              <h3 className="mb-3 font-display text-lg font-semibold uppercase tracking-wide text-texto">
-                Evolução — {dados.b.nick || dados.b.steamId}
-              </h3>
-              <div className="panel-cut border border-borda bg-superficie p-4">
+              <SectionHeader titulo={`Evolução — ${dados.b.nick || dados.b.steamId}`} />
+              <Card className="p-4">
                 <LinhaEvolucao pontos={dados.b.evolucao.map((e) => ({ label: dataHora(e.playedAt), valor: e.rating }))} cor="var(--color-time-b)" />
-              </div>
+              </Card>
             </section>
           </div>
         </>
       )}
-    </div>
-  )
-}
-
-function StatConfronto({ rotulo, valor, sub }) {
-  return (
-    <div className="text-center">
-      <div className="font-mono text-2xl font-semibold tabular-nums text-texto">{valor}</div>
-      <div className="font-mono text-[10px] uppercase tracking-wider text-texto-fraco">{rotulo}</div>
-      {sub && <div className="font-mono text-[10px] text-texto-fraco">{sub}</div>}
     </div>
   )
 }

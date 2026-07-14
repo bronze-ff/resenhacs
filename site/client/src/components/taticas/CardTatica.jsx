@@ -1,4 +1,5 @@
 import MiniRadarTatica from './MiniRadarTatica.jsx'
+import { Card, Badge } from '../ui'
 
 export const ROTULO_TIPO_TATICA = {
   execute: 'Execute', fake: 'Fake', explode: 'Explode', rush: 'Rush', split: 'Split', setup: 'Setup',
@@ -13,23 +14,21 @@ export default function CardTatica({ tatica, onSelecionar }) {
   const nPapeis = (tatica.papeis ?? []).length
 
   return (
-    <button
+    <Card
+      as="button"
+      interativo
       onClick={() => onSelecionar(tatica)}
-      className="panel-cut group flex flex-col overflow-hidden border border-borda bg-superficie text-left transition-colors hover:border-destaque"
+      className="group flex flex-col overflow-hidden text-left"
     >
       <div className="relative">
         <MiniRadarTatica mapa={tatica.map} granadas={granadas} />
         <div className="absolute left-1.5 top-1.5 flex flex-wrap gap-1">
-          <span className="panel-cut-sm border border-borda bg-fundo/80 px-1.5 py-0.5 font-mono text-[10px] uppercase text-texto-fraco">
-            {tatica.local}
-          </span>
-          <span className="panel-cut-sm border border-destaque/40 bg-fundo/80 px-1.5 py-0.5 font-mono text-[10px] uppercase text-destaque">
-            {ROTULO_TIPO_TATICA[tatica.tipo] ?? tatica.tipo}
-          </span>
+          <Badge tom="neutro" className="bg-fundo/80">{tatica.local}</Badge>
+          <Badge tom="destaque" className="bg-fundo/80">{ROTULO_TIPO_TATICA[tatica.tipo] ?? tatica.tipo}</Badge>
         </div>
-        <span className="absolute right-1.5 top-1.5 panel-cut-sm border border-borda bg-fundo/80 px-1.5 py-0.5 font-mono text-[10px] uppercase text-texto-fraco">
+        <Badge tom="neutro" className="absolute right-1.5 top-1.5 bg-fundo/80">
           {nPapeis} {nPapeis === 1 ? 'papel' : 'papéis'}
-        </span>
+        </Badge>
       </div>
       <div className="min-w-0 flex-1 p-2">
         <p className="truncate font-display text-sm font-semibold uppercase text-texto">{tatica.titulo}</p>
@@ -37,6 +36,6 @@ export default function CardTatica({ tatica, onSelecionar }) {
           {tatica.lado} · {ROTULO_ARMAS[tatica.armas] ?? tatica.armas}
         </p>
       </div>
-    </button>
+    </Card>
   )
 }

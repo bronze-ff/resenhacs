@@ -5,6 +5,7 @@ import { MAPAS_POOL } from './ExplorarMapas.jsx'
 import RadarGranadas from './RadarGranadas.jsx'
 import DetalheGranada from './DetalheGranada.jsx'
 import FormGranada from './FormGranada.jsx'
+import { SectionHeader } from '../ui'
 
 const TIPOS = [['smoke', 'Smoke'], ['flash', 'Flash'], ['molotov', 'Molotov'], ['he', 'HE']]
 const NIVEIS_CALLOUT = [['sem', 'Sem'], ['noob', 'Noob'], ['pro', 'Pro']]
@@ -60,7 +61,7 @@ export default function PaginaMapa({ mapa, onTrocarMapa }) {
   return (
     <div className="flex flex-col gap-4 lg:flex-row">
       <aside className="w-full space-y-3 lg:w-56 lg:space-y-4">
-        <h2 className="font-display text-2xl font-bold uppercase tracking-wide text-texto">{nomeMapa(mapa)}</h2>
+        <SectionHeader titulo={nomeMapa(mapa)} className="mb-0" />
 
         {/* Mobile: grupos de filtro em linha (ribbon) pra não empurrar o radar
             pra baixo da dobra. Desktop: volta a ser a coluna vertical de sempre. */}

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import ExplorarMapas, { MAPAS_POOL } from '../components/granadas/ExplorarMapas.jsx'
 import PaginaMapaTaticas from '../components/taticas/PaginaMapaTaticas.jsx'
+import { Badge } from '../components/ui'
 
 // Orquestrador mapa-first (mesmo padrão de Granadas.jsx): sem ?map= mostra a
 // landing por mapa, com ?map= válido mostra a página do mapa (sidebar de
@@ -30,9 +31,9 @@ export default function Taticas() {
         badges={(m) => {
           const total = contagens?.find((c) => c.map === m)?.total ?? 0
           return (
-            <span className="panel-cut-sm border border-destaque/40 bg-fundo/80 px-1.5 py-0.5 font-mono text-[10px] uppercase text-destaque">
+            <Badge tom="destaque" className="bg-fundo/80">
               {total} {total === 1 ? 'tática' : 'táticas'}
-            </span>
+            </Badge>
           )
         }}
       />

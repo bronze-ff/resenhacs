@@ -6,6 +6,7 @@ import CardTatica, { ROTULO_ARMAS, ROTULO_TIPO_TATICA } from './CardTatica.jsx'
 import CardTaticaReplay from './CardTaticaReplay.jsx'
 import DetalheTatica from './DetalheTatica.jsx'
 import FormTatica from './FormTatica.jsx'
+import { SectionHeader } from '../ui'
 
 const TIPOS = [['todas', 'Todas'], ...Object.entries(ROTULO_TIPO_TATICA)]
 const LOCAIS = [['todas', 'Todas'], ['A', 'A'], ['B', 'B'], ['MID', 'MID']]
@@ -174,7 +175,7 @@ export default function PaginaMapaTaticas({ mapa, onTrocarMapa }) {
         </div>
 
         <div className="border-t border-borda pt-4">
-          <h3 className="font-display text-lg font-bold uppercase tracking-wide text-texto">Do grupo (replays)</h3>
+          <SectionHeader titulo="Do grupo (replays)" className="mb-1" />
           <p className="font-mono text-xs text-texto-fraco">Táticas sugeridas em partidas reais e aprovadas no Admin.</p>
           {!antigas && <p className="mt-2 font-mono text-sm text-texto-fraco">Carregando…</p>}
           {antigas && antigas.length === 0 && (

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { embedYoutube, linkBuscaYoutube } from '../../lib/youtube.js'
 import { nomeMapa } from '../../lib/format.js'
 import { ROTULO_TECNICA, ROTULO_BOTAO } from '../../lib/rotulos.js'
+import { Card, Badge } from '../ui'
 
 export default function DetalheGranada({ granada, onFechar, acoesAdmin = null }) {
   const [aba, setAba] = useState('video')
@@ -12,8 +13,8 @@ export default function DetalheGranada({ granada, onFechar, acoesAdmin = null })
     // z-[60]: precisa abrir POR CIMA de outros modais (ex.: DetalheTatica, z-50,
     // que linka granadas da biblioteca e abre este componente sobreposto).
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-fundo/80 p-0 lg:p-4" onClick={onFechar}>
-      <div
-        className="flex h-full w-full flex-col overflow-y-hidden border border-borda bg-superficie lg:panel-cut lg:block lg:h-auto lg:max-h-[90vh] lg:w-full lg:max-w-2xl lg:overflow-y-auto lg:p-5"
+      <Card
+        className="flex h-full w-full flex-col overflow-y-hidden lg:block lg:h-auto lg:max-h-[90vh] lg:w-full lg:max-w-2xl lg:overflow-y-auto lg:p-5"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-borda bg-superficie px-4 py-3 lg:static lg:border-0 lg:bg-transparent lg:px-0 lg:py-0">
@@ -26,8 +27,8 @@ export default function DetalheGranada({ granada, onFechar, acoesAdmin = null })
 
         <div className="flex-1 overflow-y-auto px-4 pb-4 lg:overflow-visible lg:px-0 lg:pb-0">
           <div className="mt-2 flex flex-wrap gap-1.5">
-            <span className="panel-cut-sm border border-borda px-1.5 py-0.5 font-mono text-[10px] uppercase text-texto-fraco">{ROTULO_BOTAO[granada.botao]}</span>
-            <span className="panel-cut-sm border border-borda px-1.5 py-0.5 font-mono text-[10px] uppercase text-texto-fraco">{ROTULO_TECNICA[granada.tecnica]}</span>
+            <Badge tom="neutro">{ROTULO_BOTAO[granada.botao]}</Badge>
+            <Badge tom="neutro">{ROTULO_TECNICA[granada.tecnica]}</Badge>
           </div>
           {granada.descricao && <p className="mt-3 font-mono text-sm text-texto-fraco">{granada.descricao}</p>}
 
@@ -80,7 +81,7 @@ export default function DetalheGranada({ granada, onFechar, acoesAdmin = null })
 
           {acoesAdmin}
         </div>
-      </div>
+      </Card>
     </div>
   )
 }

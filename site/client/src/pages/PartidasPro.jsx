@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
+import { Card, SectionHeader, Badge } from '../components/ui'
 
-const CORES_STATUS = {
-  pendente: 'text-texto-fraco', baixando: 'text-destaque', processando: 'text-destaque',
-  concluida: 'text-sucesso', falhou: 'text-perigo',
+const TOM_STATUS = {
+  pendente: 'neutro', baixando: 'destaque', processando: 'destaque',
+  concluida: 'sucesso', falhou: 'perigo',
 }
 
 export default function PartidasPro() {
@@ -76,7 +77,7 @@ export default function PartidasPro() {
 
   return (
     <div className="space-y-4">
-      <h2 className="font-display text-2xl font-bold uppercase tracking-wide text-texto">Partidas pro</h2>
+      <SectionHeader titulo="Partidas pro" />
       <form onSubmit={adicionar} className="flex flex-col gap-2 lg:flex-row">
         <input
           value={url}
@@ -101,12 +102,12 @@ export default function PartidasPro() {
       {erro && <p className="font-mono text-sm text-perigo">{erro}</p>}
       <div className="space-y-2">
         {fila?.map((f) => (
-          <div key={f.id} className="panel-cut-sm flex items-center justify-between gap-2 border border-borda bg-superficie px-3 py-2">
+          <Card key={f.id} className="flex items-center justify-between gap-2 px-3 py-2">
             <span className="min-w-0 flex-1 truncate font-mono text-xs text-texto-fraco">{f.hltvUrl}</span>
             <div className="flex shrink-0 items-center gap-2">
-              <span className={`font-mono text-xs uppercase ${CORES_STATUS[f.status]}`}>
+              <Badge tom={TOM_STATUS[f.status]}>
                 {f.matchIds?.length > 1 ? `${f.matchIds.length} mapas processados` : f.status}
-              </span>
+              </Badge>
               {f.status === 'falhou' && (
                 <button
                   onClick={() => tentarDeNovo(f.id)}
@@ -116,7 +117,7 @@ export default function PartidasPro() {
                 </button>
               )}
             </div>
-          </div>
+          </Card>
         ))}
       </div>
     </div>

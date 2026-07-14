@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { thumbYoutube } from '../../lib/youtube.js'
 import { ROTULO_TECNICA } from '../../lib/rotulos.js'
+import { Card, Badge } from '../ui'
 
 // Ícone simples por tipo, desenhado direto em SVG (sem lib de ícones).
 // Exportado (named) pra ser reusado no mini-radar dos cards de Táticas
@@ -153,8 +154,8 @@ export default function RadarGranadas({
         </svg>
 
         {!semHover && hovered && !modoMarcacao && (
-          <div
-            className="panel-cut pointer-events-none absolute z-10 w-56 border border-borda bg-superficie p-3 shadow-lg"
+          <Card
+            className="pointer-events-none absolute z-10 w-56 p-3 shadow-lg"
             style={{
               left: `${Math.min(hovered.alvoX * 100, 62)}%`,
               top: `${Math.min(hovered.alvoY * 100 + 4, 78)}%`,
@@ -162,27 +163,23 @@ export default function RadarGranadas({
           >
             <p className="font-display text-sm font-semibold text-texto">{hovered.titulo}</p>
             {hovered.tecnica !== 'normal' && (
-              <span className="mt-1 inline-block panel-cut-sm border border-borda px-1.5 py-0.5 font-mono text-[10px] uppercase text-texto-fraco">
-                {ROTULO_TECNICA[hovered.tecnica]}
-              </span>
+              <Badge tom="neutro" className="mt-1">{ROTULO_TECNICA[hovered.tecnica]}</Badge>
             )}
             {thumbYoutube(hovered.videoUrl) && (
               <img src={thumbYoutube(hovered.videoUrl)} alt="" className="mt-2 w-full rounded" />
             )}
             <p className="mt-1 font-mono text-[10px] uppercase text-texto-fraco">clique pra ver vídeo e passos</p>
-          </div>
+          </Card>
         )}
       </div>
 
       {/* Touch: sem hover flutuante, então o preview do marcador destacado vira
           um bloco fixo ABAIXO do radar (posição por % fica ruim em tela pequena). */}
       {semHover && destacada && !modoMarcacao && (
-        <div className="panel-cut mx-auto mt-3 w-full max-w-[calc(100vh-9rem)] border border-borda bg-superficie p-3">
+        <Card className="mx-auto mt-3 w-full max-w-[calc(100vh-9rem)] p-3">
           <p className="font-display text-sm font-semibold text-texto">{destacada.titulo}</p>
           {destacada.tecnica !== 'normal' && (
-            <span className="mt-1 inline-block panel-cut-sm border border-borda px-1.5 py-0.5 font-mono text-[10px] uppercase text-texto-fraco">
-              {ROTULO_TECNICA[destacada.tecnica]}
-            </span>
+            <Badge tom="neutro" className="mt-1">{ROTULO_TECNICA[destacada.tecnica]}</Badge>
           )}
           {thumbYoutube(destacada.videoUrl) && (
             <img src={thumbYoutube(destacada.videoUrl)} alt="" className="mt-2 w-full rounded" />
@@ -193,7 +190,7 @@ export default function RadarGranadas({
           >
             Ver vídeo e passos
           </button>
-        </div>
+        </Card>
       )}
     </div>
   )

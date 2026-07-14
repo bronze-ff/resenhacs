@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Card, SectionHeader } from '../components/ui'
 
 export default function Admin() {
   const [steamId, setSteamId] = useState('')
@@ -41,7 +42,7 @@ export default function Admin() {
 
   return (
     <div className="max-w-md">
-      <h2 className="mb-4 font-display text-xl font-semibold uppercase tracking-wide text-texto">Admin</h2>
+      <SectionHeader titulo="Admin" />
       <form onSubmit={adicionar} className="space-y-3">
         <label className="block font-mono text-xs uppercase tracking-wide text-texto-fraco" htmlFor="steamId">
           SteamID64 do novo Jogador (17 dígitos)
@@ -63,14 +64,12 @@ export default function Admin() {
       {mensagem && <p className="mt-3 font-mono text-sm text-texto-fraco">{mensagem}</p>}
 
       <div className="mt-8 space-y-3">
-        <h2 className="font-display text-xl font-semibold uppercase tracking-wide text-texto">
-          Táticas pendentes
-        </h2>
+        <SectionHeader titulo="Táticas pendentes" />
         {taticasPendentes?.length === 0 && (
           <p className="font-mono text-sm text-texto-fraco">Nenhuma tática aguardando revisão.</p>
         )}
         {taticasPendentes?.map((t) => (
-          <div key={t.id} className="panel-cut-sm space-y-2 border border-borda bg-superficie px-3 py-2">
+          <Card key={t.id} className="space-y-2 px-3 py-2">
             <p className="font-display text-sm font-semibold uppercase text-texto">{t.nome}</p>
             <p className="font-mono text-xs text-texto-fraco">{t.descricao}</p>
             <p className="font-mono text-[10px] uppercase text-texto-fraco/70">sugerida por {t.criadoPorNick || t.criadoPor}</p>
@@ -88,7 +87,7 @@ export default function Admin() {
                 Rejeitar
               </button>
             </div>
-          </div>
+          </Card>
         ))}
       </div>
     </div>

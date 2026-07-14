@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import ReplayViewer from '../ReplayViewer.jsx'
+import { Card } from '../ui'
 
 // Movido de pages/Taticas.jsx (T2, Fase 3) sem mudar comportamento — era o único
 // card da aba Táticas antes do playbook curado; agora vive na seção secundária
@@ -16,7 +17,7 @@ export default function CardTaticaReplay({ t }) {
   }
 
   return (
-    <div className="panel-cut border border-borda bg-superficie p-3">
+    <Card className="p-3">
       <button onClick={abrir} className="w-full text-left">
         <p className="font-display text-sm font-semibold uppercase text-texto">{t.nome}</p>
         <p className="font-mono text-xs text-texto-fraco">{t.descricao}</p>
@@ -27,6 +28,6 @@ export default function CardTaticaReplay({ t }) {
           <ReplayViewer replay={replay} seek={{ round: t.roundNumber, frame: 0, key: `${t.id}-${Date.now()}` }} />
         </div>
       )}
-    </div>
+    </Card>
   )
 }

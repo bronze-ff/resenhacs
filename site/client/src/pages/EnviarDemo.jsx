@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { SectionHeader } from '../components/ui'
 
 export default function EnviarDemo() {
   const [arquivo, setArquivo] = useState(null)
@@ -36,7 +37,7 @@ export default function EnviarDemo() {
 
   return (
     <div className="max-w-lg">
-      <h2 className="mb-2 font-display text-xl font-semibold uppercase tracking-wide text-texto">Enviar demo</h2>
+      <SectionHeader titulo="Enviar demo" className="mb-2" />
       <p className="mb-4 font-mono text-sm leading-relaxed text-texto-fraco">
         Baixe o .dem em CS2 → Assistir → Suas Partidas (ou do Faceit/GC) e envie aqui.
         O processamento roda no Coletor local e pode levar até um minuto.

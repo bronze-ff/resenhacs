@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import RadarGranadas from '../granadas/RadarGranadas.jsx'
 import { ROTULO_TIPO_TATICA, ROTULO_ARMAS } from './CardTatica.jsx'
+import { Card } from '../ui'
 
 const TIPOS = Object.entries(ROTULO_TIPO_TATICA)
 const LOCAIS = [['A', 'A'], ['B', 'B'], ['MID', 'MID']]
@@ -263,11 +264,11 @@ export default function FormTatica({ mapa, lado: ladoInicial, inicial = null, on
             {papeis.map((p, i) => {
               const ativo = i === papelAtivoSeguro
               return (
-                <div
+                <Card
                   key={i}
                   onClick={() => setPapelAtivo(i)}
-                  className={`panel-cut-sm cursor-pointer space-y-2 border p-3 transition-colors ${
-                    ativo ? 'border-destaque bg-destaque/5' : 'border-borda bg-fundo hover:border-destaque/40'
+                  className={`cursor-pointer space-y-2 p-3 ${
+                    ativo ? '!border-destaque bg-destaque/5' : 'bg-fundo hover:border-destaque/40'
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2">
@@ -331,7 +332,7 @@ export default function FormTatica({ mapa, lado: ladoInicial, inicial = null, on
                       </div>
                     )}
                   </div>
-                </div>
+                </Card>
               )
             })}
           </div>
