@@ -33,7 +33,7 @@ export default function Entrar() {
           className="animate-surgir font-mono text-xs uppercase tracking-[0.35em] text-destaque"
           style={{ animationDelay: '0ms' }}
         >
-          Acesso restrito · grupo fechado
+          Stats de cs2 por grupo
         </p>
         <h1
           className="animate-surgir mt-4 font-display text-4xl font-bold uppercase tracking-widest text-texto sm:text-6xl lg:text-7xl"
@@ -61,7 +61,7 @@ export default function Entrar() {
           className="animate-surgir mt-8 font-mono text-[11px] uppercase tracking-widest text-texto-fraco/60"
           style={{ animationDelay: '360ms' }}
         >
-          Whitelist necessária — pede pro admin do grupo
+          Depois de entrar, crie o seu grupo ou use um link de convite
         </p>
       </div>
 
