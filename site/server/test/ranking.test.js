@@ -4,7 +4,8 @@ import { createApp } from '../src/app.js'
 import { signToken } from '../src/auth/jwt.js'
 
 const config = { jwtSecret: 's', appUrl: 'http://localhost:5173', isProduction: false }
-const cookie = `resenha_token=${signToken({ steamId: '76561198000000009', isAdmin: false }, config.jwtSecret)}`
+const cookie = `resenha_token=${signToken({ steamId: '76561198000000009', isSuperAdmin: false }, config.jwtSecret)}`
+const GRUPO = '11111111-1111-1111-1111-111111111111'
 
 function appWith(rows) {
   const db = { query: vi.fn().mockResolvedValue({ rows }) }
@@ -22,7 +23,7 @@ describe('GET /api/ranking', () => {
       { steam_id64: '1', nick: 'baixo', avatar_url: null, partidas: 4, vitorias: 1, kills: 40, deaths: 50, hs: 10, rating: '0.80', aces: 0, clutch_wins: 0, clutch_attempts: 0, entry_kills: 2, entry_deaths: 2, utility_damage: 100, rounds: 80, shots_fired: 200, shots_hit: 40 },
       { steam_id64: '2', nick: 'alto', avatar_url: null, partidas: 10, vitorias: 7, kills: 200, deaths: 150, hs: 100, rating: '1.35', aces: 3, clutch_wins: 3, clutch_attempts: 5, entry_kills: 20, entry_deaths: 5, utility_damage: 200, rounds: 200, shots_fired: 500, shots_hit: 150 },
     ])
-    const res = await request(app).get('/api/ranking').set('Cookie', cookie)
+    const res = await request(app).get('/api/ranking').set('Cookie', cookie).set('X-Group-Id', GRUPO)
     expect(res.status).toBe(200)
     expect(res.body).toHaveLength(2)
     expect(res.body[0]).toMatchObject({
@@ -38,7 +39,7 @@ describe('GET /api/ranking', () => {
       { steam_id64: '1', nick: 'novato', avatar_url: null, partidas: 0, vitorias: 0, kills: 0, deaths: 0, hs: 0, rating: null, aces: 0, clutch_wins: 0, clutch_attempts: 0 },
       { steam_id64: '2', nick: 'veterano', avatar_url: null, partidas: 5, vitorias: 3, kills: 80, deaths: 60, hs: 20, rating: '1.10', aces: 1, clutch_wins: 0, clutch_attempts: 2 },
     ])
-    const res = await request(app).get('/api/ranking').set('Cookie', cookie)
+    const res = await request(app).get('/api/ranking').set('Cookie', cookie).set('X-Group-Id', GRUPO)
     expect(res.body.map((r) => r.nick)).toEqual(['veterano', 'novato'])
     expect(res.body[1].rating).toBeNull()
   })

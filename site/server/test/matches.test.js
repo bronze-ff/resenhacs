@@ -6,13 +6,16 @@ import { signToken } from '../src/auth/jwt.js'
 import { detectProvider } from '../src/routes/clips.js'
 
 const config = { jwtSecret: 's', appUrl: 'http://localhost:5173', isProduction: false, r2Bucket: 'resenha-demos' }
-const cookie = `resenha_token=${signToken({ steamId: '76561198000000009', isAdmin: false }, config.jwtSecret)}`
+const cookie = `resenha_token=${signToken({ steamId: '76561198000000009', isSuperAdmin: false }, config.jwtSecret)}`
+const GRUPO = '11111111-1111-1111-1111-111111111111'
 
-// Roteia por SQL para simular as várias queries de cada handler.
+// Roteia por SQL para simular as várias queries de cada handler. O check de
+// membro do grupo (requireGroupMember) sempre resolve "é membro" por padrão,
+// a menos que o teste passe seu próprio handler pra esse needle.
 function appWith(handlers, extra = {}) {
   const db = {
     query: vi.fn().mockImplementation((sql) => {
-      for (const [needle, rows] of handlers) {
+      for (const [needle, rows] of [...handlers, ['group_members where group_id = $1 and steam_id64', [{}]]]) {
         if (sql.includes(needle)) return Promise.resolve({ rows })
       }
       return Promise.resolve({ rows: [] })
@@ -27,11 +30,17 @@ describe('GET /api/matches', () => {
     expect((await request(app).get('/api/matches')).status).toBe(401)
   })
 
+  it('sem X-Group-Id: 400', async () => {
+    const { app } = appWith([])
+    const res = await request(app).get('/api/matches').set('Cookie', cookie)
+    expect(res.status).toBe(400)
+  })
+
   it('lista partidas do feed', async () => {
     const { app } = appWith([
       ['from matches m', [{ id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9, status: 'parsed', source: 'valve_mm', tracked: [{ steamId: '765', nick: 'fih', won: true }], mvp: { steamId: '765', nick: 'fih', rating: '1.35' } }]],
     ])
-    const res = await request(app).get('/api/matches').set('Cookie', cookie)
+    const res = await request(app).get('/api/matches').set('Cookie', cookie).set('X-Group-Id', GRUPO)
     expect(res.status).toBe(200)
     expect(res.body[0]).toMatchObject({ id: 'm1', map: 'de_mirage', scoreA: 13, tracked: [{ nick: 'fih' }], mvp: { steamId: '765', nick: 'fih', rating: 1.35 } })
   })
@@ -40,7 +49,7 @@ describe('GET /api/matches', () => {
     const { app } = appWith([
       ['from matches m', [{ id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9, status: 'parsed', source: 'valve_mm', tracked: [], mvp: null }]],
     ])
-    const res = await request(app).get('/api/matches').set('Cookie', cookie)
+    const res = await request(app).get('/api/matches').set('Cookie', cookie).set('X-Group-Id', GRUPO)
     expect(res.body[0].mvp).toBeNull()
   })
 
@@ -48,7 +57,7 @@ describe('GET /api/matches', () => {
     const { app, db } = appWith([
       ['from matches m', [{ id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9, status: 'parsed', source: 'valve_mm', tracked: [], mvp: { steamId: '76561198000000009', nick: 'fih', rating: '1.35' } }]],
     ])
-    const res = await request(app).get('/api/matches?mvp=76561198000000009').set('Cookie', cookie)
+    const res = await request(app).get('/api/matches?mvp=76561198000000009').set('Cookie', cookie).set('X-Group-Id', GRUPO)
     expect(res.status).toBe(200)
     const sql = db.query.mock.calls.find(([s]) => s.includes('from matches m'))[0]
     expect(sql).toContain('mvp_filter')
@@ -58,7 +67,7 @@ describe('GET /api/matches', () => {
     const { app, db } = appWith([
       ['from matches m', [{ id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9, status: 'parsed', source: 'valve_mm', tracked: [], mvp: null }]],
     ])
-    const res = await request(app).get('/api/matches?mvp=abc').set('Cookie', cookie)
+    const res = await request(app).get('/api/matches?mvp=abc').set('Cookie', cookie).set('X-Group-Id', GRUPO)
     expect(res.status).toBe(200)
     const sql = db.query.mock.calls.find(([s]) => s.includes('from matches m'))[0]
     expect(sql).not.toContain('mvp_filter')
@@ -66,7 +75,7 @@ describe('GET /api/matches', () => {
 
   it('aceita limit e offset e os manda como params parametrizados', async () => {
     const { app, db } = appWith([['from matches m', []]])
-    const res = await request(app).get('/api/matches?limit=5&offset=10').set('Cookie', cookie)
+    const res = await request(app).get('/api/matches?limit=5&offset=10').set('Cookie', cookie).set('X-Group-Id', GRUPO)
     expect(res.status).toBe(200)
     const call = db.query.mock.calls.find(([s]) => s.includes('from matches m'))
     const [sql, params] = call
@@ -77,7 +86,7 @@ describe('GET /api/matches', () => {
 
   it('limit/offset inválidos caem no default (20/0)', async () => {
     const { app, db } = appWith([['from matches m', []]])
-    const res = await request(app).get('/api/matches?limit=abc&offset=-3').set('Cookie', cookie)
+    const res = await request(app).get('/api/matches?limit=abc&offset=-3').set('Cookie', cookie).set('X-Group-Id', GRUPO)
     expect(res.status).toBe(200)
     const call = db.query.mock.calls.find(([s]) => s.includes('from matches m'))
     const [, params] = call
@@ -86,7 +95,7 @@ describe('GET /api/matches', () => {
 
   it('limit fora do range 1..100 cai no default', async () => {
     const { app, db } = appWith([['from matches m', []]])
-    await request(app).get('/api/matches?limit=500').set('Cookie', cookie)
+    await request(app).get('/api/matches?limit=500').set('Cookie', cookie).set('X-Group-Id', GRUPO)
     const call = db.query.mock.calls.find(([s]) => s.includes('from matches m'))
     const [, params] = call
     expect(params.slice(-2)).toEqual([20, 0])
@@ -94,18 +103,18 @@ describe('GET /api/matches', () => {
 
   it('sem limit/offset usa default (20/0) e não quebra filtros existentes', async () => {
     const { app, db } = appWith([['from matches m', []]])
-    await request(app).get('/api/matches?map=de_mirage').set('Cookie', cookie)
+    await request(app).get('/api/matches?map=de_mirage').set('Cookie', cookie).set('X-Group-Id', GRUPO)
     const call = db.query.mock.calls.find(([s]) => s.includes('from matches m'))
     const [sql, params] = call
-    expect(sql).toContain('m.map = $1')
-    expect(params).toEqual(['de_mirage', 20, 0])
+    expect(sql).toContain('m.map = $2')
+    expect(params).toEqual([GRUPO, 'de_mirage', 20, 0])
   })
 })
 
 describe('GET /api/matches/:id', () => {
   it('404 quando não existe', async () => {
     const { app } = appWith([['from matches where id', []]])
-    const res = await request(app).get('/api/matches/xxx').set('Cookie', cookie)
+    const res = await request(app).get('/api/matches/xxx').set('Cookie', cookie).set('X-Group-Id', GRUPO)
     expect(res.status).toBe(404)
   })
 
@@ -117,7 +126,7 @@ describe('GET /api/matches/:id', () => {
       ['from highlights h', [{ id: 'h1', steam_id64: '765', round_number: 5, kind: 'ace', description: 'ACE', frame: 12, nick: 'fih' }]],
       ['from clips where match_id', [{ id: 'c1', steam_id64: '765', url: 'https://allstar.gg/x', provider: 'allstar', title: 'meu ace', highlight_id: 'h1' }]],
     ])
-    const res = await request(app).get('/api/matches/m1').set('Cookie', cookie)
+    const res = await request(app).get('/api/matches/m1').set('Cookie', cookie).set('X-Group-Id', GRUPO)
     expect(res.status).toBe(200)
     expect(res.body.players[0]).toMatchObject({ nick: 'fih', rating: 1.35, isTracked: true, teamKills: 1, avatarUrl: 'https://avatars.steamstatic.com/fih.jpg' })
     expect(res.body.rounds[0]).toMatchObject({ roundNumber: 1, winnerTeam: 'A' })
@@ -134,7 +143,7 @@ describe('GET /api/matches/:id', () => {
       ['from highlights h', []],
       ['from clips where match_id', []],
     ])
-    const res = await request(app).get('/api/matches/m1').set('Cookie', cookie)
+    const res = await request(app).get('/api/matches/m1').set('Cookie', cookie).set('X-Group-Id', GRUPO)
     expect(res.status).toBe(200)
     expect(res.body.players[0]).toMatchObject({ nick: 'adversario', isTracked: false, avatarUrl: 'https://avatars.steamstatic.com/cache.jpg' })
   })
@@ -148,7 +157,7 @@ describe('GET /api/matches/:id', () => {
         replay_url: 'https://acc.r2.cloudflarestorage.com/resenha-demos/replays/1.json',
       }]],
     ])
-    const res = await request(app).get('/api/matches/m1').set('Cookie', cookie)
+    const res = await request(app).get('/api/matches/m1').set('Cookie', cookie).set('X-Group-Id', GRUPO)
     expect(res.body.demoUrl).toBe('/api/matches/m1/demo')
     expect(res.body.replayUrl).toBe('/api/matches/m1/replay')
     expect(res.body.replayUrl).not.toContain('r2.cloudflarestorage.com')
@@ -163,14 +172,14 @@ describe('GET /api/matches/:id/replay', () => {
 
   it('R2 não configurado: 503', async () => {
     const { app } = appWith([], { r2Client: null })
-    const res = await request(app).get('/api/matches/m1/replay').set('Cookie', cookie)
+    const res = await request(app).get('/api/matches/m1/replay').set('Cookie', cookie).set('X-Group-Id', GRUPO)
     expect(res.status).toBe(503)
   })
 
   it('partida sem replay: 404', async () => {
     const fakeR2 = { send: vi.fn() }
     const { app } = appWith([['select replay_url', [{ replay_url: null }]]], { r2Client: fakeR2 })
-    const res = await request(app).get('/api/matches/m1/replay').set('Cookie', cookie)
+    const res = await request(app).get('/api/matches/m1/replay').set('Cookie', cookie).set('X-Group-Id', GRUPO)
     expect(res.status).toBe(404)
     expect(fakeR2.send).not.toHaveBeenCalled()
   })
@@ -184,7 +193,7 @@ describe('GET /api/matches/:id/replay', () => {
       [['select replay_url', [{ replay_url: 'https://acc.r2.cloudflarestorage.com/resenha-demos/replays/701c.json' }]]],
       { r2Client: fakeR2 },
     )
-    const res = await request(app).get('/api/matches/701c/replay').set('Cookie', cookie)
+    const res = await request(app).get('/api/matches/701c/replay').set('Cookie', cookie).set('X-Group-Id', GRUPO)
     expect(res.status).toBe(200)
     expect(res.text).toBe('{"map":"de_anubis"}')
     const cmd = fakeR2.send.mock.calls[0][0]

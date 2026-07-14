@@ -6,13 +6,13 @@ function pct(parte, total) {
   return Math.round((parte / total) * 1000) / 10
 }
 
-export function createRankingRouter({ db, requireAuth }) {
+export function createRankingRouter({ db, requireAuth, requireGroupMember }) {
   const router = Router()
 
   // Ranking interno do grupo: agrega os stats de cada Jogador em todas as Partidas.
   // Filtro opcional de período: ?from=YYYY-MM-DD&to=YYYY-MM-DD (sobre matches.played_at).
-  router.get('/', requireAuth, async (req, res) => {
-    const params = []
+  router.get('/', requireAuth, requireGroupMember, async (req, res) => {
+    const params = [req.groupId]
     let periodo = ''
     const { from, to } = req.query
     if (from && /^\d{4}-\d{2}-\d{2}$/.test(from)) {
@@ -33,7 +33,7 @@ export function createRankingRouter({ db, requireAuth }) {
               avg(mp.rating) as rating,
               coalesce((select count(*) from highlights h
                         join matches m on m.id = h.match_id
-                        where h.steam_id64 = p.steam_id64 and h.kind = 'ace'${periodo}), 0)::int as aces,
+                        where h.steam_id64 = p.steam_id64 and h.kind = 'ace' and m.group_id = $1${periodo}), 0)::int as aces,
               coalesce(sum(mp.clutch_wins), 0)::int as clutch_wins,
               coalesce(sum(mp.clutch_attempts), 0)::int as clutch_attempts,
               coalesce(sum(mp.entry_kills), 0)::int as entry_kills,
@@ -42,12 +42,13 @@ export function createRankingRouter({ db, requireAuth }) {
               coalesce(sum(mp.rounds_played), 0)::int as rounds,
               coalesce(sum(mp.shots_fired), 0)::int as shots_fired,
               coalesce(sum(mp.shots_hit), 0)::int as shots_hit
-       from players p
+       from (select distinct steam_id64 from group_members where group_id = $1) gm
+       join players p on p.steam_id64 = gm.steam_id64
        left join steam_avatares sa on sa.steam_id64 = p.steam_id64
        left join (
          select mp.* from match_players mp
          join matches m on m.id = mp.match_id
-         where true${periodo}
+         where m.group_id = $1${periodo}
        ) mp on mp.steam_id64 = p.steam_id64
        group by p.steam_id64, p.nick, p.avatar_url, sa.avatar_url`,
       params,

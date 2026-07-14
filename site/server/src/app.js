@@ -14,7 +14,8 @@ import { createTaticasRouter } from './routes/taticas.js'
 import { createTaticasCuradasRouter } from './routes/taticasCuradas.js'
 import { createPartidasProRouter } from './routes/partidasPro.js'
 import { createGranadasRouter } from './routes/granadas.js'
-import { createRequireAuth } from './auth/middleware.js'
+import { createGroupsRouter, createConvitesRouter } from './routes/groups.js'
+import { createRequireAuth, createRequireGroupMember } from './auth/middleware.js'
 import { createR2Client } from './r2.js'
 
 // Express 4 NÃO encaminha rejections de handler async pro error middleware: uma query
@@ -61,13 +62,16 @@ export function createApp({ config, db, verifySteamLogin, fetchPersona, fetchBan
   app.get('/api/health', (req, res) => res.json({ ok: true }))
 
   const requireAuth = createRequireAuth(config.jwtSecret)
+  const requireGroupMember = createRequireGroupMember(db)
   const r2Client = r2ClientOverride !== undefined ? r2ClientOverride : createR2Client(config)
   app.use('/api/auth', createAuthRouter({ config, db, verifySteamLogin, fetchPersona, requireAuth }))
-  app.use('/api/players', createPlayersRouter({ db, requireAuth, fetchBans }))
-  app.use('/api/matches', createMatchesRouter({ db, requireAuth, r2Client, r2Bucket: config.r2Bucket }))
-  app.use('/api/profile', createProfileRouter({ db, requireAuth }))
+  app.use('/api/groups', requireAuth, createGroupsRouter({ db }))
+  app.use('/api/convites', requireAuth, createConvitesRouter({ db }))
+  app.use('/api/players', createPlayersRouter({ db, requireAuth, requireGroupMember, fetchBans }))
+  app.use('/api/matches', createMatchesRouter({ db, requireAuth, requireGroupMember, r2Client, r2Bucket: config.r2Bucket }))
+  app.use('/api/profile', createProfileRouter({ db, requireAuth, requireGroupMember }))
   app.use('/api/clips', createClipsRouter({ db, requireAuth }))
-  app.use('/api/ranking', createRankingRouter({ db, requireAuth }))
+  app.use('/api/ranking', createRankingRouter({ db, requireAuth, requireGroupMember }))
   app.use('/api/sessions', createSessionsRouter({ db, requireAuth }))
   app.use('/api/lineups', createLineupsRouter({ db, requireAuth }))
   app.use('/api/taticas', createTaticasRouter({ db, requireAuth }))

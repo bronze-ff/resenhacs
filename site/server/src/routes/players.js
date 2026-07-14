@@ -1,7 +1,7 @@
 import { Router } from 'express'
-import { requireAdmin } from '../auth/middleware.js'
+import { requireSuperAdmin } from '../auth/middleware.js'
 
-export function createPlayersRouter({ db, requireAuth, fetchBans }) {
+export function createPlayersRouter({ db, requireAuth, requireGroupMember, fetchBans }) {
   const router = Router()
 
   // Alerta de ban/smurf: cruza os Jogadores do grupo com GetPlayerBans da Steam —
@@ -21,24 +21,27 @@ export function createPlayersRouter({ db, requireAuth, fetchBans }) {
     )
   })
 
-  router.get('/', requireAuth, async (req, res) => {
+  router.get('/', requireAuth, requireGroupMember, async (req, res) => {
     const { rows } = await db.query(
-      `select p.steam_id64, p.nick, coalesce(p.avatar_url, sa.avatar_url) as avatar_url, p.is_admin
-       from players p
+      `select p.steam_id64, p.nick, coalesce(p.avatar_url, sa.avatar_url) as avatar_url, p.is_super_admin
+       from group_members gm
+       join players p on p.steam_id64 = gm.steam_id64
        left join steam_avatares sa on sa.steam_id64 = p.steam_id64
+       where gm.group_id = $1
        order by p.nick`,
+      [req.groupId],
     )
     res.json(
       rows.map((p) => ({
         steamId: p.steam_id64,
         nick: p.nick,
         avatarUrl: p.avatar_url,
-        isAdmin: p.is_admin,
+        isSuperAdmin: p.is_super_admin,
       })),
     )
   })
 
-  router.post('/', requireAuth, requireAdmin, async (req, res) => {
+  router.post('/', requireAuth, requireSuperAdmin, async (req, res) => {
     const steamId = String(req.body?.steamId ?? '')
     if (!/^\d{17}$/.test(steamId)) {
       return res.status(400).json({ erro: 'steamId deve ser o SteamID64 (17 dígitos)' })
@@ -55,7 +58,7 @@ export function createPlayersRouter({ db, requireAuth, fetchBans }) {
 
   // Promove um Participante (já visto em alguma Partida) a Jogador com um clique,
   // sem precisar digitar o SteamID64 na mão — puxa o nick do histórico de partidas.
-  router.post('/promote', requireAuth, requireAdmin, async (req, res) => {
+  router.post('/promote', requireAuth, requireSuperAdmin, async (req, res) => {
     const steamId = String(req.body?.steamId ?? '')
     if (!/^\d{17}$/.test(steamId)) {
       return res.status(400).json({ erro: 'steamId deve ser o SteamID64 (17 dígitos)' })

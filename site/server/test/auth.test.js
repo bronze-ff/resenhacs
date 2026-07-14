@@ -13,7 +13,8 @@ const JOGADOR = {
   steam_id64: '76561198012345678',
   nick: 'fih',
   avatar_url: 'https://avatars.steamstatic.com/x.jpg',
-  is_admin: true,
+  is_super_admin: true,
+  grupo_ativo_id: 'g1',
 }
 
 // Fake que roteia por SQL: players devolve `rows`; o insert de nonce devolve
@@ -41,19 +42,19 @@ function appWith({ rows = [], nonceReplay = false, login = { steamId: JOGADOR.st
   return { app, db }
 }
 
-function cookieFor(payload = { steamId: JOGADOR.steam_id64, isAdmin: true }) {
+function cookieFor(payload = { steamId: JOGADOR.steam_id64, isSuperAdmin: true }) {
   return `resenha_token=${signToken(payload, config.jwtSecret)}`
 }
 
 describe('jwt', () => {
   it('assina e verifica payload', () => {
-    const token = signToken({ steamId: '765', isAdmin: false }, 's')
-    expect(verifyToken(token, 's')).toMatchObject({ steamId: '765', isAdmin: false })
+    const token = signToken({ steamId: '765', isSuperAdmin: false }, 's')
+    expect(verifyToken(token, 's')).toMatchObject({ steamId: '765', isSuperAdmin: false })
   })
 
   it('retorna null para token inválido ou segredo errado', () => {
     expect(verifyToken('lixo', 's')).toBeNull()
-    expect(verifyToken(signToken({ steamId: '765', isAdmin: false }, 'a'), 'b')).toBeNull()
+    expect(verifyToken(signToken({ steamId: '765', isSuperAdmin: false }, 'a'), 'b')).toBeNull()
   })
 })
 
@@ -77,12 +78,21 @@ describe('GET /api/auth/steam/return', () => {
     expect(cookie).toContain('HttpOnly')
   })
 
-  it('fora da whitelist: redireciona para acesso-negado sem cookie', async () => {
-    const { app } = appWith({ rows: [] })
+  it('primeiro login (fora da whitelist antiga): cria o jogador e loga mesmo assim', async () => {
+    const { app } = appWith({ rows: [{ ...JOGADOR, is_super_admin: false, grupo_ativo_id: null }] })
     const res = await request(app).get('/api/auth/steam/return?openid.mode=id_res')
     expect(res.status).toBe(302)
-    expect(res.headers.location).toBe(`${config.appUrl}/acesso-negado`)
-    expect(res.headers['set-cookie']).toBeUndefined()
+    expect(res.headers.location).toBe(config.appUrl)
+    expect(res.headers['set-cookie'][0]).toContain('resenha_token=')
+  })
+
+  it('com returnTo salvo em cookie: redireciona pro destino pós-login', async () => {
+    const { app } = appWith({ rows: [JOGADOR] })
+    const agent = request.agent(app)
+    await agent.get('/api/auth/steam?returnTo=/convite/tok1')
+    const res = await agent.get('/api/auth/steam/return?openid.mode=id_res')
+    expect(res.status).toBe(302)
+    expect(res.headers.location).toBe(`${config.appUrl}/convite/tok1`)
   })
 
   it('assinatura inválida: redireciona com erro', async () => {
@@ -115,7 +125,8 @@ describe('GET /api/auth/me', () => {
       steamId: JOGADOR.steam_id64,
       nick: 'fih',
       avatarUrl: JOGADOR.avatar_url,
-      isAdmin: true,
+      isSuperAdmin: true,
+      grupoAtivoId: 'g1',
     })
   })
 })

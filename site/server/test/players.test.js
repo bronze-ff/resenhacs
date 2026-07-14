@@ -14,8 +14,9 @@ function appWith(rows = []) {
   return { app: createApp({ config, db }), db }
 }
 
-const adminCookie = `resenha_token=${signToken({ steamId: '76561198000000001', isAdmin: true }, config.jwtSecret)}`
-const memberCookie = `resenha_token=${signToken({ steamId: '76561198000000002', isAdmin: false }, config.jwtSecret)}`
+const adminCookie = `resenha_token=${signToken({ steamId: '76561198000000001', isSuperAdmin: true }, config.jwtSecret)}`
+const memberCookie = `resenha_token=${signToken({ steamId: '76561198000000002', isSuperAdmin: false }, config.jwtSecret)}`
+const GRUPO = '11111111-1111-1111-1111-111111111111'
 
 describe('GET /api/players', () => {
   it('sem login: 401', async () => {
@@ -25,11 +26,11 @@ describe('GET /api/players', () => {
 
   it('logado: lista jogadores', async () => {
     const { app } = appWith([
-      { steam_id64: '765', nick: 'fih', avatar_url: null, is_admin: true },
+      { steam_id64: '765', nick: 'fih', avatar_url: null, is_super_admin: true },
     ])
-    const res = await request(app).get('/api/players').set('Cookie', memberCookie)
+    const res = await request(app).get('/api/players').set('Cookie', memberCookie).set('X-Group-Id', GRUPO)
     expect(res.status).toBe(200)
-    expect(res.body).toEqual([{ steamId: '765', nick: 'fih', avatarUrl: null, isAdmin: true }])
+    expect(res.body).toEqual([{ steamId: '765', nick: 'fih', avatarUrl: null, isSuperAdmin: true }])
   })
 })
 

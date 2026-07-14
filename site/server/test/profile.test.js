@@ -4,12 +4,13 @@ import { createApp } from '../src/app.js'
 import { signToken } from '../src/auth/jwt.js'
 
 const config = { jwtSecret: 's', appUrl: 'http://localhost:5173', isProduction: false }
-const cookie = `resenha_token=${signToken({ steamId: '76561198000000009', isAdmin: false }, config.jwtSecret)}`
+const cookie = `resenha_token=${signToken({ steamId: '76561198000000009', isSuperAdmin: false }, config.jwtSecret)}`
+const GRUPO = '11111111-1111-1111-1111-111111111111'
 
 function appWith(handlers) {
   const db = {
     query: vi.fn().mockImplementation((sql) => {
-      for (const [needle, rows] of handlers) {
+      for (const [needle, rows] of [...handlers, ['group_members where group_id = $1 and steam_id64', [{}]]]) {
         if (sql.includes(needle)) return Promise.resolve({ rows })
       }
       return Promise.resolve({ rows: [] })
@@ -24,7 +25,7 @@ describe('GET /api/profile/:steamId/posicoes', () => {
       ['group by m.map order by n desc', [{ map: 'de_mirage', n: 42 }]],
       ['kp.victim_x as x', [{ x: -3230, y: 1713 }]], // == pos_x/pos_y do mapa -> projeta pro (0,0)
     ])
-    const res = await request(app).get('/api/profile/765/posicoes').set('Cookie', cookie)
+    const res = await request(app).get('/api/profile/765/posicoes').set('Cookie', cookie).set('X-Group-Id', GRUPO)
     expect(res.status).toBe(200)
     expect(res.body).toEqual({
       map: 'de_mirage', calibrated: true,
@@ -35,7 +36,7 @@ describe('GET /api/profile/:steamId/posicoes', () => {
 
   it('sem dados: devolve mapa null e listas vazias', async () => {
     const { app } = appWith([['group by m.map order by n desc', []]])
-    const res = await request(app).get('/api/profile/765/posicoes').set('Cookie', cookie)
+    const res = await request(app).get('/api/profile/765/posicoes').set('Cookie', cookie).set('X-Group-Id', GRUPO)
     expect(res.status).toBe(200)
     expect(res.body).toEqual({ map: null, calibrated: false, mapas: [], pontos: [] })
   })
@@ -45,7 +46,7 @@ describe('GET /api/profile/:steamId/posicoes', () => {
       ['group by m.map order by n desc', [{ map: 'de_dust2', n: 5 }]],
       ['kp.killer_x as x', [{ x: -2476, y: 3239 }]],
     ])
-    const res = await request(app).get('/api/profile/765/posicoes?modo=kills').set('Cookie', cookie)
+    const res = await request(app).get('/api/profile/765/posicoes?modo=kills').set('Cookie', cookie).set('X-Group-Id', GRUPO)
     expect(res.body.pontos).toEqual([{ x: 0, y: 0 }])
   })
 })
@@ -53,7 +54,7 @@ describe('GET /api/profile/:steamId/posicoes', () => {
 describe('GET /api/profile/:steamId', () => {
   it('404 quando jogador não existe', async () => {
     const { app } = appWith([['where p.steam_id64 = $1', []]])
-    const res = await request(app).get('/api/profile/765').set('Cookie', cookie)
+    const res = await request(app).get('/api/profile/765').set('Cookie', cookie).set('X-Group-Id', GRUPO)
     expect(res.status).toBe(404)
   })
 
@@ -90,7 +91,7 @@ describe('GET /api/profile/:steamId', () => {
         { buy_type: 'eco', rounds: 3, won: 1 },
       ]],
     ])
-    const res = await request(app).get('/api/profile/765').set('Cookie', cookie)
+    const res = await request(app).get('/api/profile/765').set('Cookie', cookie).set('X-Group-Id', GRUPO)
     expect(res.status).toBe(200)
     expect(res.body.jogador).toMatchObject({ nick: 'fih' })
     expect(res.body.stats).toMatchObject({ partidas: 10, vitorias: 6, winrate: 60, kills: 200 })
@@ -136,8 +137,8 @@ describe('GET /api/profile/:steamId', () => {
 describe('GET /api/profile/compare', () => {
   it('400 quando os dois steamId não são válidos ou são iguais', async () => {
     const { app } = appWith([])
-    expect((await request(app).get('/api/profile/compare?a=1&b=2').set('Cookie', cookie)).status).toBe(400)
-    expect((await request(app).get('/api/profile/compare?a=76561198000000001&b=76561198000000001').set('Cookie', cookie)).status).toBe(400)
+    expect((await request(app).get('/api/profile/compare?a=1&b=2').set('Cookie', cookie).set('X-Group-Id', GRUPO)).status).toBe(400)
+    expect((await request(app).get('/api/profile/compare?a=76561198000000001&b=76561198000000001').set('Cookie', cookie).set('X-Group-Id', GRUPO)).status).toBe(400)
   })
 
   it('404 quando algum dos dois não é Jogador', async () => {
@@ -146,7 +147,7 @@ describe('GET /api/profile/compare', () => {
     ])
     const res = await request(app)
       .get('/api/profile/compare?a=76561198000000001&b=76561198000000002')
-      .set('Cookie', cookie)
+      .set('Cookie', cookie).set('X-Group-Id', GRUPO)
     expect(res.status).toBe(404)
   })
 
@@ -166,7 +167,7 @@ describe('GET /api/profile/compare', () => {
         { team_a: 'B', team_b: 'A', a_venceu: false }, // times opostos, b venceu
       ]],
     ])
-    const res = await request(app).get(`/api/profile/compare?a=${a}&b=${b}`).set('Cookie', cookie)
+    const res = await request(app).get(`/api/profile/compare?a=${a}&b=${b}`).set('Cookie', cookie).set('X-Group-Id', GRUPO)
     expect(res.status).toBe(200)
     expect(res.body.a).toMatchObject({ nick: 'fih', stats: { partidas: 10 } })
     expect(res.body.b).toMatchObject({ nick: 'bronze', stats: { partidas: 10 } })
