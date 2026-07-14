@@ -48,6 +48,11 @@ h1, h2, h3, .font-display {
   font-family: var(--font-mono);
 }
 
+/* Tracking negativo sutil pros tamanhos grandes de display (valores de stat, números FACEIT). */
+.display-tight {
+  letter-spacing: -0.01em;
+}
+
 ::selection {
   background: var(--color-destaque);
   color: var(--color-fundo);

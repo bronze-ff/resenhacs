@@ -1,0 +1,7 @@
+// Primitivos de UI compartilhados — import limpo: import { Card, Badge, ... } from '@/components/ui'
+export { default as Card } from './Card.jsx'
+export { default as SectionHeader } from './SectionHeader.jsx'
+export { default as StatTile } from './StatTile.jsx'
+export { default as Badge } from './Badge.jsx'
+export { default as RatingBadge } from './RatingBadge.jsx'
+export { default as DataTable } from './DataTable.jsx'
