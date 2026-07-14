@@ -3,6 +3,7 @@ import { nomeMapa } from '../../lib/format.js'
 import { MAPAS_POOL } from '../granadas/ExplorarMapas.jsx'
 import CardTatica, { ROTULO_ARMAS, ROTULO_TIPO_TATICA } from './CardTatica.jsx'
 import CardTaticaReplay from './CardTaticaReplay.jsx'
+import DetalheTatica from './DetalheTatica.jsx'
 
 const TIPOS = [['todas', 'Todas'], ...Object.entries(ROTULO_TIPO_TATICA)]
 const LOCAIS = [['todas', 'Todas'], ['A', 'A'], ['B', 'B'], ['MID', 'MID']]
@@ -15,8 +16,6 @@ export default function PaginaMapaTaticas({ mapa, onTrocarMapa }) {
   const [armas, setArmas] = useState('todas')
   const [taticas, setTaticas] = useState(null)
   const [antigas, setAntigas] = useState(null)
-  // T3 (DetalheTatica) vai ler/ligar esse estado num modal. Por ora o clique no
-  // card só guarda a tática selecionada — nenhum modal é renderizado ainda.
   const [selecionada, setSelecionada] = useState(null)
 
   useEffect(() => {
@@ -168,9 +167,9 @@ export default function PaginaMapaTaticas({ mapa, onTrocarMapa }) {
         </div>
       </div>
 
-      {/* T3 (DetalheTatica) vai renderizar aqui o modal quando `selecionada` estiver
-          preenchida (Overview + abas por jogador). Por enquanto nada é exibido. */}
-      {selecionada && null}
+      {selecionada && (
+        <DetalheTatica tatica={selecionada} onFechar={() => setSelecionada(null)} />
+      )}
     </div>
   )
 }

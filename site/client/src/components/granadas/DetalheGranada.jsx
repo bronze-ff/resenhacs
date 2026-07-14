@@ -14,7 +14,9 @@ export default function DetalheGranada({ granada, onFechar, acoesAdmin = null })
   const temPassos = (granada.passos ?? []).length > 0
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-fundo/80 p-0 lg:p-4" onClick={onFechar}>
+    // z-[60]: precisa abrir POR CIMA de outros modais (ex.: DetalheTatica, z-50,
+    // que linka granadas da biblioteca e abre este componente sobreposto).
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-fundo/80 p-0 lg:p-4" onClick={onFechar}>
       <div
         className="flex h-full w-full flex-col overflow-y-hidden border border-borda bg-superficie lg:panel-cut lg:block lg:h-auto lg:max-h-[90vh] lg:w-full lg:max-w-2xl lg:overflow-y-auto lg:p-5"
         onClick={(e) => e.stopPropagation()}
