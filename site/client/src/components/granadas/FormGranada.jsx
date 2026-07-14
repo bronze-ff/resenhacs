@@ -42,21 +42,30 @@ export default function FormGranada({ mapa, lado, posicoes, inicial = null, onSa
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-fundo/80 p-4" onClick={onCancelar}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-fundo/80 p-0 lg:p-4" onClick={onCancelar}>
+      {/* Mobile: form ocupa a tela inteira, então o backdrop clicável some;
+          esse X fixo é o único jeito de fechar sem rolar até o fim. Desktop
+          continua fechando pelo clique fora ou pelo botão Cancelar de sempre. */}
+      <button
+        type="button"
+        onClick={onCancelar}
+        aria-label="Fechar"
+        className="fixed right-3 top-3 z-[60] flex min-h-10 min-w-10 items-center justify-center rounded-full border border-borda bg-superficie font-mono text-sm text-texto-fraco hover:text-texto lg:hidden"
+      >✕</button>
       <form
         onSubmit={salvar}
         onClick={(e) => e.stopPropagation()}
-        className="panel-cut max-h-[90vh] w-full max-w-lg space-y-3 overflow-y-auto border border-borda bg-superficie p-5"
+        className="h-full w-full space-y-3 overflow-y-auto border border-borda bg-superficie p-5 lg:panel-cut lg:h-auto lg:max-h-[90vh] lg:w-full lg:max-w-lg"
       >
         <h3 className="font-display text-lg font-bold uppercase text-texto">
           {inicial ? 'Editar granada' : 'Nova granada'} — {lado}
         </h3>
         <input value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Título (ex.: Smoke janela da base)"
-          className="w-full rounded border border-borda bg-fundo px-3 py-2 font-mono text-sm" />
+          className="min-h-10 w-full rounded border border-borda bg-fundo px-3 py-2 font-mono text-sm lg:min-h-0" />
         <textarea value={descricao} onChange={(e) => setDescricao(e.target.value)} placeholder="Descrição (opcional)" rows={2}
           className="w-full rounded border border-borda bg-fundo px-3 py-2 font-mono text-sm" />
         <input value={videoUrl} onChange={(e) => setVideoUrl(e.target.value)} placeholder="Link do YouTube (opcional)"
-          className="w-full rounded border border-borda bg-fundo px-3 py-2 font-mono text-sm" />
+          className="min-h-10 w-full rounded border border-borda bg-fundo px-3 py-2 font-mono text-sm lg:min-h-0" />
         <a
           href={linkBuscaYoutube(`${nomeMapa(mapa)} ${tipo} ${titulo}`)}
           target="_blank"
@@ -66,13 +75,13 @@ export default function FormGranada({ mapa, lado, posicoes, inicial = null, onSa
           Buscar vídeo no YouTube
         </a>
         <div className="grid grid-cols-3 gap-2">
-          <select value={tipo} onChange={(e) => setTipo(e.target.value)} className="rounded border border-borda bg-fundo px-2 py-1.5 font-mono text-xs">
+          <select value={tipo} onChange={(e) => setTipo(e.target.value)} className="min-h-10 rounded border border-borda bg-fundo px-2 py-1.5 font-mono text-xs lg:min-h-0">
             {TIPOS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
-          <select value={tecnica} onChange={(e) => setTecnica(e.target.value)} className="rounded border border-borda bg-fundo px-2 py-1.5 font-mono text-xs">
+          <select value={tecnica} onChange={(e) => setTecnica(e.target.value)} className="min-h-10 rounded border border-borda bg-fundo px-2 py-1.5 font-mono text-xs lg:min-h-0">
             {TECNICAS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
-          <select value={botao} onChange={(e) => setBotao(e.target.value)} className="rounded border border-borda bg-fundo px-2 py-1.5 font-mono text-xs">
+          <select value={botao} onChange={(e) => setBotao(e.target.value)} className="min-h-10 rounded border border-borda bg-fundo px-2 py-1.5 font-mono text-xs lg:min-h-0">
             {BOTOES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
         </div>
@@ -81,9 +90,9 @@ export default function FormGranada({ mapa, lado, posicoes, inicial = null, onSa
           className="w-full rounded border border-borda bg-fundo px-3 py-2 font-mono text-sm" />
         {erro && <p className="font-mono text-sm text-perigo">{erro}</p>}
         <div className="flex justify-end gap-2">
-          <button type="button" onClick={onCancelar} className="px-4 py-2 font-mono text-xs uppercase text-texto-fraco hover:text-texto">Cancelar</button>
+          <button type="button" onClick={onCancelar} className="min-h-10 px-4 py-2 font-mono text-xs uppercase text-texto-fraco hover:text-texto lg:min-h-0">Cancelar</button>
           <button type="submit" disabled={salvando}
-            className="panel-cut-sm border border-destaque bg-destaque px-4 py-2 font-display text-sm font-semibold uppercase text-fundo disabled:opacity-50">
+            className="panel-cut-sm min-h-10 border border-destaque bg-destaque px-4 py-2 font-display text-sm font-semibold uppercase text-fundo disabled:opacity-50 lg:min-h-0">
             {salvando ? 'Salvando…' : 'Salvar'}
           </button>
         </div>

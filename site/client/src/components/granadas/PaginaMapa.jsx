@@ -132,79 +132,83 @@ export default function PaginaMapa({ mapa, onTrocarMapa }) {
 
   return (
     <div className="flex flex-col gap-4 lg:flex-row">
-      <aside className="w-full space-y-4 lg:w-56">
+      <aside className="w-full space-y-3 lg:w-56 lg:space-y-4">
         <h2 className="font-display text-2xl font-bold uppercase tracking-wide text-texto">{nomeMapa(mapa)}</h2>
 
-        <div>
-          <p className="mb-1 font-mono text-xs uppercase text-texto-fraco">Trocar mapa</p>
-          <select
-            value={mapa}
-            onChange={(e) => onTrocarMapa(e.target.value)}
-            className="w-full rounded border border-borda bg-superficie px-2 py-1 font-mono text-sm"
-          >
-            {MAPAS_POOL.map((m) => <option key={m} value={m}>{nomeMapa(m)}</option>)}
-          </select>
-        </div>
-
-        <div>
-          <p className="mb-1 font-mono text-xs uppercase text-texto-fraco">Trocar lado</p>
-          <div className="flex overflow-hidden rounded border border-borda font-mono text-xs uppercase">
-            {['T', 'CT'].map((v) => (
-              <button
-                key={v}
-                onClick={() => setLado(v)}
-                className={`flex-1 px-3 py-1.5 transition-colors ${lado === v ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'}`}
-              >
-                {v}
-              </button>
-            ))}
+        {/* Mobile: grupos de filtro em linha (ribbon) pra não empurrar o radar
+            pra baixo da dobra. Desktop: volta a ser a coluna vertical de sempre. */}
+        <div className="flex flex-wrap items-end gap-2 lg:block lg:items-stretch lg:gap-0 lg:space-y-4">
+          <div className="w-36 lg:w-auto">
+            <p className="mb-1 font-mono text-xs uppercase text-texto-fraco">Trocar mapa</p>
+            <select
+              value={mapa}
+              onChange={(e) => onTrocarMapa(e.target.value)}
+              className="min-h-10 w-full rounded border border-borda bg-superficie px-2 py-1 font-mono text-sm lg:min-h-0"
+            >
+              {MAPAS_POOL.map((m) => <option key={m} value={m}>{nomeMapa(m)}</option>)}
+            </select>
           </div>
-        </div>
 
-        <div>
-          <p className="mb-1 font-mono text-xs uppercase text-texto-fraco">Tipos de granada</p>
-          <div className="space-y-1">
-            {TIPOS.map(([v, label]) => (
-              <button
-                key={v}
-                onClick={() => setTipo(v)}
-                disabled={porTipo[v] === 0}
-                className={`flex w-full items-center justify-between rounded border px-3 py-1.5 font-mono text-xs uppercase transition-colors ${
-                  tipo === v ? 'border-destaque bg-destaque/10 text-destaque'
-                    : porTipo[v] === 0 ? 'border-borda text-texto-fraco/40'
-                    : 'border-borda text-texto-fraco hover:text-texto'
-                }`}
-              >
-                <span>{label}</span>
-                <span>{porTipo[v]}</span>
-              </button>
-            ))}
+          <div className="w-24 lg:w-auto">
+            <p className="mb-1 font-mono text-xs uppercase text-texto-fraco">Trocar lado</p>
+            <div className="flex overflow-hidden rounded border border-borda font-mono text-xs uppercase">
+              {['T', 'CT'].map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setLado(v)}
+                  className={`min-h-10 flex-1 px-3 py-1.5 transition-colors lg:min-h-0 ${lado === v ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'}`}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
 
-        <div>
-          <p className="mb-1 font-mono text-xs uppercase text-texto-fraco">Chamadas</p>
-          <div className="flex overflow-hidden rounded border border-borda font-mono text-xs uppercase">
-            {NIVEIS_CALLOUT.map(([v, label]) => (
-              <button
-                key={v}
-                onClick={() => setNivelCallouts(v)}
-                className={`flex-1 px-2 py-1.5 transition-colors ${nivelCallouts === v ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'}`}
-              >
-                {label}
-              </button>
-            ))}
+          <div className="w-full lg:w-auto">
+            <p className="mb-1 font-mono text-xs uppercase text-texto-fraco">Tipos de granada</p>
+            <div className="flex flex-wrap gap-1 lg:block lg:space-y-1">
+              {TIPOS.map(([v, label]) => (
+                <button
+                  key={v}
+                  onClick={() => setTipo(v)}
+                  disabled={porTipo[v] === 0}
+                  className={`flex min-h-10 items-center justify-between gap-1.5 rounded border px-3 py-1.5 font-mono text-xs uppercase transition-colors lg:min-h-0 lg:w-full lg:gap-0 ${
+                    tipo === v ? 'border-destaque bg-destaque/10 text-destaque'
+                      : porTipo[v] === 0 ? 'border-borda text-texto-fraco/40'
+                      : 'border-borda text-texto-fraco hover:text-texto'
+                  }`}
+                >
+                  <span>{label}</span>
+                  <span>{porTipo[v]}</span>
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
 
-        {isAdmin && (
-          <button
-            onClick={() => setModoMarcacao({})}
-            className="panel-cut-sm w-full border border-destaque bg-destaque px-3 py-2 font-display text-sm font-semibold uppercase text-fundo"
-          >
-            Adicionar granada
-          </button>
-        )}
+          <div className="w-28 lg:w-auto">
+            <p className="mb-1 font-mono text-xs uppercase text-texto-fraco">Chamadas</p>
+            <div className="flex overflow-hidden rounded border border-borda font-mono text-xs uppercase">
+              {NIVEIS_CALLOUT.map(([v, label]) => (
+                <button
+                  key={v}
+                  onClick={() => setNivelCallouts(v)}
+                  className={`min-h-10 flex-1 px-2 py-1.5 transition-colors lg:min-h-0 ${nivelCallouts === v ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {isAdmin && (
+            <button
+              onClick={() => setModoMarcacao({})}
+              className="panel-cut-sm min-h-10 w-full border border-destaque bg-destaque px-3 py-2 font-display text-sm font-semibold uppercase text-fundo lg:min-h-0"
+            >
+              Adicionar granada
+            </button>
+          )}
+        </div>
         {modoMarcacao && (
           <p className="font-mono text-xs text-destaque">
             {!modoMarcacao.arremesso ? '1º clique: de onde LANÇA' : !modoMarcacao.alvo ? '2º clique: onde CAI' : ''}
@@ -219,7 +223,7 @@ export default function PaginaMapa({ mapa, onTrocarMapa }) {
               <p className="mb-2 font-mono text-[11px] text-texto-fraco">{resumoGeracao}</p>
             )}
             {sugestoes === null ? (
-              <button onClick={abrirSugestoes} className="w-full rounded border border-borda px-3 py-1.5 font-mono text-xs uppercase text-texto-fraco hover:text-texto">
+              <button onClick={abrirSugestoes} className="min-h-10 w-full rounded border border-borda px-3 py-1.5 font-mono text-xs uppercase text-texto-fraco hover:text-texto lg:min-h-0">
                 Ver granadas mais usadas
               </button>
             ) : sugestoes.length === 0 ? (
@@ -229,7 +233,7 @@ export default function PaginaMapa({ mapa, onTrocarMapa }) {
                 <button
                   onClick={gerarBiblioteca}
                   disabled={!!gerando}
-                  className="mb-2 w-full rounded border border-destaque bg-destaque/10 px-3 py-1.5 font-mono text-xs uppercase text-destaque hover:bg-destaque/20 disabled:opacity-50"
+                  className="mb-2 min-h-10 w-full rounded border border-destaque bg-destaque/10 px-3 py-1.5 font-mono text-xs uppercase text-destaque hover:bg-destaque/20 disabled:opacity-50 lg:min-h-0"
                 >
                   {gerando ? `Cadastrando ${gerando.atual}/${gerando.total}…` : 'Gerar biblioteca deste mapa'}
                 </button>
@@ -302,7 +306,7 @@ export default function PaginaMapa({ mapa, onTrocarMapa }) {
                   })
                   setSelecionada(null)
                 }}
-                className="px-3 py-1.5 font-mono text-xs uppercase text-texto-fraco hover:text-texto"
+                className="min-h-10 px-3 py-1.5 font-mono text-xs uppercase text-texto-fraco hover:text-texto lg:min-h-0"
               >Editar</button>
               <button
                 onClick={async () => {
@@ -310,7 +314,7 @@ export default function PaginaMapa({ mapa, onTrocarMapa }) {
                   const res = await fetch(`/api/granadas/${selecionada.id}`, { method: 'DELETE' }).catch(() => null)
                   if (res?.ok) { setSelecionada(null); recarregar() }
                 }}
-                className="px-3 py-1.5 font-mono text-xs uppercase text-perigo hover:brightness-125"
+                className="min-h-10 px-3 py-1.5 font-mono text-xs uppercase text-perigo hover:brightness-125 lg:min-h-0"
               >Excluir</button>
             </div>
           )}
