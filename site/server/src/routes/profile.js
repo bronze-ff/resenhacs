@@ -369,7 +369,8 @@ export function createProfileRouter({ db, requireAuth }) {
       ),
       db.query(
         `select m.id, m.map, m.played_at, m.score_a, m.score_b,
-                mp.kills, mp.deaths, mp.rating, mp.won
+                mp.kills, mp.deaths, mp.assists, mp.rating, mp.won,
+                mp.damage, mp.rounds_played, mp.headshot_kills
          from match_players mp join matches m on m.id = mp.match_id
          where mp.steam_id64 = $1 and m.status = 'parsed'${recentesPeriodo}
          order by m.played_at desc nulls last limit 20`,
@@ -445,8 +446,11 @@ export function createProfileRouter({ db, requireAuth }) {
         scoreB: r.score_b,
         kills: r.kills,
         deaths: r.deaths,
+        assists: r.assists ?? 0,
         rating: r.rating === null ? null : Number(r.rating),
         won: r.won,
+        adr: r.rounds_played ? Math.round((r.damage / r.rounds_played) * 10) / 10 : 0,
+        hsPct: r.kills ? Math.round((r.headshot_kills / r.kills) * 100) : 0,
       })),
       sinergia: sinergia.rows.map((s) => ({
         steamId: s.steam_id64,

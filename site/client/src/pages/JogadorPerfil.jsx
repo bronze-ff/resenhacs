@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { nomeMapa, dataHora, corRating, nomeArma, TIPO_COMPRA } from '../lib/format.js'
 import StatTile from '../components/StatTile.jsx'
 import LinhaEvolucao from '../components/LinhaEvolucao.jsx'
@@ -7,8 +7,30 @@ import FiltroPeriodo from '../components/FiltroPeriodo.jsx'
 import TagEstilo from '../components/TagEstilo.jsx'
 import PosicionamentoAgregado from '../components/PosicionamentoAgregado.jsx'
 
+// Stat compacto pro card mobile de partida (padrão do CardJogador em Ranking.jsx).
+// `rating` (se passado) desenha um badge verde/vermelho estilo FACEIT (>= 1.0 / < 1.0).
+function Stat({ rotulo, valor, cor, rating }) {
+  return (
+    <div className="min-w-0">
+      <div className="font-mono text-[10px] uppercase tracking-wide text-texto-fraco">{rotulo}</div>
+      {rating !== undefined ? (
+        <span
+          className={`panel-cut-sm inline-block px-1.5 py-0.5 font-mono text-sm font-bold tabular-nums ${
+            rating == null ? 'text-texto-fraco' : rating >= 1 ? 'bg-sucesso/15 text-sucesso' : 'bg-perigo/15 text-perigo'
+          }`}
+        >
+          {valor}
+        </span>
+      ) : (
+        <div className={`truncate text-sm font-semibold tabular-nums ${cor ?? 'text-texto'}`}>{valor}</div>
+      )}
+    </div>
+  )
+}
+
 export default function JogadorPerfil() {
   const { steamId } = useParams()
+  const navegar = useNavigate()
   const [data, setData] = useState(null)
   const [erro, setErro] = useState(false)
   const [de, setDe] = useState('')
@@ -339,39 +361,115 @@ export default function JogadorPerfil() {
           )}
         </h3>
         {recentes.length === 0 && <p className="font-mono text-sm text-texto-fraco">Nenhuma partida ainda.</p>}
-        <div className="space-y-2">
-          {recentes.map((r) => {
-            const delta = r.rating != null && stats.rating != null ? Math.round((r.rating - stats.rating) * 100) / 100 : null
-            return (
-            <Link
-              key={r.id}
-              to={`/partida/${r.id}`}
-              className="panel-cut flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border border-borda bg-superficie p-3 transition-colors hover:border-destaque/60"
-            >
-              <span className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-texto">
-                <span
-                  className={`inline-block h-2 w-2 shrink-0 rounded-full ${r.won === true ? 'bg-sucesso' : r.won === false ? 'bg-perigo' : 'bg-texto-fraco'}`}
-                  title={r.won === true ? 'Vitória' : r.won === false ? 'Derrota' : 'Empate'}
-                />
-                <span>{nomeMapa(r.map)}</span>
-                <span className="text-xs text-texto-fraco">{dataHora(r.playedAt)}</span>
-                {delta != null && (
-                  <span
-                    className={`text-xs ${delta >= 0.1 ? 'text-sucesso' : delta <= -0.1 ? 'text-perigo' : 'text-texto-fraco'}`}
-                    title="Diferença do rating dessa partida pra média dele no período"
+
+        {recentes.length > 0 && (
+          <>
+            {/* Mobile: cards no padrão do Ranking (borda esquerda por resultado + grade de stats) */}
+            <div className="space-y-2 lg:hidden">
+              {recentes.map((r) => {
+                const kd = r.deaths > 0 ? (r.kills / r.deaths).toFixed(2) : r.kills.toFixed(2)
+                return (
+                  <Link
+                    key={r.id}
+                    to={`/partida/${r.id}`}
+                    className={`panel-cut flex items-center gap-3 border-y border-r border-l-4 border-borda bg-superficie p-3 transition-colors hover:bg-superficie-alta ${
+                      r.won === true ? 'border-l-sucesso' : r.won === false ? 'border-l-perigo' : 'border-l-texto-fraco'
+                    }`}
                   >
-                    {delta >= 0 ? '+' : ''}{delta.toFixed(2)}
-                  </span>
-                )}
-              </span>
-              <span className="font-mono text-sm tabular-nums text-texto-fraco">
-                {r.scoreA}:{r.scoreB} · {r.kills}/{r.deaths}
-                {r.rating != null && <span className={`ml-2 ${corRating(r.rating)}`}>{r.rating.toFixed(2)}</span>}
-              </span>
-            </Link>
-            )
-          })}
-        </div>
+                    <div className="w-14 shrink-0 font-mono text-[11px] leading-tight text-texto-fraco">
+                      <div>{new Date(r.playedAt ?? '').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</div>
+                      <div>{new Date(r.playedAt ?? '').toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`panel-cut-sm px-1.5 py-0.5 font-display text-[10px] font-bold uppercase ${
+                            r.won === true ? 'bg-sucesso/15 text-sucesso' : r.won === false ? 'bg-perigo/15 text-perigo' : 'bg-superficie-alta text-texto-fraco'
+                          }`}
+                        >
+                          {r.won === true ? 'V' : r.won === false ? 'D' : '—'}
+                        </span>
+                        <span className="font-display text-lg font-bold tabular-nums text-texto">{r.scoreA} : {r.scoreB}</span>
+                        <span className="truncate font-mono text-xs text-texto-fraco">{nomeMapa(r.map)}</span>
+                      </div>
+                      <div className="mt-2 grid grid-cols-4 gap-2">
+                        <Stat rotulo="Rating" valor={r.rating != null ? r.rating.toFixed(2) : '–'} rating={r.rating} />
+                        <Stat rotulo="K/D/A" valor={`${r.kills}/${r.deaths}/${r.assists}`} />
+                        <Stat rotulo="K/D" valor={kd} cor={Number(kd) >= 1 ? 'text-sucesso' : 'text-perigo'} />
+                        <Stat rotulo="ADR" valor={r.adr} />
+                      </div>
+                    </div>
+                  </Link>
+                )
+              })}
+            </div>
+
+            {/* Desktop: tabela densa estilo FACEIT */}
+            <div className="panel-cut hidden overflow-x-auto border border-borda lg:block">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-superficie text-left font-mono text-[10px] uppercase tracking-wider text-texto-fraco">
+                    <th className="px-3 py-2">Data</th>
+                    <th className="px-2 py-2">Placar</th>
+                    <th className="px-2 py-2 text-right">Rating</th>
+                    <th className="px-2 py-2 text-right">K/D/A</th>
+                    <th className="px-2 py-2 text-right">K/D</th>
+                    <th className="hidden px-2 py-2 text-right xl:table-cell">ADR</th>
+                    <th className="hidden px-2 py-2 text-right xl:table-cell">HS%</th>
+                    <th className="px-3 py-2">Mapa</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentes.map((r) => {
+                    const kd = r.deaths > 0 ? (r.kills / r.deaths).toFixed(2) : r.kills.toFixed(2)
+                    return (
+                      <tr
+                        key={r.id}
+                        className={`cursor-pointer border-t border-l-4 border-borda transition-colors hover:bg-superficie-alta ${
+                          r.won === true ? 'border-l-sucesso' : r.won === false ? 'border-l-perigo' : 'border-l-texto-fraco'
+                        }`}
+                        onClick={() => navegar(`/partida/${r.id}`)}
+                      >
+                        <td className="px-3 py-2">
+                          <div className="font-mono text-[11px] leading-tight text-texto-fraco">
+                            <div>{new Date(r.playedAt ?? '').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</div>
+                            <div>{new Date(r.playedAt ?? '').toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
+                          </div>
+                        </td>
+                        <td className="px-2 py-2">
+                          <span className="flex items-center gap-2">
+                            <span
+                              className={`panel-cut-sm px-1.5 py-0.5 font-display text-[10px] font-bold uppercase ${
+                                r.won === true ? 'bg-sucesso/15 text-sucesso' : r.won === false ? 'bg-perigo/15 text-perigo' : 'bg-superficie-alta text-texto-fraco'
+                              }`}
+                            >
+                              {r.won === true ? 'V' : r.won === false ? 'D' : '—'}
+                            </span>
+                            <span className="font-display font-bold tabular-nums text-texto">{r.scoreA} : {r.scoreB}</span>
+                          </span>
+                        </td>
+                        <td className="px-2 py-2 text-right">
+                          <span
+                            className={`panel-cut-sm px-2 py-0.5 font-mono text-xs font-bold tabular-nums ${
+                              (r.rating ?? 0) >= 1 ? 'bg-sucesso/15 text-sucesso' : 'bg-perigo/15 text-perigo'
+                            }`}
+                          >
+                            {r.rating != null ? r.rating.toFixed(2) : '–'}
+                          </span>
+                        </td>
+                        <td className="px-2 py-2 text-right font-mono tabular-nums text-texto-fraco">{r.kills}/{r.deaths}/{r.assists}</td>
+                        <td className={`px-2 py-2 text-right font-mono tabular-nums ${Number(kd) >= 1 ? 'text-sucesso' : 'text-perigo'}`}>{kd}</td>
+                        <td className="hidden px-2 py-2 text-right font-mono tabular-nums text-texto-fraco xl:table-cell">{r.adr}</td>
+                        <td className="hidden px-2 py-2 text-right font-mono tabular-nums text-texto-fraco xl:table-cell">{r.hsPct}%</td>
+                        <td className="px-3 py-2 font-mono text-texto-fraco">{nomeMapa(r.map)}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
       </section>
     </div>
   )
