@@ -13,10 +13,10 @@ import { ROTULO_TECNICA } from '../../lib/rotulos.js'
 // Sem essa prop o marcador se comporta exatamente como antes.
 export function MarcadorTipo({ tipo, x, y, ativo, estado }) {
   const corPorTipo = { smoke: '#d2d2d7', flash: '#fff8d6', he: '#ffaa3c', molotov: '#ff6e1e' }
-  const cor = ativo ? '#ffd166' : estado === 'ativo' ? '#ff9a1f' : corPorTipo[tipo]
+  const cor = ativo ? '#ffd166' : estado === 'ativo' ? '#ff2e43' : corPorTipo[tipo]
   const opacidade = estado === 'normal' ? 0.4 : 0.9
   const anel = estado === 'ativo'
-    ? <circle cx={x} cy={y} r="3.1" fill="none" stroke="#ff9a1f" strokeWidth="0.6" opacity="0.95" />
+    ? <circle cx={x} cy={y} r="3.1" fill="none" stroke="#ff2e43" strokeWidth="0.6" opacity="0.95" />
     : estado === 'outro'
       ? <circle cx={x} cy={y} r="2.7" fill="none" stroke="#d2d2d7" strokeWidth="0.4" opacity="0.55" />
       : null
@@ -102,7 +102,7 @@ export default function RadarGranadas({
               fill="#e8e8ec"
               fontSize={c.nivel === 'noob' ? 2.6 : 1.8}
               opacity={c.nivel === 'noob' ? 0.9 : 0.7}
-              style={{ paintOrder: 'stroke', stroke: '#0a0d12', strokeWidth: 0.5 }}
+              style={{ paintOrder: 'stroke', stroke: '#0a0a0c', strokeWidth: 0.5 }}
             >
               {c.nome}
             </text>

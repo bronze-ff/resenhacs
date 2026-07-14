@@ -8,7 +8,7 @@ function desenhar(ctx, radar, pontos, cor) {
   if (radar && radar.complete && radar.naturalWidth > 0) {
     ctx.drawImage(radar, 0, 0, TAM, TAM)
   } else {
-    ctx.fillStyle = '#0a0d12'
+    ctx.fillStyle = '#0a0a0c'
     ctx.fillRect(0, 0, TAM, TAM)
   }
   ctx.globalCompositeOperation = 'lighter'

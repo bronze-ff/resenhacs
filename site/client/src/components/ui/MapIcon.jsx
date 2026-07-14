@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { nomeMapa } from '../../lib/format.js'
 
-// Ícone oficial do mapa (PNG em /mapicons/de_*.png). Se a imagem faltar/quebrar
+// Ícone oficial do mapa (SVG vetorial em /mapicons/de_*.svg — nítido em qualquer
+// tamanho inline, ao contrário do PNG). Se a imagem faltar/quebrar
 // (mapa desconhecido, arquivo ausente), cai num fallback com as 3 primeiras letras
 // pra não quebrar o layout.
 export default function MapIcon({ map, size = 32, className = '' }) {
@@ -22,7 +23,7 @@ export default function MapIcon({ map, size = 32, className = '' }) {
 
   return (
     <img
-      src={`/mapicons/${map}.png`}
+      src={`/mapicons/${map}.svg`}
       width={size}
       height={size}
       alt={nome}

@@ -18,7 +18,7 @@ export default function Entrar() {
         className="pointer-events-none absolute inset-0 opacity-40"
         style={{
           background:
-            'conic-gradient(from 0deg at 50% 50%, transparent 0deg, rgba(255,154,31,0.05) 40deg, transparent 90deg)',
+            'conic-gradient(from 0deg at 50% 50%, transparent 0deg, rgba(255,46,67,0.05) 40deg, transparent 90deg)',
           animation: 'girar 14s linear infinite',
         }}
       />
@@ -50,7 +50,7 @@ export default function Entrar() {
 
         <a
           href="/api/auth/steam"
-          className="animate-surgir panel-cut mt-10 flex items-center gap-3 border border-destaque bg-destaque px-7 py-3.5 font-display text-sm font-semibold uppercase tracking-wider text-fundo shadow-[0_0_40px_-10px_rgba(255,154,31,0.65)] transition-shadow hover:shadow-[0_0_60px_-8px_rgba(255,154,31,0.85)]"
+          className="animate-surgir panel-cut mt-10 flex items-center gap-3 border border-destaque bg-destaque px-7 py-3.5 font-display text-sm font-semibold uppercase tracking-wider text-fundo shadow-[0_0_40px_-10px_rgba(255,46,67,0.6)] transition-shadow hover:shadow-[0_0_60px_-8px_rgba(255,46,67,0.8)]"
           style={{ animationDelay: '280ms' }}
         >
           <SteamIcon className="h-5 w-5" />

@@ -7,7 +7,7 @@ const TAM = 640 // lado do canvas em px
 // verdade CT é sempre azul e T sempre laranja, trocando no intervalo; usar o time fixo
 // (como Economia/Scoreboard fazem, de propósito, pra somar stats da partida inteira)
 // deixava o radar tático "errado" aos olhos de quem tá acostumado com o HUD do CS2.
-const COR_LADO = { CT: '#4fb6ff', T: '#ff9a1f' }
+const COR_LADO = { CT: '#4fb6ff', T: '#f5a524' }
 
 // Lado (CT/T) de um jogador num tick específico do round — usado pro kill feed, que só
 // tem o id do killer/vítima e o tick do kill, não o objeto do frame já resolvido.
@@ -151,7 +151,7 @@ function desenharFrame(ctx, round, f, radar, replay) {
   if (radar && radar.complete && radar.naturalWidth > 0) {
     ctx.drawImage(radar, 0, 0, TAM, TAM)
   } else {
-    ctx.fillStyle = '#0a0d12'
+    ctx.fillStyle = '#0a0a0c'
     ctx.fillRect(0, 0, TAM, TAM)
     ctx.strokeStyle = '#262f3d'
     ctx.lineWidth = 1
@@ -235,7 +235,7 @@ function desenharFrame(ctx, round, f, radar, replay) {
     }
     // portador da bomba: quadradinho laranja ao lado
     if (p.id === carrier && p.alive) {
-      ctx.fillStyle = '#ff9a1f'
+      ctx.fillStyle = '#f5a524'
       ctx.fillRect(cx + 6, cy - 3, 6, 6)
     }
     // nick (+ estrela se clutcher, + hp se baixo)
