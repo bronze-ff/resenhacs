@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext.jsx'
+import { setGrupoAtivo } from '../lib/grupoAtivo.js'
 
 const CHAVE_SIDEBAR_COLAPSADA = 'resenha_sidebar_colapsada'
 
@@ -199,7 +200,7 @@ export default function Shell({ children }) {
               <span className={colapsada ? 'lg:hidden' : ''}>{item.label}</span>
             </NavLink>
           ))}
-          {jogador?.isAdmin && (
+          {jogador?.isSuperAdmin && (
             <>
               <NavLink
                 to="/granadas"
@@ -275,6 +276,7 @@ export default function Shell({ children }) {
             </h1>
           </div>
           <div className="flex items-center gap-3">
+            <SeletorGrupo grupoAtivoId={jogador?.grupoAtivoId} />
             {jogador?.avatarUrl && (
               <img
                 src={jogador.avatarUrl}
@@ -293,7 +295,7 @@ export default function Shell({ children }) {
         </header>
         <main className="px-4 pb-20 pt-4 lg:px-6 lg:py-6">{children}</main>
       </div>
-      <BarraInferior menuAberto={menuAberto} onAbrirMenu={() => setMenuAberto(true)} isAdmin={jogador?.isAdmin} />
+      <BarraInferior menuAberto={menuAberto} onAbrirMenu={() => setMenuAberto(true)} isAdmin={jogador?.isSuperAdmin} />
     </div>
   )
 }
@@ -346,5 +348,38 @@ function BarraInferior({ menuAberto, onAbrirMenu, isAdmin }) {
         Mais
       </button>
     </nav>
+  )
+}
+
+// Troca de "workspace" — só aparece quando o jogador tem mais de 1 grupo.
+function SeletorGrupo({ grupoAtivoId }) {
+  const [grupos, setGrupos] = useState([])
+
+  useEffect(() => {
+    fetch('/api/groups/meus').then((res) => (res.ok ? res.json() : [])).then(setGrupos)
+  }, [])
+
+  async function trocar(e) {
+    const groupId = e.target.value
+    await fetch('/api/groups/ativo', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ groupId }),
+    })
+    setGrupoAtivo(groupId)
+    window.location.reload()
+  }
+
+  if (grupos.length <= 1) return null
+  return (
+    <select
+      value={grupoAtivoId ?? ''}
+      onChange={trocar}
+      className="cursor-pointer rounded border border-borda bg-superficie px-2 py-1 font-mono text-xs"
+    >
+      {grupos.map((g) => (
+        <option key={g.id} value={g.id}>{g.nome}</option>
+      ))}
+    </select>
   )
 }

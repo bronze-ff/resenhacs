@@ -16,11 +16,14 @@ import Perfil from './pages/Perfil.jsx'
 import Admin from './pages/Admin.jsx'
 import PartidasPro from './pages/PartidasPro.jsx'
 import ReplayDemo from './pages/ReplayDemo.jsx'
+import Onboarding from './pages/Onboarding.jsx'
+import AceitarConvite from './pages/AceitarConvite.jsx'
 
 function RotaProtegida({ children }) {
   const { carregando, jogador } = useAuth()
   if (carregando) return <p className="p-8 text-texto-fraco">Carregando…</p>
   if (!jogador) return <Navigate to="/entrar" replace />
+  if (!jogador.grupoAtivoId) return <Navigate to="/bem-vindo" replace />
   return <Shell>{children}</Shell>
 }
 
@@ -28,7 +31,8 @@ function RotaAdmin({ children }) {
   const { carregando, jogador } = useAuth()
   if (carregando) return <p className="p-8 text-texto-fraco">Carregando…</p>
   if (!jogador) return <Navigate to="/entrar" replace />
-  if (!jogador.isAdmin) return <Navigate to="/" replace />
+  if (!jogador.grupoAtivoId) return <Navigate to="/bem-vindo" replace />
+  if (!jogador.isSuperAdmin) return <Navigate to="/" replace />
   return <Shell>{children}</Shell>
 }
 
@@ -40,6 +44,8 @@ export default function App() {
           <Route path="/entrar" element={<Entrar />} />
           <Route path="/acesso-negado" element={<AcessoNegado />} />
           <Route path="/replay-demo" element={<ReplayDemo />} />
+          <Route path="/convite/:token" element={<AceitarConvite />} />
+          <Route path="/bem-vindo" element={<RotaBemVindo><Onboarding /></RotaBemVindo>} />
           <Route path="/" element={<RotaProtegida><Feed /></RotaProtegida>} />
           <Route path="/partida/:id" element={<RotaProtegida><Partida /></RotaProtegida>} />
           <Route path="/ranking" element={<RotaProtegida><Ranking /></RotaProtegida>} />
@@ -56,4 +62,12 @@ export default function App() {
       </BrowserRouter>
     </AuthProvider>
   )
+}
+
+// Onboarding é a única página protegida que NÃO exige grupo ativo (é onde ele é criado).
+function RotaBemVindo({ children }) {
+  const { carregando, jogador } = useAuth()
+  if (carregando) return <p className="p-8 text-texto-fraco">Carregando…</p>
+  if (!jogador) return <Navigate to="/entrar" replace />
+  return children
 }
