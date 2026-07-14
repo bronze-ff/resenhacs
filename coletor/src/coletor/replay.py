@@ -20,6 +20,7 @@ MAP_CALIBRATION = {
     "de_ancient": {"pos_x": -2953, "pos_y": 2164, "scale": 5.00},
     "de_anubis": {"pos_x": -2796, "pos_y": 3328, "scale": 5.22},
     "de_train": {"pos_x": -2308, "pos_y": 2078, "scale": 4.082077},
+    "de_cache": {"pos_x": -2000, "pos_y": 3250, "scale": 5.5},
 }
 
 
