@@ -10,6 +10,13 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket }) {
     const cond = ["m.status = 'parsed'"]
     const params = []
     const { from, to, map, source, mvp } = req.query
+    // Paginação: limit 1..100 (default 20), offset >=0 (default 0). O shape da
+    // resposta continua um array puro — o client sabe que acabou quando uma
+    // página volta com menos itens que `limit` (não precisamos de um flag extra).
+    let limit = parseInt(req.query.limit, 10)
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) limit = 20
+    let offset = parseInt(req.query.offset, 10)
+    if (!Number.isInteger(offset) || offset < 0) offset = 0
     if (from && /^\d{4}-\d{2}-\d{2}$/.test(from)) {
       params.push(from)
       cond.push(`m.played_at >= $${params.length}`)
@@ -59,8 +66,8 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket }) {
        where ${cond.join(' and ')}
        group by m.id, mvp.mvp
        order by m.played_at desc nulls last, m.created_at desc
-       limit 200`,
-      params,
+       limit $${params.length + 1} offset $${params.length + 2}`,
+      [...params, limit, offset],
     )
     res.json(
       rows.map((m) => ({

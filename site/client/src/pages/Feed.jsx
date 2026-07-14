@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { nomeMapa, dataHora, origemPartida, corRating } from '../lib/format.js'
 import FiltroPeriodo from '../components/FiltroPeriodo.jsx'
@@ -255,6 +255,8 @@ function Resenhas() {
   )
 }
 
+const TAMANHO_PAGINA = 20
+
 export default function Feed() {
   const [partidas, setPartidas] = useState(null)
   const [de, setDe] = useState('')
@@ -264,6 +266,12 @@ export default function Feed() {
   const [resultado, setResultado] = useState('')
   const [mvp, setMvp] = useState('')
   const [jogadores, setJogadores] = useState([])
+  const [temMais, setTemMais] = useState(false)
+  const [carregandoMais, setCarregandoMais] = useState(false)
+
+  // Guard de corrida: cada busca (troca de filtro ou "carregar mais") incrementa
+  // este contador; só a resposta da requisição mais recente pode aplicar estado.
+  const requisicaoAtual = useRef(0)
 
   useEffect(() => {
     fetch('/api/players')
@@ -274,18 +282,59 @@ export default function Feed() {
       .catch(() => setJogadores([]))
   }, [])
 
-  useEffect(() => {
+  function montarQs(offset) {
     const qs = new URLSearchParams()
     if (de) qs.set('from', de)
     if (ate) qs.set('to', ate)
     if (mapa) qs.set('map', mapa)
     if (origem) qs.set('source', origem)
     if (mvp) qs.set('mvp', mvp)
-    fetch(`/api/matches${qs.size ? `?${qs}` : ''}`)
+    qs.set('limit', String(TAMANHO_PAGINA))
+    qs.set('offset', String(offset))
+    return qs
+  }
+
+  // Ao montar ou trocar qualquer filtro: reseta a lista e busca a 1ª página.
+  useEffect(() => {
+    const minhaRequisicao = ++requisicaoAtual.current
+    setPartidas(null)
+    setTemMais(false)
+    fetch(`/api/matches?${montarQs(0)}`)
       .then((res) => (res.ok ? res.json() : []))
-      .then(setPartidas)
-      .catch(() => setPartidas([]))
+      .then((data) => {
+        if (requisicaoAtual.current !== minhaRequisicao) return
+        const lista = Array.isArray(data) ? data : []
+        setPartidas(lista)
+        setTemMais(lista.length === TAMANHO_PAGINA)
+      })
+      .catch(() => {
+        if (requisicaoAtual.current !== minhaRequisicao) return
+        setPartidas([])
+        setTemMais(false)
+      })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [de, ate, mapa, origem, mvp])
+
+  function carregarMais() {
+    if (carregandoMais || !partidas) return
+    const minhaRequisicao = ++requisicaoAtual.current
+    setCarregandoMais(true)
+    fetch(`/api/matches?${montarQs(partidas.length)}`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => {
+        if (requisicaoAtual.current !== minhaRequisicao) return
+        const lista = Array.isArray(data) ? data : []
+        setPartidas((atual) => [...(atual ?? []), ...lista])
+        setTemMais(lista.length === TAMANHO_PAGINA)
+      })
+      .catch(() => {
+        if (requisicaoAtual.current !== minhaRequisicao) return
+        setTemMais(false)
+      })
+      .finally(() => {
+        if (requisicaoAtual.current === minhaRequisicao) setCarregandoMais(false)
+      })
+  }
 
   // Resultado (V/D) é do ponto de vista do grupo — filtrado no client.
   const visiveis = useMemo(() => {
@@ -355,6 +404,18 @@ export default function Feed() {
       <div className="space-y-3 lg:space-y-2">
         {visiveis?.map((m) => <CardPartida key={m.id} m={m} />)}
       </div>
+
+      {temMais && (
+        <div className="mt-4 flex justify-center">
+          <button
+            onClick={carregarMais}
+            disabled={carregandoMais}
+            className="min-h-10 rounded border border-borda bg-superficie px-5 py-2 font-mono text-sm uppercase tracking-wide text-texto transition-colors hover:border-destaque hover:text-destaque disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {carregandoMais ? 'Carregando…' : 'Carregar mais'}
+          </button>
+        </div>
+      )}
     </div>
   )
 }

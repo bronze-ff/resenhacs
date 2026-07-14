@@ -63,6 +63,43 @@ describe('GET /api/matches', () => {
     const sql = db.query.mock.calls.find(([s]) => s.includes('from matches m'))[0]
     expect(sql).not.toContain('mvp_filter')
   })
+
+  it('aceita limit e offset e os manda como params parametrizados', async () => {
+    const { app, db } = appWith([['from matches m', []]])
+    const res = await request(app).get('/api/matches?limit=5&offset=10').set('Cookie', cookie)
+    expect(res.status).toBe(200)
+    const call = db.query.mock.calls.find(([s]) => s.includes('from matches m'))
+    const [sql, params] = call
+    expect(sql).toContain('limit $')
+    expect(sql).toContain('offset $')
+    expect(params.slice(-2)).toEqual([5, 10])
+  })
+
+  it('limit/offset inválidos caem no default (20/0)', async () => {
+    const { app, db } = appWith([['from matches m', []]])
+    const res = await request(app).get('/api/matches?limit=abc&offset=-3').set('Cookie', cookie)
+    expect(res.status).toBe(200)
+    const call = db.query.mock.calls.find(([s]) => s.includes('from matches m'))
+    const [, params] = call
+    expect(params.slice(-2)).toEqual([20, 0])
+  })
+
+  it('limit fora do range 1..100 cai no default', async () => {
+    const { app, db } = appWith([['from matches m', []]])
+    await request(app).get('/api/matches?limit=500').set('Cookie', cookie)
+    const call = db.query.mock.calls.find(([s]) => s.includes('from matches m'))
+    const [, params] = call
+    expect(params.slice(-2)).toEqual([20, 0])
+  })
+
+  it('sem limit/offset usa default (20/0) e não quebra filtros existentes', async () => {
+    const { app, db } = appWith([['from matches m', []]])
+    await request(app).get('/api/matches?map=de_mirage').set('Cookie', cookie)
+    const call = db.query.mock.calls.find(([s]) => s.includes('from matches m'))
+    const [sql, params] = call
+    expect(sql).toContain('m.map = $1')
+    expect(params).toEqual(['de_mirage', 20, 0])
+  })
 })
 
 describe('GET /api/matches/:id', () => {
