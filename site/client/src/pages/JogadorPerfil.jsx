@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { nomeMapa, dataHora, corRating, nomeArma, TIPO_COMPRA } from '../lib/format.js'
-import { Card, SectionHeader, StatTile, RatingBadge, DataTable, MapIcon } from '../components/ui'
+import { Card, SectionHeader, StatTile, RatingBadge, DataTable, MapIcon, Badge } from '../components/ui'
 import LinhaEvolucao from '../components/LinhaEvolucao.jsx'
 import FiltroPeriodo from '../components/FiltroPeriodo.jsx'
 import TagEstilo from '../components/TagEstilo.jsx'
@@ -19,6 +19,149 @@ function Stat({ rotulo, valor, cor, rating }) {
         <div className={`truncate text-sm font-semibold tabular-nums ${cor ?? 'text-texto'}`}>{valor}</div>
       )}
     </div>
+  )
+}
+
+// Kinds de highlight que contam como "clutch" no resumo agrupado (CLUTCH_1V1, CLUTCH_1V2, CLUTCH_1V3...).
+const CLUTCH_PREFIX = 'CLUTCH_'
+const TOM_KIND = { ACE: 'destaque', QUAD: 'destaque', TRIPLE: 'sucesso' }
+function tomDoKind(kind) {
+  if (kind?.startsWith(CLUTCH_PREFIX)) return 'sucesso'
+  return TOM_KIND[kind] ?? 'neutro'
+}
+function grupoDoKind(kind) {
+  return kind?.startsWith(CLUTCH_PREFIX) ? 'Clutch' : kind
+}
+const LIMITE_INICIAL_DESTAQUES = 12
+
+// Seção de Highlights com resumo por tipo, filtro por tipo/mapa e "carregar mais" — tudo client-side,
+// já que o backend manda os destaques inteiros (já filtrados por período) num único payload.
+function SecaoHighlights({ destaques }) {
+  const [filtroTipo, setFiltroTipo] = useState(null) // null = todos; string = kind exato OU "Clutch"
+  const [filtroMapa, setFiltroMapa] = useState('')
+  const [limite, setLimite] = useState(LIMITE_INICIAL_DESTAQUES)
+
+  const ordenados = useMemo(
+    () => [...destaques].sort((a, b) => new Date(b.playedAt ?? 0) - new Date(a.playedAt ?? 0)),
+    [destaques],
+  )
+
+  const contagemPorGrupo = useMemo(() => {
+    const map = new Map()
+    for (const d of ordenados) {
+      const g = grupoDoKind(d.kind)
+      map.set(g, (map.get(g) ?? 0) + 1)
+    }
+    return map
+  }, [ordenados])
+
+  const mapasDisponiveis = useMemo(
+    () => [...new Set(ordenados.map((d) => d.map).filter(Boolean))].sort(),
+    [ordenados],
+  )
+
+  const filtrados = useMemo(
+    () =>
+      ordenados.filter(
+        (d) => (filtroTipo == null || grupoDoKind(d.kind) === filtroTipo) && (!filtroMapa || d.map === filtroMapa),
+      ),
+    [ordenados, filtroTipo, filtroMapa],
+  )
+
+  const visiveis = filtrados.slice(0, limite)
+  const temMais = filtrados.length > visiveis.length
+
+  function aplicarFiltroTipo(grupo) {
+    setFiltroTipo((atual) => (atual === grupo ? null : grupo))
+    setLimite(LIMITE_INICIAL_DESTAQUES)
+  }
+
+  return (
+    <section>
+      <SectionHeader titulo={<>Highlights <span className="text-texto-fraco">({destaques.length}) — "em qual partida foi esse mesmo?"</span></>} />
+
+      {/* Resumo por tipo — clicável, filtra a lista abaixo. */}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => aplicarFiltroTipo(null)}
+          className={`panel-cut-sm min-h-10 cursor-pointer border px-3 py-2 font-mono text-xs uppercase tracking-wide transition-colors duration-200 sm:min-h-0 ${
+            filtroTipo == null
+              ? 'border-destaque/60 bg-destaque/10 text-destaque'
+              : 'border-borda bg-superficie text-texto-fraco hover:border-destaque/40 hover:text-texto'
+          }`}
+        >
+          Todos ({ordenados.length})
+        </button>
+        {[...contagemPorGrupo.entries()].map(([grupo, qtd]) => (
+          <button
+            key={grupo}
+            type="button"
+            onClick={() => aplicarFiltroTipo(grupo)}
+            className={`panel-cut-sm min-h-10 cursor-pointer border px-3 py-2 font-mono text-xs uppercase tracking-wide transition-colors duration-200 sm:min-h-0 ${
+              filtroTipo === grupo
+                ? 'border-destaque/60 bg-destaque/10 text-destaque'
+                : 'border-borda bg-superficie text-texto-fraco hover:border-destaque/40 hover:text-texto'
+            }`}
+          >
+            {grupo} ({qtd})
+          </button>
+        ))}
+
+        {mapasDisponiveis.length > 1 && (
+          <select
+            value={filtroMapa}
+            onChange={(e) => {
+              setFiltroMapa(e.target.value)
+              setLimite(LIMITE_INICIAL_DESTAQUES)
+            }}
+            className="panel-cut-sm min-h-10 cursor-pointer border border-borda bg-superficie px-3 py-2 font-mono text-xs uppercase tracking-wide text-texto-fraco transition-colors duration-200 hover:border-destaque/40 hover:text-texto sm:min-h-0"
+          >
+            <option value="">Todos os mapas</option>
+            {mapasDisponiveis.map((m) => (
+              <option key={m} value={m}>{nomeMapa(m)}</option>
+            ))}
+          </select>
+        )}
+      </div>
+
+      {filtrados.length === 0 && <p className="font-mono text-sm text-texto-fraco">Nenhum highlight com esse filtro.</p>}
+
+      {filtrados.length > 0 && (
+        <>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {visiveis.map((d) => (
+              <Link
+                key={d.id}
+                to={`/partida/${d.matchId}?highlight=${d.id}`}
+                className="panel-cut-sm flex min-h-10 flex-wrap items-center gap-x-2 gap-y-1 border border-borda bg-superficie px-3 py-2 font-mono text-xs transition-colors duration-200 hover:border-destaque/60 hover:bg-superficie-alta"
+                title={`${nomeMapa(d.map)} · ${dataHora(d.playedAt)}`}
+              >
+                <Badge tom={tomDoKind(d.kind)}>{d.kind}</Badge>
+                <span className="text-texto-fraco">round {d.roundNumber}</span>
+                <span className="ml-auto flex items-center gap-1 text-texto">
+                  <MapIcon map={d.map} size={16} />
+                  {nomeMapa(d.map)}
+                </span>
+                <span className="w-full text-texto-fraco sm:w-auto">{dataHora(d.playedAt)}</span>
+              </Link>
+            ))}
+          </div>
+
+          {temMais && (
+            <div className="mt-3 flex justify-center">
+              <button
+                type="button"
+                onClick={() => setLimite((l) => l + LIMITE_INICIAL_DESTAQUES)}
+                className="panel-cut-sm min-h-10 cursor-pointer border border-borda px-4 py-2 font-mono text-xs uppercase tracking-wide text-texto-fraco transition-colors duration-200 hover:border-destaque/60 hover:text-destaque"
+              >
+                Carregar mais ({filtrados.length - visiveis.length})
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </section>
   )
 }
 
@@ -224,28 +367,8 @@ export default function JogadorPerfil() {
         )}
       </section>
 
-      {/* 4. Highlights — aces/clutches com deep-link. */}
-      {destaques.length > 0 && (
-        <section>
-          <SectionHeader titulo={<>Highlights <span className="text-texto-fraco">({destaques.length}) — "em qual partida foi esse mesmo?"</span></>} />
-          <div className="flex flex-wrap gap-2">
-            {destaques.map((d) => (
-              <Link
-                key={d.id}
-                to={`/partida/${d.matchId}?highlight=${d.id}`}
-                className="panel-cut-sm flex items-center gap-2 border border-borda bg-superficie px-3 py-2 font-mono text-xs transition-colors hover:border-destaque/60"
-                title={`${nomeMapa(d.map)} · ${dataHora(d.playedAt)}`}
-              >
-                <span className="font-display font-semibold uppercase text-destaque">{d.kind}</span>
-                <span className="text-texto-fraco">round {d.roundNumber}</span>
-                <span className="text-texto-fraco">·</span>
-                <span className="text-texto">{nomeMapa(d.map)}</span>
-                <span className="text-texto-fraco">{dataHora(d.playedAt)}</span>
-              </Link>
-            ))}
-          </div>
-        </section>
-      )}
+      {/* 4. Highlights — aces/clutches com deep-link, resumo por tipo/mapa e carregar mais. */}
+      {destaques.length > 0 && <SecaoHighlights destaques={destaques} />}
 
       {/* 5. Armas. */}
       <section>
