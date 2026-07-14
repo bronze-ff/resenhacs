@@ -77,18 +77,18 @@ export default function PartidasPro() {
   return (
     <div className="space-y-4">
       <h2 className="font-display text-2xl font-bold uppercase tracking-wide text-texto">Partidas pro</h2>
-      <form onSubmit={adicionar} className="flex gap-2">
+      <form onSubmit={adicionar} className="flex flex-col gap-2 lg:flex-row">
         <input
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           placeholder="Link do demo no HLTV"
-          className="flex-1 rounded border border-borda bg-superficie px-3 py-2 font-mono text-sm"
+          className="min-h-10 w-full rounded border border-borda bg-superficie px-3 py-2 font-mono text-sm lg:min-h-0 lg:flex-1"
         />
-        <button type="submit" className="panel-cut-sm border border-destaque bg-destaque px-4 py-2 font-display text-sm font-semibold uppercase text-fundo">
+        <button type="submit" className="panel-cut-sm min-h-10 w-full border border-destaque bg-destaque px-4 py-2 font-display text-sm font-semibold uppercase text-fundo lg:min-h-0 lg:w-auto">
           Adicionar
         </button>
       </form>
-      <label className="panel-cut-sm flex w-fit cursor-pointer items-center gap-2 border border-borda bg-superficie px-4 py-2 font-display text-sm font-semibold uppercase text-texto-fraco hover:text-texto">
+      <label className="panel-cut-sm flex min-h-10 w-full cursor-pointer items-center justify-center gap-2 border border-borda bg-superficie px-4 py-2 font-display text-sm font-semibold uppercase text-texto-fraco hover:text-texto lg:min-h-0 lg:w-fit lg:justify-start">
         {enviando ? 'Enviando...' : 'Enviar arquivo (.rar/.dem)'}
         <input
           type="file"
@@ -101,16 +101,16 @@ export default function PartidasPro() {
       {erro && <p className="font-mono text-sm text-perigo">{erro}</p>}
       <div className="space-y-2">
         {fila?.map((f) => (
-          <div key={f.id} className="panel-cut-sm flex items-center justify-between border border-borda bg-superficie px-3 py-2">
-            <span className="truncate font-mono text-xs text-texto-fraco">{f.hltvUrl}</span>
-            <div className="flex items-center gap-2">
+          <div key={f.id} className="panel-cut-sm flex items-center justify-between gap-2 border border-borda bg-superficie px-3 py-2">
+            <span className="min-w-0 flex-1 truncate font-mono text-xs text-texto-fraco">{f.hltvUrl}</span>
+            <div className="flex shrink-0 items-center gap-2">
               <span className={`font-mono text-xs uppercase ${CORES_STATUS[f.status]}`}>
                 {f.matchIds?.length > 1 ? `${f.matchIds.length} mapas processados` : f.status}
               </span>
               {f.status === 'falhou' && (
                 <button
                   onClick={() => tentarDeNovo(f.id)}
-                  className="panel-cut-sm border border-borda px-2 py-1 font-mono text-[10px] uppercase text-texto-fraco hover:text-texto"
+                  className="panel-cut-sm min-h-10 border border-borda px-2 py-1 font-mono text-[10px] uppercase text-texto-fraco hover:text-texto lg:min-h-0"
                 >
                   Tentar de novo
                 </button>

@@ -36,7 +36,7 @@ export default function Entrar() {
           Acesso restrito · grupo fechado
         </p>
         <h1
-          className="animate-surgir mt-4 font-display text-6xl font-bold uppercase tracking-widest text-texto sm:text-7xl"
+          className="animate-surgir mt-4 font-display text-4xl font-bold uppercase tracking-widest text-texto sm:text-6xl lg:text-7xl"
           style={{ animationDelay: '90ms' }}
         >
           Resenha<span className="text-destaque">.</span>

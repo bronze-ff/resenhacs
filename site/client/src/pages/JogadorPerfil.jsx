@@ -36,14 +36,14 @@ export default function JogadorPerfil() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex min-w-0 items-center gap-4">
           {jogador.avatarUrl && (
-            <img src={jogador.avatarUrl} alt="" className="panel-cut h-16 w-16 border border-borda object-cover" />
+            <img src={jogador.avatarUrl} alt="" className="panel-cut h-16 w-16 shrink-0 border border-borda object-cover" />
           )}
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="font-display text-2xl font-bold uppercase tracking-wide text-texto">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="truncate font-display text-2xl font-bold uppercase tracking-wide text-texto">
                 {jogador.nick || jogador.steamId}
               </h2>
               <TagEstilo estilo={estilo} />
@@ -51,11 +51,11 @@ export default function JogadorPerfil() {
             <p className="font-mono text-sm text-texto-fraco">{stats.partidas} partidas · {stats.winrate}% de vitória</p>
           </div>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-3 lg:gap-4">
           <FiltroPeriodo de={de} ate={ate} onDe={setDe} onAte={setAte} />
           <Link
             to={`/comparar?a=${jogador.steamId}`}
-            className="panel-cut-sm border border-borda px-3 py-2 font-mono text-xs uppercase tracking-wide text-texto-fraco transition-colors hover:border-destaque/60 hover:text-destaque"
+            className="panel-cut-sm min-h-10 border border-borda px-3 py-2 font-mono text-xs uppercase tracking-wide text-texto-fraco transition-colors hover:border-destaque/60 hover:text-destaque lg:min-h-0"
           >
             Comparar com…
           </Link>
@@ -213,7 +213,7 @@ export default function JogadorPerfil() {
               const maiorKills = armas[0]?.kills || 1
               return (
                 <div key={a.weapon} className="panel-cut border border-borda bg-superficie p-3">
-                  <div className="mb-1.5 flex items-center justify-between font-mono text-sm">
+                  <div className="mb-1.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 font-mono text-sm">
                     <span className="text-texto">{nomeArma(a.weapon)}</span>
                     <span className="text-texto-fraco">
                       <span className="text-texto">{a.kills}</span> kills · {a.hsPct}% HS
@@ -266,15 +266,15 @@ export default function JogadorPerfil() {
               <Link
                 key={s.steamId}
                 to={`/jogador/${s.steamId}`}
-                className="panel-cut flex items-center justify-between border border-borda bg-superficie p-3 transition-colors hover:border-destaque/60"
+                className="panel-cut flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border border-borda bg-superficie p-3 transition-colors hover:border-destaque/60"
               >
-                <span className="flex items-center gap-3 font-mono text-texto">
+                <span className="flex min-w-0 items-center gap-3 font-mono text-texto">
                   {s.avatarUrl && (
-                    <img src={s.avatarUrl} alt="" className="panel-cut-sm h-8 w-8 border border-borda object-cover" />
+                    <img src={s.avatarUrl} alt="" className="panel-cut-sm h-8 w-8 shrink-0 border border-borda object-cover" />
                   )}
-                  <span>{s.nick || s.steamId}</span>
+                  <span className="truncate">{s.nick || s.steamId}</span>
                 </span>
-                <span className="font-mono text-sm text-texto-fraco">
+                <span className="shrink-0 font-mono text-sm text-texto-fraco">
                   <span className="tabular-nums text-texto">{s.partidas}</span> juntos ·{' '}
                   <span className={`tabular-nums ${s.winrate >= 50 ? 'text-sucesso' : 'text-perigo'}`}>
                     {s.winrate}%
@@ -290,7 +290,7 @@ export default function JogadorPerfil() {
           {porMapa.length === 0 && <p className="font-mono text-sm text-texto-fraco">Sem dados por mapa ainda.</p>}
           <div className="space-y-2">
             {porMapa.map((mp) => (
-              <div key={mp.map} className="panel-cut flex items-center justify-between border border-borda bg-superficie p-3">
+              <div key={mp.map} className="panel-cut flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border border-borda bg-superficie p-3">
                 <span className="font-mono text-texto">{nomeMapa(mp.map)}</span>
                 <span className="font-mono text-sm text-texto-fraco">
                   <span className="tabular-nums text-texto">{mp.partidas}</span> jogos ·{' '}
@@ -346,11 +346,11 @@ export default function JogadorPerfil() {
             <Link
               key={r.id}
               to={`/partida/${r.id}`}
-              className="panel-cut flex items-center justify-between border border-borda bg-superficie p-3 transition-colors hover:border-destaque/60"
+              className="panel-cut flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border border-borda bg-superficie p-3 transition-colors hover:border-destaque/60"
             >
-              <span className="flex items-center gap-3 font-mono text-texto">
+              <span className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-texto">
                 <span
-                  className={`inline-block h-2 w-2 rounded-full ${r.won === true ? 'bg-sucesso' : r.won === false ? 'bg-perigo' : 'bg-texto-fraco'}`}
+                  className={`inline-block h-2 w-2 shrink-0 rounded-full ${r.won === true ? 'bg-sucesso' : r.won === false ? 'bg-perigo' : 'bg-texto-fraco'}`}
                   title={r.won === true ? 'Vitória' : r.won === false ? 'Derrota' : 'Empate'}
                 />
                 <span>{nomeMapa(r.map)}</span>

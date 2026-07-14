@@ -43,7 +43,7 @@ export default function Taticas() {
   return (
     <div className="space-y-4">
       <h2 className="font-display text-2xl font-bold uppercase tracking-wide text-texto">Táticas</h2>
-      <select value={mapa} onChange={(e) => setMapa(e.target.value)} className="rounded border border-borda bg-superficie px-2 py-1 font-mono text-sm">
+      <select value={mapa} onChange={(e) => setMapa(e.target.value)} className="min-h-10 rounded border border-borda bg-superficie px-2 py-1 font-mono text-sm lg:min-h-0">
         {MAPAS.map((m) => <option key={m} value={m}>{nomeMapa(m)}</option>)}
       </select>
       {!taticas && <p className="font-mono text-sm text-texto-fraco">Carregando…</p>}

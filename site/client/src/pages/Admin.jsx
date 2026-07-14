@@ -55,7 +55,7 @@ export default function Admin() {
         />
         <button
           type="submit"
-          className="panel-cut-sm border border-destaque bg-destaque px-4 py-2 font-display text-sm font-semibold uppercase tracking-wide text-fundo"
+          className="panel-cut-sm min-h-10 w-full border border-destaque bg-destaque px-4 py-2 font-display text-sm font-semibold uppercase tracking-wide text-fundo lg:min-h-0 lg:w-auto"
         >
           Adicionar à whitelist
         </button>
@@ -74,16 +74,16 @@ export default function Admin() {
             <p className="font-display text-sm font-semibold uppercase text-texto">{t.nome}</p>
             <p className="font-mono text-xs text-texto-fraco">{t.descricao}</p>
             <p className="font-mono text-[10px] uppercase text-texto-fraco/70">sugerida por {t.criadoPorNick || t.criadoPor}</p>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => revisar(t.id, 'aprovada')}
-                className="panel-cut-sm border border-sucesso px-3 py-1 font-mono text-xs uppercase tracking-wide text-sucesso"
+                className="panel-cut-sm min-h-10 border border-sucesso px-3 py-1 font-mono text-xs uppercase tracking-wide text-sucesso lg:min-h-0"
               >
                 Aprovar
               </button>
               <button
                 onClick={() => revisar(t.id, 'rejeitada')}
-                className="panel-cut-sm border border-perigo px-3 py-1 font-mono text-xs uppercase tracking-wide text-perigo"
+                className="panel-cut-sm min-h-10 border border-perigo px-3 py-1 font-mono text-xs uppercase tracking-wide text-perigo lg:min-h-0"
               >
                 Rejeitar
               </button>
