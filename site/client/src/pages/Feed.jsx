@@ -64,7 +64,7 @@ function CardPartida({ m }) {
   return (
     <Link
       to={`/partida/${m.id}`}
-      className={`panel-cut relative flex items-center justify-between gap-3 border border-borda bg-superficie p-4 transition-colors hover:border-destaque/50 hover:bg-superficie-alta ${borda}`}
+      className={`panel-cut relative flex items-center justify-between gap-3 border border-borda bg-superficie px-4 py-5 transition-colors hover:border-destaque/50 hover:bg-superficie-alta lg:p-4 ${borda}`}
     >
       <div className="flex min-w-0 flex-1 items-center gap-3 lg:gap-4">
         <div className="panel-cut-sm flex h-12 w-12 shrink-0 items-center justify-center border border-borda bg-fundo font-mono text-xs font-bold uppercase text-destaque">
@@ -80,7 +80,7 @@ function CardPartida({ m }) {
               {origemPartida(m.source).label}
             </span>
           </div>
-          <div className="truncate font-mono text-xs text-texto-fraco">
+          <div className="truncate font-mono text-sm text-texto-fraco lg:text-xs">
             {dataHora(m.playedAt)}
             {m.tracked?.length > 0 && (
               <span> · {m.tracked.map((t) => t.nick).join(', ')}</span>
@@ -155,7 +155,7 @@ function Resenhas() {
         {(sessoes ?? []).map((s) => (
           <div
             key={s.matchIds[0]}
-            className="panel-cut-sm min-w-[240px] flex-shrink-0 snap-start border border-borda bg-superficie p-3"
+            className="panel-cut-sm w-64 shrink-0 snap-start border border-borda bg-superficie p-3 lg:w-auto lg:min-w-[240px]"
           >
             <div className="flex items-center justify-between font-mono text-xs text-texto-fraco">
               <span>{dataHora(s.inicio)}</span>
@@ -217,37 +217,41 @@ export default function Feed() {
       <SincStatus />
       <Resenhas />
 
-      <div className="mb-4 flex flex-wrap items-center gap-x-5 gap-y-3">
-        <FiltroPeriodo de={de} ate={ate} onDe={setDe} onAte={setAte} />
-        <select
-          value={mapa}
-          onChange={(e) => setMapa(e.target.value)}
-          className="rounded border border-borda bg-superficie px-2 py-2 font-mono text-xs lg:py-1"
-        >
-          <option value="">Todos os mapas</option>
-          {MAPAS.map((m) => <option key={m} value={m}>{nomeMapa(m)}</option>)}
-        </select>
-        <div className="flex overflow-hidden rounded border border-borda font-mono text-xs uppercase">
-          {[['', 'Tudo'], ['vitoria', 'Vitórias'], ['derrota', 'Derrotas']].map(([v, label]) => (
-            <button
-              key={v}
-              onClick={() => setResultado(v)}
-              className={`px-2.5 py-3 transition-colors lg:py-1 ${resultado === v ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'}`}
-            >
-              {label}
-            </button>
-          ))}
+      <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center lg:gap-x-5 lg:gap-y-3">
+        <div className="flex flex-wrap items-center gap-3 lg:contents">
+          <FiltroPeriodo de={de} ate={ate} onDe={setDe} onAte={setAte} />
+          <select
+            value={mapa}
+            onChange={(e) => setMapa(e.target.value)}
+            className="min-h-10 rounded border border-borda bg-superficie px-3 py-2 font-mono text-sm lg:min-h-0 lg:px-2 lg:py-1 lg:text-xs"
+          >
+            <option value="">Todos os mapas</option>
+            {MAPAS.map((m) => <option key={m} value={m}>{nomeMapa(m)}</option>)}
+          </select>
         </div>
-        <div className="flex overflow-hidden rounded border border-borda font-mono text-xs uppercase">
-          {[['', 'Todas'], ['valve_mm', 'Auto'], ['upload', 'Manual']].map(([v, label]) => (
-            <button
-              key={v}
-              onClick={() => setOrigem(v)}
-              className={`px-2.5 py-3 transition-colors lg:py-1 ${origem === v ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'}`}
-            >
-              {label}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-3 lg:contents">
+          <div className="flex overflow-hidden rounded border border-borda font-mono text-xs uppercase">
+            {[['', 'Tudo'], ['vitoria', 'Vitórias'], ['derrota', 'Derrotas']].map(([v, label]) => (
+              <button
+                key={v}
+                onClick={() => setResultado(v)}
+                className={`min-h-10 px-3 py-3 transition-colors lg:min-h-0 lg:px-2.5 lg:py-1 ${resultado === v ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="flex overflow-hidden rounded border border-borda font-mono text-xs uppercase">
+            {[['', 'Todas'], ['valve_mm', 'Auto'], ['upload', 'Manual']].map(([v, label]) => (
+              <button
+                key={v}
+                onClick={() => setOrigem(v)}
+                className={`min-h-10 px-3 py-3 transition-colors lg:min-h-0 lg:px-2.5 lg:py-1 ${origem === v ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
