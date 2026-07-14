@@ -7,7 +7,9 @@ const ROTULO_TECNICA = {
 }
 
 // Ícone simples por tipo, desenhado direto em SVG (sem lib de ícones).
-function MarcadorTipo({ tipo, x, y, ativo }) {
+// Exportado (named) pra ser reusado no mini-radar dos cards de Táticas
+// (MiniRadarTatica.jsx) sem duplicar o desenho dos marcadores.
+export function MarcadorTipo({ tipo, x, y, ativo }) {
   const cor = ativo ? '#ffd166' : { smoke: '#d2d2d7', flash: '#fff8d6', he: '#ffaa3c', molotov: '#ff6e1e' }[tipo]
   if (tipo === 'smoke') {
     return <circle cx={x} cy={y} r={ativo ? 2.2 : 1.8} fill={cor} opacity="0.9" />
