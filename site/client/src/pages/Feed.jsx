@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { nomeMapa, dataHora, origemPartida, corRating } from '../lib/format.js'
 import FiltroPeriodo from '../components/FiltroPeriodo.jsx'
-import { Card, SectionHeader, Badge } from '../components/ui'
+import { Card, SectionHeader, Badge, MapIcon } from '../components/ui'
 
 const MAPAS = ['de_anubis', 'de_ancient', 'de_cache', 'de_dust2', 'de_inferno', 'de_mirage', 'de_nuke', 'de_overpass', 'de_train', 'de_vertigo']
 
@@ -85,6 +85,7 @@ function CardPartida({ m }) {
             <span className="text-texto-fraco">:</span>
             <span className="text-texto-fraco">{b ?? '–'}</span>
           </div>
+          <MapIcon map={m.map} size={22} />
           <span className="truncate font-display text-lg font-semibold uppercase text-texto">{nomeMapa(m.map)}</span>
         </div>
         {timesPro ? (
@@ -106,9 +107,7 @@ function CardPartida({ m }) {
 
       {/* Desktop: layout original, intocado */}
       <div className="hidden min-w-0 flex-1 items-center gap-4 lg:flex">
-        <div className="panel-cut-sm flex h-12 w-12 shrink-0 items-center justify-center border border-borda bg-fundo font-mono text-xs font-bold uppercase text-destaque">
-          {nomeMapa(m.map).slice(0, 3)}
-        </div>
+        <MapIcon map={m.map} size={44} />
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-2">
             <span className="truncate font-display font-semibold uppercase tracking-wide text-texto">{nomeMapa(m.map)}</span>

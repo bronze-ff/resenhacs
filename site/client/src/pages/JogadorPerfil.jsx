@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { nomeMapa, dataHora, corRating, nomeArma, TIPO_COMPRA } from '../lib/format.js'
-import { Card, SectionHeader, StatTile, RatingBadge, DataTable } from '../components/ui'
+import { Card, SectionHeader, StatTile, RatingBadge, DataTable, MapIcon } from '../components/ui'
 import LinhaEvolucao from '../components/LinhaEvolucao.jsx'
 import FiltroPeriodo from '../components/FiltroPeriodo.jsx'
 import TagEstilo from '../components/TagEstilo.jsx'
@@ -279,7 +279,10 @@ export default function JogadorPerfil() {
         <div className="space-y-2">
           {porMapa.map((mp) => (
             <Card key={mp.map} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 p-3">
-              <span className="font-mono text-texto">{nomeMapa(mp.map)}</span>
+              <span className="flex items-center gap-2 font-mono text-texto">
+                <MapIcon map={mp.map} size={28} />
+                {nomeMapa(mp.map)}
+              </span>
               <span className="font-mono text-sm text-texto-fraco">
                 <span className="tabular-nums text-texto">{mp.partidas}</span> jogos ·{' '}
                 <span className={`tabular-nums ${mp.winrate >= 50 ? 'text-sucesso' : 'text-perigo'}`}>{mp.winrate}%</span>

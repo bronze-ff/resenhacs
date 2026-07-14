@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useSearchParams, Link } from 'react-router-dom'
 import { nomeMapa, dataHora, origemPartida, corRating, TIPO_COMPRA } from '../lib/format.js'
+import { MapIcon } from '../components/ui'
 import ReplayViewer from '../components/ReplayViewer.jsx'
 import MapaCalor from '../components/MapaCalor.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
@@ -694,6 +695,7 @@ export default function Partida() {
         <div>
           <Link to="/" className="font-mono text-sm text-texto-fraco hover:text-texto">← Partidas</Link>
           <div className="mt-1 flex flex-wrap items-center gap-2">
+            <MapIcon map={m.map} size={40} />
             <h2 className="font-display text-2xl font-bold uppercase tracking-wide text-texto">{nomeMapa(m.map)}</h2>
             <span
               title={origemPartida(m.source).title}
