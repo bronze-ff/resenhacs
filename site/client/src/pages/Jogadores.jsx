@@ -33,7 +33,7 @@ export default function Jogadores() {
                 <img src={j.avatarUrl} alt="" className="panel-cut-sm h-8 w-8 shrink-0 border border-borda object-cover" />
               )}
               <span className="min-w-0 flex-1 truncate font-mono text-sm text-texto">{j.nick || j.steamId}</span>
-              {j.isAdmin && (
+              {j.isSuperAdmin && (
                 <span className="shrink-0 font-mono text-[10px] uppercase tracking-widest text-destaque">admin</span>
               )}
               {ban?.vacBanned && (

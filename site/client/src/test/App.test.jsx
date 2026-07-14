@@ -9,7 +9,7 @@ function mockMe(response) {
       // Feed busca /api/matches e /api/sessions; devolvemos lista vazia pros dois.
       // /api/auth/me devolve o jogador. Sem esses dois casos, cai no fallback abaixo
       // e o componente Resenhas recebe o objeto do jogador como "sessoes" e quebra.
-      if (typeof url === 'string' && (url.includes('/api/matches') || url.includes('/api/sessions'))) {
+      if (typeof url === 'string' && (url.includes('/api/matches') || url.includes('/api/sessions') || url.includes('/api/groups/meus'))) {
         return Promise.resolve({ ok: true, json: async () => [] })
       }
       return Promise.resolve({
@@ -37,7 +37,7 @@ describe('App', () => {
   })
 
   it('logado: mostra o shell com o nick do jogador', async () => {
-    mockMe({ steamId: '765', nick: 'fih', avatarUrl: null, isAdmin: false })
+    mockMe({ steamId: '765', nick: 'fih', avatarUrl: null, isSuperAdmin: false, grupoAtivoId: 'g1' })
     render(<App />)
     expect(await screen.findByText('fih')).toBeInTheDocument()
     // /api/matches é um fetch separado do /api/auth/me (que resolveu findByText acima);

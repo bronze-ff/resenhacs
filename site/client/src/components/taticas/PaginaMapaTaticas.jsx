@@ -14,7 +14,7 @@ const ARMAS = [['todas', 'Todas'], ...Object.entries(ROTULO_ARMAS)]
 
 export default function PaginaMapaTaticas({ mapa, onTrocarMapa }) {
   const { jogador } = useAuth()
-  const isAdmin = !!jogador?.isAdmin
+  const isAdmin = !!jogador?.isSuperAdmin
   const [lado, setLado] = useState('T')
   const [tipo, setTipo] = useState('todas')
   const [local, setLocal] = useState('todas')

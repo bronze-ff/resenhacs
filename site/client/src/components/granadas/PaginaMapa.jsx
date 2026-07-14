@@ -12,7 +12,7 @@ const NIVEIS_CALLOUT = [['sem', 'Sem'], ['noob', 'Noob'], ['pro', 'Pro']]
 
 export default function PaginaMapa({ mapa, onTrocarMapa }) {
   const { jogador } = useAuth()
-  const isAdmin = !!jogador?.isAdmin
+  const isAdmin = !!jogador?.isSuperAdmin
   const [lado, setLado] = useState('T')
   const [tipo, setTipo] = useState('smoke')
   const [lineups, setLineups] = useState(null)

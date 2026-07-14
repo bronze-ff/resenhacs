@@ -737,8 +737,8 @@ export default function Partida() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Scoreboard time="A" jogadores={timeA} podePromover={jogador?.isAdmin} onPromover={promover} promovendo={promovendo} />
-        <Scoreboard time="B" jogadores={timeB} podePromover={jogador?.isAdmin} onPromover={promover} promovendo={promovendo} />
+        <Scoreboard time="A" jogadores={timeA} podePromover={jogador?.isSuperAdmin} onPromover={promover} promovendo={promovendo} />
+        <Scoreboard time="B" jogadores={timeB} podePromover={jogador?.isSuperAdmin} onPromover={promover} promovendo={promovendo} />
       </div>
 
       <section ref={replayRef}>
