@@ -1,16 +1,18 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext.jsx'
 
+const CHAVE_SIDEBAR_COLAPSADA = 'resenha_sidebar_colapsada'
+
 const ITENS = [
-  { to: '/', end: true, label: 'Partidas', num: '01' },
-  { to: '/ranking', label: 'Ranking', num: '02' },
-  { to: '/enviar-demo', label: 'Enviar demo', num: '03' },
-  { to: '/jogadores', label: 'Jogadores', num: '04' },
-  { to: '/comparar', label: 'Comparar', num: '05' },
-  { to: '/granadas', label: 'Granadas', num: '06' },
-  { to: '/taticas', label: 'Táticas', num: '07' },
-  { to: '/perfil', label: 'Meu perfil', num: '08' },
+  { to: '/', end: true, label: 'Partidas', num: '01', icone: 'partidas' },
+  { to: '/ranking', label: 'Ranking', num: '02', icone: 'ranking' },
+  { to: '/enviar-demo', label: 'Enviar demo', num: '03', icone: 'enviarDemo' },
+  { to: '/jogadores', label: 'Jogadores', num: '04', icone: 'jogadores' },
+  { to: '/comparar', label: 'Comparar', num: '05', icone: 'comparar' },
+  { to: '/granadas', label: 'Granadas', num: '06', icone: 'granadas' },
+  { to: '/taticas', label: 'Táticas', num: '07', icone: 'taticas' },
+  { to: '/perfil', label: 'Meu perfil', num: '08', icone: 'perfil' },
 ]
 
 // Itens da barra inferior mobile (estilo app da FACEIT): 4 rotas principais
@@ -52,6 +54,56 @@ const NAV_ICONES = {
       <circle cx="19" cy="12" r="1.4" fill="currentColor" stroke="none" />
     </svg>
   ),
+  enviarDemo: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
+      <path d="M12 3v12" />
+      <path d="M7 8L12 3L17 8" />
+      <path d="M4 15V19C4 20.1046 4.89543 21 6 21H18C19.1046 21 20 20.1046 20 19V15" />
+    </svg>
+  ),
+  jogadores: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
+      <circle cx="9" cy="8" r="3" />
+      <path d="M3 20C3 16.6863 5.68629 14 9 14C12.3137 14 15 16.6863 15 20" />
+      <circle cx="17" cy="8" r="2.5" />
+      <path d="M21 20C21 17.2386 19.2091 15 17 15" />
+    </svg>
+  ),
+  comparar: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
+      <path d="M8 4V20" />
+      <path d="M16 4V20" />
+      <path d="M4 9L8 5L12 9" />
+      <path d="M12 15L16 19L20 15" />
+    </svg>
+  ),
+  perfil: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
+      <circle cx="12" cy="8" r="4" />
+      <path d="M4 20C4 15.5817 7.58172 12 12 12C16.4183 12 20 15.5817 20 20" />
+    </svg>
+  ),
+  admin: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
+      <path d="M12 3L4 6V11C4 15.4183 7.35786 19.5695 12 21C16.6421 19.5695 20 15.4183 20 11V6L12 3Z" />
+      <path d="M9 12L11 14L15 10" />
+    </svg>
+  ),
+  partidasPro: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
+      <path d="M12 2L14.5 8.5L21 9L16 13.5L17.5 20L12 16.5L6.5 20L8 13.5L3 9L9.5 8.5L12 2Z" />
+    </svg>
+  ),
+  colapsar: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+      <path d="M15 5L9 12L15 19" />
+    </svg>
+  ),
+  expandir: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+      <path d="M9 5L15 12L9 19" />
+    </svg>
+  ),
 }
 
 const NAV_INFERIOR = [
@@ -61,17 +113,35 @@ const NAV_INFERIOR = [
   { to: '/taticas', label: 'Táticas', icone: 'taticas' },
 ]
 
-function itemClasse({ isActive }) {
-  return `group flex items-center gap-3 border-l-2 px-3 py-2.5 text-sm uppercase tracking-wide transition-colors ${
-    isActive
-      ? 'border-destaque bg-destaque/10 text-texto'
-      : 'border-transparent text-texto-fraco hover:border-destaque/40 hover:bg-superficie-alta hover:text-texto'
-  }`
+function itemClasse(colapsada) {
+  return ({ isActive }) =>
+    `group flex items-center gap-3 border-l-2 px-3 py-2.5 text-sm uppercase tracking-wide transition-colors ${
+      colapsada ? 'lg:justify-center lg:px-0' : ''
+    } ${
+      isActive
+        ? 'border-destaque bg-destaque/10 text-texto'
+        : 'border-transparent text-texto-fraco hover:border-destaque/40 hover:bg-superficie-alta hover:text-texto'
+    }`
 }
 
 export default function Shell({ children }) {
   const { jogador } = useAuth()
   const [menuAberto, setMenuAberto] = useState(false)
+  const [colapsada, setColapsada] = useState(() => {
+    try {
+      return localStorage.getItem(CHAVE_SIDEBAR_COLAPSADA) === '1'
+    } catch {
+      return false
+    }
+  })
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(CHAVE_SIDEBAR_COLAPSADA, colapsada ? '1' : '0')
+    } catch {
+      // ignora (ex.: storage indisponível)
+    }
+  }, [colapsada])
 
   async function sair() {
     await fetch('/api/auth/logout', { method: 'POST' })
@@ -81,6 +151,8 @@ export default function Shell({ children }) {
   function fecharMenu() {
     setMenuAberto(false)
   }
+
+  const classeItem = itemClasse(colapsada)
 
   return (
     <div className="flex min-h-screen">
@@ -92,40 +164,77 @@ export default function Shell({ children }) {
         />
       )}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-60 shrink-0 flex-col border-r border-borda bg-superficie transition-transform duration-200 lg:static lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 flex w-60 shrink-0 flex-col border-r border-borda bg-superficie transition-[transform,width] duration-200 lg:static lg:translate-x-0 ${
           menuAberto ? 'translate-x-0' : '-translate-x-full'
-        }`}
+        } ${colapsada ? 'lg:w-16' : 'lg:w-60'}`}
       >
-        <div className="border-b border-borda px-5 py-5">
+        <div className={`border-b border-borda px-5 py-5 ${colapsada ? 'lg:px-0 lg:text-center' : ''}`}>
           <h1 className="font-display text-2xl font-bold uppercase tracking-widest text-texto">
-            Resenha<span className="text-destaque">.</span>
+            <span className={colapsada ? 'lg:hidden' : ''}>Resenha</span>
+            <span className={`hidden ${colapsada ? 'lg:inline' : ''}`}>R</span>
+            <span className="text-destaque">.</span>
           </h1>
-          <p className="mt-0.5 font-mono text-[10px] uppercase tracking-[0.2em] text-texto-fraco">
+          <p className={`mt-0.5 font-mono text-[10px] uppercase tracking-[0.2em] text-texto-fraco ${colapsada ? 'lg:hidden' : ''}`}>
             resenha cs2 // ops
           </p>
         </div>
         <nav className="flex-1 py-3">
           {ITENS.map((item) => (
-            <NavLink key={item.to} to={item.to} end={item.end} className={itemClasse} onClick={fecharMenu}>
-              <span className="font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque">
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.end}
+              className={classeItem}
+              onClick={fecharMenu}
+              title={colapsada ? item.label : undefined}
+              aria-label={colapsada ? item.label : undefined}
+            >
+              <span className="shrink-0">{NAV_ICONES[item.icone]}</span>
+              <span className={`font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque ${colapsada ? 'lg:hidden' : ''}`}>
                 {item.num}
               </span>
-              {item.label}
+              <span className={colapsada ? 'lg:hidden' : ''}>{item.label}</span>
             </NavLink>
           ))}
           {jogador?.isAdmin && (
             <>
-              <NavLink to="/admin" className={itemClasse} onClick={fecharMenu}>
-                <span className="font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque">09</span>
-                Admin
+              <NavLink
+                to="/admin"
+                className={classeItem}
+                onClick={fecharMenu}
+                title={colapsada ? 'Admin' : undefined}
+                aria-label={colapsada ? 'Admin' : undefined}
+              >
+                <span className="shrink-0">{NAV_ICONES.admin}</span>
+                <span className={`font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque ${colapsada ? 'lg:hidden' : ''}`}>09</span>
+                <span className={colapsada ? 'lg:hidden' : ''}>Admin</span>
               </NavLink>
-              <NavLink to="/partidas-pro" className={itemClasse} onClick={fecharMenu}>
-                <span className="font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque">10</span>
-                Partidas pro
+              <NavLink
+                to="/partidas-pro"
+                className={classeItem}
+                onClick={fecharMenu}
+                title={colapsada ? 'Partidas pro' : undefined}
+                aria-label={colapsada ? 'Partidas pro' : undefined}
+              >
+                <span className="shrink-0">{NAV_ICONES.partidasPro}</span>
+                <span className={`font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque ${colapsada ? 'lg:hidden' : ''}`}>10</span>
+                <span className={colapsada ? 'lg:hidden' : ''}>Partidas pro</span>
               </NavLink>
             </>
           )}
         </nav>
+        <div className="hidden border-t border-borda p-2 lg:flex">
+          <button
+            type="button"
+            onClick={() => setColapsada((v) => !v)}
+            aria-label={colapsada ? 'Expandir menu' : 'Recolher menu'}
+            title={colapsada ? 'Expandir menu' : 'Recolher menu'}
+            className="flex h-10 w-full cursor-pointer items-center justify-center gap-2 rounded text-texto-fraco transition-colors duration-200 hover:bg-superficie-alta hover:text-texto"
+          >
+            {NAV_ICONES[colapsada ? 'expandir' : 'colapsar']}
+            {!colapsada && <span className="text-[10px] font-mono uppercase tracking-wide">Recolher</span>}
+          </button>
+        </div>
       </aside>
       {/* min-w-0: sem isso, conteúdo com largura intrínseca maior que a tela (ex.: o
           carrossel de Resenhas) impede o flex-item de encolher, alarga o body além do
