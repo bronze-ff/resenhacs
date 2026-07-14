@@ -47,7 +47,9 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket }) {
        from matches m
        left join match_players mp on mp.match_id = m.id
        left join lateral (
-         select json_build_object('steamId', mp3.steam_id64, 'nick', mp3.nick, 'rating', mp3.rating) as mvp
+         -- jsonb (não json): o GROUP BY m.id, mvp.mvp exige operador de igualdade,
+         -- que o tipo json não tem — com json o Postgres rejeita a query inteira.
+         select jsonb_build_object('steamId', mp3.steam_id64, 'nick', mp3.nick, 'rating', mp3.rating) as mvp
          from match_players mp3
          where mp3.match_id = m.id and mp3.is_tracked
          order by mp3.rating desc nulls last, mp3.kills desc
