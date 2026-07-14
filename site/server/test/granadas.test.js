@@ -33,11 +33,16 @@ describe('GET /api/granadas', () => {
     expect((await request(app).get('/api/granadas')).status).toBe(401)
   })
 
-  it('logado lista com filtros validados e camelCase', async () => {
+  it('jogador comum: 403 (pagina ainda em teste, admin-only)', async () => {
+    const { app } = appWith([])
+    expect((await request(app).get('/api/granadas').set('Cookie', cookieJogador)).status).toBe(403)
+  })
+
+  it('admin lista com filtros validados e camelCase', async () => {
     const { app, db } = appWith([['from lineups_curados', [LINHA]]])
     const res = await request(app)
       .get('/api/granadas?map=de_mirage&lado=T&tipo=smoke')
-      .set('Cookie', cookieJogador)
+      .set('Cookie', cookieAdmin)
     expect(res.status).toBe(200)
     expect(res.body[0]).toMatchObject({
       id: 'g1', videoUrl: 'https://youtu.be/abcdefghijk', arremessoX: 0.2, alvoY: 0.3,
@@ -48,15 +53,20 @@ describe('GET /api/granadas', () => {
 
   it('filtro invalido e ignorado (nao vira SQL)', async () => {
     const { app, db } = appWith([['from lineups_curados', []]])
-    await request(app).get("/api/granadas?map=x';drop&lado=Z&tipo=nuke").set('Cookie', cookieJogador)
+    await request(app).get("/api/granadas?map=x';drop&lado=Z&tipo=nuke").set('Cookie', cookieAdmin)
     expect(db.query.mock.calls[0][1]).toEqual([])
   })
 })
 
 describe('GET /api/granadas/contagem', () => {
+  it('jogador comum: 403', async () => {
+    const { app } = appWith([])
+    expect((await request(app).get('/api/granadas/contagem').set('Cookie', cookieJogador)).status).toBe(403)
+  })
+
   it('agrupa por mapa e tipo', async () => {
     const { app } = appWith([['group by map, tipo', [{ map: 'de_mirage', tipo: 'smoke', total: '3' }]]])
-    const res = await request(app).get('/api/granadas/contagem').set('Cookie', cookieJogador)
+    const res = await request(app).get('/api/granadas/contagem').set('Cookie', cookieAdmin)
     expect(res.status).toBe(200)
     expect(res.body[0]).toEqual({ map: 'de_mirage', tipo: 'smoke', total: 3 })
   })

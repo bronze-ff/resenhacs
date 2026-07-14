@@ -20,9 +20,14 @@ function appWith(handlers) {
 }
 
 describe('GET /api/taticas', () => {
-  it('lista só aprovadas por padrao', async () => {
+  it('jogador comum: 403 (pagina ainda em teste, admin-only)', async () => {
+    const { app } = appWith([])
+    expect((await request(app).get('/api/taticas?map=de_mirage').set('Cookie', cookieJogador)).status).toBe(403)
+  })
+
+  it('admin lista só aprovadas por padrao', async () => {
     const { app, db } = appWith([['from taticas', []]])
-    await request(app).get('/api/taticas?map=de_mirage').set('Cookie', cookieJogador)
+    await request(app).get('/api/taticas?map=de_mirage').set('Cookie', cookieAdmin)
     expect(db.query.mock.calls[0][0]).toContain("status = 'aprovada'")
   })
 })

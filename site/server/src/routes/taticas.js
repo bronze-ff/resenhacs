@@ -4,7 +4,7 @@ import { requireAdmin } from '../auth/middleware.js'
 export function createTaticasRouter({ db, requireAuth }) {
   const router = Router()
 
-  router.get('/', requireAuth, async (req, res) => {
+  router.get('/', requireAuth, requireAdmin, async (req, res) => {
     const cond = ["status = 'aprovada'"]
     const params = []
     const { map, status } = req.query
