@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext.jsx'
 
 const ITENS = [
@@ -11,6 +11,54 @@ const ITENS = [
   { to: '/granadas', label: 'Granadas', num: '06' },
   { to: '/taticas', label: 'Táticas', num: '07' },
   { to: '/perfil', label: 'Meu perfil', num: '08' },
+]
+
+// Itens da barra inferior mobile (estilo app da FACEIT): 4 rotas principais
+// + "Mais" que abre o drawer completo (mesmo menu do hambúrguer, agora removido
+// do header mobile pra não duplicar entrada — "Mais" é o único caminho pro resto).
+const NAV_ICONES = {
+  partidas: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
+      <line x1="4" y1="6" x2="20" y2="6" />
+      <line x1="4" y1="12" x2="20" y2="12" />
+      <line x1="4" y1="18" x2="14" y2="18" />
+    </svg>
+  ),
+  ranking: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
+      <path d="M4 21V13H9V21" />
+      <path d="M9 21V9H15V21" />
+      <path d="M15 21V15H20V21" />
+    </svg>
+  ),
+  granadas: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
+      <circle cx="12" cy="12" r="8" />
+      <circle cx="12" cy="12" r="4" />
+      <circle cx="12" cy="12" r="0.5" fill="currentColor" />
+    </svg>
+  ),
+  taticas: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
+      <rect x="4" y="4" width="16" height="14" rx="1" />
+      <path d="M8 9L11 12L8 15" />
+      <line x1="13" y1="15" x2="16" y2="15" />
+    </svg>
+  ),
+  mais: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
+      <circle cx="5" cy="12" r="1.4" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" />
+      <circle cx="19" cy="12" r="1.4" fill="currentColor" stroke="none" />
+    </svg>
+  ),
+}
+
+const NAV_INFERIOR = [
+  { to: '/', end: true, label: 'Partidas', icone: 'partidas' },
+  { to: '/ranking', label: 'Ranking', icone: 'ranking' },
+  { to: '/granadas', label: 'Granadas', icone: 'granadas' },
+  { to: '/taticas', label: 'Táticas', icone: 'taticas' },
 ]
 
 function itemClasse({ isActive }) {
@@ -81,19 +129,10 @@ export default function Shell({ children }) {
       </aside>
       <div className="flex-1">
         <header className="flex items-center justify-between gap-3 border-b border-borda bg-superficie/60 px-4 py-3 backdrop-blur lg:justify-end lg:px-6">
+          {/* Sem hambúrguer aqui: a barra inferior mobile cobre as rotas
+              principais e o botão "Mais" abre este mesmo drawer, então um
+              segundo gatilho no header seria redundante. */}
           <div className="flex items-center gap-3 lg:hidden">
-            <button
-              onClick={() => setMenuAberto(true)}
-              aria-label="Abrir menu"
-              className="flex h-10 w-10 shrink-0 items-center justify-center border border-borda text-texto-fraco transition-colors hover:border-destaque/40 hover:text-texto"
-            >
-              <span className="sr-only">Abrir menu</span>
-              <span className="flex flex-col items-center gap-1">
-                <span className="block h-0.5 w-5 bg-current" />
-                <span className="block h-0.5 w-5 bg-current" />
-                <span className="block h-0.5 w-5 bg-current" />
-              </span>
-            </button>
             <h1 className="font-display text-lg font-bold uppercase tracking-widest text-texto">
               Resenha<span className="text-destaque">.</span>
             </h1>
@@ -115,8 +154,56 @@ export default function Shell({ children }) {
             </button>
           </div>
         </header>
-        <main className="px-4 py-4 lg:px-6 lg:py-6">{children}</main>
+        <main className="px-4 pb-20 pt-4 lg:px-6 lg:py-6">{children}</main>
       </div>
+      <BarraInferior menuAberto={menuAberto} onAbrirMenu={() => setMenuAberto(true)} />
     </div>
+  )
+}
+
+// Barra de navegação inferior mobile (estilo app da FACEIT): fica sempre
+// visível em telas pequenas (lg:hidden), abaixo do overlay (z-30) e do
+// drawer (z-40) pra não competir visualmente quando o menu completo abre.
+function BarraInferior({ menuAberto, onAbrirMenu }) {
+  const location = useLocation()
+
+  function itemNavClasse({ isActive }) {
+    return `flex h-14 flex-col items-center justify-center gap-1 text-[10px] font-mono uppercase tracking-wide transition-colors ${
+      isActive ? 'text-destaque' : 'text-texto-fraco'
+    }`
+  }
+
+  const maisAtivo = menuAberto
+  // "Mais" também deve acender quando a rota atual não é nenhuma das 4
+  // principais (ex.: /jogadores, /comparar, /perfil, /admin) — senão nenhum
+  // ícone fica ativo nessas telas.
+  const rotaCobertaPelasPrincipais = NAV_INFERIOR.some((item) =>
+    item.end ? location.pathname === item.to : location.pathname.startsWith(item.to)
+  )
+
+  return (
+    <nav
+      className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-5 border-t border-borda bg-superficie pb-[env(safe-area-inset-bottom)] lg:hidden"
+      aria-label="Navegação principal"
+    >
+      {NAV_INFERIOR.map((item) => (
+        <NavLink key={item.to} to={item.to} end={item.end} className={itemNavClasse}>
+          {NAV_ICONES[item.icone]}
+          {item.label}
+        </NavLink>
+      ))}
+      <button
+        type="button"
+        onClick={onAbrirMenu}
+        aria-label="Mais opções"
+        aria-expanded={menuAberto}
+        className={`flex h-14 flex-col items-center justify-center gap-1 text-[10px] font-mono uppercase tracking-wide transition-colors ${
+          maisAtivo || !rotaCobertaPelasPrincipais ? 'text-destaque' : 'text-texto-fraco'
+        }`}
+      >
+        {NAV_ICONES.mais}
+        Mais
+      </button>
+    </nav>
   )
 }
