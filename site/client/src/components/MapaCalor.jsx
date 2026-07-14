@@ -132,7 +132,7 @@ export default function MapaCalor({ replay, onSelecionarPonto }) {
             <button
               key={v}
               onClick={() => setModo(v)}
-              className={`px-3 py-1.5 transition-colors ${modo === v ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'}`}
+              className={`flex min-h-10 items-center px-3 py-1.5 transition-colors lg:min-h-0 ${modo === v ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'}`}
             >
               {label}
             </button>
@@ -143,7 +143,7 @@ export default function MapaCalor({ replay, onSelecionarPonto }) {
             <select
               value={jogadorFiltro}
               onChange={(e) => setJogadorFiltro(e.target.value)}
-              className="rounded border border-borda bg-superficie px-2 py-1 font-mono text-xs"
+              className="min-h-10 rounded border border-borda bg-superficie px-2 py-1 font-mono text-xs lg:min-h-0"
             >
               <option value="">Todo mundo</option>
               {jogadoresIds.map((id) => <option key={id} value={id}>{replay.names[id]}</option>)}
@@ -154,7 +154,7 @@ export default function MapaCalor({ replay, onSelecionarPonto }) {
                   key={v || 'ambos'}
                   onClick={() => setLadoFiltro(v)}
                   title={v ? `Só quando estava jogando de ${v}` : 'CT e T juntos'}
-                  className={`px-2.5 py-1.5 transition-colors ${ladoFiltro === v ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'}`}
+                  className={`flex min-h-10 items-center px-2.5 py-1.5 transition-colors lg:min-h-0 ${ladoFiltro === v ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'}`}
                 >
                   {label}
                 </button>
@@ -168,7 +168,7 @@ export default function MapaCalor({ replay, onSelecionarPonto }) {
               <button
                 key={v || 'todas'}
                 onClick={() => setTipoGranadaFiltro(v)}
-                className={`px-2.5 py-1.5 transition-colors ${tipoGranadaFiltro === v ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'}`}
+                className={`flex min-h-10 items-center px-2.5 py-1.5 transition-colors lg:min-h-0 ${tipoGranadaFiltro === v ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'}`}
               >
                 {label}
               </button>

@@ -361,7 +361,7 @@ export default function ReplayViewer({ replay, seek }) {
         <select
           value={roundIdx}
           onChange={(e) => { setRoundIdx(Number(e.target.value)); setFrameAtual(0); setTocando(false) }}
-          className="rounded border border-borda bg-superficie px-2 py-1 font-mono text-sm"
+          className="min-h-10 rounded border border-borda bg-superficie px-2 py-1 font-mono text-sm lg:min-h-0"
         >
           {replay.rounds.map((r, i) => (
             <option key={r.round} value={i}>Round {r.round}</option>
@@ -369,14 +369,14 @@ export default function ReplayViewer({ replay, seek }) {
         </select>
         <button
           onClick={() => setTocando((t) => !t)}
-          className="panel-cut-sm border border-destaque bg-destaque px-4 py-1 font-display text-sm font-semibold uppercase tracking-wide text-fundo"
+          className="panel-cut-sm flex min-h-10 items-center justify-center border border-destaque bg-destaque px-4 py-1 font-display text-sm font-semibold uppercase tracking-wide text-fundo lg:min-h-0"
         >
           {tocando ? 'Pausar' : 'Play'}
         </button>
         <select
           value={velocidade}
           onChange={(e) => setVelocidade(Number(e.target.value))}
-          className="rounded border border-borda bg-superficie px-2 py-1 font-mono text-sm"
+          className="min-h-10 rounded border border-borda bg-superficie px-2 py-1 font-mono text-sm lg:min-h-0"
         >
           {[0.5, 1, 2, 4].map((v) => <option key={v} value={v}>{v}x</option>)}
         </select>
@@ -386,7 +386,7 @@ export default function ReplayViewer({ replay, seek }) {
           max={Math.max(0, total - 1)}
           value={frameAtual}
           onChange={(e) => { setFrameAtual(Number(e.target.value)); setTocando(false) }}
-          className="flex-1 accent-[color:var(--color-destaque)]"
+          className="min-h-10 min-w-[140px] flex-1 accent-[color:var(--color-destaque)] lg:min-h-0"
         />
         <span className="w-24 text-right font-mono text-xs tabular-nums text-texto-fraco">
           {(frameAtual / replay.tickRate).toFixed(1)}s / {dur.toFixed(1)}s
@@ -400,7 +400,7 @@ export default function ReplayViewer({ replay, seek }) {
           className="panel-cut block w-full border border-borda"
           aria-label={`Replay 2D de ${nomeMapa(replay.map)}`}
         />
-        <div className="pointer-events-none absolute right-2 top-2 flex flex-col items-end gap-1">
+        <div className="mt-2 flex flex-col gap-1 lg:pointer-events-none lg:absolute lg:right-2 lg:top-2 lg:mt-0 lg:items-end">
           {feed.map((k, i) => (
             <div
               key={`${k.t}-${i}`}

@@ -42,7 +42,7 @@ function SecaoReplay({ replayUrl, seek, onSelecionarPonto }) {
           <button
             key={v}
             onClick={() => setAba(v)}
-            className={`px-3 py-1.5 transition-colors ${aba === v ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'}`}
+            className={`flex min-h-10 items-center px-3 py-1.5 transition-colors lg:min-h-0 ${aba === v ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'}`}
           >
             {label}
           </button>
@@ -59,17 +59,17 @@ function SecaoReplay({ replayUrl, seek, onSelecionarPonto }) {
 
 function Scoreboard({ time, jogadores, podePromover, onPromover, promovendo }) {
   return (
-    <div className="panel-cut overflow-hidden border border-borda">
+    <div className="panel-cut overflow-x-auto border border-borda">
       <table className="w-full text-sm">
         <thead>
           <tr className="bg-superficie text-left font-mono text-[10px] uppercase tracking-wider text-texto-fraco">
             <th className="px-3 py-2">Time {time}</th>
             <th className="px-2 py-2 text-right">K</th>
-            <th className="px-2 py-2 text-right" title="Team kills (não contam pro K nem pro rating)">TK</th>
+            <th className="hidden px-2 py-2 text-right sm:table-cell" title="Team kills (não contam pro K nem pro rating)">TK</th>
             <th className="px-2 py-2 text-right">D</th>
             <th className="px-2 py-2 text-right">A</th>
             <th className="px-2 py-2 text-right">ADR</th>
-            <th className="px-2 py-2 text-right">HS%</th>
+            <th className="hidden px-2 py-2 text-right sm:table-cell">HS%</th>
             <th className="px-3 py-2 text-right">Rating</th>
           </tr>
         </thead>
@@ -104,13 +104,13 @@ function Scoreboard({ time, jogadores, podePromover, onPromover, promovendo }) {
                   )}
                 </td>
                 <td className="px-2 py-2 text-right tabular-nums">{p.kills}</td>
-                <td className={`px-2 py-2 text-right tabular-nums ${p.teamKills > 0 ? 'text-perigo' : 'text-texto-fraco'}`}>
+                <td className={`hidden px-2 py-2 text-right tabular-nums sm:table-cell ${p.teamKills > 0 ? 'text-perigo' : 'text-texto-fraco'}`}>
                   {p.teamKills || 0}
                 </td>
                 <td className="px-2 py-2 text-right tabular-nums">{p.deaths}</td>
                 <td className="px-2 py-2 text-right tabular-nums">{p.assists}</td>
                 <td className="px-2 py-2 text-right tabular-nums">{adr}</td>
-                <td className="px-2 py-2 text-right tabular-nums">{hs}%</td>
+                <td className="hidden px-2 py-2 text-right tabular-nums sm:table-cell">{hs}%</td>
                 <td className={`px-3 py-2 text-right font-semibold tabular-nums ${corRating(p.rating)}`}>
                   {p.rating?.toFixed(2) ?? '–'}
                 </td>
@@ -156,7 +156,7 @@ function SugerirTatica({ matchId, map, roundNumber, onFechar }) {
 
   if (sucesso) {
     return (
-      <div className="panel-cut absolute left-0 top-full z-10 mt-1 w-56 border border-sucesso/40 bg-superficie p-3 font-mono text-xs text-sucesso">
+      <div className="panel-cut mt-2 w-full border border-sucesso/40 bg-superficie p-3 font-mono text-xs text-sucesso sm:w-64">
         Tática sugerida! Aguardando aprovação.
       </div>
     )
@@ -166,7 +166,7 @@ function SugerirTatica({ matchId, map, roundNumber, onFechar }) {
     <form
       onSubmit={enviar}
       onClick={(e) => e.stopPropagation()}
-      className="panel-cut absolute left-0 top-full z-10 mt-1 w-64 space-y-2 border border-borda bg-superficie p-3 text-left"
+      className="panel-cut mt-2 w-full space-y-2 border border-borda bg-superficie p-3 text-left sm:w-64"
     >
       <p className="font-mono text-[10px] uppercase tracking-widest text-texto-fraco">Sugerir tática · round {roundNumber}</p>
       <input
@@ -214,38 +214,41 @@ function LinhaDoTempoRounds({ rounds, highlights, timeDoGrupo, onClicarHighlight
   }
   return (
     <div className="panel-cut border border-borda bg-superficie p-3">
-      <div className="flex flex-wrap gap-1">
+      <div className="flex gap-1 overflow-x-auto pb-1">
         {rounds.map((r) => {
           const hs = porRound.get(r.roundNumber) ?? []
           const vencedorGrupo = timeDoGrupo ? r.winnerTeam === timeDoGrupo : null
           const cor =
             vencedorGrupo === true ? 'border-sucesso/50 bg-sucesso/10' : vencedorGrupo === false ? 'border-perigo/50 bg-perigo/10' : 'border-borda bg-fundo'
           const conteudo = (
-            <div className={`panel-cut-sm flex h-9 w-9 flex-col items-center justify-center border ${cor} font-mono text-[10px]`}>
+            <div className={`panel-cut-sm flex h-9 w-9 flex-shrink-0 flex-col items-center justify-center border ${cor} font-mono text-[10px]`}>
               <span className="text-texto">{r.roundNumber}</span>
               {hs.length > 0 && <span className="leading-none text-destaque">●</span>}
             </div>
           )
           const primeiroComFrame = hs.find((h) => h.frame != null)
           return primeiroComFrame && replayDisponivel ? (
-            <button key={r.roundNumber} title={hs.map((h) => h.kind).join(', ')} onClick={() => onClicarHighlight(primeiroComFrame)}>
+            <button key={r.roundNumber} className="flex-shrink-0" title={hs.map((h) => h.kind).join(', ')} onClick={() => onClicarHighlight(primeiroComFrame)}>
               {conteudo}
             </button>
           ) : (
-            <div key={r.roundNumber} className="relative">
-              <button
-                title={`${r.winReason ?? ''} — clique pra sugerir como tática`.trim()}
-                onClick={() => setRoundAberto((v) => (v === r.roundNumber ? null : r.roundNumber))}
-              >
-                {conteudo}
-              </button>
-              {roundAberto === r.roundNumber && (
-                <SugerirTatica matchId={matchId} map={map} roundNumber={r.roundNumber} onFechar={() => setRoundAberto(null)} />
-              )}
-            </div>
+            <button
+              key={r.roundNumber}
+              className="flex-shrink-0"
+              title={`${r.winReason ?? ''} — clique pra sugerir como tática`.trim()}
+              onClick={() => setRoundAberto((v) => (v === r.roundNumber ? null : r.roundNumber))}
+            >
+              {conteudo}
+            </button>
           )
         })}
       </div>
+      {/* Popover fora da faixa com overflow-x-auto (que agora rola os rounds no mobile) —
+          se ficasse dentro, overflow-x forçaria overflow-y a clipar (regra CSS: eixo
+          "visible" vira "auto" quando o outro eixo não é visible), escondendo o form. */}
+      {roundAberto != null && (
+        <SugerirTatica matchId={matchId} map={map} roundNumber={roundAberto} onFechar={() => setRoundAberto(null)} />
+      )}
       <p className="mt-2 font-mono text-[11px] text-texto-fraco">
         Verde/vermelho = round vencido/perdido pelo grupo. ● = teve highlight nesse round (clique pra assistir). Rounds sem
         highlight: clique pra sugerir como tática.
@@ -312,7 +315,7 @@ function CabecalhoTimeEconomia({ time, jogadores, timeDoGrupo }) {
           seu time
         </span>
       )}
-      <div className="ml-auto flex items-center gap-1">
+      <div className="ml-auto flex flex-wrap items-center gap-1">
         {jogadores?.map((p) => <Avatar key={p.steamId} p={p} />)}
       </div>
     </div>
@@ -349,7 +352,7 @@ function LinhaDoTempoEconomia({ economia, timeDoGrupo, timeA, timeB }) {
           const a = r.A
           const b = r.B
           return (
-            <div key={rn} className="flex flex-shrink-0 flex-col items-center" style={{ width: 30 }}>
+            <div key={rn} className="flex w-[30px] flex-shrink-0 flex-col items-center">
               <span className="whitespace-nowrap font-mono text-[8px] font-semibold tabular-nums text-time-a">
                 {a ? fmtEquip(a.equipValue) : '–'}
               </span>
@@ -419,8 +422,8 @@ function TabelaUtilitariaTime({ time, jogadores }) {
             <th className="px-3 py-2">Jogador</th>
             <th className="px-2 py-2 text-right" title="Smokes / Flashes / HEs / Molotovs jogadas">Granadas</th>
             <th className="px-2 py-2 text-right" title="Inimigos cegados por mais de 1.1s (vezes) e segundos totais — cegueira rápida/de raspão não conta">Cegou inimigo</th>
-            <th className="px-2 py-2 text-right" title="Aliados cegados por mais de 1.1s (vezes) e segundos totais — inclui auto-flash">Cegou aliado</th>
-            <th className="px-2 py-2 text-right" title="Flash que cegou um inimigo morto por um colega logo em seguida, ainda cego (crédito pra quem jogou a flash)">Flash assist</th>
+            <th className="hidden px-2 py-2 text-right sm:table-cell" title="Aliados cegados por mais de 1.1s (vezes) e segundos totais — inclui auto-flash">Cegou aliado</th>
+            <th className="hidden px-2 py-2 text-right sm:table-cell" title="Flash que cegou um inimigo morto por um colega logo em seguida, ainda cego (crédito pra quem jogou a flash)">Flash assist</th>
             <th className="px-2 py-2 text-right" title="Dano de HE em inimigo (fogo amigo à parte, entre parênteses)">Dano HE</th>
             <th className="px-2 py-2 text-right" title="Dano de molotov/incendiary em inimigo (fogo amigo à parte, entre parênteses)">Dano fogo</th>
           </tr>
@@ -444,11 +447,11 @@ function TabelaUtilitariaTime({ time, jogadores }) {
                   {u.enemiesFlashed ?? 0}
                   <span className="ml-1 text-xs text-texto-fraco">({(u.enemyFlashDuration ?? 0).toFixed(1)}s)</span>
                 </td>
-                <td className={`px-2 py-2.5 text-right tabular-nums ${u.teammatesFlashed > 0 ? 'text-perigo' : ''}`}>
+                <td className={`hidden px-2 py-2.5 text-right tabular-nums sm:table-cell ${u.teammatesFlashed > 0 ? 'text-perigo' : ''}`}>
                   {u.teammatesFlashed ?? 0}
                   <span className="ml-1 text-xs text-texto-fraco">({(u.teammateFlashDuration ?? 0).toFixed(1)}s)</span>
                 </td>
-                <td className="px-2 py-2.5 text-right tabular-nums">{u.flashAssists ?? 0}</td>
+                <td className="hidden px-2 py-2.5 text-right tabular-nums sm:table-cell">{u.flashAssists ?? 0}</td>
                 <td className="px-2 py-2.5 text-right tabular-nums">
                   {u.heDamage ?? 0}
                   {u.heTeamDamage > 0 && <span className="ml-1 text-xs text-perigo">({u.heTeamDamage})</span>}
@@ -646,10 +649,10 @@ export default function Partida() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <Link to="/" className="font-mono text-sm text-texto-fraco hover:text-texto">← Partidas</Link>
-          <div className="mt-1 flex items-center gap-2">
+          <div className="mt-1 flex flex-wrap items-center gap-2">
             <h2 className="font-display text-2xl font-bold uppercase tracking-wide text-texto">{nomeMapa(m.map)}</h2>
             <span
               title={origemPartida(m.source).title}
@@ -660,7 +663,7 @@ export default function Partida() {
           </div>
           <p className="font-mono text-sm text-texto-fraco">{dataHora(m.playedAt)}</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           {resultadoGrupo === 'vitoria' && (
             <span className="panel-cut-sm border border-sucesso/40 bg-sucesso/10 px-2.5 py-1 font-display text-xs font-bold uppercase tracking-widest text-sucesso">
               Vitória
@@ -773,8 +776,8 @@ export default function Partida() {
               rel="noreferrer"
               className="panel-cut-sm flex items-center gap-3 border border-borda bg-superficie p-3 font-mono text-sm transition-colors hover:border-destaque/60"
             >
-              <span className="rounded bg-fundo px-2 py-1 text-xs uppercase tracking-wide text-destaque">{c.provider}</span>
-              <span className="text-texto">{c.title || c.url}</span>
+              <span className="flex-shrink-0 rounded bg-fundo px-2 py-1 text-xs uppercase tracking-wide text-destaque">{c.provider}</span>
+              <span className="min-w-0 flex-1 truncate text-texto">{c.title || c.url}</span>
             </a>
           ))}
         </div>
