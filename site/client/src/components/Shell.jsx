@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext.jsx'
 
@@ -22,15 +23,31 @@ function itemClasse({ isActive }) {
 
 export default function Shell({ children }) {
   const { jogador } = useAuth()
+  const [menuAberto, setMenuAberto] = useState(false)
 
   async function sair() {
     await fetch('/api/auth/logout', { method: 'POST' })
     window.location.href = '/entrar'
   }
 
+  function fecharMenu() {
+    setMenuAberto(false)
+  }
+
   return (
     <div className="flex min-h-screen">
-      <aside className="flex w-60 shrink-0 flex-col border-r border-borda bg-superficie">
+      {menuAberto && (
+        <div
+          className="fixed inset-0 z-30 bg-fundo/70 lg:hidden"
+          onClick={fecharMenu}
+          aria-hidden="true"
+        />
+      )}
+      <aside
+        className={`fixed inset-y-0 left-0 z-40 flex w-60 shrink-0 flex-col border-r border-borda bg-superficie transition-transform duration-200 lg:static lg:translate-x-0 ${
+          menuAberto ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
         <div className="border-b border-borda px-5 py-5">
           <h1 className="font-display text-2xl font-bold uppercase tracking-widest text-texto">
             Resenha<span className="text-destaque">.</span>
@@ -41,7 +58,7 @@ export default function Shell({ children }) {
         </div>
         <nav className="flex-1 py-3">
           {ITENS.map((item) => (
-            <NavLink key={item.to} to={item.to} end={item.end} className={itemClasse}>
+            <NavLink key={item.to} to={item.to} end={item.end} className={itemClasse} onClick={fecharMenu}>
               <span className="font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque">
                 {item.num}
               </span>
@@ -50,11 +67,11 @@ export default function Shell({ children }) {
           ))}
           {jogador?.isAdmin && (
             <>
-              <NavLink to="/admin" className={itemClasse}>
+              <NavLink to="/admin" className={itemClasse} onClick={fecharMenu}>
                 <span className="font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque">09</span>
                 Admin
               </NavLink>
-              <NavLink to="/partidas-pro" className={itemClasse}>
+              <NavLink to="/partidas-pro" className={itemClasse} onClick={fecharMenu}>
                 <span className="font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque">10</span>
                 Partidas pro
               </NavLink>
@@ -63,23 +80,42 @@ export default function Shell({ children }) {
         </nav>
       </aside>
       <div className="flex-1">
-        <header className="flex items-center justify-end gap-3 border-b border-borda bg-superficie/60 px-6 py-3 backdrop-blur">
-          {jogador?.avatarUrl && (
-            <img
-              src={jogador.avatarUrl}
-              alt=""
-              className="panel-cut-sm h-8 w-8 border border-borda object-cover"
-            />
-          )}
-          <span className="font-mono text-sm text-texto">{jogador?.nick}</span>
-          <button
-            onClick={sair}
-            className="panel-cut-sm border border-borda px-2.5 py-1 text-xs uppercase tracking-wide text-texto-fraco transition-colors hover:border-perigo/50 hover:text-perigo"
-          >
-            Sair
-          </button>
+        <header className="flex items-center justify-between gap-3 border-b border-borda bg-superficie/60 px-4 py-3 backdrop-blur lg:justify-end lg:px-6">
+          <div className="flex items-center gap-3 lg:hidden">
+            <button
+              onClick={() => setMenuAberto(true)}
+              aria-label="Abrir menu"
+              className="flex h-10 w-10 shrink-0 items-center justify-center border border-borda text-texto-fraco transition-colors hover:border-destaque/40 hover:text-texto"
+            >
+              <span className="sr-only">Abrir menu</span>
+              <span className="flex flex-col items-center gap-1">
+                <span className="block h-0.5 w-5 bg-current" />
+                <span className="block h-0.5 w-5 bg-current" />
+                <span className="block h-0.5 w-5 bg-current" />
+              </span>
+            </button>
+            <h1 className="font-display text-lg font-bold uppercase tracking-widest text-texto">
+              Resenha<span className="text-destaque">.</span>
+            </h1>
+          </div>
+          <div className="flex items-center gap-3">
+            {jogador?.avatarUrl && (
+              <img
+                src={jogador.avatarUrl}
+                alt=""
+                className="panel-cut-sm h-8 w-8 border border-borda object-cover"
+              />
+            )}
+            <span className="font-mono text-sm text-texto">{jogador?.nick}</span>
+            <button
+              onClick={sair}
+              className="panel-cut-sm border border-borda px-2.5 py-1 text-xs uppercase tracking-wide text-texto-fraco transition-colors hover:border-perigo/50 hover:text-perigo"
+            >
+              Sair
+            </button>
+          </div>
         </header>
-        <main className="p-6">{children}</main>
+        <main className="px-4 py-4 lg:px-6 lg:py-6">{children}</main>
       </div>
     </div>
   )
