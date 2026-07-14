@@ -54,10 +54,11 @@ export default function FormGranada({ mapa, lado, posicoes, inicial = null, onSa
         className="fixed right-3 top-3 z-[60] flex min-h-10 min-w-10 items-center justify-center rounded-full border border-borda bg-superficie font-mono text-sm text-texto-fraco hover:text-texto lg:hidden"
       >✕</button>
       <Card
+        corte={false}
         as="form"
         onSubmit={salvar}
         onClick={(e) => e.stopPropagation()}
-        className="h-full w-full space-y-3 overflow-y-auto p-5 lg:h-auto lg:max-h-[90vh] lg:w-full lg:max-w-lg"
+        className="h-full w-full space-y-3 overflow-y-auto p-5 lg:panel-cut lg:h-auto lg:max-h-[90vh] lg:w-full lg:max-w-lg"
       >
         <h3 className="font-display text-lg font-bold uppercase text-texto">
           {inicial ? 'Editar granada' : 'Nova granada'} — {lado}

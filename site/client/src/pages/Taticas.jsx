@@ -31,7 +31,7 @@ export default function Taticas() {
         badges={(m) => {
           const total = contagens?.find((c) => c.map === m)?.total ?? 0
           return (
-            <Badge tom="destaque" className="bg-fundo/80">
+            <Badge tom="destaque" className="!bg-fundo/80">
               {total} {total === 1 ? 'tática' : 'táticas'}
             </Badge>
           )

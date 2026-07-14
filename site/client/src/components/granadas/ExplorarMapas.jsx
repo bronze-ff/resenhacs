@@ -40,7 +40,7 @@ export default function ExplorarMapas({ contagens, onEscolher, badges, subtitulo
               />
               <div className="absolute right-2 top-2 flex gap-1">
                 {badges ? badges(m) : Object.entries(tipos).map(([tipo, total]) => (
-                  <Badge key={tipo} tom="destaque" className="bg-fundo/80">
+                  <Badge key={tipo} tom="destaque" className="!bg-fundo/80">
                     {ROTULO_TIPO[tipo]} {total}
                   </Badge>
                 ))}

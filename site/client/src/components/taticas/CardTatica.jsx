@@ -23,10 +23,10 @@ export default function CardTatica({ tatica, onSelecionar }) {
       <div className="relative">
         <MiniRadarTatica mapa={tatica.map} granadas={granadas} />
         <div className="absolute left-1.5 top-1.5 flex flex-wrap gap-1">
-          <Badge tom="neutro" className="bg-fundo/80">{tatica.local}</Badge>
-          <Badge tom="destaque" className="bg-fundo/80">{ROTULO_TIPO_TATICA[tatica.tipo] ?? tatica.tipo}</Badge>
+          <Badge tom="neutro" className="!bg-fundo/80">{tatica.local}</Badge>
+          <Badge tom="destaque" className="!bg-fundo/80">{ROTULO_TIPO_TATICA[tatica.tipo] ?? tatica.tipo}</Badge>
         </div>
-        <Badge tom="neutro" className="absolute right-1.5 top-1.5 bg-fundo/80">
+        <Badge tom="neutro" className="absolute right-1.5 top-1.5 !bg-fundo/80">
           {nPapeis} {nPapeis === 1 ? 'papel' : 'papéis'}
         </Badge>
       </div>
