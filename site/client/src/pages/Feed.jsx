@@ -2,6 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { nomeMapa, dataHora, origemPartida, corRating } from '../lib/format.js'
 import FiltroPeriodo from '../components/FiltroPeriodo.jsx'
+import { Card, SectionHeader, Badge } from '../components/ui'
 
 const MAPAS = ['de_anubis', 'de_ancient', 'de_cache', 'de_dust2', 'de_inferno', 'de_mirage', 'de_nuke', 'de_overpass', 'de_train', 'de_vertigo']
 
@@ -29,34 +30,10 @@ function placarOrientado(m, resultado) {
 }
 
 function BadgeResultado({ resultado }) {
-  if (resultado === 'vitoria') {
-    return (
-      <span className="panel-cut-sm border border-sucesso/40 bg-sucesso/10 px-2 py-0.5 font-display text-[10px] font-bold uppercase tracking-widest text-sucesso">
-        Vitória
-      </span>
-    )
-  }
-  if (resultado === 'derrota') {
-    return (
-      <span className="panel-cut-sm border border-perigo/40 bg-perigo/10 px-2 py-0.5 font-display text-[10px] font-bold uppercase tracking-widest text-perigo">
-        Derrota
-      </span>
-    )
-  }
-  if (resultado === 'empate') {
-    return (
-      <span className="panel-cut-sm border border-borda bg-superficie px-2 py-0.5 font-display text-[10px] font-bold uppercase tracking-widest text-texto-fraco">
-        Empate
-      </span>
-    )
-  }
-  if (resultado === 'misto') {
-    return (
-      <span className="panel-cut-sm border border-borda bg-superficie px-2 py-0.5 font-display text-[10px] font-bold uppercase tracking-widest text-texto-fraco" title="O grupo jogou dividido nos dois times">
-        Misto
-      </span>
-    )
-  }
+  if (resultado === 'vitoria') return <Badge tom="sucesso">Vitória</Badge>
+  if (resultado === 'derrota') return <Badge tom="perigo">Derrota</Badge>
+  if (resultado === 'empate') return <Badge tom="neutro">Empate</Badge>
+  if (resultado === 'misto') return <Badge tom="neutro" title="O grupo jogou dividido nos dois times">Misto</Badge>
   return null
 }
 
@@ -86,26 +63,19 @@ function CardPartida({ m }) {
   // normal se a partida não tiver os dois nomes (demos antigas de pro, por exemplo).
   const timesPro = m.source === 'pro' && m.teamAName && m.teamBName
   return (
-    <Link
+    <Card
+      as={Link}
+      interativo
       to={`/partida/${m.id}`}
-      className={`panel-cut relative block border border-borda bg-superficie transition-colors hover:border-destaque/50 hover:bg-superficie-alta lg:flex lg:items-center lg:justify-between lg:gap-3 lg:p-4 ${borda}`}
+      className={`relative block hover:bg-superficie-alta lg:flex lg:items-center lg:justify-between lg:gap-3 lg:p-4 ${borda}`}
     >
       {/* Mobile: card estilo app (FACEIT) — placar grande, respiro, sem linha densa de tabela */}
       <div className="space-y-2 p-4 lg:hidden">
         <div className="flex items-center justify-between">
           <span className="font-mono text-xs uppercase text-texto-fraco">{dataHora(m.playedAt)}</span>
           <div className="flex items-center gap-1.5">
-            {m.source === 'pro' && (
-              <span className="panel-cut-sm shrink-0 border border-destaque bg-destaque/10 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-widest text-destaque">
-                PRO
-              </span>
-            )}
-            <span
-              title={origem.title}
-              className="panel-cut-sm shrink-0 border border-borda bg-fundo px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-widest text-texto-fraco"
-            >
-              {origem.label}
-            </span>
+            {m.source === 'pro' && <Badge tom="destaque" className="shrink-0">PRO</Badge>}
+            <Badge tom="neutro" title={origem.title} className="shrink-0">{origem.label}</Badge>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -142,17 +112,8 @@ function CardPartida({ m }) {
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-2">
             <span className="truncate font-display font-semibold uppercase tracking-wide text-texto">{nomeMapa(m.map)}</span>
-            {m.source === 'pro' && (
-              <span className="panel-cut-sm shrink-0 border border-destaque bg-destaque/10 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-widest text-destaque">
-                PRO
-              </span>
-            )}
-            <span
-              title={origem.title}
-              className="panel-cut-sm shrink-0 border border-borda bg-fundo px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-widest text-texto-fraco"
-            >
-              {origem.label}
-            </span>
+            {m.source === 'pro' && <Badge tom="destaque" className="shrink-0">PRO</Badge>}
+            <Badge tom="neutro" title={origem.title} className="shrink-0">{origem.label}</Badge>
           </div>
           <div className="truncate font-mono text-xs text-texto-fraco">
             {dataHora(m.playedAt)}
@@ -178,7 +139,7 @@ function CardPartida({ m }) {
       <div className="hidden shrink-0 lg:block">
         <Placar m={m} />
       </div>
-    </Link>
+    </Card>
   )
 }
 
@@ -242,7 +203,7 @@ function Resenhas() {
         {(sessoes ?? []).map((s) => (
           <Fragment key={s.matchIds[0]}>
             {/* Mobile: estilo app (FACEIT) — data em cima, resumo V/D grande, resto embaixo */}
-            <div className="panel-cut-sm w-64 shrink-0 snap-start border border-borda bg-superficie p-3 lg:hidden">
+            <Card className="w-64 shrink-0 snap-start p-3 lg:hidden">
               <div className="font-mono text-xs uppercase text-texto-fraco">{dataHora(s.inicio)}</div>
               <div className="mt-1 flex items-center gap-2 font-display text-xl font-bold">
                 {s.vitorias > 0 && <span className="text-sucesso">{s.vitorias}V</span>}
@@ -263,10 +224,10 @@ function Resenhas() {
                   {s.destaque.aces > 0 && <span className="ml-1 text-texto-fraco">· {s.destaque.aces} ace{s.destaque.aces > 1 ? 's' : ''}</span>}
                 </div>
               )}
-            </div>
+            </Card>
 
             {/* Desktop: layout original, intocado */}
-            <div className="panel-cut-sm hidden w-auto min-w-[240px] shrink-0 snap-start border border-borda bg-superficie p-3 lg:block">
+            <Card className="hidden w-auto min-w-[240px] shrink-0 snap-start p-3 lg:block">
               <div className="flex items-center justify-between font-mono text-xs text-texto-fraco">
                 <span>{dataHora(s.inicio)}</span>
                 <span>{s.partidas} partida{s.partidas === 1 ? '' : 's'}</span>
@@ -287,7 +248,7 @@ function Resenhas() {
                   {s.destaque.aces > 0 && <span className="ml-1 text-texto-fraco">· {s.destaque.aces} ace{s.destaque.aces > 1 ? 's' : ''}</span>}
                 </div>
               )}
-            </div>
+            </Card>
           </Fragment>
         ))}
       </div>
@@ -336,7 +297,7 @@ export default function Feed() {
 
   return (
     <div>
-      <h2 className="mb-4 font-display text-xl font-semibold uppercase tracking-wide text-texto">Partidas</h2>
+      <SectionHeader titulo="Partidas" className="mb-4" />
       <SincStatus />
       <Resenhas />
 

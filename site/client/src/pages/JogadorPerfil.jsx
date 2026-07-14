@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { nomeMapa, dataHora, corRating, nomeArma, TIPO_COMPRA } from '../lib/format.js'
-import StatTile from '../components/StatTile.jsx'
+import { Card, SectionHeader, StatTile, RatingBadge, DataTable } from '../components/ui'
 import LinhaEvolucao from '../components/LinhaEvolucao.jsx'
 import FiltroPeriodo from '../components/FiltroPeriodo.jsx'
 import TagEstilo from '../components/TagEstilo.jsx'
@@ -14,13 +14,7 @@ function Stat({ rotulo, valor, cor, rating }) {
     <div className="min-w-0">
       <div className="font-mono text-[10px] uppercase tracking-wide text-texto-fraco">{rotulo}</div>
       {rating !== undefined ? (
-        <span
-          className={`panel-cut-sm inline-block px-1.5 py-0.5 font-mono text-sm font-bold tabular-nums ${
-            rating == null ? 'text-texto-fraco' : rating >= 1 ? 'bg-sucesso/15 text-sucesso' : 'bg-perigo/15 text-perigo'
-          }`}
-        >
-          {valor}
-        </span>
+        <RatingBadge valor={rating} className="text-sm" />
       ) : (
         <div className={`truncate text-sm font-semibold tabular-nums ${cor ?? 'text-texto'}`}>{valor}</div>
       )}
@@ -87,7 +81,11 @@ export default function JogadorPerfil() {
 
       {/* 2. Tiles de stats principais — o que mais se consulta de cara. */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <StatTile rotulo="Rating" valor={stats.rating?.toFixed(2) ?? '–'} destaque={corRating(stats.rating)} />
+        <StatTile
+          rotulo="Rating"
+          valor={stats.rating?.toFixed(2) ?? '–'}
+          tom={stats.rating == null ? 'neutro' : stats.rating >= 1.15 ? 'sucesso' : stats.rating <= 0.85 ? 'perigo' : 'neutro'}
+        />
         <StatTile rotulo="K/D" valor={stats.kd} />
         <StatTile rotulo="ADR" valor={stats.adr} />
         <StatTile rotulo="HS%" valor={`${stats.hsPct}%`} />
@@ -97,9 +95,7 @@ export default function JogadorPerfil() {
 
       {badges.length > 0 && (
         <section>
-          <h3 className="mb-3 font-display text-lg font-semibold uppercase tracking-wide text-texto">
-            Conquistas <span className="text-texto-fraco">({badges.length})</span>
-          </h3>
+          <SectionHeader titulo={<>Conquistas <span className="text-texto-fraco">({badges.length})</span></>} />
           <div className="flex flex-wrap gap-2">
             {badges.map((b) => (
               <div
@@ -117,14 +113,14 @@ export default function JogadorPerfil() {
 
       {/* 3. Histórico de partidas — o que mais se consulta, logo depois dos tiles. */}
       <section>
-        <h3 className="mb-3 font-display text-lg font-semibold uppercase tracking-wide text-texto">
+        <SectionHeader titulo={<>
           Partidas recentes
           {stats.rating != null && (
             <span className="ml-2 font-mono text-xs font-normal normal-case text-texto-fraco">
               (± vs média de {stats.rating.toFixed(2)} — consistência: acima ou abaixo do normal dele)
             </span>
           )}
-        </h3>
+        </>} />
         {recentes.length === 0 && <p className="font-mono text-sm text-texto-fraco">Nenhuma partida ainda.</p>}
 
         {recentes.length > 0 && (
@@ -170,10 +166,10 @@ export default function JogadorPerfil() {
             </div>
 
             {/* Desktop: tabela densa estilo FACEIT */}
-            <div className="panel-cut hidden overflow-x-auto border border-borda lg:block">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-superficie text-left font-mono text-[10px] uppercase tracking-wider text-texto-fraco">
+            <div className="hidden lg:block">
+              <DataTable
+                head={
+                  <tr>
                     <th className="px-3 py-2">Data</th>
                     <th className="px-2 py-2">Placar</th>
                     <th className="px-2 py-2 text-right">Rating</th>
@@ -183,55 +179,46 @@ export default function JogadorPerfil() {
                     <th className="hidden px-2 py-2 text-right xl:table-cell">HS%</th>
                     <th className="px-3 py-2">Mapa</th>
                   </tr>
-                </thead>
-                <tbody>
-                  {recentes.map((r) => {
-                    const kd = r.deaths > 0 ? (r.kills / r.deaths).toFixed(2) : r.kills.toFixed(2)
-                    return (
-                      <tr
-                        key={r.id}
-                        className={`cursor-pointer border-t border-l-4 border-borda transition-colors hover:bg-superficie-alta ${
-                          r.won === true ? 'border-l-sucesso' : r.won === false ? 'border-l-perigo' : 'border-l-texto-fraco'
-                        }`}
-                        onClick={() => navegar(`/partida/${r.id}`)}
-                      >
-                        <td className="px-3 py-2">
-                          <div className="font-mono text-[11px] leading-tight text-texto-fraco">
-                            <div>{new Date(r.playedAt ?? '').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</div>
-                            <div>{new Date(r.playedAt ?? '').toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
-                          </div>
-                        </td>
-                        <td className="px-2 py-2">
-                          <span className="flex items-center gap-2">
-                            <span
-                              className={`panel-cut-sm px-1.5 py-0.5 font-display text-[10px] font-bold uppercase ${
-                                r.won === true ? 'bg-sucesso/15 text-sucesso' : r.won === false ? 'bg-perigo/15 text-perigo' : 'bg-superficie-alta text-texto-fraco'
-                              }`}
-                            >
-                              {r.won === true ? 'V' : r.won === false ? 'D' : '—'}
-                            </span>
-                            <span className="font-display font-bold tabular-nums text-texto">{r.scoreA} : {r.scoreB}</span>
-                          </span>
-                        </td>
-                        <td className="px-2 py-2 text-right">
+                }
+              >
+                {recentes.map((r) => {
+                  const kd = r.deaths > 0 ? (r.kills / r.deaths).toFixed(2) : r.kills.toFixed(2)
+                  return (
+                    <tr
+                      key={r.id}
+                      className={`cursor-pointer border-l-4 ${
+                        r.won === true ? 'border-l-sucesso' : r.won === false ? 'border-l-perigo' : 'border-l-texto-fraco'
+                      }`}
+                      onClick={() => navegar(`/partida/${r.id}`)}
+                    >
+                      <td className="px-3 py-2">
+                        <div className="font-mono text-[11px] leading-tight text-texto-fraco">
+                          <div>{new Date(r.playedAt ?? '').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</div>
+                          <div>{new Date(r.playedAt ?? '').toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
+                        </div>
+                      </td>
+                      <td className="px-2 py-2">
+                        <span className="flex items-center gap-2">
                           <span
-                            className={`panel-cut-sm px-2 py-0.5 font-mono text-xs font-bold tabular-nums ${
-                              (r.rating ?? 0) >= 1 ? 'bg-sucesso/15 text-sucesso' : 'bg-perigo/15 text-perigo'
+                            className={`panel-cut-sm px-1.5 py-0.5 font-display text-[10px] font-bold uppercase ${
+                              r.won === true ? 'bg-sucesso/15 text-sucesso' : r.won === false ? 'bg-perigo/15 text-perigo' : 'bg-superficie-alta text-texto-fraco'
                             }`}
                           >
-                            {r.rating != null ? r.rating.toFixed(2) : '–'}
+                            {r.won === true ? 'V' : r.won === false ? 'D' : '—'}
                           </span>
-                        </td>
-                        <td className="px-2 py-2 text-right font-mono tabular-nums text-texto-fraco">{r.kills}/{r.deaths}/{r.assists}</td>
-                        <td className={`px-2 py-2 text-right font-mono tabular-nums ${Number(kd) >= 1 ? 'text-sucesso' : 'text-perigo'}`}>{kd}</td>
-                        <td className="hidden px-2 py-2 text-right font-mono tabular-nums text-texto-fraco xl:table-cell">{r.adr}</td>
-                        <td className="hidden px-2 py-2 text-right font-mono tabular-nums text-texto-fraco xl:table-cell">{r.hsPct}%</td>
-                        <td className="px-3 py-2 font-mono text-texto-fraco">{nomeMapa(r.map)}</td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+                          <span className="font-display font-bold tabular-nums text-texto">{r.scoreA} : {r.scoreB}</span>
+                        </span>
+                      </td>
+                      <td className="px-2 py-2 text-right"><RatingBadge valor={r.rating} /></td>
+                      <td className="px-2 py-2 text-right font-mono tabular-nums text-texto-fraco">{r.kills}/{r.deaths}/{r.assists}</td>
+                      <td className={`px-2 py-2 text-right font-mono tabular-nums ${Number(kd) >= 1 ? 'text-sucesso' : 'text-perigo'}`}>{kd}</td>
+                      <td className="hidden px-2 py-2 text-right font-mono tabular-nums text-texto-fraco xl:table-cell">{r.adr}</td>
+                      <td className="hidden px-2 py-2 text-right font-mono tabular-nums text-texto-fraco xl:table-cell">{r.hsPct}%</td>
+                      <td className="px-3 py-2 font-mono text-texto-fraco">{nomeMapa(r.map)}</td>
+                    </tr>
+                  )
+                })}
+              </DataTable>
             </div>
           </>
         )}
@@ -240,9 +227,7 @@ export default function JogadorPerfil() {
       {/* 4. Highlights — aces/clutches com deep-link. */}
       {destaques.length > 0 && (
         <section>
-          <h3 className="mb-3 font-display text-lg font-semibold uppercase tracking-wide text-texto">
-            Highlights <span className="text-texto-fraco">({destaques.length}) — "em qual partida foi esse mesmo?"</span>
-          </h3>
+          <SectionHeader titulo={<>Highlights <span className="text-texto-fraco">({destaques.length}) — "em qual partida foi esse mesmo?"</span></>} />
           <div className="flex flex-wrap gap-2">
             {destaques.map((d) => (
               <Link
@@ -264,13 +249,13 @@ export default function JogadorPerfil() {
 
       {/* 5. Armas. */}
       <section>
-        <h3 className="mb-3 font-display text-lg font-semibold uppercase tracking-wide text-texto">Armas</h3>
+        <SectionHeader titulo="Armas" />
         {armas.length === 0 && <p className="font-mono text-sm text-texto-fraco">Sem dados de arma ainda.</p>}
         <div className="space-y-2">
           {armas.slice(0, 6).map((a) => {
             const maiorKills = armas[0]?.kills || 1
             return (
-              <div key={a.weapon} className="panel-cut border border-borda bg-superficie p-3">
+              <Card key={a.weapon} className="p-3">
                 <div className="mb-1.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 font-mono text-sm">
                   <span className="text-texto">{nomeArma(a.weapon)}</span>
                   <span className="text-texto-fraco">
@@ -281,7 +266,7 @@ export default function JogadorPerfil() {
                 <div className="h-1.5 overflow-hidden rounded bg-fundo">
                   <div className="h-full bg-destaque/70" style={{ width: `${(a.kills / maiorKills) * 100}%` }} />
                 </div>
-              </div>
+              </Card>
             )
           })}
         </div>
@@ -289,11 +274,11 @@ export default function JogadorPerfil() {
 
       {/* 6. Por mapa. */}
       <section>
-        <h3 className="mb-3 font-display text-lg font-semibold uppercase tracking-wide text-texto">Por mapa</h3>
+        <SectionHeader titulo="Por mapa" />
         {porMapa.length === 0 && <p className="font-mono text-sm text-texto-fraco">Sem dados por mapa ainda.</p>}
         <div className="space-y-2">
           {porMapa.map((mp) => (
-            <div key={mp.map} className="panel-cut flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border border-borda bg-superficie p-3">
+            <Card key={mp.map} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 p-3">
               <span className="font-mono text-texto">{nomeMapa(mp.map)}</span>
               <span className="font-mono text-sm text-texto-fraco">
                 <span className="tabular-nums text-texto">{mp.partidas}</span> jogos ·{' '}
@@ -302,21 +287,23 @@ export default function JogadorPerfil() {
                   <span className={`ml-2 tabular-nums ${corRating(mp.rating)}`}>{mp.rating.toFixed(2)}</span>
                 )}
               </span>
-            </div>
+            </Card>
           ))}
         </div>
       </section>
 
       {/* 7. Sinergia / com quem joga. */}
       <section>
-        <h3 className="mb-3 font-display text-lg font-semibold uppercase tracking-wide text-texto">Com quem mais joga</h3>
+        <SectionHeader titulo="Com quem mais joga" />
         {sinergia.length === 0 && <p className="font-mono text-sm text-texto-fraco">Sem duplas registradas ainda.</p>}
         <div className="space-y-2">
           {sinergia.map((s) => (
-            <Link
+            <Card
+              as={Link}
+              interativo
               key={s.steamId}
               to={`/jogador/${s.steamId}`}
-              className="panel-cut flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border border-borda bg-superficie p-3 transition-colors hover:border-destaque/60"
+              className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 p-3"
             >
               <span className="flex min-w-0 items-center gap-3 font-mono text-texto">
                 {s.avatarUrl && (
@@ -330,23 +317,21 @@ export default function JogadorPerfil() {
                   {s.winrate}%
                 </span>
               </span>
-            </Link>
+            </Card>
           ))}
         </div>
       </section>
 
       {/* 8. Resto — evolução, stats avançadas/utilitária, economia e posicionamento. */}
       <section>
-        <h3 className="mb-3 font-display text-lg font-semibold uppercase tracking-wide text-texto">
-          Evolução do rating <span className="text-texto-fraco">(últimas {evolucao.length} partidas)</span>
-        </h3>
-        <div className="panel-cut border border-borda bg-superficie p-4">
+        <SectionHeader titulo={<>Evolução do rating <span className="text-texto-fraco">(últimas {evolucao.length} partidas)</span></>} />
+        <Card className="p-4">
           <LinhaEvolucao pontos={evolucao.map((e) => ({ label: dataHora(e.playedAt), valor: e.rating }))} />
-        </div>
+        </Card>
       </section>
 
       <section>
-        <h3 className="mb-3 font-display text-lg font-semibold uppercase tracking-wide text-texto">Detalhado</h3>
+        <SectionHeader titulo="Detalhado" />
         {(() => {
           // Convenção do sistema inteiro: X/Y sempre = sucessos/total.
           const duelosEntry = stats.entryKills + stats.entryDeaths
@@ -396,7 +381,7 @@ export default function JogadorPerfil() {
       </section>
 
       <section>
-        <h3 className="mb-3 font-display text-lg font-semibold uppercase tracking-wide text-texto">Utilitária</h3>
+        <SectionHeader titulo="Utilitária" />
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-8">
           <StatTile
             rotulo="Smokes"
@@ -437,25 +422,23 @@ export default function JogadorPerfil() {
             rotulo="Cegou aliado"
             valor={stats.teammatesFlashed}
             sub={`${stats.teammateFlashDuration}s no total`}
-            destaque={stats.teammatesFlashed > 0 ? 'text-perigo' : undefined}
+            tom={stats.teammatesFlashed > 0 ? 'perigo' : 'neutro'}
             title="Flash de time (mais de 1.1s de cegueira) — auto-flash (cegar a si mesmo) CONTA aqui, é fogo amigo também."
           />
           <StatTile
             rotulo="Fogo amigo (HE+fogo)"
             valor={stats.heTeamDamage + stats.molotovTeamDamage}
-            destaque={(stats.heTeamDamage + stats.molotovTeamDamage) > 0 ? 'text-perigo' : undefined}
+            tom={(stats.heTeamDamage + stats.molotovTeamDamage) > 0 ? 'perigo' : 'neutro'}
             title="Dano de HE + molotov no PRÓPRIO time — não entra no 'Dano HE'/'Dano fogo' de cima, que é só inimigo."
           />
         </div>
       </section>
 
       <section>
-        <h3 className="mb-3 font-display text-lg font-semibold uppercase tracking-wide text-texto">
-          Economia <span className="text-texto-fraco">— winrate por tipo de compra</span>
-        </h3>
+        <SectionHeader titulo={<>Economia <span className="text-texto-fraco">— winrate por tipo de compra</span></>} />
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           {Object.entries(economia ?? {}).map(([tipo, e]) => (
-            <div key={tipo} className="panel-cut border border-borda bg-superficie p-3">
+            <Card key={tipo} className="p-3">
               <div className={`font-mono text-xs uppercase tracking-wide ${TIPO_COMPRA[tipo]?.cor ?? 'text-texto-fraco'}`}>
                 {TIPO_COMPRA[tipo]?.label ?? tipo}
               </div>
@@ -463,7 +446,7 @@ export default function JogadorPerfil() {
                 {e.rounds > 0 ? `${e.winPct}%` : '–'}
               </div>
               <div className="font-mono text-xs text-texto-fraco">{e.won}/{e.rounds} rounds</div>
-            </div>
+            </Card>
           ))}
         </div>
         <p className="mt-2 font-mono text-[11px] text-texto-fraco">
@@ -472,7 +455,7 @@ export default function JogadorPerfil() {
       </section>
 
       <section>
-        <h3 className="mb-3 font-display text-lg font-semibold uppercase tracking-wide text-texto">Posicionamento</h3>
+        <SectionHeader titulo="Posicionamento" />
         <PosicionamentoAgregado steamId={jogador.steamId} />
       </section>
     </div>

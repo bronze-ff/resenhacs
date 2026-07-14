@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { corRating } from '../lib/format.js'
 import { useAuth } from '../auth/AuthContext.jsx'
 import FiltroPeriodo from '../components/FiltroPeriodo.jsx'
 import TagEstilo from '../components/TagEstilo.jsx'
+import { Card, SectionHeader, RatingBadge, DataTable } from '../components/ui'
 
 function Medalha({ posicao }) {
   const cores = { 0: 'text-yellow-400', 1: 'text-slate-300', 2: 'text-amber-600' }
@@ -38,11 +38,11 @@ function Stat({ rotulo, valor, cor }) {
 // Destaca o próprio usuário logado com fundo/borda laranja.
 function CardJogador({ r, posicao, souEu }) {
   return (
-    <Link
+    <Card
+      as={Link}
+      interativo={!souEu}
       to={`/jogador/${r.steamId}`}
-      className={`panel-cut flex gap-3 border p-4 transition-colors ${
-        souEu ? 'border-destaque bg-destaque/10' : 'border-borda bg-superficie hover:bg-superficie-alta'
-      }`}
+      className={`flex gap-3 p-4 ${souEu ? '!border-destaque !bg-destaque/10' : 'hover:bg-superficie-alta'}`}
     >
       <AvatarRanking r={r} />
       <div className="min-w-0 flex-1">
@@ -52,13 +52,16 @@ function CardJogador({ r, posicao, souEu }) {
           <TagEstilo estilo={r.estilo} />
         </div>
         <div className="mt-2 grid grid-cols-4 gap-2">
-          <Stat rotulo="Rating" valor={r.rating?.toFixed(2) ?? '–'} cor={corRating(r.rating)} />
+          <div className="min-w-0">
+            <div className="font-mono text-[10px] uppercase tracking-wide text-texto-fraco">Rating</div>
+            <RatingBadge valor={r.rating} className="text-base" />
+          </div>
           <Stat rotulo="K/D" valor={r.kd} />
           <Stat rotulo="Partidas" valor={r.partidas} />
           <Stat rotulo="HS%" valor={`${r.hsPct}%`} />
         </div>
       </div>
-    </Link>
+    </Card>
   )
 }
 
@@ -103,10 +106,11 @@ export default function Ranking() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="font-display text-xl font-semibold uppercase tracking-wide text-texto">Ranking do grupo</h2>
-        <FiltroPeriodo de={de} ate={ate} onDe={setDe} onAte={setAte} />
-      </div>
+      <SectionHeader
+        titulo="Ranking do grupo"
+        className="mb-0 flex-wrap"
+        acao={<FiltroPeriodo de={de} ate={ate} onDe={setDe} onAte={setAte} />}
+      />
 
       {comPartida.length === 0 && (
         <p className="font-mono text-sm text-texto-fraco">Ninguém do grupo tem Partidas registradas {de || ate ? 'nesse período' : 'ainda'}.</p>
@@ -153,10 +157,10 @@ export default function Ranking() {
       )}
 
       {comPartida.length > 0 && (
-        <div className="panel-cut hidden overflow-x-auto border border-borda lg:block">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-superficie text-left font-mono text-[10px] uppercase tracking-wider text-texto-fraco">
+        <div className="panel-cut hidden border border-borda lg:block">
+          <DataTable
+            head={
+              <tr>
                 <th className="px-3 py-2">#</th>
                 <th className="px-3 py-2">Jogador</th>
                 <th className="px-2 py-2 text-right">Partidas</th>
@@ -167,38 +171,35 @@ export default function Ranking() {
                 <th className="hidden px-2 py-2 text-right sm:table-cell">Clutches</th>
                 <th className="px-3 py-2 text-right">Rating</th>
               </tr>
-            </thead>
-            <tbody>
-              {comPartida.map((r, i) => (
-                <tr key={r.steamId} className="border-t border-borda transition-colors hover:bg-superficie-alta">
-                  <td className="px-3 py-2"><Medalha posicao={i} /></td>
-                  <td className="px-3 py-2">
-                    <Link to={`/jogador/${r.steamId}`} className="flex items-center gap-2 font-mono text-texto hover:text-destaque">
-                      {r.avatarUrl && (
-                        <img src={r.avatarUrl} alt="" className="panel-cut-sm h-6 w-6 border border-borda object-cover" />
-                      )}
-                      {r.nick || r.steamId}
-                      <TagEstilo estilo={r.estilo} />
-                    </Link>
-                  </td>
-                  <td className="px-2 py-2 text-right tabular-nums">{r.partidas}</td>
-                  <td className={`px-2 py-2 text-right tabular-nums ${r.winrate >= 50 ? 'text-sucesso' : 'text-perigo'}`}>{r.winrate}%</td>
-                  <td className="px-2 py-2 text-right tabular-nums">{r.kd}</td>
-                  <td className="hidden px-2 py-2 text-right tabular-nums sm:table-cell">{r.hsPct}%</td>
-                  <td className="hidden px-2 py-2 text-right tabular-nums sm:table-cell">{r.aces}</td>
-                  <td className="hidden px-2 py-2 text-right tabular-nums sm:table-cell" title="Clutches vencidos / tentativas (1vX)">
-                    {r.clutchWins}/{r.clutchAttempts}
-                    {r.clutchAttempts > 0 && (
-                      <span className={`ml-1.5 text-xs ${r.clutchPct >= 50 ? 'text-sucesso' : 'text-texto-fraco'}`}>{r.clutchPct}%</span>
+            }
+          >
+            {comPartida.map((r, i) => (
+              <tr key={r.steamId}>
+                <td className="px-3 py-2"><Medalha posicao={i} /></td>
+                <td className="px-3 py-2">
+                  <Link to={`/jogador/${r.steamId}`} className="flex items-center gap-2 font-mono text-texto hover:text-destaque">
+                    {r.avatarUrl && (
+                      <img src={r.avatarUrl} alt="" className="panel-cut-sm h-6 w-6 border border-borda object-cover" />
                     )}
-                  </td>
-                  <td className={`px-3 py-2 text-right font-semibold tabular-nums ${corRating(r.rating)}`}>
-                    {r.rating?.toFixed(2) ?? '–'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    {r.nick || r.steamId}
+                    <TagEstilo estilo={r.estilo} />
+                  </Link>
+                </td>
+                <td className="px-2 py-2 text-right tabular-nums">{r.partidas}</td>
+                <td className={`px-2 py-2 text-right tabular-nums ${r.winrate >= 50 ? 'text-sucesso' : 'text-perigo'}`}>{r.winrate}%</td>
+                <td className="px-2 py-2 text-right tabular-nums">{r.kd}</td>
+                <td className="hidden px-2 py-2 text-right tabular-nums sm:table-cell">{r.hsPct}%</td>
+                <td className="hidden px-2 py-2 text-right tabular-nums sm:table-cell">{r.aces}</td>
+                <td className="hidden px-2 py-2 text-right tabular-nums sm:table-cell" title="Clutches vencidos / tentativas (1vX)">
+                  {r.clutchWins}/{r.clutchAttempts}
+                  {r.clutchAttempts > 0 && (
+                    <span className={`ml-1.5 text-xs ${r.clutchPct >= 50 ? 'text-sucesso' : 'text-texto-fraco'}`}>{r.clutchPct}%</span>
+                  )}
+                </td>
+                <td className="px-3 py-2 text-right"><RatingBadge valor={r.rating} /></td>
+              </tr>
+            ))}
+          </DataTable>
         </div>
       )}
 
