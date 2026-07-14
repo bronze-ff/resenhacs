@@ -29,6 +29,7 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket }) {
     }
     const { rows } = await db.query(
       `select m.id, m.map, m.played_at, m.score_a, m.score_b, m.status, m.source,
+         m.team_a_name, m.team_b_name,
          coalesce(json_agg(json_build_object('steamId', mp.steam_id64, 'nick', mp.nick, 'won', mp.won))
            filter (where mp.is_tracked), '[]') as tracked
        from matches m
@@ -47,6 +48,8 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket }) {
         scoreA: m.score_a,
         scoreB: m.score_b,
         source: m.source,
+        teamAName: m.team_a_name,
+        teamBName: m.team_b_name,
         tracked: m.tracked,
       })),
     )

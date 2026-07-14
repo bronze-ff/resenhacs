@@ -23,7 +23,6 @@ export default function RadarGranadas({
   mapa, lineups, selecionadaId, onSelecionar,
   callouts = [], nivelCallouts = 'sem',
   modoMarcacao = null, onCliqueMarcacao = null,
-  sugestoes = [], sugestaoAtiva = null,
 }) {
   const svgRef = useRef(null)
   const [hoverId, setHoverId] = useState(null)
@@ -102,16 +101,6 @@ export default function RadarGranadas({
               <circle cx={ativa.arremessoX * 100} cy={ativa.arremessoY * 100} r="1.6" fill="#ffd166" />
             </>
           )}
-
-          {sugestoes.map((s, i) => (
-            <circle
-              key={`sug-${i}`}
-              cx={s.alvoX * 100} cy={s.alvoY * 100}
-              r={sugestaoAtiva === i ? 2.4 : 1.4}
-              fill="none" stroke="#8fd3a6" strokeWidth="0.5"
-              opacity={sugestaoAtiva === i ? 1 : 0.5}
-            />
-          ))}
 
           {lineups.map((l) => (
             <g

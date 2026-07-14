@@ -81,6 +81,10 @@ function CardPartida({ m }) {
     resultado === 'vitoria' ? 'border-l-2 border-l-sucesso/70' : resultado === 'derrota' ? 'border-l-2 border-l-perigo/70' : ''
   const origem = origemPartida(m.source)
   const { a, b, corNosso } = placarOrientado(m, resultado)
+  // Partida importada de pro: mostra os nomes dos times em vez dos Jogadores rastreados
+  // (não há Jogador do grupo numa partida profissional). Fallback pro comportamento
+  // normal se a partida não tiver os dois nomes (demos antigas de pro, por exemplo).
+  const timesPro = m.source === 'pro' && m.teamAName && m.teamBName
   return (
     <Link
       to={`/partida/${m.id}`}
@@ -90,12 +94,19 @@ function CardPartida({ m }) {
       <div className="space-y-2 p-4 lg:hidden">
         <div className="flex items-center justify-between">
           <span className="font-mono text-xs uppercase text-texto-fraco">{dataHora(m.playedAt)}</span>
-          <span
-            title={origem.title}
-            className="panel-cut-sm shrink-0 border border-borda bg-fundo px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-widest text-texto-fraco"
-          >
-            {origem.label}
-          </span>
+          <div className="flex items-center gap-1.5">
+            {m.source === 'pro' && (
+              <span className="panel-cut-sm shrink-0 border border-destaque bg-destaque/10 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-widest text-destaque">
+                PRO
+              </span>
+            )}
+            <span
+              title={origem.title}
+              className="panel-cut-sm shrink-0 border border-borda bg-fundo px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-widest text-texto-fraco"
+            >
+              {origem.label}
+            </span>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <BadgeResultado resultado={resultado} />
@@ -106,7 +117,9 @@ function CardPartida({ m }) {
           </div>
           <span className="truncate font-display text-lg font-semibold uppercase text-texto">{nomeMapa(m.map)}</span>
         </div>
-        {m.tracked?.length > 0 && (
+        {timesPro ? (
+          <div className="truncate text-xs text-texto-fraco">{m.teamAName} x {m.teamBName}</div>
+        ) : m.tracked?.length > 0 && (
           <div className="truncate text-xs text-texto-fraco">
             {m.tracked.map((t) => t.nick).join(', ')}
           </div>
@@ -121,6 +134,11 @@ function CardPartida({ m }) {
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-2">
             <span className="truncate font-display font-semibold uppercase tracking-wide text-texto">{nomeMapa(m.map)}</span>
+            {m.source === 'pro' && (
+              <span className="panel-cut-sm shrink-0 border border-destaque bg-destaque/10 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-widest text-destaque">
+                PRO
+              </span>
+            )}
             <span
               title={origem.title}
               className="panel-cut-sm shrink-0 border border-borda bg-fundo px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-widest text-texto-fraco"
@@ -130,7 +148,9 @@ function CardPartida({ m }) {
           </div>
           <div className="truncate font-mono text-xs text-texto-fraco">
             {dataHora(m.playedAt)}
-            {m.tracked?.length > 0 && (
+            {timesPro ? (
+              <span> · {m.teamAName} x {m.teamBName}</span>
+            ) : m.tracked?.length > 0 && (
               <span> · {m.tracked.map((t) => t.nick).join(', ')}</span>
             )}
           </div>
