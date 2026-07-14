@@ -262,7 +262,10 @@ export function createProfileRouter({ db, requireAuth }) {
       return res.status(400).json({ erro: 'Informe dois SteamID64 diferentes (a e b)' })
     }
     const playersQ = await db.query(
-      'select steam_id64, nick, avatar_url from players where steam_id64 in ($1, $2)',
+      `select p.steam_id64, p.nick, coalesce(p.avatar_url, sa.avatar_url) as avatar_url
+       from players p
+       left join steam_avatares sa on sa.steam_id64 = p.steam_id64
+       where p.steam_id64 in ($1, $2)`,
       [a, b],
     )
     const jogadorA = playersQ.rows.find((p) => p.steam_id64 === a)
@@ -344,7 +347,10 @@ export function createProfileRouter({ db, requireAuth }) {
     const { steamId } = req.params
     const { from, to } = req.query
     const playerQ = await db.query(
-      'select steam_id64, nick, avatar_url, is_admin from players where steam_id64 = $1',
+      `select p.steam_id64, p.nick, coalesce(p.avatar_url, sa.avatar_url) as avatar_url, p.is_admin
+       from players p
+       left join steam_avatares sa on sa.steam_id64 = p.steam_id64
+       where p.steam_id64 = $1`,
       [steamId],
     )
     if (playerQ.rows.length === 0) return res.status(404).json({ erro: 'Jogador não encontrado' })
@@ -377,13 +383,14 @@ export function createProfileRouter({ db, requireAuth }) {
         recentesParams,
       ),
       db.query(
-        `select p.steam_id64, p.nick, p.avatar_url, sp.partidas, sp.vitorias
+        `select p.steam_id64, p.nick, coalesce(p.avatar_url, sa.avatar_url) as avatar_url, sp.partidas, sp.vitorias
          from (
            select case when steam_id_1 = $1 then steam_id_2 else steam_id_1 end as parceiro,
                   partidas, vitorias
            from synergy_pairs where steam_id_1 = $1 or steam_id_2 = $1
          ) sp
          join players p on p.steam_id64 = sp.parceiro
+         left join steam_avatares sa on sa.steam_id64 = p.steam_id64
          order by sp.partidas desc`,
         [steamId],
       ),

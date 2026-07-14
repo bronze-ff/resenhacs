@@ -52,14 +52,14 @@ describe('GET /api/profile/:steamId/posicoes', () => {
 
 describe('GET /api/profile/:steamId', () => {
   it('404 quando jogador não existe', async () => {
-    const { app } = appWith([['from players where steam_id64', []]])
+    const { app } = appWith([['where p.steam_id64 = $1', []]])
     const res = await request(app).get('/api/profile/765').set('Cookie', cookie)
     expect(res.status).toBe(404)
   })
 
   it('agrega stats, winrate, ADR, HS% e sinergia', async () => {
     const { app } = appWith([
-      ['from players where steam_id64', [{ steam_id64: '765', nick: 'fih', avatar_url: null, is_admin: false }]],
+      ['where p.steam_id64 = $1', [{ steam_id64: '765', nick: 'fih', avatar_url: null, is_admin: false }]],
       // Precisa vir ANTES de 'count(*)::int as partidas' — o texto dessa query também
       // contém aquele trecho, e o mock casa pelo primeiro needle que bater.
       ['group by mp.steam_id64', [
@@ -142,7 +142,7 @@ describe('GET /api/profile/compare', () => {
 
   it('404 quando algum dos dois não é Jogador', async () => {
     const { app } = appWith([
-      ['from players where steam_id64 in', [{ steam_id64: '76561198000000001', nick: 'fih', avatar_url: null }]],
+      ['where p.steam_id64 in', [{ steam_id64: '76561198000000001', nick: 'fih', avatar_url: null }]],
     ])
     const res = await request(app)
       .get('/api/profile/compare?a=76561198000000001&b=76561198000000002')
@@ -154,7 +154,7 @@ describe('GET /api/profile/compare', () => {
     const a = '76561198000000001'
     const b = '76561198000000002'
     const { app } = appWith([
-      ['from players where steam_id64 in', [
+      ['where p.steam_id64 in', [
         { steam_id64: a, nick: 'fih', avatar_url: null },
         { steam_id64: b, nick: 'bronze', avatar_url: null },
       ]],

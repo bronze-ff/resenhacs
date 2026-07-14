@@ -23,7 +23,10 @@ export function createPlayersRouter({ db, requireAuth, fetchBans }) {
 
   router.get('/', requireAuth, async (req, res) => {
     const { rows } = await db.query(
-      'select steam_id64, nick, avatar_url, is_admin from players order by nick',
+      `select p.steam_id64, p.nick, coalesce(p.avatar_url, sa.avatar_url) as avatar_url, p.is_admin
+       from players p
+       left join steam_avatares sa on sa.steam_id64 = p.steam_id64
+       order by p.nick`,
     )
     res.json(
       rows.map((p) => ({

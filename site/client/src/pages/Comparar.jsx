@@ -1,29 +1,63 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { corRating, dataHora } from '../lib/format.js'
+import { dataHora } from '../lib/format.js'
 import LinhaEvolucao from '../components/LinhaEvolucao.jsx'
 import FiltroPeriodo from '../components/FiltroPeriodo.jsx'
-import { Card, SectionHeader, StatTile } from '../components/ui'
+import { Card, SectionHeader, StatTile, RatingBadge } from '../components/ui'
 
 const LINHAS_STAT = [
-  { rotulo: 'Rating', chave: 'rating', formato: (v) => v?.toFixed(2) ?? '–', cor: true },
+  { rotulo: 'Rating', chave: 'rating', formato: (v) => v?.toFixed(2) ?? '–', rating: true },
   { rotulo: 'K/D', chave: 'kd', formato: (v) => v },
+  { rotulo: 'Vitórias', chave: 'winrate', formato: (v) => `${v}%` },
   { rotulo: 'ADR', chave: 'adr', formato: (v) => v },
   { rotulo: 'HS%', chave: 'hsPct', formato: (v) => `${v}%` },
+  { rotulo: 'Kills/partida', chave: 'kills', formato: (v, s) => (s.partidas ? Math.round((v / s.partidas) * 10) / 10 : v) },
   { rotulo: 'Precisão', chave: 'accuracy', formato: (v) => `${v}%` },
   { rotulo: 'Clutch %', chave: 'clutchPct', formato: (v) => `${v}%` },
-  { rotulo: 'Vitórias', chave: 'winrate', formato: (v) => `${v}%` },
+  { rotulo: 'Entry win %', chave: 'entryWinPct', formato: (v) => `${v}%` },
   { rotulo: 'Partidas', chave: 'partidas', formato: (v) => v },
 ]
 
-function ColunaJogador({ p, ladoOposto }) {
+function AvatarFallback({ nick }) {
+  return (
+    <div className="panel-cut-sm flex h-16 w-16 shrink-0 items-center justify-center border border-borda bg-fundo font-display text-lg font-bold uppercase text-texto-fraco sm:h-20 sm:w-20">
+      {(nick || '?').slice(0, 2)}
+    </div>
+  )
+}
+
+function CabecalhoJogador({ p, alinhamento }) {
   if (!p) return <div className="min-w-0 flex-1" />
   return (
-    <div className="flex min-w-0 flex-1 flex-col items-center gap-1 text-center">
-      {p.avatarUrl && <img src={p.avatarUrl} alt="" className="panel-cut h-14 w-14 shrink-0 border border-borda object-cover" />}
-      <Link to={`/jogador/${p.steamId}`} className="w-full truncate font-display font-semibold uppercase text-texto hover:text-destaque">
-        {p.nick || p.steamId}
-      </Link>
+    <Link
+      to={`/jogador/${p.steamId}`}
+      className={`flex min-w-0 flex-1 flex-col items-center gap-2 rounded transition-colors duration-200 hover:text-destaque sm:flex-row ${alinhamento === 'direita' ? 'sm:flex-row-reverse sm:text-right' : 'sm:text-left'}`}
+    >
+      {p.avatarUrl ? (
+        <img src={p.avatarUrl} alt="" className="panel-cut-sm h-16 w-16 shrink-0 border border-borda object-cover sm:h-20 sm:w-20" />
+      ) : (
+        <AvatarFallback nick={p.nick} />
+      )}
+      <div className="flex min-w-0 flex-col items-center gap-1 sm:items-start">
+        <span className="w-full truncate font-display text-base font-semibold uppercase tracking-wide text-texto sm:text-lg">
+          {p.nick || p.steamId}
+        </span>
+        <RatingBadge valor={p.stats?.rating} className="text-sm" />
+      </div>
+    </Link>
+  )
+}
+
+// Barra dividida A|B proporcional ao peso de cada lado nessa métrica (só quando os dois
+// valores são numéricos e positivos — clutch%/precisão etc. já são 0–100).
+function BarraComparacao({ va, vb }) {
+  if (typeof va !== 'number' || typeof vb !== 'number' || (va === 0 && vb === 0)) return null
+  const total = Math.abs(va) + Math.abs(vb)
+  const pctA = total ? (Math.abs(va) / total) * 100 : 50
+  return (
+    <div className="mt-1 flex h-1 w-full overflow-hidden rounded-full bg-fundo">
+      <div className="bg-time-a" style={{ width: `${pctA}%` }} />
+      <div className="bg-time-b" style={{ width: `${100 - pctA}%` }} />
     </div>
   )
 }
@@ -69,12 +103,12 @@ export default function Comparar() {
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <select value={a} onChange={(e) => setA(e.target.value)} className="rounded border border-borda bg-superficie px-3 py-2 font-mono text-sm">
+        <select value={a} onChange={(e) => setA(e.target.value)} className="cursor-pointer rounded border border-borda bg-superficie px-3 py-2 font-mono text-sm">
           <option value="">Jogador A…</option>
           {jogadores.map((j) => <option key={j.steamId} value={j.steamId}>{j.nick || j.steamId}</option>)}
         </select>
         <span className="font-display text-texto-fraco">vs</span>
-        <select value={b} onChange={(e) => setB(e.target.value)} className="rounded border border-borda bg-superficie px-3 py-2 font-mono text-sm">
+        <select value={b} onChange={(e) => setB(e.target.value)} className="cursor-pointer rounded border border-borda bg-superficie px-3 py-2 font-mono text-sm">
           <option value="">Jogador B…</option>
           {jogadores.map((j) => <option key={j.steamId} value={j.steamId}>{j.nick || j.steamId}</option>)}
         </select>
@@ -85,27 +119,31 @@ export default function Comparar() {
 
       {dados && (
         <>
-          <Card className="p-4">
-            <div className="mb-4 flex items-start justify-between">
-              <ColunaJogador p={dados.a} />
-              <div className="px-2 pt-2 font-display text-xs uppercase tracking-widest text-texto-fraco">vs</div>
-              <ColunaJogador p={dados.b} ladoOposto />
+          <Card className="p-4 sm:p-5">
+            <div className="flex items-start justify-between gap-3">
+              <CabecalhoJogador p={dados.a} alinhamento="esquerda" />
+              <div className="shrink-0 pt-2 font-display text-xs uppercase tracking-widest text-texto-fraco sm:pt-6">vs</div>
+              <CabecalhoJogador p={dados.b} alinhamento="direita" />
             </div>
-            <div className="divide-y divide-borda">
+
+            <div className="mt-4 divide-y divide-borda border-t border-borda">
               {LINHAS_STAT.map((linha) => {
                 const va = dados.a.stats[linha.chave]
                 const vb = dados.b.stats[linha.chave]
                 const aGanha = typeof va === 'number' && typeof vb === 'number' && va > vb
                 const bGanha = typeof va === 'number' && typeof vb === 'number' && vb > va
                 return (
-                  <div key={linha.chave} className="grid grid-cols-3 items-center py-2 font-mono text-sm tabular-nums">
-                    <span className={`text-right ${aGanha ? 'font-semibold text-destaque' : 'text-texto'} ${linha.cor ? corRating(va) : ''}`}>
-                      {linha.formato(va)}
+                  <div key={linha.chave} className="grid grid-cols-3 items-center gap-2 py-2.5">
+                    <span className={`text-right font-mono text-sm font-bold tabular-nums ${aGanha ? 'text-destaque' : 'text-texto'}`}>
+                      {linha.formato(va, dados.a.stats)}
                     </span>
-                    <span className="text-center text-[10px] uppercase tracking-wider text-texto-fraco">{linha.rotulo}</span>
-                    <span className={`text-left ${bGanha ? 'font-semibold text-destaque' : 'text-texto'} ${linha.cor ? corRating(vb) : ''}`}>
-                      {linha.formato(vb)}
+                    <span className="text-center text-[10px] font-display uppercase tracking-wider text-texto-fraco">{linha.rotulo}</span>
+                    <span className={`text-left font-mono text-sm font-bold tabular-nums ${bGanha ? 'text-destaque' : 'text-texto'}`}>
+                      {linha.formato(vb, dados.b.stats)}
                     </span>
+                    <div className="col-span-3">
+                      <BarraComparacao va={typeof va === 'number' ? va : 0} vb={typeof vb === 'number' ? vb : 0} />
+                    </div>
                   </div>
                 )
               })}

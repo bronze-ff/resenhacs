@@ -24,7 +24,7 @@ export function createRankingRouter({ db, requireAuth }) {
       periodo += ` and m.played_at < ($${params.length}::date + interval '1 day')`
     }
     const { rows } = await db.query(
-      `select p.steam_id64, p.nick, p.avatar_url,
+      `select p.steam_id64, p.nick, coalesce(p.avatar_url, sa.avatar_url) as avatar_url,
               count(mp.match_id)::int as partidas,
               coalesce(sum(case when mp.won then 1 else 0 end), 0)::int as vitorias,
               coalesce(sum(mp.kills), 0)::int as kills,
@@ -43,12 +43,13 @@ export function createRankingRouter({ db, requireAuth }) {
               coalesce(sum(mp.shots_fired), 0)::int as shots_fired,
               coalesce(sum(mp.shots_hit), 0)::int as shots_hit
        from players p
+       left join steam_avatares sa on sa.steam_id64 = p.steam_id64
        left join (
          select mp.* from match_players mp
          join matches m on m.id = mp.match_id
          where true${periodo}
        ) mp on mp.steam_id64 = p.steam_id64
-       group by p.steam_id64, p.nick, p.avatar_url`,
+       group by p.steam_id64, p.nick, p.avatar_url, sa.avatar_url`,
       params,
     )
 
