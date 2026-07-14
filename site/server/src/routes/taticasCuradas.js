@@ -42,10 +42,11 @@ function validarCorpo(body) {
 }
 
 // Insere os papéis de uma tática (e os vínculos com a biblioteca de granadas)
-// já dentro da transação aberta pelo caller (POST/PUT).
-async function inserirPapeis(db, taticaId, papeis) {
+// já dentro da transação aberta pelo caller (POST/PUT). `client` é o client
+// dedicado da transação (ver createTaticasCuradasRouter), não o pool.
+async function inserirPapeis(client, taticaId, papeis) {
   for (const p of papeis) {
-    const { rows } = await db.query(
+    const { rows } = await client.query(
       `insert into taticas_papeis (tatica_id, ordem, descricao, obrigatorio)
        values ($1, $2, $3, $4)
        returning id`,
@@ -53,7 +54,7 @@ async function inserirPapeis(db, taticaId, papeis) {
     )
     const papelId = rows[0].id
     for (let i = 0; i < p.granadaIds.length; i += 1) {
-      await db.query(
+      await client.query(
         `insert into taticas_papel_granadas (papel_id, lineup_curado_id, ordem)
          values ($1, $2, $3)`,
         [papelId, p.granadaIds[i], i],
@@ -155,29 +156,34 @@ export function createTaticasCuradasRouter({ db, requireAuth }) {
     if (erro) return res.status(400).json({ erro })
     const v = valores
 
-    // O `db` injetado é o pg.Pool do projeto inteiro (nenhuma outra rota usa client
-    // dedicado via pool.connect()) — aqui a tática é pai de papéis/vínculos, então
-    // sem transação um erro no meio deixaria tática órfã sem papéis. Na Vercel o
-    // pool sobe com max:1, ou seja begin/insert*/commit caem sempre na MESMA conexão
-    // e correm serializados na mesma sessão: funciona. Se o projeto um dia aumentar
-    // o max do pool, isso precisa migrar pra um client dedicado por request (senão
-    // um insert concorrente de outro request pode pegar outra conexão no meio desta
-    // transação e nunca ver o BEGIN).
+    // pool.query() pega uma conexão emprestada e devolve ao pool a cada chamada —
+    // begin/insert/commit em chamadas separadas via db.query() NÃO garantem a mesma
+    // conexão entre si. Com mais de uma escrita concorrente no mesmo processo, os
+    // comandos de transações diferentes podem se intercalar na mesma conexão física
+    // (o commit de uma request persistiria inserts parciais de outra). Isso hoje não
+    // se manifesta porque a Vercel serverless dá 1 request por instância, mas é uma
+    // dependência frágil de topologia, não uma garantia do código. Por isso a
+    // transação usa um client dedicado (pool.connect()): begin/insert*/commit correm
+    // todos na mesma conexão física, isolados de qualquer outra transação, não
+    // importa quantas rodem em paralelo no mesmo processo.
+    const client = await db.connect()
     try {
-      await db.query('begin')
-      const { rows } = await db.query(
+      await client.query('begin')
+      const { rows } = await client.query(
         `insert into taticas_curadas (map, lado, tipo, local, armas, titulo, descricao, criado_por)
          values ($1, $2, $3, $4, $5, $6, $7, $8)
          returning id`,
         [v.map, v.lado, v.tipo, v.local, v.armas, v.titulo, v.descricao, req.player.steamId],
       )
       const taticaId = rows[0].id
-      await inserirPapeis(db, taticaId, v.papeis)
-      await db.query('commit')
+      await inserirPapeis(client, taticaId, v.papeis)
+      await client.query('commit')
       res.status(201).json({ id: taticaId })
     } catch (err) {
-      await db.query('rollback')
+      await client.query('rollback')
       throw err
+    } finally {
+      client.release()
     }
   })
 
@@ -186,12 +192,13 @@ export function createTaticasCuradasRouter({ db, requireAuth }) {
     if (erro) return res.status(400).json({ erro })
     const v = valores
 
-    // Mesmo padrão de transação simples do POST (ver comentário acima) — aqui
-    // substituindo tudo: update da tática, apaga papéis (cascade limpa os vínculos
-    // com a biblioteca) e reinsere papéis/vínculos do zero.
+    // Mesmo padrão de transação com client dedicado do POST (ver comentário acima) —
+    // aqui substituindo tudo: update da tática, apaga papéis (cascade limpa os
+    // vínculos com a biblioteca) e reinsere papéis/vínculos do zero.
+    const client = await db.connect()
     try {
-      await db.query('begin')
-      const { rows } = await db.query(
+      await client.query('begin')
+      const { rows } = await client.query(
         `update taticas_curadas
          set map = $1, lado = $2, tipo = $3, local = $4, armas = $5, titulo = $6, descricao = $7,
              atualizado_em = now()
@@ -200,16 +207,18 @@ export function createTaticasCuradasRouter({ db, requireAuth }) {
         [v.map, v.lado, v.tipo, v.local, v.armas, v.titulo, v.descricao, req.params.id],
       )
       if (!rows.length) {
-        await db.query('rollback')
+        await client.query('rollback')
         return res.status(404).json({ erro: 'tática não encontrada' })
       }
-      await db.query('delete from taticas_papeis where tatica_id = $1', [req.params.id])
-      await inserirPapeis(db, req.params.id, v.papeis)
-      await db.query('commit')
+      await client.query('delete from taticas_papeis where tatica_id = $1', [req.params.id])
+      await inserirPapeis(client, req.params.id, v.papeis)
+      await client.query('commit')
       res.json({ ok: true })
     } catch (err) {
-      await db.query('rollback')
+      await client.query('rollback')
       throw err
+    } finally {
+      client.release()
     }
   })
 

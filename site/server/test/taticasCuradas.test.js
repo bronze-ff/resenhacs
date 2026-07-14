@@ -8,15 +8,18 @@ const cookieJogador = `resenha_token=${signToken({ steamId: '765', isAdmin: fals
 const cookieAdmin = `resenha_token=${signToken({ steamId: '999', isAdmin: true }, config.jwtSecret)}`
 
 function appWith(handlers) {
-  const db = {
-    query: vi.fn().mockImplementation((sql) => {
-      for (const [needle, rows] of handlers) {
-        if (sql.includes(needle)) return Promise.resolve({ rows })
-      }
-      return Promise.resolve({ rows: [] })
-    }),
-  }
-  return { app: createApp({ config, db, r2Client: null }), db }
+  const query = vi.fn().mockImplementation((sql) => {
+    for (const [needle, rows] of handlers) {
+      if (sql.includes(needle)) return Promise.resolve({ rows })
+    }
+    return Promise.resolve({ rows: [] })
+  })
+  // POST/PUT de taticas-curadas abrem transação num client dedicado (db.connect()),
+  // não em db.query() direto — o mock do client reusa a mesma vi.fn() pra que as
+  // asserções continuem enxergando begin/commit/insert* numa lista só de calls.
+  const client = { query, release: vi.fn() }
+  const db = { query, connect: vi.fn().mockResolvedValue(client) }
+  return { app: createApp({ config, db, r2Client: null }), db, client }
 }
 
 const TATICA = {

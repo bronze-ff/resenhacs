@@ -11,6 +11,9 @@ export function createDb(connectionString) {
   const pool = new pg.Pool({ connectionString, max: 1 })
   return {
     query: (text, params) => pool.query(text, params),
+    // Usado pelas rotas que precisam de transação (begin/commit numa única conexão
+    // dedicada — ver comentário em taticasCuradas.js). Delega direto pro pool.
+    connect: () => pool.connect(),
     close: () => pool.end(),
   }
 }
