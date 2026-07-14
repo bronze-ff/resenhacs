@@ -163,8 +163,10 @@ export default function Shell({ children }) {
           aria-hidden="true"
         />
       )}
+      {/* lg:sticky + h-screen: no desktop a sidebar vira uma coluna fixa de altura total,
+          então o botão de recolher (no rodapé dela) fica SEMPRE visível sem rolar a página. */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-60 shrink-0 flex-col border-r border-borda bg-superficie transition-[transform,width] duration-200 lg:static lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 flex w-60 shrink-0 flex-col border-r border-borda bg-superficie transition-[transform,width] duration-200 lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 ${
           menuAberto ? 'translate-x-0' : '-translate-x-full'
         } ${colapsada ? 'lg:w-16' : 'lg:w-60'}`}
       >
@@ -178,7 +180,7 @@ export default function Shell({ children }) {
             resenha cs2 // ops
           </p>
         </div>
-        <nav className="flex-1 py-3">
+        <nav className="flex-1 overflow-y-auto py-3">
           {ITENS.map((item) => (
             <NavLink
               key={item.to}
