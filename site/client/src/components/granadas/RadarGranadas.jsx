@@ -5,24 +5,41 @@ import { ROTULO_TECNICA } from '../../lib/rotulos.js'
 // Ícone simples por tipo, desenhado direto em SVG (sem lib de ícones).
 // Exportado (named) pra ser reusado no mini-radar dos cards de Táticas
 // (MiniRadarTatica.jsx) sem duplicar o desenho dos marcadores.
-export function MarcadorTipo({ tipo, x, y, ativo }) {
-  const cor = ativo ? '#ffd166' : { smoke: '#d2d2d7', flash: '#fff8d6', he: '#ffaa3c', molotov: '#ff6e1e' }[tipo]
+//
+// `estado` é opcional e só usado pelo builder de táticas (FormTatica.jsx):
+// 'ativo' (vinculada ao papel selecionado, anel laranja forte), 'outro'
+// (vinculada a outro papel, anel cinza fino) ou 'normal'/undefined (sem
+// vínculo — some apagada quando `estado` está presente pra dar contraste).
+// Sem essa prop o marcador se comporta exatamente como antes.
+export function MarcadorTipo({ tipo, x, y, ativo, estado }) {
+  const corPorTipo = { smoke: '#d2d2d7', flash: '#fff8d6', he: '#ffaa3c', molotov: '#ff6e1e' }
+  const cor = ativo ? '#ffd166' : estado === 'ativo' ? '#ff9a1f' : corPorTipo[tipo]
+  const opacidade = estado === 'normal' ? 0.4 : 0.9
+  const anel = estado === 'ativo'
+    ? <circle cx={x} cy={y} r="3.1" fill="none" stroke="#ff9a1f" strokeWidth="0.6" opacity="0.95" />
+    : estado === 'outro'
+      ? <circle cx={x} cy={y} r="2.7" fill="none" stroke="#d2d2d7" strokeWidth="0.4" opacity="0.55" />
+      : null
+
+  let forma
   if (tipo === 'smoke') {
-    return <circle cx={x} cy={y} r={ativo ? 2.2 : 1.8} fill={cor} opacity="0.9" />
+    forma = <circle cx={x} cy={y} r={ativo ? 2.2 : 1.8} fill={cor} opacity={opacidade} />
+  } else if (tipo === 'molotov') {
+    forma = <path d={`M ${x} ${y - 2} L ${x + 1.6} ${y + 1.4} L ${x - 1.6} ${y + 1.4} Z`} fill={cor} opacity={opacidade} />
+  } else if (tipo === 'flash') {
+    forma = <rect x={x - 1.4} y={y - 1.4} width="2.8" height="2.8" transform={`rotate(45 ${x} ${y})`} fill={cor} opacity={opacidade} />
+  } else {
+    forma = <circle cx={x} cy={y} r={ativo ? 2 : 1.5} fill="none" stroke={cor} strokeWidth="0.7" opacity={opacidade} />
   }
-  if (tipo === 'molotov') {
-    return <path d={`M ${x} ${y - 2} L ${x + 1.6} ${y + 1.4} L ${x - 1.6} ${y + 1.4} Z`} fill={cor} opacity="0.9" />
-  }
-  if (tipo === 'flash') {
-    return <rect x={x - 1.4} y={y - 1.4} width="2.8" height="2.8" transform={`rotate(45 ${x} ${y})`} fill={cor} opacity="0.9" />
-  }
-  return <circle cx={x} cy={y} r={ativo ? 2 : 1.5} fill="none" stroke={cor} strokeWidth="0.7" opacity="0.9" />
+
+  return <>{anel}{forma}</>
 }
 
 export default function RadarGranadas({
   mapa, lineups, selecionadaId, onSelecionar,
   callouts = [], nivelCallouts = 'sem',
   modoMarcacao = null, onCliqueMarcacao = null,
+  estadoPorId = null,
 }) {
   const svgRef = useRef(null)
   const [hoverId, setHoverId] = useState(null)
@@ -112,7 +129,11 @@ export default function RadarGranadas({
             >
               {/* área de acerto maior que o ícone, senão o hover/tap fica nervoso */}
               <circle cx={l.alvoX * 100} cy={l.alvoY * 100} r="3" fill="transparent" />
-              <MarcadorTipo tipo={l.tipo} x={l.alvoX * 100} y={l.alvoY * 100} ativo={l.id === (idDestacado ?? selecionadaId)} />
+              <MarcadorTipo
+                tipo={l.tipo} x={l.alvoX * 100} y={l.alvoY * 100}
+                ativo={l.id === (idDestacado ?? selecionadaId)}
+                estado={estadoPorId ? (estadoPorId[l.id] ?? 'normal') : undefined}
+              />
             </g>
           ))}
 

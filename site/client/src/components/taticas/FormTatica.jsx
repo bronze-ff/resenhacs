@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import RadarGranadas from '../granadas/RadarGranadas.jsx'
 import { ROTULO_TIPO_TATICA, ROTULO_ARMAS } from './CardTatica.jsx'
 
 const TIPOS = Object.entries(ROTULO_TIPO_TATICA)
@@ -23,10 +24,16 @@ function papeisIniciais(inicial) {
     }))
 }
 
-// Form modal de criar/editar tática curada: título/descrição/lado/tipo/local/armas
-// + lista dinâmica de papéis, cada um com descrição, toggle "necessário" e um
-// seletor de granadas da biblioteca (por mapa+lado). Segue o mesmo padrão visual
-// de FormGranada.jsx (modal tela cheia no mobile, painel `lg:max-w-2xl` no desktop).
+// Form modal de criar/editar tática curada — builder no radar (estilo
+// tactician.it/tactics): a montagem acontece DIRETO no mapa, não numa lista de
+// checkboxes. Layout de duas colunas no desktop (radar ~58% à esquerda, painel
+// de edição à direita); empilha no mobile (radar em cima, painel embaixo).
+//
+// Fluxo: um papel fica "ativo" por vez (pills acima do radar ou clicando no
+// card dele à direita); clicar num marcador do radar vincula/desvincula esse
+// papel àquela granada. RadarGranadas mostra os 3 estados via `estadoPorId`
+// (ativo = anel laranja forte, outro papel = anel cinza fino, sem vínculo =
+// apagado) — ver RadarGranadas.jsx.
 export default function FormTatica({ mapa, lado: ladoInicial, inicial = null, onSalvo, onCancelar }) {
   const [titulo, setTitulo] = useState(inicial?.titulo ?? '')
   const [descricao, setDescricao] = useState(inicial?.descricao ?? '')
@@ -35,6 +42,7 @@ export default function FormTatica({ mapa, lado: ladoInicial, inicial = null, on
   const [local, setLocal] = useState(inicial?.local ?? 'A')
   const [armas, setArmas] = useState(inicial?.armas ?? 'full')
   const [papeis, setPapeis] = useState(() => papeisIniciais(inicial))
+  const [papelAtivo, setPapelAtivo] = useState(0)
   const [granadas, setGranadas] = useState(null)
   const [erro, setErro] = useState(null)
   const [salvando, setSalvando] = useState(false)
@@ -58,6 +66,28 @@ export default function FormTatica({ mapa, lado: ladoInicial, inicial = null, on
     }
   }, [mapa, lado])
 
+  // Índice do papel ativo, blindado contra ficar apontando pra fora do array
+  // depois de uma remoção (removerPapel já tenta recalcular, isso é só a rede
+  // de segurança final usada em todo lugar que lê o papel ativo).
+  const papelAtivoSeguro = Math.min(papelAtivo, papeis.length - 1)
+
+  const granadaPorId = useMemo(
+    () => new Map((granadas ?? []).map((g) => [g.id, g])),
+    [granadas],
+  )
+
+  // Estado visual de cada marcador do radar pro papel ativo: 'ativo' (vinculada
+  // a ele), 'outro' (vinculada a outro papel da mesma tática) ou 'normal'.
+  const estadoPorId = useMemo(() => {
+    const mapa2 = {}
+    for (const g of granadas ?? []) {
+      const doAtivo = papeis[papelAtivoSeguro]?.granadaIds.includes(g.id) ?? false
+      const deOutroPapel = !doAtivo && papeis.some((p) => p.granadaIds.includes(g.id))
+      mapa2[g.id] = doAtivo ? 'ativo' : deOutroPapel ? 'outro' : 'normal'
+    }
+    return mapa2
+  }, [granadas, papeis, papelAtivoSeguro])
+
   function atualizarPapel(i, patch) {
     setPapeis((ps) => ps.map((p, idx) => (idx === i ? { ...p, ...patch } : p)))
   }
@@ -74,11 +104,17 @@ export default function FormTatica({ mapa, lado: ladoInicial, inicial = null, on
   }
 
   function adicionarPapel() {
+    setPapelAtivo(papeis.length)
     setPapeis((ps) => [...ps, novoPapel()])
   }
 
   function removerPapel(i) {
+    const novoLen = papeis.length - 1
     setPapeis((ps) => ps.filter((_, idx) => idx !== i))
+    setPapelAtivo((atual) => {
+      const ajustado = i < atual ? atual - 1 : atual
+      return Math.min(ajustado, Math.max(0, novoLen - 1))
+    })
   }
 
   async function salvar(e) {
@@ -120,134 +156,195 @@ export default function FormTatica({ mapa, lado: ladoInicial, inicial = null, on
       <form
         onSubmit={salvar}
         onClick={(e) => e.stopPropagation()}
-        className="h-full w-full space-y-3 overflow-y-auto border border-borda bg-superficie p-5 lg:panel-cut lg:h-auto lg:max-h-[90vh] lg:w-full lg:max-w-2xl"
+        className="flex h-full w-full flex-col overflow-y-auto border border-borda bg-superficie lg:panel-cut lg:h-auto lg:max-h-[90vh] lg:w-full lg:max-w-6xl lg:flex-row lg:overflow-hidden"
       >
-        <h3 className="font-display text-lg font-bold uppercase text-texto">
-          {inicial ? 'Editar tática' : 'Nova tática'}
-        </h3>
+        {/* Coluna do radar: sempre visível, mostra TODAS as granadas curadas do
+            mapa+lado atual. É aqui que a tática é montada de fato. */}
+        <div className="shrink-0 border-b border-borda p-4 lg:w-[58%] lg:overflow-y-auto lg:border-b-0 lg:border-r lg:p-5">
+          <div className="mb-3 flex flex-wrap items-center gap-1.5">
+            <p className="mr-1 font-mono text-xs uppercase text-texto-fraco">Vinculando ao papel:</p>
+            {papeis.map((p, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => setPapelAtivo(i)}
+                className={`min-h-10 rounded border px-2.5 py-1 font-mono text-xs uppercase transition-colors lg:min-h-0 ${
+                  i === papelAtivoSeguro ? 'border-destaque bg-destaque/10 text-destaque' : 'border-borda text-texto-fraco hover:text-texto'
+                }`}
+              >
+                Jogador {i + 1}
+              </button>
+            ))}
+          </div>
 
-        <input
-          value={titulo}
-          onChange={(e) => setTitulo(e.target.value)}
-          placeholder="Título (ex.: Execute A padrão)"
-          className="min-h-10 w-full rounded border border-borda bg-fundo px-3 py-2 font-mono text-sm lg:min-h-0"
-        />
-        <textarea
-          value={descricao}
-          onChange={(e) => setDescricao(e.target.value)}
-          placeholder="Descrição (opcional)"
-          rows={2}
-          className="w-full rounded border border-borda bg-fundo px-3 py-2 font-mono text-sm"
-        />
+          <RadarGranadas
+            mapa={mapa}
+            lineups={granadas ?? []}
+            estadoPorId={estadoPorId}
+            onSelecionar={(g) => alternarGranada(papelAtivoSeguro, g.id)}
+          />
 
-        <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-          <div>
-            <p className="mb-1 font-mono text-xs uppercase text-texto-fraco">Lado</p>
-            <select value={lado} onChange={(e) => setLado(e.target.value)}
-              className="min-h-10 w-full rounded border border-borda bg-fundo px-2 py-1.5 font-mono text-xs lg:min-h-0">
-              <option value="T">T</option>
-              <option value="CT">CT</option>
-            </select>
-          </div>
-          <div>
-            <p className="mb-1 font-mono text-xs uppercase text-texto-fraco">Tipo</p>
-            <select value={tipo} onChange={(e) => setTipo(e.target.value)}
-              className="min-h-10 w-full rounded border border-borda bg-fundo px-2 py-1.5 font-mono text-xs lg:min-h-0">
-              {TIPOS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </select>
-          </div>
-          <div>
-            <p className="mb-1 font-mono text-xs uppercase text-texto-fraco">Local</p>
-            <select value={local} onChange={(e) => setLocal(e.target.value)}
-              className="min-h-10 w-full rounded border border-borda bg-fundo px-2 py-1.5 font-mono text-xs lg:min-h-0">
-              {LOCAIS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </select>
-          </div>
-          <div>
-            <p className="mb-1 font-mono text-xs uppercase text-texto-fraco">Armas</p>
-            <select value={armas} onChange={(e) => setArmas(e.target.value)}
-              className="min-h-10 w-full rounded border border-borda bg-fundo px-2 py-1.5 font-mono text-xs lg:min-h-0">
-              {ARMAS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </select>
-          </div>
+          {granadas === null && (
+            <p className="mt-2 font-mono text-xs text-texto-fraco">Carregando granadas…</p>
+          )}
+          {granadas?.length === 0 && (
+            <p className="mt-2 font-mono text-xs text-texto-fraco">Nenhuma granada cadastrada pra esse lado ainda. Cadastre em Granadas primeiro.</p>
+          )}
+          {granadas != null && granadas.length > 0 && (
+            <p className="mt-2 font-mono text-xs text-texto-fraco">
+              Clique num marcador pra vincular ou desvincular do <span className="text-destaque">Jogador {papelAtivoSeguro + 1}</span>.
+            </p>
+          )}
         </div>
 
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <p className="font-mono text-xs uppercase text-texto-fraco">Papéis</p>
-            <button
-              type="button"
-              onClick={adicionarPapel}
-              className="min-h-10 lg:min-h-0 rounded border border-borda px-2 py-1 font-mono text-xs uppercase text-texto-fraco hover:text-texto"
-            >+ papel</button>
-          </div>
+        {/* Coluna do painel: campos da tática compactados no topo + papéis como
+            cards selecionáveis (clicar num card o torna o papel ativo). */}
+        <div className="min-w-0 flex-1 space-y-3 p-4 lg:overflow-y-auto lg:p-5">
+          <h3 className="font-display text-lg font-bold uppercase text-texto">
+            {inicial ? 'Editar tática' : 'Nova tática'}
+          </h3>
 
-          {papeis.map((p, i) => (
-            <div key={i} className="panel-cut-sm space-y-2 border border-borda bg-fundo p-3">
-              <div className="flex items-center justify-between gap-2">
-                <p className="font-display text-sm font-semibold uppercase text-texto">Jogador {i + 1}</p>
-                {papeis.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => removerPapel(i)}
-                    className="min-h-10 lg:min-h-0 px-2 py-1 font-mono text-xs uppercase text-perigo hover:brightness-125"
-                  >remover</button>
-                )}
-              </div>
+          <input
+            value={titulo}
+            onChange={(e) => setTitulo(e.target.value)}
+            placeholder="Título (ex.: Execute A padrão)"
+            className="min-h-10 w-full rounded border border-borda bg-fundo px-3 py-2 font-mono text-sm lg:min-h-0"
+          />
+          <textarea
+            value={descricao}
+            onChange={(e) => setDescricao(e.target.value)}
+            placeholder="Descrição (opcional)"
+            rows={1}
+            className="w-full rounded border border-borda bg-fundo px-3 py-1.5 font-mono text-sm"
+          />
 
-              <textarea
-                value={p.descricao}
-                onChange={(e) => atualizarPapel(i, { descricao: e.target.value })}
-                placeholder="Descrição do papel (obrigatória)"
-                rows={2}
-                className="w-full rounded border border-borda bg-superficie px-3 py-2 font-mono text-sm"
-              />
-
-              <label className="flex min-h-10 lg:min-h-0 w-fit items-center gap-2 font-mono text-xs uppercase text-texto-fraco">
-                <input
-                  type="checkbox"
-                  checked={p.obrigatorio}
-                  onChange={(e) => atualizarPapel(i, { obrigatorio: e.target.checked })}
-                  className="h-4 w-4"
-                />
-                necessário
-              </label>
-
-              <div>
-                <p className="mb-1 font-mono text-xs uppercase text-texto-fraco">Granadas ({lado})</p>
-                <div className="max-h-40 space-y-1 overflow-y-auto rounded border border-borda bg-superficie p-2">
-                  {granadas === null && (
-                    <p className="font-mono text-xs text-texto-fraco">Carregando…</p>
-                  )}
-                  {granadas?.length === 0 && (
-                    <p className="font-mono text-xs text-texto-fraco">Nenhuma granada cadastrada pra esse lado ainda.</p>
-                  )}
-                  {granadas?.map((g) => (
-                    <label key={g.id} className="flex min-h-10 lg:min-h-0 items-center gap-2 font-mono text-xs text-texto">
-                      <input
-                        type="checkbox"
-                        checked={p.granadaIds.includes(g.id)}
-                        onChange={() => alternarGranada(i, g.id)}
-                        className="h-4 w-4 shrink-0"
-                      />
-                      <span className="min-w-0 flex-1 truncate">{g.titulo}</span>
-                      <span className="shrink-0 uppercase text-texto-fraco">{ROTULO_TIPO_GRANADA[g.tipo] ?? g.tipo}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
+          <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+            <div>
+              <p className="mb-1 font-mono text-xs uppercase text-texto-fraco">Lado</p>
+              <select value={lado} onChange={(e) => setLado(e.target.value)}
+                className="min-h-10 w-full rounded border border-borda bg-fundo px-2 py-1.5 font-mono text-xs lg:min-h-0">
+                <option value="T">T</option>
+                <option value="CT">CT</option>
+              </select>
             </div>
-          ))}
-        </div>
+            <div>
+              <p className="mb-1 font-mono text-xs uppercase text-texto-fraco">Tipo</p>
+              <select value={tipo} onChange={(e) => setTipo(e.target.value)}
+                className="min-h-10 w-full rounded border border-borda bg-fundo px-2 py-1.5 font-mono text-xs lg:min-h-0">
+                {TIPOS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+            </div>
+            <div>
+              <p className="mb-1 font-mono text-xs uppercase text-texto-fraco">Local</p>
+              <select value={local} onChange={(e) => setLocal(e.target.value)}
+                className="min-h-10 w-full rounded border border-borda bg-fundo px-2 py-1.5 font-mono text-xs lg:min-h-0">
+                {LOCAIS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+            </div>
+            <div>
+              <p className="mb-1 font-mono text-xs uppercase text-texto-fraco">Armas</p>
+              <select value={armas} onChange={(e) => setArmas(e.target.value)}
+                className="min-h-10 w-full rounded border border-borda bg-fundo px-2 py-1.5 font-mono text-xs lg:min-h-0">
+                {ARMAS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+            </div>
+          </div>
 
-        {erro && <p className="font-mono text-sm text-perigo">{erro}</p>}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="font-mono text-xs uppercase text-texto-fraco">Papéis</p>
+              <button
+                type="button"
+                onClick={adicionarPapel}
+                className="min-h-10 lg:min-h-0 rounded border border-borda px-2 py-1 font-mono text-xs uppercase text-texto-fraco hover:text-texto"
+              >+ papel</button>
+            </div>
 
-        <div className="flex justify-end gap-2">
-          <button type="button" onClick={onCancelar} className="min-h-10 px-4 py-2 font-mono text-xs uppercase text-texto-fraco hover:text-texto lg:min-h-0">Cancelar</button>
-          <button type="submit" disabled={salvando}
-            className="panel-cut-sm min-h-10 border border-destaque bg-destaque px-4 py-2 font-display text-sm font-semibold uppercase text-fundo disabled:opacity-50 lg:min-h-0">
-            {salvando ? 'Salvando…' : 'Salvar'}
-          </button>
+            {papeis.map((p, i) => {
+              const ativo = i === papelAtivoSeguro
+              return (
+                <div
+                  key={i}
+                  onClick={() => setPapelAtivo(i)}
+                  className={`panel-cut-sm cursor-pointer space-y-2 border p-3 transition-colors ${
+                    ativo ? 'border-destaque bg-destaque/5' : 'border-borda bg-fundo hover:border-destaque/40'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className={`font-display text-sm font-semibold uppercase ${ativo ? 'text-destaque' : 'text-texto'}`}>
+                      Jogador {i + 1}
+                      {ativo && <span className="ml-1.5 font-mono text-[10px] normal-case text-texto-fraco">ativo no radar</span>}
+                    </p>
+                    {papeis.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); removerPapel(i) }}
+                        className="min-h-10 lg:min-h-0 px-2 py-1 font-mono text-xs uppercase text-perigo hover:brightness-125"
+                      >remover</button>
+                    )}
+                  </div>
+
+                  <textarea
+                    value={p.descricao}
+                    onChange={(e) => atualizarPapel(i, { descricao: e.target.value })}
+                    placeholder="Descrição do papel (obrigatória)"
+                    rows={2}
+                    className="w-full rounded border border-borda bg-superficie px-3 py-2 font-mono text-sm"
+                  />
+
+                  <label className="flex min-h-10 lg:min-h-0 w-fit items-center gap-2 font-mono text-xs uppercase text-texto-fraco">
+                    <input
+                      type="checkbox"
+                      checked={p.obrigatorio}
+                      onChange={(e) => atualizarPapel(i, { obrigatorio: e.target.checked })}
+                      className="h-4 w-4"
+                    />
+                    necessário
+                  </label>
+
+                  <div>
+                    <p className="mb-1 font-mono text-xs uppercase text-texto-fraco">
+                      Granadas vinculadas ({p.granadaIds.length})
+                    </p>
+                    {p.granadaIds.length === 0 ? (
+                      <p className="font-mono text-xs text-texto-fraco/70">
+                        Nenhuma ainda — clique nos marcadores do radar {!ativo && '(torne esse papel ativo primeiro)'}.
+                      </p>
+                    ) : (
+                      <div className="flex flex-wrap gap-1.5">
+                        {p.granadaIds.map((id) => {
+                          const g = granadaPorId.get(id)
+                          return (
+                            <button
+                              key={id}
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); alternarGranada(i, id) }}
+                              title="Clique pra desvincular"
+                              className="panel-cut-sm flex min-h-10 items-center gap-1.5 border border-borda bg-superficie px-2.5 py-1 font-mono text-[10px] uppercase text-texto transition-colors hover:border-perigo/60 hover:text-perigo lg:min-h-0"
+                            >
+                              <span className="max-w-[8rem] truncate">{g?.titulo ?? 'Granada'}</span>
+                              <span className="text-texto-fraco">{ROTULO_TIPO_GRANADA[g?.tipo] ?? ''}</span>
+                              <span aria-hidden>✕</span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {erro && <p className="font-mono text-sm text-perigo">{erro}</p>}
+
+          <div className="flex justify-end gap-2 pb-1">
+            <button type="button" onClick={onCancelar} className="min-h-10 px-4 py-2 font-mono text-xs uppercase text-texto-fraco hover:text-texto lg:min-h-0">Cancelar</button>
+            <button type="submit" disabled={salvando}
+              className="panel-cut-sm min-h-10 border border-destaque bg-destaque px-4 py-2 font-display text-sm font-semibold uppercase text-fundo disabled:opacity-50 lg:min-h-0">
+              {salvando ? 'Salvando…' : 'Salvar'}
+            </button>
+          </div>
         </div>
       </form>
     </div>
