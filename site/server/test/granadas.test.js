@@ -140,6 +140,53 @@ describe('DELETE /api/granadas/:id', () => {
   })
 })
 
+describe('GET /api/granadas/rounds-utilitaria', () => {
+  it('jogador comum: 403 (ferramenta de curadoria)', async () => {
+    const { app } = appWith([])
+    expect((await request(app).get('/api/granadas/rounds-utilitaria?map=de_mirage').set('Cookie', cookieJogador)).status).toBe(403)
+  })
+
+  it('sem map: 400', async () => {
+    const { app } = appWith([])
+    expect((await request(app).get('/api/granadas/rounds-utilitaria').set('Cookie', cookieAdmin)).status).toBe(400)
+  })
+
+  it('agrupa por match+round+lado, filtra grupos com menos de 3 granadas e ordena por tick', async () => {
+    const linha = (over) => ({
+      match_id: 'm1', round_number: 1, lado: 'T', tipo: 'smoke', tick: 100, origem: 'pro',
+      thrower_steam_id: '111', thrower_nick: 'Jogador1',
+      thrower_x: '0.2', thrower_y: '0.8', target_x: '0.4', target_y: '0.3',
+      team_a_name: 'Vitality', team_b_name: 'Falcons',
+      ...over,
+    })
+    const rows = [
+      // round 1, lado T: 3 granadas (candidato), ticks fora de ordem pra testar o sort
+      linha({ tick: 300, tipo: 'flash' }),
+      linha({ tick: 100, tipo: 'smoke' }),
+      linha({ tick: 200, tipo: 'he' }),
+      // round 2, lado T: só 2 granadas (deve ser filtrado)
+      linha({ round_number: 2, tick: 400 }),
+      linha({ round_number: 2, tick: 500 }),
+    ]
+    const { app, db } = appWith([['round_number', rows]])
+    const res = await request(app).get('/api/granadas/rounds-utilitaria?map=de_mirage').set('Cookie', cookieAdmin)
+    expect(res.status).toBe(200)
+    expect(res.body).toHaveLength(1)
+    const grupo = res.body[0]
+    expect(grupo).toMatchObject({
+      matchId: 'm1', roundNumber: 1, lado: 'T', origem: 'pro',
+      teamAName: 'Vitality', teamBName: 'Falcons',
+    })
+    expect(grupo.granadas).toHaveLength(3)
+    expect(grupo.granadas.map((g) => g.tick)).toEqual([100, 200, 300])
+    expect(grupo.granadas[0]).toMatchObject({
+      tipo: 'smoke', tick: 100, throwerSteamId: '111', throwerNick: 'Jogador1',
+      arremessoX: 0.2, arremessoY: 0.8, alvoX: 0.4, alvoY: 0.3,
+    })
+    expect(db.query.mock.calls[0][1]).toEqual(['de_mirage'])
+  })
+})
+
 describe('GET /api/granadas/sugestoes', () => {
   it('jogador comum: 403 (insight e ferramenta de curadoria)', async () => {
     const { app } = appWith([])

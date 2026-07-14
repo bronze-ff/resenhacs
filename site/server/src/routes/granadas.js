@@ -118,6 +118,47 @@ export function createGranadasRouter({ db, requireAuth }) {
     })))
   })
 
+  // Rounds com utilitária agrupada por (match, round, lado) — matéria-prima da
+  // detecção automática de táticas (client agrupa/classifica). Só devolve grupos
+  // com >=3 granadas pra reduzir payload (heurística v1 exige >=3 pra virar candidato).
+  router.get('/rounds-utilitaria', requireAuth, requireAdmin, async (req, res) => {
+    const map = String(req.query?.map ?? '')
+    if (!MAP_RE.test(map)) return res.status(400).json({ erro: 'map é obrigatório' })
+    const { rows } = await db.query(
+      `select l.match_id, l.round_number, l.lado, l.tipo, l.tick, l.origem,
+              l.thrower_steam_id, l.thrower_nick,
+              l.thrower_x, l.thrower_y, l.target_x, l.target_y,
+              m.team_a_name, m.team_b_name
+       from lineups l
+       join matches m on m.id = l.match_id
+       where l.map = $1 and l.lado is not null
+       order by l.match_id, l.round_number, l.tick
+       limit 5000`,
+      [map],
+    )
+    const grupos = new Map()
+    for (const r of rows) {
+      const chave = `${r.match_id}|${r.round_number}|${r.lado}`
+      if (!grupos.has(chave)) {
+        grupos.set(chave, {
+          matchId: r.match_id, roundNumber: Number(r.round_number), lado: r.lado,
+          origem: r.origem, teamAName: r.team_a_name, teamBName: r.team_b_name,
+          granadas: [],
+        })
+      }
+      grupos.get(chave).granadas.push({
+        tipo: r.tipo, tick: Number(r.tick),
+        throwerSteamId: r.thrower_steam_id, throwerNick: r.thrower_nick,
+        arremessoX: Number(r.thrower_x), arremessoY: Number(r.thrower_y),
+        alvoX: Number(r.target_x), alvoY: Number(r.target_y),
+      })
+    }
+    const resultado = [...grupos.values()]
+      .filter((g) => g.granadas.length >= 3)
+      .map((g) => ({ ...g, granadas: [...g.granadas].sort((a, b) => a.tick - b.tick) }))
+    res.json(resultado)
+  })
+
   router.post('/', requireAuth, requireAdmin, async (req, res) => {
     const { erro, valores } = validarCorpo(req.body)
     if (erro) return res.status(400).json({ erro })
