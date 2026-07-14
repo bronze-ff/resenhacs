@@ -29,11 +29,39 @@ describe('GET /api/matches', () => {
 
   it('lista partidas do feed', async () => {
     const { app } = appWith([
-      ['from matches m', [{ id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9, status: 'parsed', source: 'valve_mm', tracked: [{ steamId: '765', nick: 'fih', won: true }] }]],
+      ['from matches m', [{ id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9, status: 'parsed', source: 'valve_mm', tracked: [{ steamId: '765', nick: 'fih', won: true }], mvp: { steamId: '765', nick: 'fih', rating: '1.35' } }]],
     ])
     const res = await request(app).get('/api/matches').set('Cookie', cookie)
     expect(res.status).toBe(200)
-    expect(res.body[0]).toMatchObject({ id: 'm1', map: 'de_mirage', scoreA: 13, tracked: [{ nick: 'fih' }] })
+    expect(res.body[0]).toMatchObject({ id: 'm1', map: 'de_mirage', scoreA: 13, tracked: [{ nick: 'fih' }], mvp: { steamId: '765', nick: 'fih', rating: 1.35 } })
+  })
+
+  it('partida sem mvp rastreado devolve mvp null', async () => {
+    const { app } = appWith([
+      ['from matches m', [{ id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9, status: 'parsed', source: 'valve_mm', tracked: [], mvp: null }]],
+    ])
+    const res = await request(app).get('/api/matches').set('Cookie', cookie)
+    expect(res.body[0].mvp).toBeNull()
+  })
+
+  it('filtra por mvp quando steamid válido é passado', async () => {
+    const { app, db } = appWith([
+      ['from matches m', [{ id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9, status: 'parsed', source: 'valve_mm', tracked: [], mvp: { steamId: '76561198000000009', nick: 'fih', rating: '1.35' } }]],
+    ])
+    const res = await request(app).get('/api/matches?mvp=76561198000000009').set('Cookie', cookie)
+    expect(res.status).toBe(200)
+    const sql = db.query.mock.calls.find(([s]) => s.includes('from matches m'))[0]
+    expect(sql).toContain('mvp_filter')
+  })
+
+  it('ignora param mvp inválido (não é steamid 64-bit)', async () => {
+    const { app, db } = appWith([
+      ['from matches m', [{ id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9, status: 'parsed', source: 'valve_mm', tracked: [], mvp: null }]],
+    ])
+    const res = await request(app).get('/api/matches?mvp=abc').set('Cookie', cookie)
+    expect(res.status).toBe(200)
+    const sql = db.query.mock.calls.find(([s]) => s.includes('from matches m'))[0]
+    expect(sql).not.toContain('mvp_filter')
   })
 })
 

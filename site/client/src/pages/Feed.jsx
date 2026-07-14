@@ -118,10 +118,18 @@ function CardPartida({ m }) {
           <span className="truncate font-display text-lg font-semibold uppercase text-texto">{nomeMapa(m.map)}</span>
         </div>
         {timesPro ? (
-          <div className="truncate text-xs text-texto-fraco">{m.teamAName} x {m.teamBName}</div>
+          <div className="truncate text-xs text-texto-fraco">
+            {m.teamAName} x {m.teamBName}
+            {m.mvp && <span className="ml-1 text-destaque">· ★ {m.mvp.nick}</span>}
+          </div>
         ) : m.tracked?.length > 0 && (
           <div className="truncate text-xs text-texto-fraco">
-            {m.tracked.map((t) => t.nick).join(', ')}
+            {m.tracked.map((t, i) => (
+              <span key={t.steamId}>
+                {i > 0 && ', '}
+                {m.mvp?.steamId === t.steamId ? <span className="text-destaque">★ {t.nick}</span> : t.nick}
+              </span>
+            ))}
           </div>
         )}
       </div>
@@ -149,9 +157,20 @@ function CardPartida({ m }) {
           <div className="truncate font-mono text-xs text-texto-fraco">
             {dataHora(m.playedAt)}
             {timesPro ? (
-              <span> · {m.teamAName} x {m.teamBName}</span>
+              <span>
+                {' '}· {m.teamAName} x {m.teamBName}
+                {m.mvp && <span className="text-destaque"> · ★ {m.mvp.nick}</span>}
+              </span>
             ) : m.tracked?.length > 0 && (
-              <span> · {m.tracked.map((t) => t.nick).join(', ')}</span>
+              <span>
+                {' '}·{' '}
+                {m.tracked.map((t, i) => (
+                  <span key={t.steamId}>
+                    {i > 0 && ', '}
+                    {m.mvp?.steamId === t.steamId ? <span className="text-destaque">★ {t.nick}</span> : t.nick}
+                  </span>
+                ))}
+              </span>
             )}
           </div>
         </div>
@@ -283,6 +302,15 @@ export default function Feed() {
   const [mapa, setMapa] = useState('')
   const [origem, setOrigem] = useState('')
   const [resultado, setResultado] = useState('')
+  const [mvp, setMvp] = useState('')
+  const [jogadores, setJogadores] = useState([])
+
+  useEffect(() => {
+    fetch('/api/players')
+      .then((res) => (res.ok ? res.json() : []))
+      .then(setJogadores)
+      .catch(() => setJogadores([]))
+  }, [])
 
   useEffect(() => {
     const qs = new URLSearchParams()
@@ -290,11 +318,12 @@ export default function Feed() {
     if (ate) qs.set('to', ate)
     if (mapa) qs.set('map', mapa)
     if (origem) qs.set('source', origem)
+    if (mvp) qs.set('mvp', mvp)
     fetch(`/api/matches${qs.size ? `?${qs}` : ''}`)
       .then((res) => (res.ok ? res.json() : []))
       .then(setPartidas)
       .catch(() => setPartidas([]))
-  }, [de, ate, mapa, origem])
+  }, [de, ate, mapa, origem, mvp])
 
   // Resultado (V/D) é do ponto de vista do grupo — filtrado no client.
   const visiveis = useMemo(() => {
@@ -319,6 +348,14 @@ export default function Feed() {
           >
             <option value="">Todos os mapas</option>
             {MAPAS.map((m) => <option key={m} value={m}>{nomeMapa(m)}</option>)}
+          </select>
+          <select
+            value={mvp}
+            onChange={(e) => setMvp(e.target.value)}
+            className="min-h-10 rounded border border-borda bg-superficie px-3 py-2 font-mono text-sm lg:min-h-0 lg:px-2 lg:py-1 lg:text-xs"
+          >
+            <option value="">Todos os MVPs</option>
+            {jogadores.map((j) => <option key={j.steamId} value={j.steamId}>{j.nick}</option>)}
           </select>
         </div>
         <div className="flex flex-wrap items-center gap-3 lg:contents">

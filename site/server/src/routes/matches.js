@@ -9,7 +9,7 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket }) {
   router.get('/', requireAuth, async (req, res) => {
     const cond = ["m.status = 'parsed'"]
     const params = []
-    const { from, to, map, source } = req.query
+    const { from, to, map, source, mvp } = req.query
     if (from && /^\d{4}-\d{2}-\d{2}$/.test(from)) {
       params.push(from)
       cond.push(`m.played_at >= $${params.length}`)
@@ -27,15 +27,35 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket }) {
       params.push(source)
       cond.push(`m.source = $${params.length}`)
     }
+    let mvpJoin = ''
+    if (mvp && /^\d{17}$/.test(mvp)) {
+      params.push(mvp)
+      mvpJoin = `join lateral (
+         select mp2.steam_id64
+         from match_players mp2
+         where mp2.match_id = m.id and mp2.is_tracked
+         order by mp2.rating desc nulls last, mp2.kills desc
+         limit 1
+       ) mvp_filter on mvp_filter.steam_id64 = $${params.length}`
+    }
     const { rows } = await db.query(
       `select m.id, m.map, m.played_at, m.score_a, m.score_b, m.status, m.source,
          m.team_a_name, m.team_b_name,
          coalesce(json_agg(json_build_object('steamId', mp.steam_id64, 'nick', mp.nick, 'won', mp.won))
-           filter (where mp.is_tracked), '[]') as tracked
+           filter (where mp.is_tracked), '[]') as tracked,
+         mvp.mvp
        from matches m
        left join match_players mp on mp.match_id = m.id
+       left join lateral (
+         select json_build_object('steamId', mp3.steam_id64, 'nick', mp3.nick, 'rating', mp3.rating) as mvp
+         from match_players mp3
+         where mp3.match_id = m.id and mp3.is_tracked
+         order by mp3.rating desc nulls last, mp3.kills desc
+         limit 1
+       ) mvp on true
+       ${mvpJoin}
        where ${cond.join(' and ')}
-       group by m.id
+       group by m.id, mvp.mvp
        order by m.played_at desc nulls last, m.created_at desc
        limit 200`,
       params,
@@ -51,6 +71,7 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket }) {
         teamAName: m.team_a_name,
         teamBName: m.team_b_name,
         tracked: m.tracked,
+        mvp: m.mvp ? { ...m.mvp, rating: m.mvp.rating === null ? null : Number(m.mvp.rating) } : null,
       })),
     )
   })
