@@ -11,6 +11,7 @@ import { createSessionsRouter } from './routes/sessions.js'
 import { createUploadRouter } from './routes/upload.js'
 import { createLineupsRouter } from './routes/lineups.js'
 import { createTaticasRouter } from './routes/taticas.js'
+import { createTaticasCuradasRouter } from './routes/taticasCuradas.js'
 import { createPartidasProRouter } from './routes/partidasPro.js'
 import { createGranadasRouter } from './routes/granadas.js'
 import { createRequireAuth } from './auth/middleware.js'
@@ -70,6 +71,7 @@ export function createApp({ config, db, verifySteamLogin, fetchPersona, fetchBan
   app.use('/api/sessions', createSessionsRouter({ db, requireAuth }))
   app.use('/api/lineups', createLineupsRouter({ db, requireAuth }))
   app.use('/api/taticas', createTaticasRouter({ db, requireAuth }))
+  app.use('/api/taticas-curadas', createTaticasCuradasRouter({ db, requireAuth }))
   app.use('/api/partidas-pro-fila', createPartidasProRouter({ db, requireAuth, r2Client, r2Bucket: config.r2Bucket }))
   app.use('/api/granadas', createGranadasRouter({ db, requireAuth }))
 

@@ -8,7 +8,7 @@ const BOTOES = new Set(['esquerdo', 'direito', 'esquerdo_direito'])
 const MAP_RE = /^[a-z0-9_]+$/
 const YOUTUBE_RE = /^https:\/\/(www\.)?(youtube\.com\/(watch\?v=|shorts\/)|youtu\.be\/)[A-Za-z0-9_-]{11}([&?#].*)?$/
 
-function paraCamel(l) {
+export function paraCamel(l) {
   return {
     id: l.id, map: l.map, lado: l.lado, tipo: l.tipo, titulo: l.titulo,
     descricao: l.descricao, videoUrl: l.video_url, tecnica: l.tecnica, botao: l.botao,
