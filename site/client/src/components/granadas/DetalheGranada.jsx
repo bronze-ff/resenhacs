@@ -1,12 +1,7 @@
 import { useState } from 'react'
 import { embedYoutube, linkBuscaYoutube } from '../../lib/youtube.js'
 import { nomeMapa } from '../../lib/format.js'
-
-const ROTULO_TECNICA = {
-  normal: 'lançar parado', jumpthrow: 'lançar com salto', walkthrow: 'andando',
-  runthrow: 'correndo', run_jumpthrow: 'correr + saltar',
-}
-const ROTULO_BOTAO = { esquerdo: 'botão esquerdo', direito: 'botão direito', esquerdo_direito: 'os dois botões' }
+import { ROTULO_TECNICA, ROTULO_BOTAO } from '../../lib/rotulos.js'
 
 export default function DetalheGranada({ granada, onFechar, acoesAdmin = null }) {
   const [aba, setAba] = useState('video')

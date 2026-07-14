@@ -1,10 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { thumbYoutube } from '../../lib/youtube.js'
-
-const ROTULO_TECNICA = {
-  normal: null, jumpthrow: 'lançar com salto', walkthrow: 'andando',
-  runthrow: 'correndo', run_jumpthrow: 'correr + saltar',
-}
+import { ROTULO_TECNICA } from '../../lib/rotulos.js'
 
 // Ícone simples por tipo, desenhado direto em SVG (sem lib de ícones).
 // Exportado (named) pra ser reusado no mini-radar dos cards de Táticas
@@ -155,7 +151,7 @@ export default function RadarGranadas({
             }}
           >
             <p className="font-display text-sm font-semibold text-texto">{hovered.titulo}</p>
-            {ROTULO_TECNICA[hovered.tecnica] && (
+            {hovered.tecnica !== 'normal' && (
               <span className="mt-1 inline-block panel-cut-sm border border-borda px-1.5 py-0.5 font-mono text-[10px] uppercase text-texto-fraco">
                 {ROTULO_TECNICA[hovered.tecnica]}
               </span>
@@ -173,7 +169,7 @@ export default function RadarGranadas({
       {semHover && destacada && !modoMarcacao && (
         <div className="panel-cut mx-auto mt-3 w-full max-w-[calc(100vh-9rem)] border border-borda bg-superficie p-3">
           <p className="font-display text-sm font-semibold text-texto">{destacada.titulo}</p>
-          {ROTULO_TECNICA[destacada.tecnica] && (
+          {destacada.tecnica !== 'normal' && (
             <span className="mt-1 inline-block panel-cut-sm border border-borda px-1.5 py-0.5 font-mono text-[10px] uppercase text-texto-fraco">
               {ROTULO_TECNICA[destacada.tecnica]}
             </span>

@@ -15,7 +15,7 @@ const LIMIAR_CENTROIDE_GRUPO = 0.06
 
 const ALIAS_REGIAO = { a: 'A', b: 'B', mid: 'MID', meio: 'MID' }
 const ROTULO_TIPO_GRANADA = { smoke: 'smoke', flash: 'flash', molotov: 'molotov', he: 'he' }
-const PLURAL_TIPO = { smoke: 'smokes', flash: 'flashes', molotov: 'molotovs', he: 'he\'s' }
+const PLURAL_TIPO = { smoke: 'smokes', flash: 'flashes', molotov: 'molotovs', he: 'HEs' }
 
 function normalizarNome(nome) {
   return String(nome ?? '').trim().toLowerCase()
@@ -32,14 +32,16 @@ export function filtrarJanela(round) {
 }
 
 // Região (A/B/MID) mais próxima de (cx, cy) entre os callouts nível "noob" cujo
-// nome normalizado é exatamente "a"/"b"/"mid"/"meio". null se o mapa não tiver
-// os 3 (ex.: alguns mapas não têm um callout "Mid" nível noob) ou sem callouts.
+// nome normalizado é exatamente "a"/"b"/"mid"/"meio". Exige A e B (null se
+// faltar um dos dois); Mid é opcional — quando o mapa tem um callout "Mid"
+// nível noob ele participa da disputa de "mais próximo", senão a classificação
+// fica só entre A e B (ex.: mapas sem callout "Mid" nível noob).
 export function classificarRegiao(callouts, cx, cy) {
   const candidatos = (callouts ?? [])
     .filter((c) => c.nivel === 'noob' && ALIAS_REGIAO[normalizarNome(c.nome)])
 
   const regioesDisponiveis = new Set(candidatos.map((c) => ALIAS_REGIAO[normalizarNome(c.nome)]))
-  if (!['A', 'B', 'MID'].every((r) => regioesDisponiveis.has(r))) return null
+  if (!regioesDisponiveis.has('A') || !regioesDisponiveis.has('B')) return null
 
   let melhor = null
   let melhorDist = Infinity

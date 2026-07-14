@@ -25,6 +25,7 @@ export default function PaginaMapaTaticas({ mapa, onTrocarMapa }) {
   const [formAberto, setFormAberto] = useState(null) // null | {} (nova) | {inicial} (edição)
   const [callouts, setCallouts] = useState([])
   const [detectarAberto, setDetectarAberto] = useState(false)
+  const [erro, setErro] = useState(null)
 
   function recarregar() {
     setTaticas(null)
@@ -52,6 +53,7 @@ export default function PaginaMapaTaticas({ mapa, onTrocarMapa }) {
     setArmas('todas')
     setSelecionada(null)
     setFormAberto(null)
+    setErro(null)
   }, [mapa, lado])
 
   // Callouts do mapa: só usados pra nomear granadas/papéis na detecção automática
@@ -242,14 +244,22 @@ export default function PaginaMapaTaticas({ mapa, onTrocarMapa }) {
               <button
                 onClick={async () => {
                   if (!window.confirm(`Excluir "${selecionada.titulo}"?`)) return
+                  setErro(null)
                   const res = await fetch(`/api/taticas-curadas/${selecionada.id}`, { method: 'DELETE' }).catch(() => null)
                   if (res?.ok) { setSelecionada(null); recarregar() }
+                  else setErro('Não foi possível excluir a tática. Tente de novo.')
                 }}
                 className="min-h-10 px-3 py-1.5 font-mono text-xs uppercase text-perigo hover:brightness-125 lg:min-h-0"
               >Excluir</button>
             </div>
           )}
         />
+      )}
+
+      {erro && (
+        <p className="fixed bottom-4 right-4 z-[70] panel-cut-sm border border-perigo bg-superficie px-3 py-2 font-mono text-xs text-perigo shadow-lg">
+          {erro}
+        </p>
       )}
     </div>
   )

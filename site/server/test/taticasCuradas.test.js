@@ -123,17 +123,20 @@ describe('POST /api/taticas-curadas', () => {
   })
 })
 
+const UUID_T1 = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+const UUID_TX = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
+
 describe('PUT /api/taticas-curadas/:id', () => {
   it('jogador comum: 403', async () => {
     const { app } = appWith([])
     expect(
-      (await request(app).put('/api/taticas-curadas/t1').set('Cookie', cookieJogador).send(PAYLOAD_VALIDO)).status,
+      (await request(app).put(`/api/taticas-curadas/${UUID_T1}`).set('Cookie', cookieJogador).send(PAYLOAD_VALIDO)).status,
     ).toBe(403)
   })
 
   it('id inexistente: 404 (com rollback)', async () => {
     const { app, db } = appWith([['update taticas_curadas', []]])
-    const res = await request(app).put('/api/taticas-curadas/tx').set('Cookie', cookieAdmin).send(PAYLOAD_VALIDO)
+    const res = await request(app).put(`/api/taticas-curadas/${UUID_TX}`).set('Cookie', cookieAdmin).send(PAYLOAD_VALIDO)
     expect(res.status).toBe(404)
     const sqls = db.query.mock.calls.map((c) => c[0])
     expect(sqls).toContain('rollback')
@@ -141,33 +144,47 @@ describe('PUT /api/taticas-curadas/:id', () => {
 
   it('admin substitui tatica e papeis', async () => {
     const { app, db } = appWith([
-      ['update taticas_curadas', [{ id: 't1' }]],
+      ['update taticas_curadas', [{ id: UUID_T1 }]],
       ['insert into taticas_papeis', [{ id: 'p2' }]],
     ])
-    const res = await request(app).put('/api/taticas-curadas/t1').set('Cookie', cookieAdmin).send(PAYLOAD_VALIDO)
+    const res = await request(app).put(`/api/taticas-curadas/${UUID_T1}`).set('Cookie', cookieAdmin).send(PAYLOAD_VALIDO)
     expect(res.status).toBe(200)
     const sqls = db.query.mock.calls.map((c) => c[0])
     expect(sqls.some((s) => s.includes('delete from taticas_papeis'))).toBe(true)
     expect(sqls).toContain('commit')
+  })
+
+  it('id nao-uuid: 404 sem tocar no db', async () => {
+    const { app, db } = appWith([])
+    const res = await request(app).put('/api/taticas-curadas/abc').set('Cookie', cookieAdmin).send(PAYLOAD_VALIDO)
+    expect(res.status).toBe(404)
+    expect(db.query).not.toHaveBeenCalled()
   })
 })
 
 describe('DELETE /api/taticas-curadas/:id', () => {
   it('jogador comum: 403', async () => {
     const { app } = appWith([])
-    expect((await request(app).delete('/api/taticas-curadas/t1').set('Cookie', cookieJogador)).status).toBe(403)
+    expect((await request(app).delete(`/api/taticas-curadas/${UUID_T1}`).set('Cookie', cookieJogador)).status).toBe(403)
   })
 
   it('admin apaga', async () => {
-    const { app, db } = appWith([['delete from taticas_curadas', [{ id: 't1' }]]])
-    const res = await request(app).delete('/api/taticas-curadas/t1').set('Cookie', cookieAdmin)
+    const { app, db } = appWith([['delete from taticas_curadas', [{ id: UUID_T1 }]]])
+    const res = await request(app).delete(`/api/taticas-curadas/${UUID_T1}`).set('Cookie', cookieAdmin)
     expect(res.status).toBe(200)
-    expect(db.query.mock.calls[0][1]).toEqual(['t1'])
+    expect(db.query.mock.calls[0][1]).toEqual([UUID_T1])
   })
 
   it('id inexistente: 404', async () => {
     const { app } = appWith([['delete from taticas_curadas', []]])
-    const res = await request(app).delete('/api/taticas-curadas/tx').set('Cookie', cookieAdmin)
+    const res = await request(app).delete(`/api/taticas-curadas/${UUID_TX}`).set('Cookie', cookieAdmin)
     expect(res.status).toBe(404)
+  })
+
+  it('id nao-uuid: 404 sem tocar no db', async () => {
+    const { app, db } = appWith([])
+    const res = await request(app).delete('/api/taticas-curadas/abc').set('Cookie', cookieAdmin)
+    expect(res.status).toBe(404)
+    expect(db.query).not.toHaveBeenCalled()
   })
 })

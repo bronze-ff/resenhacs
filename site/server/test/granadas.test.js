@@ -106,10 +106,13 @@ describe('POST /api/granadas', () => {
   })
 })
 
+const UUID_G1 = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+const UUID_GX = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
+
 describe('PATCH /api/granadas/:id', () => {
   it('admin edita e atualizado_em anda', async () => {
-    const { app, db } = appWith([['update lineups_curados', [{ id: 'g1' }]]])
-    const res = await request(app).patch('/api/granadas/g1').set('Cookie', cookieAdmin)
+    const { app, db } = appWith([['update lineups_curados', [{ id: UUID_G1 }]]])
+    const res = await request(app).patch(`/api/granadas/${UUID_G1}`).set('Cookie', cookieAdmin)
       .send({ map: 'de_mirage', lado: 'CT', tipo: 'flash', titulo: 'Flash CT',
         tecnica: 'normal', botao: 'direito', passos: [], arremessoX: 0.1, arremessoY: 0.1,
         alvoX: 0.2, alvoY: 0.2 })
@@ -119,24 +122,40 @@ describe('PATCH /api/granadas/:id', () => {
 
   it('id inexistente: 404', async () => {
     const { app } = appWith([['update lineups_curados', []]])
-    const res = await request(app).patch('/api/granadas/gx').set('Cookie', cookieAdmin)
+    const res = await request(app).patch(`/api/granadas/${UUID_GX}`).set('Cookie', cookieAdmin)
       .send({ map: 'de_mirage', lado: 'CT', tipo: 'flash', titulo: 'x', tecnica: 'normal',
         botao: 'direito', passos: [], arremessoX: 0.1, arremessoY: 0.1, alvoX: 0.2, alvoY: 0.2 })
     expect(res.status).toBe(404)
+  })
+
+  it('id nao-uuid: 404 sem tocar no db', async () => {
+    const { app, db } = appWith([])
+    const res = await request(app).patch('/api/granadas/abc').set('Cookie', cookieAdmin)
+      .send({ map: 'de_mirage', lado: 'CT', tipo: 'flash', titulo: 'x', tecnica: 'normal',
+        botao: 'direito', passos: [], arremessoX: 0.1, arremessoY: 0.1, alvoX: 0.2, alvoY: 0.2 })
+    expect(res.status).toBe(404)
+    expect(db.query).not.toHaveBeenCalled()
   })
 })
 
 describe('DELETE /api/granadas/:id', () => {
   it('jogador comum: 403', async () => {
     const { app } = appWith([])
-    expect((await request(app).delete('/api/granadas/g1').set('Cookie', cookieJogador)).status).toBe(403)
+    expect((await request(app).delete(`/api/granadas/${UUID_G1}`).set('Cookie', cookieJogador)).status).toBe(403)
   })
 
   it('admin apaga', async () => {
-    const { app, db } = appWith([['delete from lineups_curados', [{ id: 'g1' }]]])
-    const res = await request(app).delete('/api/granadas/g1').set('Cookie', cookieAdmin)
+    const { app, db } = appWith([['delete from lineups_curados', [{ id: UUID_G1 }]]])
+    const res = await request(app).delete(`/api/granadas/${UUID_G1}`).set('Cookie', cookieAdmin)
     expect(res.status).toBe(200)
-    expect(db.query.mock.calls[0][1]).toEqual(['g1'])
+    expect(db.query.mock.calls[0][1]).toEqual([UUID_G1])
+  })
+
+  it('id nao-uuid: 404 sem tocar no db', async () => {
+    const { app, db } = appWith([])
+    const res = await request(app).delete('/api/granadas/abc').set('Cookie', cookieAdmin)
+    expect(res.status).toBe(404)
+    expect(db.query).not.toHaveBeenCalled()
   })
 })
 

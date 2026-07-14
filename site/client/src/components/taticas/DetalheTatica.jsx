@@ -3,15 +3,7 @@ import RadarGranadas from '../granadas/RadarGranadas.jsx'
 import DetalheGranada from '../granadas/DetalheGranada.jsx'
 import { thumbYoutube } from '../../lib/youtube.js'
 import { ROTULO_TIPO_TATICA, ROTULO_ARMAS } from './CardTatica.jsx'
-
-// Mesmos rótulos usados em DetalheGranada.jsx (duplicados de propósito — não são
-// exportados de lá pra não acoplar os dois componentes; qualquer um pode evoluir
-// os rótulos sem quebrar o outro).
-const ROTULO_TECNICA = {
-  normal: 'lançar parado', jumpthrow: 'lançar com salto', walkthrow: 'andando',
-  runthrow: 'correndo', run_jumpthrow: 'correr + saltar',
-}
-const ROTULO_BOTAO = { esquerdo: 'botão esquerdo', direito: 'botão direito', esquerdo_direito: 'os dois botões' }
+import { ROTULO_TECNICA, ROTULO_BOTAO } from '../../lib/rotulos.js'
 
 // Bloco compacto de uma granada linkada a um papel: título + badges técnica/botão
 // + thumb do YouTube, clicável — abre o DetalheGranada por cima (z-[60]).

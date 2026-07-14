@@ -101,6 +101,8 @@ export default function PaginaMapa({ mapa, onTrocarMapa }) {
     recarregar()
   }, [mapa, lado])
 
+  useEffect(() => { setSelecionada(null) }, [mapa, lado])
+
   useEffect(() => {
     setCallouts([])
     import(`../../data/callouts/${mapa}.json`)

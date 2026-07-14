@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { requireAdmin } from '../auth/middleware.js'
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const LADOS = new Set(['T', 'CT'])
 const TIPOS = new Set(['smoke', 'flash', 'he', 'molotov'])
 const TECNICAS = new Set(['normal', 'jumpthrow', 'walkthrow', 'runthrow', 'run_jumpthrow'])
@@ -177,6 +178,7 @@ export function createGranadasRouter({ db, requireAuth }) {
   })
 
   router.patch('/:id', requireAuth, requireAdmin, async (req, res) => {
+    if (!UUID_RE.test(req.params.id)) return res.status(404).json({ erro: 'granada não encontrada' })
     const { erro, valores } = validarCorpo(req.body)
     if (erro) return res.status(400).json({ erro })
     const v = valores
@@ -197,6 +199,7 @@ export function createGranadasRouter({ db, requireAuth }) {
   })
 
   router.delete('/:id', requireAuth, requireAdmin, async (req, res) => {
+    if (!UUID_RE.test(req.params.id)) return res.status(404).json({ erro: 'granada não encontrada' })
     const { rows } = await db.query(
       'delete from lineups_curados where id = $1 returning id',
       [req.params.id],

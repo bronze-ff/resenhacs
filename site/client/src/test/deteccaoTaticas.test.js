@@ -46,8 +46,19 @@ describe('classificarRegiao', () => {
     expect(classificarRegiao(CALLOUTS_INFERNO, 0.55, 0.64)).toBe('MID')
   })
 
-  it('null quando o mapa não tem as 3 regiões (ex.: sem Mid noob)', () => {
-    expect(classificarRegiao(CALLOUTS_SEM_MID, 0.8, 0.66)).toBeNull()
+  it('sem Mid: classifica entre A e B (Mid é opcional)', () => {
+    expect(classificarRegiao(CALLOUTS_SEM_MID, 0.8, 0.66)).toBe('A')
+    expect(classificarRegiao(CALLOUTS_SEM_MID, 0.53, 0.16)).toBe('B')
+  })
+
+  it('null sem A', () => {
+    const semA = CALLOUTS_INFERNO.filter((c) => c.nome !== 'A')
+    expect(classificarRegiao(semA, 0.8, 0.66)).toBeNull()
+  })
+
+  it('null sem B', () => {
+    const semB = CALLOUTS_INFERNO.filter((c) => c.nome !== 'B')
+    expect(classificarRegiao(semB, 0.53, 0.16)).toBeNull()
   })
 
   it('null sem callouts', () => {
