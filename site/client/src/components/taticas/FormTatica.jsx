@@ -178,7 +178,7 @@ export default function FormTatica({ mapa, lado: ladoInicial, inicial = null, on
             <button
               type="button"
               onClick={adicionarPapel}
-              className="min-h-8 rounded border border-borda px-2 py-1 font-mono text-xs uppercase text-texto-fraco hover:text-texto"
+              className="min-h-10 lg:min-h-0 rounded border border-borda px-2 py-1 font-mono text-xs uppercase text-texto-fraco hover:text-texto"
             >+ papel</button>
           </div>
 
@@ -190,7 +190,7 @@ export default function FormTatica({ mapa, lado: ladoInicial, inicial = null, on
                   <button
                     type="button"
                     onClick={() => removerPapel(i)}
-                    className="min-h-8 px-2 py-1 font-mono text-xs uppercase text-perigo hover:brightness-125"
+                    className="min-h-10 lg:min-h-0 px-2 py-1 font-mono text-xs uppercase text-perigo hover:brightness-125"
                   >remover</button>
                 )}
               </div>
@@ -203,7 +203,7 @@ export default function FormTatica({ mapa, lado: ladoInicial, inicial = null, on
                 className="w-full rounded border border-borda bg-superficie px-3 py-2 font-mono text-sm"
               />
 
-              <label className="flex min-h-8 w-fit items-center gap-2 font-mono text-xs uppercase text-texto-fraco">
+              <label className="flex min-h-10 lg:min-h-0 w-fit items-center gap-2 font-mono text-xs uppercase text-texto-fraco">
                 <input
                   type="checkbox"
                   checked={p.obrigatorio}
@@ -223,7 +223,7 @@ export default function FormTatica({ mapa, lado: ladoInicial, inicial = null, on
                     <p className="font-mono text-xs text-texto-fraco">Nenhuma granada cadastrada pra esse lado ainda.</p>
                   )}
                   {granadas?.map((g) => (
-                    <label key={g.id} className="flex min-h-8 items-center gap-2 font-mono text-xs text-texto">
+                    <label key={g.id} className="flex min-h-10 lg:min-h-0 items-center gap-2 font-mono text-xs text-texto">
                       <input
                         type="checkbox"
                         checked={p.granadaIds.includes(g.id)}
