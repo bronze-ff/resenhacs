@@ -24,6 +24,14 @@ function RotaProtegida({ children }) {
   return <Shell>{children}</Shell>
 }
 
+function RotaAdmin({ children }) {
+  const { carregando, jogador } = useAuth()
+  if (carregando) return <p className="p-8 text-texto-fraco">Carregando…</p>
+  if (!jogador) return <Navigate to="/entrar" replace />
+  if (!jogador.isAdmin) return <Navigate to="/" replace />
+  return <Shell>{children}</Shell>
+}
+
 export default function App() {
   return (
     <AuthProvider>
@@ -39,11 +47,11 @@ export default function App() {
           <Route path="/jogadores" element={<RotaProtegida><Jogadores /></RotaProtegida>} />
           <Route path="/jogador/:steamId" element={<RotaProtegida><JogadorPerfil /></RotaProtegida>} />
           <Route path="/comparar" element={<RotaProtegida><Comparar /></RotaProtegida>} />
-          <Route path="/granadas" element={<RotaProtegida><Granadas /></RotaProtegida>} />
-          <Route path="/taticas" element={<RotaProtegida><Taticas /></RotaProtegida>} />
-          <Route path="/perfil" element={<RotaProtegida><Perfil /></RotaProtegida>} />
-          <Route path="/admin" element={<RotaProtegida><Admin /></RotaProtegida>} />
-          <Route path="/partidas-pro" element={<RotaProtegida><PartidasPro /></RotaProtegida>} />
+          <Route path="/granadas" element={<RotaAdmin><Granadas /></RotaAdmin>} />
+          <Route path="/taticas" element={<RotaAdmin><Taticas /></RotaAdmin>} />
+          <Route path="/conta" element={<RotaProtegida><Perfil /></RotaProtegida>} />
+          <Route path="/admin" element={<RotaAdmin><Admin /></RotaAdmin>} />
+          <Route path="/partidas-pro" element={<RotaAdmin><PartidasPro /></RotaAdmin>} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
