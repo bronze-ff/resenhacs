@@ -32,15 +32,15 @@ export default function Jogadores() {
               className="panel-cut flex items-center gap-3 border border-borda bg-superficie p-3 transition-colors hover:border-destaque/50 hover:bg-superficie-alta"
             >
               {j.avatarUrl && (
-                <img src={j.avatarUrl} alt="" className="panel-cut-sm h-8 w-8 border border-borda object-cover" />
+                <img src={j.avatarUrl} alt="" className="panel-cut-sm h-8 w-8 shrink-0 border border-borda object-cover" />
               )}
-              <span className="font-mono text-sm text-texto">{j.nick || j.steamId}</span>
+              <span className="min-w-0 flex-1 truncate font-mono text-sm text-texto">{j.nick || j.steamId}</span>
               {j.isAdmin && (
-                <span className="font-mono text-[10px] uppercase tracking-widest text-destaque">admin</span>
+                <span className="shrink-0 font-mono text-[10px] uppercase tracking-widest text-destaque">admin</span>
               )}
               {ban?.vacBanned && (
                 <span
-                  className="panel-cut-sm border border-perigo/40 bg-perigo/10 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-widest text-perigo"
+                  className="panel-cut-sm shrink-0 border border-perigo/40 bg-perigo/10 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-widest text-perigo"
                   title={`VAC ban — ${ban.numVacBans} conta(s), há ${ban.daysSinceLastBan} dias`}
                 >
                   VAC ban
@@ -48,7 +48,7 @@ export default function Jogadores() {
               )}
               {!ban?.vacBanned && ban?.gameBanned && (
                 <span
-                  className="panel-cut-sm border border-perigo/40 bg-perigo/10 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-widest text-perigo"
+                  className="panel-cut-sm shrink-0 border border-perigo/40 bg-perigo/10 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-widest text-perigo"
                   title={`Game ban (Overwatch/cheat) — ${ban.numGameBans} ban(s)`}
                 >
                   Game ban

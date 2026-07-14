@@ -64,23 +64,23 @@ function CardPartida({ m }) {
   return (
     <Link
       to={`/partida/${m.id}`}
-      className={`panel-cut relative flex items-center justify-between border border-borda bg-superficie p-4 transition-colors hover:border-destaque/50 hover:bg-superficie-alta ${borda}`}
+      className={`panel-cut relative flex items-center justify-between gap-3 border border-borda bg-superficie p-4 transition-colors hover:border-destaque/50 hover:bg-superficie-alta ${borda}`}
     >
-      <div className="flex items-center gap-4">
-        <div className="panel-cut-sm flex h-12 w-12 items-center justify-center border border-borda bg-fundo font-mono text-xs font-bold uppercase text-destaque">
+      <div className="flex min-w-0 flex-1 items-center gap-3 lg:gap-4">
+        <div className="panel-cut-sm flex h-12 w-12 shrink-0 items-center justify-center border border-borda bg-fundo font-mono text-xs font-bold uppercase text-destaque">
           {nomeMapa(m.map).slice(0, 3)}
         </div>
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="font-display font-semibold uppercase tracking-wide text-texto">{nomeMapa(m.map)}</span>
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="truncate font-display font-semibold uppercase tracking-wide text-texto">{nomeMapa(m.map)}</span>
             <span
               title={origemPartida(m.source).title}
-              className="panel-cut-sm border border-borda bg-fundo px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-widest text-texto-fraco"
+              className="panel-cut-sm shrink-0 border border-borda bg-fundo px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-widest text-texto-fraco"
             >
               {origemPartida(m.source).label}
             </span>
           </div>
-          <div className="font-mono text-xs text-texto-fraco">
+          <div className="truncate font-mono text-xs text-texto-fraco">
             {dataHora(m.playedAt)}
             {m.tracked?.length > 0 && (
               <span> · {m.tracked.map((t) => t.nick).join(', ')}</span>
@@ -88,7 +88,9 @@ function CardPartida({ m }) {
           </div>
         </div>
       </div>
-      <Placar m={m} />
+      <div className="shrink-0">
+        <Placar m={m} />
+      </div>
     </Link>
   )
 }
@@ -149,11 +151,11 @@ function Resenhas() {
       <h3 className="mb-2 font-display text-sm font-semibold uppercase tracking-wide text-texto-fraco">
         Resenhas recentes
       </h3>
-      <div className="flex gap-3 overflow-x-auto pb-1">
+      <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-1">
         {(sessoes ?? []).map((s) => (
           <div
             key={s.matchIds[0]}
-            className="panel-cut-sm min-w-[240px] flex-shrink-0 border border-borda bg-superficie p-3"
+            className="panel-cut-sm min-w-[240px] flex-shrink-0 snap-start border border-borda bg-superficie p-3"
           >
             <div className="flex items-center justify-between font-mono text-xs text-texto-fraco">
               <span>{dataHora(s.inicio)}</span>
@@ -220,7 +222,7 @@ export default function Feed() {
         <select
           value={mapa}
           onChange={(e) => setMapa(e.target.value)}
-          className="rounded border border-borda bg-superficie px-2 py-1 font-mono text-xs"
+          className="rounded border border-borda bg-superficie px-2 py-2 font-mono text-xs lg:py-1"
         >
           <option value="">Todos os mapas</option>
           {MAPAS.map((m) => <option key={m} value={m}>{nomeMapa(m)}</option>)}
@@ -230,7 +232,7 @@ export default function Feed() {
             <button
               key={v}
               onClick={() => setResultado(v)}
-              className={`px-2.5 py-1 transition-colors ${resultado === v ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'}`}
+              className={`px-2.5 py-3 transition-colors lg:py-1 ${resultado === v ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'}`}
             >
               {label}
             </button>
@@ -241,7 +243,7 @@ export default function Feed() {
             <button
               key={v}
               onClick={() => setOrigem(v)}
-              className={`px-2.5 py-1 transition-colors ${origem === v ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'}`}
+              className={`px-2.5 py-3 transition-colors lg:py-1 ${origem === v ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'}`}
             >
               {label}
             </button>

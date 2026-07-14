@@ -16,11 +16,11 @@ const LINHAS_STAT = [
 ]
 
 function ColunaJogador({ p, ladoOposto }) {
-  if (!p) return <div className="flex-1" />
+  if (!p) return <div className="min-w-0 flex-1" />
   return (
-    <div className="flex flex-1 flex-col items-center gap-1 text-center">
-      {p.avatarUrl && <img src={p.avatarUrl} alt="" className="panel-cut h-14 w-14 border border-borda object-cover" />}
-      <Link to={`/jogador/${p.steamId}`} className="font-display font-semibold uppercase text-texto hover:text-destaque">
+    <div className="flex min-w-0 flex-1 flex-col items-center gap-1 text-center">
+      {p.avatarUrl && <img src={p.avatarUrl} alt="" className="panel-cut h-14 w-14 shrink-0 border border-borda object-cover" />}
+      <Link to={`/jogador/${p.steamId}`} className="w-full truncate font-display font-semibold uppercase text-texto hover:text-destaque">
         {p.nick || p.steamId}
       </Link>
     </div>
@@ -125,7 +125,7 @@ export default function Comparar() {
             )}
           </section>
 
-          <div className="grid gap-6 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <section>
               <h3 className="mb-3 font-display text-lg font-semibold uppercase tracking-wide text-texto">
                 Evolução — {dados.a.nick || dados.a.steamId}

@@ -101,9 +101,9 @@ export default function Ranking() {
                 <th className="px-2 py-2 text-right">Partidas</th>
                 <th className="px-2 py-2 text-right">Winrate</th>
                 <th className="px-2 py-2 text-right">K/D</th>
-                <th className="px-2 py-2 text-right">HS%</th>
-                <th className="px-2 py-2 text-right">ACEs</th>
-                <th className="px-2 py-2 text-right">Clutches</th>
+                <th className="hidden px-2 py-2 text-right sm:table-cell">HS%</th>
+                <th className="hidden px-2 py-2 text-right sm:table-cell">ACEs</th>
+                <th className="hidden px-2 py-2 text-right sm:table-cell">Clutches</th>
                 <th className="px-3 py-2 text-right">Rating</th>
               </tr>
             </thead>
@@ -123,9 +123,9 @@ export default function Ranking() {
                   <td className="px-2 py-2 text-right tabular-nums">{r.partidas}</td>
                   <td className={`px-2 py-2 text-right tabular-nums ${r.winrate >= 50 ? 'text-sucesso' : 'text-perigo'}`}>{r.winrate}%</td>
                   <td className="px-2 py-2 text-right tabular-nums">{r.kd}</td>
-                  <td className="px-2 py-2 text-right tabular-nums">{r.hsPct}%</td>
-                  <td className="px-2 py-2 text-right tabular-nums">{r.aces}</td>
-                  <td className="px-2 py-2 text-right tabular-nums" title="Clutches vencidos / tentativas (1vX)">
+                  <td className="hidden px-2 py-2 text-right tabular-nums sm:table-cell">{r.hsPct}%</td>
+                  <td className="hidden px-2 py-2 text-right tabular-nums sm:table-cell">{r.aces}</td>
+                  <td className="hidden px-2 py-2 text-right tabular-nums sm:table-cell" title="Clutches vencidos / tentativas (1vX)">
                     {r.clutchWins}/{r.clutchAttempts}
                     {r.clutchAttempts > 0 && (
                       <span className={`ml-1.5 text-xs ${r.clutchPct >= 50 ? 'text-sucesso' : 'text-texto-fraco'}`}>{r.clutchPct}%</span>
