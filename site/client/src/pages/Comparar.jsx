@@ -117,6 +117,19 @@ export default function Comparar() {
 
       {erro && <p className="font-mono text-sm text-perigo">{erro}</p>}
 
+      {/* Estado vazio: sem os dois jogadores escolhidos, `dados` é null — em vez de
+          deixar a página em branco, mostra uma instrução clara. */}
+      {!dados && !erro && (
+        <Card className="flex flex-col items-center justify-center gap-2 px-6 py-16 text-center">
+          <span className="font-display text-lg font-semibold uppercase tracking-wide text-texto-fraco">
+            Escolha dois jogadores
+          </span>
+          <p className="max-w-sm font-mono text-xs text-texto-fraco/80">
+            Selecione o Jogador A e o Jogador B acima pra ver o confronto direto — rating, stats lado a lado e histórico entre eles.
+          </p>
+        </Card>
+      )}
+
       {dados && (
         <>
           <Card className="p-4 sm:p-5">
