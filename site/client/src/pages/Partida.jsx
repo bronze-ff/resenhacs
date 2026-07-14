@@ -96,7 +96,7 @@ function Scoreboard({ time, jogadores, podePromover, onPromover, promovendo }) {
               <tr key={p.steamId} className="border-t border-borda transition-colors hover:bg-superficie-alta">
                 <td className="px-3 py-2">
                   {p.isTracked ? (
-                    <Link to={`/jogador/${p.steamId}`} className="hover:text-destaque">
+                    <Link to={`/jogador/${p.steamId}`} className="cursor-pointer transition-colors hover:text-destaque">
                       {conteudoNome}
                     </Link>
                   ) : (
@@ -465,11 +465,21 @@ function TabelaUtilitariaTime({ time, jogadores }) {
             return (
               <tr key={p.steamId} className="border-t border-borda transition-colors hover:bg-superficie-alta">
                 <td className="px-3 py-2.5">
-                  <span className="flex items-center gap-2 font-mono text-texto">
-                    <Avatar p={p} />
-                    {p.nick || p.steamId}
-                    {p.isTracked && <span className="text-[9px] uppercase tracking-widest text-destaque">grupo</span>}
-                  </span>
+                  {p.isTracked ? (
+                    <Link
+                      to={`/jogador/${p.steamId}`}
+                      className="flex items-center gap-2 font-mono text-texto cursor-pointer transition-colors hover:text-destaque"
+                    >
+                      <Avatar p={p} />
+                      {p.nick || p.steamId}
+                      <span className="text-[9px] uppercase tracking-widest text-destaque">grupo</span>
+                    </Link>
+                  ) : (
+                    <span className="flex items-center gap-2 font-mono text-texto">
+                      <Avatar p={p} />
+                      {p.nick || p.steamId}
+                    </span>
+                  )}
                 </td>
                 <td className="px-2 py-2.5 text-right font-mono text-xs tabular-nums text-texto-fraco">
                   {u.smokesThrown ?? 0}/{u.flashesThrown ?? 0}/{u.heThrown ?? 0}/{u.molotovsThrown ?? 0}
