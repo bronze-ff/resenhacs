@@ -126,7 +126,17 @@ function Scoreboard({ time, jogadores, podePromover, onPromover, promovendo }) {
 // Popover local (nome + descrição) pra sugerir um round como Tática — abre ao clicar num
 // round sem highlight na linha do tempo. Fica pendente de aprovação (Task 10/14 cuidam do
 // fluxo de aprovação); aqui só dispara o POST e mostra confirmação.
-function SugerirTatica({ matchId, map, roundNumber, onFechar }) {
+// `variante` escolhe o posicionamento: "absoluta" (desktop, ancorado no round clicado —
+// como era antes do M3) ou "bloco" (mobile, abaixo da faixa inteira de rounds).
+function SugerirTatica({ matchId, map, roundNumber, onFechar, variante = 'bloco' }) {
+  const classesSucesso =
+    variante === 'absoluta'
+      ? 'panel-cut absolute left-0 top-full z-10 mt-1 w-56 border border-sucesso/40 bg-superficie p-3 font-mono text-xs text-sucesso'
+      : 'panel-cut mt-2 w-full border border-sucesso/40 bg-superficie p-3 font-mono text-xs text-sucesso sm:w-64'
+  const classesForm =
+    variante === 'absoluta'
+      ? 'panel-cut absolute left-0 top-full z-10 mt-1 w-64 space-y-2 border border-borda bg-superficie p-3 text-left'
+      : 'panel-cut mt-2 w-full space-y-2 border border-borda bg-superficie p-3 text-left sm:w-64'
   const [nome, setNome] = useState('')
   const [descricao, setDescricao] = useState('')
   const [enviando, setEnviando] = useState(false)
@@ -156,7 +166,7 @@ function SugerirTatica({ matchId, map, roundNumber, onFechar }) {
 
   if (sucesso) {
     return (
-      <div className="panel-cut mt-2 w-full border border-sucesso/40 bg-superficie p-3 font-mono text-xs text-sucesso sm:w-64">
+      <div className={classesSucesso}>
         Tática sugerida! Aguardando aprovação.
       </div>
     )
@@ -166,7 +176,7 @@ function SugerirTatica({ matchId, map, roundNumber, onFechar }) {
     <form
       onSubmit={enviar}
       onClick={(e) => e.stopPropagation()}
-      className="panel-cut mt-2 w-full space-y-2 border border-borda bg-superficie p-3 text-left sm:w-64"
+      className={classesForm}
     >
       <p className="font-mono text-[10px] uppercase tracking-widest text-texto-fraco">Sugerir tática · round {roundNumber}</p>
       <input
@@ -214,7 +224,7 @@ function LinhaDoTempoRounds({ rounds, highlights, timeDoGrupo, onClicarHighlight
   }
   return (
     <div className="panel-cut border border-borda bg-superficie p-3">
-      <div className="flex gap-1 overflow-x-auto pb-1">
+      <div className="flex gap-1 overflow-x-auto pb-1 lg:flex-wrap lg:overflow-visible">
         {rounds.map((r) => {
           const hs = porRound.get(r.roundNumber) ?? []
           const vencedorGrupo = timeDoGrupo ? r.winnerTeam === timeDoGrupo : null
@@ -232,22 +242,37 @@ function LinhaDoTempoRounds({ rounds, highlights, timeDoGrupo, onClicarHighlight
               {conteudo}
             </button>
           ) : (
-            <button
-              key={r.roundNumber}
-              className="flex-shrink-0"
-              title={`${r.winReason ?? ''} — clique pra sugerir como tática`.trim()}
-              onClick={() => setRoundAberto((v) => (v === r.roundNumber ? null : r.roundNumber))}
-            >
-              {conteudo}
-            </button>
+            <div key={r.roundNumber} className="relative flex-shrink-0">
+              <button
+                className="flex-shrink-0"
+                title={`${r.winReason ?? ''} — clique pra sugerir como tática`.trim()}
+                onClick={() => setRoundAberto((v) => (v === r.roundNumber ? null : r.roundNumber))}
+              >
+                {conteudo}
+              </button>
+              {/* Desktop (lg+): popover absolute ancorado nesse round, como era antes do M3 —
+                  só funciona sem clipping porque a faixa volta a overflow-visible no desktop
+                  (ver comentário abaixo do map). */}
+              {roundAberto === r.roundNumber && (
+                <div className="hidden lg:block">
+                  <SugerirTatica matchId={matchId} map={map} roundNumber={r.roundNumber} onFechar={() => setRoundAberto(null)} variante="absoluta" />
+                </div>
+              )}
+            </div>
           )
         })}
       </div>
-      {/* Popover fora da faixa com overflow-x-auto (que agora rola os rounds no mobile) —
-          se ficasse dentro, overflow-x forçaria overflow-y a clipar (regra CSS: eixo
-          "visible" vira "auto" quando o outro eixo não é visible), escondendo o form. */}
+      {/* Mobile (abaixo de lg): a faixa rola horizontalmente (overflow-x-auto), então um
+          popover absolute dentro dela seria clipado (regra CSS: eixo "visible" vira "auto"
+          quando o outro eixo não é visible) — por isso aqui ele é renderizado em bloco, fora
+          da faixa, abaixo dela inteira. No desktop (lg+) a faixa quebra linha (flex-wrap)
+          com overflow visível, então o popover volta a ser absolute/ancorado no round
+          clicado (variante "absoluta" acima, dentro do map). São dois mounts do mesmo
+          componente — só um fica visível por vez conforme o breakpoint. */}
       {roundAberto != null && (
-        <SugerirTatica matchId={matchId} map={map} roundNumber={roundAberto} onFechar={() => setRoundAberto(null)} />
+        <div className="lg:hidden">
+          <SugerirTatica matchId={matchId} map={map} roundNumber={roundAberto} onFechar={() => setRoundAberto(null)} variante="bloco" />
+        </div>
       )}
       <p className="mt-2 font-mono text-[11px] text-texto-fraco">
         Verde/vermelho = round vencido/perdido pelo grupo. ● = teve highlight nesse round (clique pra assistir). Rounds sem
@@ -414,7 +439,13 @@ function TabelaUtilitariaTime({ time, jogadores }) {
       <table className="w-full text-sm">
         <thead>
           <tr className={`border-b ${borda} bg-superficie text-left`}>
-            <th className="px-3 py-2" colSpan={7}>
+            {/* Abaixo de 640px "Cegou aliado"/"Flash assist" somem (hidden sm:table-cell),
+                então a tabela tem só 5 colunas — a super-linha precisa de um colSpan
+                diferente por breakpoint, senão descasa da grade real. */}
+            <th className="px-3 py-2 sm:hidden" colSpan={5}>
+              <span className={`font-display text-xs font-bold uppercase tracking-widest ${cor}`}>Time {time}</span>
+            </th>
+            <th className="hidden px-3 py-2 sm:table-cell" colSpan={7}>
               <span className={`font-display text-xs font-bold uppercase tracking-widest ${cor}`}>Time {time}</span>
             </th>
           </tr>

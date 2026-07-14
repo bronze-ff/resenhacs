@@ -386,7 +386,7 @@ export default function ReplayViewer({ replay, seek }) {
           max={Math.max(0, total - 1)}
           value={frameAtual}
           onChange={(e) => { setFrameAtual(Number(e.target.value)); setTocando(false) }}
-          className="min-h-10 min-w-[140px] flex-1 accent-[color:var(--color-destaque)] lg:min-h-0"
+          className="min-h-10 min-w-[140px] flex-1 accent-[color:var(--color-destaque)] lg:min-h-0 lg:min-w-0"
         />
         <span className="w-24 text-right font-mono text-xs tabular-nums text-texto-fraco">
           {(frameAtual / replay.tickRate).toFixed(1)}s / {dur.toFixed(1)}s
