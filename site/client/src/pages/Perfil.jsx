@@ -1,10 +1,27 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Card, SectionHeader, Badge } from '../components/ui'
+import { useAuth } from '../auth/AuthContext.jsx'
 
 export default function Perfil() {
+  const { jogador } = useAuth()
   const [matchAuthCode, setMatchAuthCode] = useState('')
   const [lastShareCode, setLastShareCode] = useState('')
   const [mensagem, setMensagem] = useState(null)
+  const [rankingPublico, setRankingPublico] = useState(false)
+
+  useEffect(() => {
+    if (jogador) setRankingPublico(Boolean(jogador.rankingPublico))
+  }, [jogador])
+
+  async function alternarRankingPublico() {
+    const novo = !rankingPublico
+    setRankingPublico(novo)
+    await fetch('/api/players/me/ranking-publico', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ publico: novo }),
+    })
+  }
 
   async function salvar(e) {
     e.preventDefault()
@@ -74,6 +91,26 @@ export default function Perfil() {
             </button>
           </form>
           {mensagem && <p className="mt-3 font-mono text-sm text-texto-fraco">{mensagem}</p>}
+        </Card>
+      </section>
+
+      <section className="space-y-3">
+        <h3 className="font-display text-sm font-semibold uppercase tracking-wide text-texto-fraco">
+          Ranking público
+        </h3>
+        <Card className="flex items-center justify-between gap-3 p-4 sm:p-5">
+          <div>
+            <p className="font-display text-sm font-semibold uppercase tracking-wide text-texto">Aparecer no ranking público</p>
+            <p className="font-mono text-xs text-texto-fraco">Expõe seu nick e stats agregadas fora do seu grupo, num ranking global de jogadores.</p>
+          </div>
+          <button
+            onClick={alternarRankingPublico}
+            className={`panel-cut-sm border px-3 py-1.5 font-mono text-xs uppercase tracking-wide ${
+              rankingPublico ? 'border-destaque bg-destaque/10 text-destaque' : 'border-borda text-texto-fraco'
+            }`}
+          >
+            {rankingPublico ? 'Ativado' : 'Desativado'}
+          </button>
         </Card>
       </section>
 

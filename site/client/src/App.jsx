@@ -18,6 +18,9 @@ import PartidasPro from './pages/PartidasPro.jsx'
 import ReplayDemo from './pages/ReplayDemo.jsx'
 import Onboarding from './pages/Onboarding.jsx'
 import AceitarConvite from './pages/AceitarConvite.jsx'
+import Times from './pages/Times.jsx'
+import CompararTimes from './pages/CompararTimes.jsx'
+import RankingPublico from './pages/RankingPublico.jsx'
 
 function RotaProtegida({ children }) {
   const { carregando, jogador } = useAuth()
@@ -53,6 +56,9 @@ export default function App() {
           <Route path="/jogadores" element={<RotaProtegida><Jogadores /></RotaProtegida>} />
           <Route path="/jogador/:steamId" element={<RotaProtegida><JogadorPerfil /></RotaProtegida>} />
           <Route path="/comparar" element={<RotaProtegida><Comparar /></RotaProtegida>} />
+          <Route path="/times" element={<RotaProtegida><Times /></RotaProtegida>} />
+          <Route path="/times/comparar" element={<RotaProtegida><CompararTimes /></RotaProtegida>} />
+          <Route path="/ranking-publico" element={<RotaProtegida><RankingPublico /></RotaProtegida>} />
           <Route path="/granadas" element={<RotaAdmin><Granadas /></RotaAdmin>} />
           <Route path="/taticas" element={<RotaAdmin><Taticas /></RotaAdmin>} />
           <Route path="/conta" element={<RotaProtegida><Perfil /></RotaProtegida>} />

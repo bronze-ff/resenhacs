@@ -8,10 +8,12 @@ const CHAVE_SIDEBAR_COLAPSADA = 'resenha_sidebar_colapsada'
 const ITENS = [
   { to: '/', end: true, label: 'Partidas', num: '01', icone: 'partidas' },
   { to: '/ranking', label: 'Ranking', num: '02', icone: 'ranking' },
-  { to: '/enviar-demo', label: 'Enviar demo', num: '03', icone: 'enviarDemo' },
-  { to: '/jogadores', label: 'Jogadores', num: '04', icone: 'jogadores' },
-  { to: '/comparar', label: 'Comparar', num: '05', icone: 'comparar' },
-  { to: '/conta', label: 'Minha conta', num: '06', icone: 'perfil' },
+  { to: '/ranking-publico', label: 'Ranking público', num: '03', icone: 'ranking' },
+  { to: '/enviar-demo', label: 'Enviar demo', num: '04', icone: 'enviarDemo' },
+  { to: '/jogadores', label: 'Jogadores', num: '05', icone: 'jogadores' },
+  { to: '/comparar', label: 'Comparar', num: '06', icone: 'comparar' },
+  { to: '/times', label: 'Times', num: '07', icone: 'jogadores' },
+  { to: '/conta', label: 'Minha conta', num: '08', icone: 'perfil' },
 ]
 
 // Itens da barra inferior mobile (estilo app da FACEIT): 4 rotas principais
