@@ -46,7 +46,7 @@ function BlocoGranada({ granada, onAbrir }) {
 // às granadas daquele papel + descrição + granadas linkadas clicáveis).
 // Reusa RadarGranadas em modo leitura (mesmo padrão de PaginaMapa.jsx) e abre o
 // DetalheGranada existente por cima quando uma granada é clicada.
-export default function DetalheTatica({ tatica, onFechar }) {
+export default function DetalheTatica({ tatica, onFechar, acoesAdmin = null }) {
   const papeis = useMemo(
     () => [...(tatica.papeis ?? [])].sort((a, b) => a.ordem - b.ordem),
     [tatica],
@@ -166,6 +166,8 @@ export default function DetalheTatica({ tatica, onFechar }) {
                 )}
               </div>
             </div>
+
+            {acoesAdmin}
           </div>
         </div>
       </div>

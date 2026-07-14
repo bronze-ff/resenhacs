@@ -1,15 +1,19 @@
 import { useEffect, useMemo, useState } from 'react'
 import { nomeMapa } from '../../lib/format.js'
+import { useAuth } from '../../auth/AuthContext.jsx'
 import { MAPAS_POOL } from '../granadas/ExplorarMapas.jsx'
 import CardTatica, { ROTULO_ARMAS, ROTULO_TIPO_TATICA } from './CardTatica.jsx'
 import CardTaticaReplay from './CardTaticaReplay.jsx'
 import DetalheTatica from './DetalheTatica.jsx'
+import FormTatica from './FormTatica.jsx'
 
 const TIPOS = [['todas', 'Todas'], ...Object.entries(ROTULO_TIPO_TATICA)]
 const LOCAIS = [['todas', 'Todas'], ['A', 'A'], ['B', 'B'], ['MID', 'MID']]
 const ARMAS = [['todas', 'Todas'], ...Object.entries(ROTULO_ARMAS)]
 
 export default function PaginaMapaTaticas({ mapa, onTrocarMapa }) {
+  const { jogador } = useAuth()
+  const isAdmin = !!jogador?.isAdmin
   const [lado, setLado] = useState('T')
   const [tipo, setTipo] = useState('todas')
   const [local, setLocal] = useState('todas')
@@ -17,13 +21,18 @@ export default function PaginaMapaTaticas({ mapa, onTrocarMapa }) {
   const [taticas, setTaticas] = useState(null)
   const [antigas, setAntigas] = useState(null)
   const [selecionada, setSelecionada] = useState(null)
+  const [formAberto, setFormAberto] = useState(null) // null | {} (nova) | {inicial} (edição)
 
-  useEffect(() => {
+  function recarregar() {
     setTaticas(null)
     fetch(`/api/taticas-curadas?map=${mapa}&lado=${lado}`)
       .then((r) => r.json())
       .then(setTaticas)
       .catch(() => setTaticas([]))
+  }
+
+  useEffect(() => {
+    recarregar()
   }, [mapa, lado])
 
   useEffect(() => {
@@ -39,6 +48,7 @@ export default function PaginaMapaTaticas({ mapa, onTrocarMapa }) {
     setLocal('todas')
     setArmas('todas')
     setSelecionada(null)
+    setFormAberto(null)
   }, [mapa, lado])
 
   const visiveis = useMemo(() => (taticas ?? []).filter((t) =>
@@ -129,6 +139,15 @@ export default function PaginaMapaTaticas({ mapa, onTrocarMapa }) {
               ))}
             </div>
           </div>
+
+          {isAdmin && (
+            <button
+              onClick={() => setFormAberto({})}
+              className="panel-cut-sm min-h-10 w-full border border-destaque bg-destaque px-3 py-2 font-display text-sm font-semibold uppercase text-fundo lg:min-h-0"
+            >
+              Adicionar tática
+            </button>
+          )}
         </div>
       </aside>
 
@@ -167,8 +186,40 @@ export default function PaginaMapaTaticas({ mapa, onTrocarMapa }) {
         </div>
       </div>
 
+      {formAberto && (
+        <FormTatica
+          mapa={mapa}
+          lado={lado}
+          inicial={formAberto.inicial}
+          onSalvo={() => { setFormAberto(null); recarregar() }}
+          onCancelar={() => setFormAberto(null)}
+        />
+      )}
+
       {selecionada && (
-        <DetalheTatica tatica={selecionada} onFechar={() => setSelecionada(null)} />
+        <DetalheTatica
+          tatica={selecionada}
+          onFechar={() => setSelecionada(null)}
+          acoesAdmin={isAdmin && (
+            <div className="mt-4 flex justify-end gap-2 border-t border-borda pt-3">
+              <button
+                onClick={() => {
+                  setFormAberto({ inicial: selecionada })
+                  setSelecionada(null)
+                }}
+                className="min-h-10 px-3 py-1.5 font-mono text-xs uppercase text-texto-fraco hover:text-texto lg:min-h-0"
+              >Editar</button>
+              <button
+                onClick={async () => {
+                  if (!window.confirm(`Excluir "${selecionada.titulo}"?`)) return
+                  const res = await fetch(`/api/taticas-curadas/${selecionada.id}`, { method: 'DELETE' }).catch(() => null)
+                  if (res?.ok) { setSelecionada(null); recarregar() }
+                }}
+                className="min-h-10 px-3 py-1.5 font-mono text-xs uppercase text-perigo hover:brightness-125 lg:min-h-0"
+              >Excluir</button>
+            </div>
+          )}
+        />
       )}
     </div>
   )
