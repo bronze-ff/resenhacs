@@ -13,7 +13,7 @@ const config = {
   coletorDir: '/fake/coletor',
   pythonBin: '/fake/python',
 }
-const cookie = `resenha_token=${signToken({ steamId: '76561198000000009', isAdmin: false }, config.jwtSecret)}`
+const cookie = `resenha_token=${signToken({ steamId: '76561198000000009', isSuperAdmin: false }, config.jwtSecret)}`
 
 const demoFalso = path.join(os.tmpdir(), 'resenha-test.dem')
 fs.writeFileSync(demoFalso, 'conteudo falso de demo')

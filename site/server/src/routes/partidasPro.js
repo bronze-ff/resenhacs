@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
 import { Router } from 'express'
-import { requireAdmin } from '../auth/middleware.js'
+import { requireSuperAdmin } from '../auth/middleware.js'
 import { presignUpload } from '../r2.js'
 
 const EXTENSOES_ACEITAS = ['.rar', '.dem']
@@ -8,7 +8,7 @@ const EXTENSOES_ACEITAS = ['.rar', '.dem']
 export function createPartidasProRouter({ db, requireAuth, r2Client, r2Bucket }) {
   const router = Router()
 
-  router.get('/', requireAuth, requireAdmin, async (req, res) => {
+  router.get('/', requireAuth, requireSuperAdmin, async (req, res) => {
     const { rows } = await db.query(
       'select id, hltv_url, status, match_id, match_ids, erro, adicionado_por, adicionado_em from partidas_pro_fila order by adicionado_em desc',
     )
@@ -22,7 +22,7 @@ export function createPartidasProRouter({ db, requireAuth, r2Client, r2Bucket })
     )
   })
 
-  router.post('/', requireAuth, requireAdmin, async (req, res) => {
+  router.post('/', requireAuth, requireSuperAdmin, async (req, res) => {
     const hltvUrl = String(req.body?.hltvUrl ?? '').trim()
     if (!/^https:\/\/.+/.test(hltvUrl)) {
       return res.status(400).json({ erro: 'hltvUrl deve ser um link válido' })
@@ -34,7 +34,7 @@ export function createPartidasProRouter({ db, requireAuth, r2Client, r2Bucket })
     res.status(201).json({ id: rows[0].id, status: 'pendente' })
   })
 
-  router.post('/upload-url', requireAuth, requireAdmin, async (req, res) => {
+  router.post('/upload-url', requireAuth, requireSuperAdmin, async (req, res) => {
     const filename = String(req.body?.filename ?? '').trim()
     const extensao = filename.slice(filename.lastIndexOf('.')).toLowerCase()
     if (!filename || !EXTENSOES_ACEITAS.includes(extensao)) {
@@ -50,7 +50,7 @@ export function createPartidasProRouter({ db, requireAuth, r2Client, r2Bucket })
     res.json({ id: rows[0].id, uploadUrl, key })
   })
 
-  router.patch('/:id/retry', requireAuth, requireAdmin, async (req, res) => {
+  router.patch('/:id/retry', requireAuth, requireSuperAdmin, async (req, res) => {
     const { rows } = await db.query(
       "update partidas_pro_fila set status = 'pendente', erro = null where id = $1 and status = 'falhou' returning id",
       [req.params.id],

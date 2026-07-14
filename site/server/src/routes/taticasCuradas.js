@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { requireAdmin } from '../auth/middleware.js'
+import { requireSuperAdmin } from '../auth/middleware.js'
 import { paraCamel } from './granadas.js'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -152,7 +152,7 @@ export function createTaticasCuradasRouter({ db, requireAuth }) {
     res.json(rows.map((r) => ({ map: r.map, total: Number(r.total) })))
   })
 
-  router.post('/', requireAuth, requireAdmin, async (req, res) => {
+  router.post('/', requireAuth, requireSuperAdmin, async (req, res) => {
     const { erro, valores } = validarCorpo(req.body)
     if (erro) return res.status(400).json({ erro })
     const v = valores
@@ -188,7 +188,7 @@ export function createTaticasCuradasRouter({ db, requireAuth }) {
     }
   })
 
-  router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
+  router.put('/:id', requireAuth, requireSuperAdmin, async (req, res) => {
     if (!UUID_RE.test(req.params.id)) return res.status(404).json({ erro: 'tática não encontrada' })
     const { erro, valores } = validarCorpo(req.body)
     if (erro) return res.status(400).json({ erro })
@@ -224,7 +224,7 @@ export function createTaticasCuradasRouter({ db, requireAuth }) {
     }
   })
 
-  router.delete('/:id', requireAuth, requireAdmin, async (req, res) => {
+  router.delete('/:id', requireAuth, requireSuperAdmin, async (req, res) => {
     if (!UUID_RE.test(req.params.id)) return res.status(404).json({ erro: 'tática não encontrada' })
     const { rows } = await db.query(
       'delete from taticas_curadas where id = $1 returning id',

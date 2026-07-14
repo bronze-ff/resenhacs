@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { requireAdmin } from '../auth/middleware.js'
+import { requireSuperAdmin } from '../auth/middleware.js'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const LADOS = new Set(['T', 'CT'])
@@ -61,7 +61,7 @@ function validarCorpo(body) {
 export function createGranadasRouter({ db, requireAuth }) {
   const router = Router()
 
-  router.get('/', requireAuth, requireAdmin, async (req, res) => {
+  router.get('/', requireAuth, requireSuperAdmin, async (req, res) => {
     const cond = []
     const params = []
     const { map, lado, tipo } = req.query
@@ -87,7 +87,7 @@ export function createGranadasRouter({ db, requireAuth }) {
     res.json(rows.map(paraCamel))
   })
 
-  router.get('/contagem', requireAuth, requireAdmin, async (req, res) => {
+  router.get('/contagem', requireAuth, requireSuperAdmin, async (req, res) => {
     const { rows } = await db.query(
       'select map, tipo, count(*) as total from lineups_curados group by map, tipo',
     )
@@ -96,7 +96,7 @@ export function createGranadasRouter({ db, requireAuth }) {
 
   // Agrega a tabela auto-extraída (lineups) por célula de queda (grade de 1/40) pra
   // mostrar ao admin as granadas mais usadas de verdade nas demos (grupo e pro).
-  router.get('/sugestoes', requireAuth, requireAdmin, async (req, res) => {
+  router.get('/sugestoes', requireAuth, requireSuperAdmin, async (req, res) => {
     const map = String(req.query?.map ?? '')
     if (!MAP_RE.test(map)) return res.status(400).json({ erro: 'map é obrigatório' })
     const { rows } = await db.query(
@@ -122,7 +122,7 @@ export function createGranadasRouter({ db, requireAuth }) {
   // Rounds com utilitária agrupada por (match, round, lado) — matéria-prima da
   // detecção automática de táticas (client agrupa/classifica). Só devolve grupos
   // com >=3 granadas pra reduzir payload (heurística v1 exige >=3 pra virar candidato).
-  router.get('/rounds-utilitaria', requireAuth, requireAdmin, async (req, res) => {
+  router.get('/rounds-utilitaria', requireAuth, requireSuperAdmin, async (req, res) => {
     const map = String(req.query?.map ?? '')
     if (!MAP_RE.test(map)) return res.status(400).json({ erro: 'map é obrigatório' })
     const { rows } = await db.query(
@@ -160,7 +160,7 @@ export function createGranadasRouter({ db, requireAuth }) {
     res.json(resultado)
   })
 
-  router.post('/', requireAuth, requireAdmin, async (req, res) => {
+  router.post('/', requireAuth, requireSuperAdmin, async (req, res) => {
     const { erro, valores } = validarCorpo(req.body)
     if (erro) return res.status(400).json({ erro })
     const v = valores
@@ -177,7 +177,7 @@ export function createGranadasRouter({ db, requireAuth }) {
     res.status(201).json({ id: rows[0].id })
   })
 
-  router.patch('/:id', requireAuth, requireAdmin, async (req, res) => {
+  router.patch('/:id', requireAuth, requireSuperAdmin, async (req, res) => {
     if (!UUID_RE.test(req.params.id)) return res.status(404).json({ erro: 'granada não encontrada' })
     const { erro, valores } = validarCorpo(req.body)
     if (erro) return res.status(400).json({ erro })
@@ -198,7 +198,7 @@ export function createGranadasRouter({ db, requireAuth }) {
     res.json({ ok: true })
   })
 
-  router.delete('/:id', requireAuth, requireAdmin, async (req, res) => {
+  router.delete('/:id', requireAuth, requireSuperAdmin, async (req, res) => {
     if (!UUID_RE.test(req.params.id)) return res.status(404).json({ erro: 'granada não encontrada' })
     const { rows } = await db.query(
       'delete from lineups_curados where id = $1 returning id',

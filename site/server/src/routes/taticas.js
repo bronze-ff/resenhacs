@@ -1,10 +1,10 @@
 import { Router } from 'express'
-import { requireAdmin } from '../auth/middleware.js'
+import { requireSuperAdmin } from '../auth/middleware.js'
 
 export function createTaticasRouter({ db, requireAuth }) {
   const router = Router()
 
-  router.get('/', requireAuth, requireAdmin, async (req, res) => {
+  router.get('/', requireAuth, requireSuperAdmin, async (req, res) => {
     const cond = ["status = 'aprovada'"]
     const params = []
     const { map, status } = req.query
@@ -52,7 +52,7 @@ export function createTaticasRouter({ db, requireAuth }) {
     res.status(201).json({ id: rows[0].id, status: 'sugerida' })
   })
 
-  router.patch('/:id', requireAuth, requireAdmin, async (req, res) => {
+  router.patch('/:id', requireAuth, requireSuperAdmin, async (req, res) => {
     const status = req.body?.status
     if (status !== 'aprovada' && status !== 'rejeitada') {
       return res.status(400).json({ erro: 'status deve ser aprovada ou rejeitada' })
