@@ -308,7 +308,9 @@ export default function Feed() {
   useEffect(() => {
     fetch('/api/players')
       .then((res) => (res.ok ? res.json() : []))
-      .then(setJogadores)
+      // guarda: só array vira lista; resposta inesperada (objeto/erro) não pode
+      // derrubar a home no jogadores.map do filtro de MVP.
+      .then((data) => setJogadores(Array.isArray(data) ? data : []))
       .catch(() => setJogadores([]))
   }, [])
 
