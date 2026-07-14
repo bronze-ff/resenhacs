@@ -5,6 +5,7 @@ import { MAPAS_POOL } from '../granadas/ExplorarMapas.jsx'
 import CardTatica, { ROTULO_ARMAS, ROTULO_TIPO_TATICA } from './CardTatica.jsx'
 import CardTaticaReplay from './CardTaticaReplay.jsx'
 import DetalheTatica from './DetalheTatica.jsx'
+import DetectarTaticas from './DetectarTaticas.jsx'
 import FormTatica from './FormTatica.jsx'
 
 const TIPOS = [['todas', 'Todas'], ...Object.entries(ROTULO_TIPO_TATICA)]
@@ -22,6 +23,8 @@ export default function PaginaMapaTaticas({ mapa, onTrocarMapa }) {
   const [antigas, setAntigas] = useState(null)
   const [selecionada, setSelecionada] = useState(null)
   const [formAberto, setFormAberto] = useState(null) // null | {} (nova) | {inicial} (edição)
+  const [callouts, setCallouts] = useState([])
+  const [detectarAberto, setDetectarAberto] = useState(false)
 
   function recarregar() {
     setTaticas(null)
@@ -50,6 +53,15 @@ export default function PaginaMapaTaticas({ mapa, onTrocarMapa }) {
     setSelecionada(null)
     setFormAberto(null)
   }, [mapa, lado])
+
+  // Callouts do mapa: só usados pra nomear granadas/papéis na detecção automática
+  // (admin), mas carregados sempre — igual PaginaMapa.jsx (Granadas) faz.
+  useEffect(() => {
+    setCallouts([])
+    import(`../../data/callouts/${mapa}.json`)
+      .then((m) => setCallouts(m.default ?? []))
+      .catch(() => setCallouts([]))
+  }, [mapa])
 
   const visiveis = useMemo(() => (taticas ?? []).filter((t) =>
     (tipo === 'todas' || t.tipo === tipo)
@@ -148,6 +160,15 @@ export default function PaginaMapaTaticas({ mapa, onTrocarMapa }) {
               Adicionar tática
             </button>
           )}
+
+          {isAdmin && (
+            <button
+              onClick={() => setDetectarAberto(true)}
+              className="min-h-10 w-full rounded border border-borda px-3 py-1.5 font-mono text-xs uppercase text-texto-fraco hover:text-texto lg:min-h-0"
+            >
+              Detectar táticas
+            </button>
+          )}
         </div>
       </aside>
 
@@ -193,6 +214,15 @@ export default function PaginaMapaTaticas({ mapa, onTrocarMapa }) {
           inicial={formAberto.inicial}
           onSalvo={() => { setFormAberto(null); recarregar() }}
           onCancelar={() => setFormAberto(null)}
+        />
+      )}
+
+      {detectarAberto && (
+        <DetectarTaticas
+          mapa={mapa}
+          callouts={callouts}
+          onFechar={() => setDetectarAberto(false)}
+          onCriada={recarregar}
         />
       )}
 
