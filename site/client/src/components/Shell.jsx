@@ -127,7 +127,10 @@ export default function Shell({ children }) {
           )}
         </nav>
       </aside>
-      <div className="flex-1">
+      {/* min-w-0: sem isso, conteúdo com largura intrínseca maior que a tela (ex.: o
+          carrossel de Resenhas) impede o flex-item de encolher, alarga o body além do
+          viewport e o iOS reduz o zoom da página INTEIRA pra caber (tudo fica miúdo). */}
+      <div className="min-w-0 flex-1">
         <header className="flex items-center justify-between gap-3 border-b border-borda bg-superficie/60 px-4 py-3 backdrop-blur lg:justify-end lg:px-6">
           {/* Sem hambúrguer aqui: a barra inferior mobile cobre as rotas
               principais e o botão "Mais" abre este mesmo drawer, então um
