@@ -89,6 +89,18 @@ _NAO_ARMA_DE_FOGO = {
 }
 _ARMAS_UTILITARIAS = {"hegrenade", "molotov", "inferno", "incgrenade"}
 
+# Durações oficiais de utilitária no CS2 (pesquisado 2026-07-14, NÃO é o valor de
+# CS:GO): fumaça dura 18s no total (nuvem plena por ~16s + ~2s formando — swap.gg
+# "How Long Does Smoke Last in CS2?", bo3.gg "How long do grenades in CS2?");
+# molotov/incendiário queima 7s no chão (`inferno_flame_lifetime` default = 7,
+# totalcsgo.com/commands/infernoflamelifetime — o valor real usado pelo próprio jogo,
+# não estimativa de guia). Usados como TETO de duração (nunca o fim do round) quando o
+# evento de expiração não casa com o de início, ou casa com uma duração absurda — ver
+# _casar_fim_de_granada.
+DURACAO_SMOKE_S = 18
+DURACAO_FOGO_S = 7
+_FOLGA_DURACAO_S = 2  # tolerância acima do teto antes de descartar o evento casado como errado
+
 # Classificação de economia por time (soma dos 5 no fim do freezetime) — esquema
 # HLTV/awpy ("Taken from hltv economy tab"), validado via pesquisa web (2026-07-11):
 # eco < $5.000 | forçado $5.000-9.999 | semi-compra $10.000-19.999 | full >= $20.000.
@@ -151,6 +163,41 @@ def _casar_arremesso_com_detonacao(fires, detonates, janela_ticks=600):
         if melhor is not None:
             casados[(d["tick"], d["thrower"])] = melhor
     return casados
+
+
+def _casar_fim_de_granada(inicios, fins, cap_ticks, folga_ticks):
+    """[tickEnd por início] — casa cada início de granada com duração (smoke/molotov,
+    `inicios`: [{tick, entityid}]) com o PRÓXIMO evento de expiração do MESMO entityid
+    (`fins`: [{tick, entityid}]), na mesma ordem de `inicios`.
+
+    Bug real (achado pelo usuário via print, 2026-07-14): o código antigo casava por
+    um dict simples `entityid -> tick` construído numa passada só sobre TODOS os
+    eventos de fim da demo inteira — como demoparser2/Source reciclam entityid ao
+    longo da partida, a última ocorrência daquele id no dict podia ser de uma granada
+    de outro round, produzindo tickEnd absurdo (67.9s vistos no Replay 2D pra uma
+    smoke que dura ~18s de verdade). Aqui casamos com o fim mais próximo ESTRITAMENTE
+    DEPOIS do início (bisect no fim por entityid, todos ordenados) — e, quando não há
+    fim casável OU a duração resultante estoura `cap_ticks + folga_ticks` (sinal de
+    casamento ainda errado), caímos pro teto `cap_ticks` (duração oficial do CS2) a
+    partir do início. NUNCA usa o fim do round como fallback."""
+    import bisect
+
+    fins_por_entidade = {}
+    for f in fins:
+        fins_por_entidade.setdefault(f.get("entityid"), []).append(int(f["tick"]))
+    for lista in fins_por_entidade.values():
+        lista.sort()
+
+    saida = []
+    for ini in inicios:
+        t0 = int(ini["tick"])
+        candidatos = fins_por_entidade.get(ini.get("entityid"), [])
+        pos = bisect.bisect_right(candidatos, t0)
+        t1 = candidatos[pos] if pos < len(candidatos) else None
+        if t1 is None or t1 - t0 > cap_ticks + folga_ticks:
+            t1 = t0 + cap_ticks
+        saida.append(t1)
+    return saida
 
 
 # Descoberta empírica (mesmo demo real, 2026-07-11): player_hurt NÃO distingue essas
@@ -983,13 +1030,21 @@ def extract_replay(path, target_hz=8, demo_tick_rate=64):
         "throwerLado": None,
     }
 
-    # Smokes e fogo: casa detonate/startburn com expired pelo entityid (duração real).
+    # Smokes e fogo: casa detonate/startburn com expired pelo entityid (duração real),
+    # com teto na duração oficial do CS2 quando não casa ou casa errado — ver
+    # _casar_fim_de_granada (correção do bug de tickEnd absurdo, 2026-07-14).
     def granadas_com_duracao(ev_ini, ev_fim, dur_padrao_s):
-        fins = {}
-        for r in evento(ev_fim):
-            fins[r.get("entityid")] = int(r["tick"])
-
         regs_ini = evento(ev_ini)
+        regs_fim = evento(ev_fim)
+        cap_ticks = round(dur_padrao_s * 64)
+        folga_ticks = round(_FOLGA_DURACAO_S * 64)
+        tick_ends = _casar_fim_de_granada(
+            [{"tick": int(r["tick"]), "entityid": r.get("entityid")} for r in regs_ini],
+            [{"tick": int(r["tick"]), "entityid": r.get("entityid")} for r in regs_fim],
+            cap_ticks,
+            folga_ticks,
+        )
+
         detonates = []
         for r in regs_ini:
             sid = _sid(r.get("user_steamid"))
@@ -998,18 +1053,17 @@ def extract_replay(path, target_hz=8, demo_tick_rate=64):
         arremessos = _dados_arremesso(ev_ini, detonates)
 
         saida = []
-        for r in regs_ini:
+        for r, t1 in zip(regs_ini, tick_ends):
             x, y = _xy(r)
             t0 = int(r["tick"])
-            t1 = fins.get(r.get("entityid"), t0 + int(dur_padrao_s * 64))
             sid = _sid(r.get("user_steamid"))
             item = {"round": round_do_tick(t0), "x": x, "y": y, "tickStart": t0, "tickEnd": t1}
             item.update(arremessos.get((t0, sid), _SEM_ARREMESSO))
             saida.append(item)
         return saida
 
-    smokes = granadas_com_duracao("smokegrenade_detonate", "smokegrenade_expired", 18)
-    fires = granadas_com_duracao("inferno_startburn", "inferno_expire", 7)
+    smokes = granadas_com_duracao("smokegrenade_detonate", "smokegrenade_expired", DURACAO_SMOKE_S)
+    fires = granadas_com_duracao("inferno_startburn", "inferno_expire", DURACAO_FOGO_S)
 
     def granadas_instantaneas(nome):
         regs = evento(nome)

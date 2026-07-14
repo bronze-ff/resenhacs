@@ -138,6 +138,75 @@ def test_sem_fire_correspondente_fica_de_fora():
     assert parse._casar_arremesso_com_detonacao([], detonates) == {}
 
 
+def test_casar_fim_de_granada_usa_evento_de_expiracao_quando_casavel():
+    # Caso normal: início e fim do MESMO entityid, duração dentro do teto oficial
+    # (18s = 1152 ticks pra smoke) -> usa o tick real do evento de expiração.
+    inicios = [{"tick": 1000, "entityid": 42}]
+    fins = [{"tick": 1000 + 1100, "entityid": 42}]  # ~17.2s, plausível pra smoke
+    cap_ticks = round(18 * 64)
+    folga_ticks = round(2 * 64)
+    assert parse._casar_fim_de_granada(inicios, fins, cap_ticks, folga_ticks) == [1000 + 1100]
+
+
+def test_casar_fim_de_granada_sem_evento_de_fim_usa_teto_oficial():
+    # Sem expired/expire casável pro entityid -> cap na duração oficial do CS2, nunca
+    # no fim do round.
+    inicios = [{"tick": 5000, "entityid": 7}]
+    fins = []
+    cap_ticks = round(18 * 64)
+    folga_ticks = round(2 * 64)
+    assert parse._casar_fim_de_granada(inicios, fins, cap_ticks, folga_ticks) == [5000 + cap_ticks]
+
+
+def test_casar_fim_de_granada_duracao_absurda_cai_no_teto():
+    # Bug real (achado pelo usuário via print, 2026-07-14): entityid reciclado ao longo
+    # da demo casava com o evento de expiração de OUTRA granada (de outro round,
+    # muito mais tarde), gerando um tickEnd absurdo (67.9s vistos no Replay 2D pra uma
+    # smoke que dura ~18s). Duração > cap + folga -> descarta o casado e usa o teto.
+    inicios = [{"tick": 1000, "entityid": 42}]
+    fins = [{"tick": 1000 + 4346, "entityid": 42}]  # ~67.9s — entityid reciclado de outro round
+    cap_ticks = round(18 * 64)
+    folga_ticks = round(2 * 64)
+    assert parse._casar_fim_de_granada(inicios, fins, cap_ticks, folga_ticks) == [1000 + cap_ticks]
+
+
+def test_casar_fim_de_granada_ignora_fim_anterior_ao_inicio_e_pega_o_proximo():
+    # entityid reciclado: existe um fim ANTES do início (de uma granada anterior que já
+    # usou esse mesmo id) e o fim de verdade depois — deve pegar o de depois, nunca o
+    # de antes (senão duração negativa).
+    inicios = [{"tick": 2000, "entityid": 9}]
+    fins = [
+        {"tick": 1500, "entityid": 9},  # fim de uma granada anterior (mesmo id reciclado)
+        {"tick": 2000 + 1000, "entityid": 9},  # fim de verdade desta granada
+    ]
+    cap_ticks = round(18 * 64)
+    folga_ticks = round(2 * 64)
+    assert parse._casar_fim_de_granada(inicios, fins, cap_ticks, folga_ticks) == [2000 + 1000]
+
+
+def test_casar_fim_de_granada_entityid_diferente_nao_casa():
+    inicios = [{"tick": 1000, "entityid": 1}]
+    fins = [{"tick": 1500, "entityid": 2}]  # outro entityid -> não casa
+    cap_ticks = round(7 * 64)
+    folga_ticks = round(2 * 64)
+    assert parse._casar_fim_de_granada(inicios, fins, cap_ticks, folga_ticks) == [1000 + cap_ticks]
+
+
+def test_casar_fim_de_granada_preserva_ordem_e_multiplas_granadas():
+    inicios = [
+        {"tick": 1000, "entityid": 1},
+        {"tick": 1200, "entityid": 2},
+    ]
+    fins = [
+        {"tick": 1200 + 400, "entityid": 2},
+        {"tick": 1000 + 1150, "entityid": 1},
+    ]
+    cap_ticks = round(18 * 64)
+    folga_ticks = round(2 * 64)
+    saida = parse._casar_fim_de_granada(inicios, fins, cap_ticks, folga_ticks)
+    assert saida == [1000 + 1150, 1200 + 400]
+
+
 def test_lado_de_team_num_converte_2_e_3_e_devolve_none_pro_resto():
     # Convenção CS2 (valve_demo_2): team_num 2=T, 3=CT — usada no snapshot batched de
     # weapon_fire (snap_fire) pra gravar o lado real do arremessador em `lineups.lado`.
