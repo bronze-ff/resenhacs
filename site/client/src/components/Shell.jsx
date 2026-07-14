@@ -10,9 +10,7 @@ const ITENS = [
   { to: '/enviar-demo', label: 'Enviar demo', num: '03', icone: 'enviarDemo' },
   { to: '/jogadores', label: 'Jogadores', num: '04', icone: 'jogadores' },
   { to: '/comparar', label: 'Comparar', num: '05', icone: 'comparar' },
-  { to: '/granadas', label: 'Granadas', num: '06', icone: 'granadas' },
-  { to: '/taticas', label: 'Táticas', num: '07', icone: 'taticas' },
-  { to: '/perfil', label: 'Meu perfil', num: '08', icone: 'perfil' },
+  { to: '/conta', label: 'Minha conta', num: '06', icone: 'perfil' },
 ]
 
 // Itens da barra inferior mobile (estilo app da FACEIT): 4 rotas principais
@@ -106,9 +104,12 @@ const NAV_ICONES = {
   ),
 }
 
-const NAV_INFERIOR = [
+const NAV_INFERIOR_BASE = [
   { to: '/', end: true, label: 'Partidas', icone: 'partidas' },
   { to: '/ranking', label: 'Ranking', icone: 'ranking' },
+]
+
+const NAV_INFERIOR_ADMIN = [
   { to: '/granadas', label: 'Granadas', icone: 'granadas' },
   { to: '/taticas', label: 'Táticas', icone: 'taticas' },
 ]
@@ -201,6 +202,28 @@ export default function Shell({ children }) {
           {jogador?.isAdmin && (
             <>
               <NavLink
+                to="/granadas"
+                className={classeItem}
+                onClick={fecharMenu}
+                title={colapsada ? 'Granadas' : undefined}
+                aria-label={colapsada ? 'Granadas' : undefined}
+              >
+                <span className="shrink-0">{NAV_ICONES.granadas}</span>
+                <span className={`font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque ${colapsada ? 'lg:hidden' : ''}`}>07</span>
+                <span className={colapsada ? 'lg:hidden' : ''}>Granadas</span>
+              </NavLink>
+              <NavLink
+                to="/taticas"
+                className={classeItem}
+                onClick={fecharMenu}
+                title={colapsada ? 'Táticas' : undefined}
+                aria-label={colapsada ? 'Táticas' : undefined}
+              >
+                <span className="shrink-0">{NAV_ICONES.taticas}</span>
+                <span className={`font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque ${colapsada ? 'lg:hidden' : ''}`}>08</span>
+                <span className={colapsada ? 'lg:hidden' : ''}>Táticas</span>
+              </NavLink>
+              <NavLink
                 to="/admin"
                 className={classeItem}
                 onClick={fecharMenu}
@@ -270,7 +293,7 @@ export default function Shell({ children }) {
         </header>
         <main className="px-4 pb-20 pt-4 lg:px-6 lg:py-6">{children}</main>
       </div>
-      <BarraInferior menuAberto={menuAberto} onAbrirMenu={() => setMenuAberto(true)} />
+      <BarraInferior menuAberto={menuAberto} onAbrirMenu={() => setMenuAberto(true)} isAdmin={jogador?.isAdmin} />
     </div>
   )
 }
@@ -278,8 +301,11 @@ export default function Shell({ children }) {
 // Barra de navegação inferior mobile (estilo app da FACEIT): fica sempre
 // visível em telas pequenas (lg:hidden), abaixo do overlay (z-30) e do
 // drawer (z-40) pra não competir visualmente quando o menu completo abre.
-function BarraInferior({ menuAberto, onAbrirMenu }) {
+function BarraInferior({ menuAberto, onAbrirMenu, isAdmin }) {
   const location = useLocation()
+  // Granadas/Táticas só entram na barra mobile pra admin — o grid tem que
+  // ganhar/perder coluna junto, senão sobra espaço vazio ou "Mais" some.
+  const itens = isAdmin ? [...NAV_INFERIOR_BASE, ...NAV_INFERIOR_ADMIN] : NAV_INFERIOR_BASE
 
   function itemNavClasse({ isActive }) {
     return `flex h-14 flex-col items-center justify-center gap-1 text-[10px] font-mono uppercase tracking-wide transition-colors ${
@@ -288,19 +314,20 @@ function BarraInferior({ menuAberto, onAbrirMenu }) {
   }
 
   const maisAtivo = menuAberto
-  // "Mais" também deve acender quando a rota atual não é nenhuma das 4
-  // principais (ex.: /jogadores, /comparar, /perfil, /admin) — senão nenhum
+  // "Mais" também deve acender quando a rota atual não é nenhum dos itens
+  // principais (ex.: /jogadores, /comparar, /conta, /admin) — senão nenhum
   // ícone fica ativo nessas telas.
-  const rotaCobertaPelasPrincipais = NAV_INFERIOR.some((item) =>
+  const rotaCobertaPelasPrincipais = itens.some((item) =>
     item.end ? location.pathname === item.to : location.pathname.startsWith(item.to)
   )
 
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-5 border-t border-borda bg-superficie pb-[env(safe-area-inset-bottom)] lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-20 grid border-t border-borda bg-superficie pb-[env(safe-area-inset-bottom)] lg:hidden"
+      style={{ gridTemplateColumns: `repeat(${itens.length + 1}, minmax(0, 1fr))` }}
       aria-label="Navegação principal"
     >
-      {NAV_INFERIOR.map((item) => (
+      {itens.map((item) => (
         <NavLink key={item.to} to={item.to} end={item.end} className={itemNavClasse}>
           {NAV_ICONES[item.icone]}
           {item.label}
