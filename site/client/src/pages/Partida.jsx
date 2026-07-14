@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useSearchParams, Link } from 'react-router-dom'
 import { nomeMapa, dataHora, origemPartida, corRating, TIPO_COMPRA } from '../lib/format.js'
-import { MapIcon } from '../components/ui'
+import { MapIcon, SectionHeader } from '../components/ui'
 import ReplayViewer from '../components/ReplayViewer.jsx'
 import MapaCalor from '../components/MapaCalor.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
@@ -58,6 +58,39 @@ function SecaoReplay({ replayUrl, seek, onSelecionarPonto }) {
   )
 }
 
+// Avatar do jogador (mesmo padrão do Ranking: panel-cut-sm + border + object-cover) com
+// fallback pra quem nunca logou no site (avatarUrl null — comum, ~metade do placar de uma
+// partida costuma ser adversário sem conta) — mostra a inicial do nick tingida na cor do
+// time em vez de sumir/quebrar o layout. Compartilhado entre Scoreboard, Economia e Utilitária.
+function Avatar({ p }) {
+  const titulo = p?.nick || p?.steamId || '?'
+  if (p?.avatarUrl) {
+    return (
+      <img
+        src={p.avatarUrl}
+        alt=""
+        title={titulo}
+        className="panel-cut-sm h-6 w-6 flex-shrink-0 border border-borda object-cover"
+      />
+    )
+  }
+  const inicial = titulo.charAt(0).toUpperCase()
+  const cor =
+    p?.team === 'A'
+      ? 'border-time-a/50 bg-time-a/10 text-time-a'
+      : p?.team === 'B'
+        ? 'border-time-b/50 bg-time-b/10 text-time-b'
+        : 'border-borda bg-superficie-alta text-texto-fraco'
+  return (
+    <span
+      title={titulo}
+      className={`panel-cut-sm flex h-6 w-6 flex-shrink-0 items-center justify-center border font-display text-[10px] font-bold ${cor}`}
+    >
+      {inicial}
+    </span>
+  )
+}
+
 function Scoreboard({ time, jogadores, podePromover, onPromover, promovendo }) {
   return (
     <div className="panel-cut overflow-x-auto border border-borda">
@@ -80,6 +113,7 @@ function Scoreboard({ time, jogadores, podePromover, onPromover, promovendo }) {
             const hs = p.kills ? Math.round((p.headshotKills / p.kills) * 100) : 0
             const conteudoNome = (
               <span className="flex items-center gap-2 font-mono">
+                <Avatar p={p} />
                 {p.nick || p.steamId}
                 {p.isTracked && <span className="text-[10px] uppercase tracking-widest text-destaque">grupo</span>}
                 {!p.isTracked && podePromover && (
@@ -280,39 +314,6 @@ function LinhaDoTempoRounds({ rounds, highlights, timeDoGrupo, onClicarHighlight
         highlight: clique pra sugerir como tática.
       </p>
     </div>
-  )
-}
-
-// Avatar do jogador (mesmo padrão do Ranking: panel-cut-sm + border + object-cover) com
-// fallback pra quem nunca logou no site (avatarUrl null — comum, ~metade do placar de uma
-// partida costuma ser adversário sem conta) — mostra a inicial do nick tingida na cor do
-// time em vez de sumir/quebrar o layout. Compartilhado entre Economia e Utilitária.
-function Avatar({ p }) {
-  const titulo = p?.nick || p?.steamId || '?'
-  if (p?.avatarUrl) {
-    return (
-      <img
-        src={p.avatarUrl}
-        alt=""
-        title={titulo}
-        className="panel-cut-sm h-6 w-6 flex-shrink-0 border border-borda object-cover"
-      />
-    )
-  }
-  const inicial = titulo.charAt(0).toUpperCase()
-  const cor =
-    p?.team === 'A'
-      ? 'border-time-a/50 bg-time-a/10 text-time-a'
-      : p?.team === 'B'
-        ? 'border-time-b/50 bg-time-b/10 text-time-b'
-        : 'border-borda bg-superficie-alta text-texto-fraco'
-  return (
-    <span
-      title={titulo}
-      className={`panel-cut-sm flex h-6 w-6 flex-shrink-0 items-center justify-center border font-display text-[10px] font-bold ${cor}`}
-    >
-      {inicial}
-    </span>
   )
 }
 
@@ -740,8 +741,17 @@ export default function Partida() {
         <Scoreboard time="B" jogadores={timeB} podePromover={jogador?.isAdmin} onPromover={promover} promovendo={promovendo} />
       </div>
 
+      <section ref={replayRef}>
+        <SectionHeader titulo="Replay 2D" />
+        <SecaoReplay
+          replayUrl={m.replayUrl}
+          seek={seek}
+          onSelecionarPonto={({ round, frame }) => irParaMomento(round, frame)}
+        />
+      </section>
+
       <section>
-        <h3 className="mb-2 font-display text-lg font-semibold uppercase tracking-wide text-texto">Linha do tempo dos rounds</h3>
+        <SectionHeader titulo="Linha do tempo dos rounds" />
         <LinhaDoTempoRounds
           rounds={m.rounds}
           highlights={m.highlights}
@@ -753,30 +763,9 @@ export default function Partida() {
         />
       </section>
 
-      {m.economia?.length > 0 && (
-        <section>
-          <h3 className="mb-2 font-display text-lg font-semibold uppercase tracking-wide text-texto">Economia</h3>
-          <LinhaDoTempoEconomia economia={m.economia} timeDoGrupo={timeDoGrupo} timeA={timeA} timeB={timeB} />
-        </section>
-      )}
-
-      <section>
-        <h3 className="mb-2 font-display text-lg font-semibold uppercase tracking-wide text-texto">Utilitária</h3>
-        <TabelaUtilitaria timeA={timeA} timeB={timeB} />
-      </section>
-
-      <section ref={replayRef}>
-        <h3 className="mb-2 font-display text-lg font-semibold uppercase tracking-wide text-texto">Replay 2D</h3>
-        <SecaoReplay
-          replayUrl={m.replayUrl}
-          seek={seek}
-          onSelecionarPonto={({ round, frame }) => irParaMomento(round, frame)}
-        />
-      </section>
-
       {m.highlights.length > 0 && (
         <section>
-          <h3 className="mb-2 font-display text-lg font-semibold uppercase tracking-wide text-texto">Highlights</h3>
+          <SectionHeader titulo="Highlights" />
           <div className="flex flex-wrap gap-2">
             {m.highlights.map((h) => {
               const podeAssistir = h.frame != null && m.replayUrl
@@ -807,8 +796,20 @@ export default function Partida() {
         </section>
       )}
 
+      {m.economia?.length > 0 && (
+        <section>
+          <SectionHeader titulo="Economia" />
+          <LinhaDoTempoEconomia economia={m.economia} timeDoGrupo={timeDoGrupo} timeA={timeA} timeB={timeB} />
+        </section>
+      )}
+
       <section>
-        <h3 className="mb-2 font-display text-lg font-semibold uppercase tracking-wide text-texto">Clipes</h3>
+        <SectionHeader titulo="Utilitária" />
+        <TabelaUtilitaria timeA={timeA} timeB={timeB} />
+      </section>
+
+      <section>
+        <SectionHeader titulo="Clipes" />
         <div className="mb-3 space-y-2">
           {m.clips.length === 0 && <p className="font-mono text-sm text-texto-fraco">Nenhum clipe anexado ainda.</p>}
           {m.clips.map((c) => (
