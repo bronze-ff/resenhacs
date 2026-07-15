@@ -444,6 +444,7 @@ function Scoreboard({ time, jogadores, matchId, podePromover, onPromover, promov
             <th className="hidden cursor-help px-2 py-2 text-right underline decoration-dotted underline-offset-2 sm:table-cell" title="Assists — dano/flash que ajudou a matar sem ser o abate final">A</th>
             <th className="hidden cursor-help px-2 py-2 text-right underline decoration-dotted underline-offset-2 sm:table-cell" title="Average Damage per Round — dano médio causado por round (contando também rounds sem kill)">ADR</th>
             <th className="hidden cursor-help px-2 py-2 text-right underline decoration-dotted underline-offset-2 sm:table-cell" title="% dos abates que foram headshot">HS%</th>
+            <th className="hidden cursor-help px-2 py-2 text-right underline decoration-dotted underline-offset-2 sm:table-cell" title="KAST — % dos rounds em que ele teve kill, assist, sobreviveu ou foi vingado (trade)">KAST</th>
             <th className="cursor-help px-3 py-2 text-right underline decoration-dotted underline-offset-2" title="Aproximação do HLTV Rating 1.0: combina kills/round, sobrevivência/round e multi-kills (2K/3K/4K/5K) num único número — acima de 1.00 é acima da média">Rating</th>
           </tr>
         </thead>
@@ -484,13 +485,14 @@ function Scoreboard({ time, jogadores, matchId, podePromover, onPromover, promov
                   <td className="hidden px-2 py-2 text-right tabular-nums sm:table-cell">{p.assists}</td>
                   <td className="hidden px-2 py-2 text-right tabular-nums sm:table-cell">{adr}</td>
                   <td className="hidden px-2 py-2 text-right tabular-nums sm:table-cell">{hs}%</td>
+                  <td className="hidden px-2 py-2 text-right tabular-nums sm:table-cell">{p.kastPct != null ? `${p.kastPct}%` : '–'}</td>
                   <td className={`px-3 py-2 text-right font-semibold tabular-nums ${corRating(p.rating)}`}>
                     {p.rating?.toFixed(2) ?? '–'}
                   </td>
                 </tr>
                 {aberto && (
                   <tr className="border-t border-borda/60 bg-fundo/40">
-                    <td colSpan={8}>
+                    <td colSpan={9}>
                       <ArmasDoJogador weapons={p.weapons} onAbrirDetalhe={() => setDetalheAberto(p)} />
                     </td>
                   </tr>

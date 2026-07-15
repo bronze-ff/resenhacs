@@ -130,7 +130,7 @@ export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Cli
     const [players, rounds, highlights, clips, econ, weapons] = await Promise.all([
       db.query(
         `select mp.steam_id64, mp.nick, mp.team, mp.kills, mp.deaths, mp.assists, mp.headshot_kills,
-                mp.damage, mp.rounds_played, mp.rating, mp.won, mp.is_tracked, mp.team_kills,
+                mp.damage, mp.rounds_played, mp.rating, mp.kast_pct, mp.won, mp.is_tracked, mp.team_kills,
                 mp.he_damage, mp.molotov_damage, mp.smokes_thrown, mp.flashes_thrown,
                 mp.he_thrown, mp.molotovs_thrown, mp.enemies_flashed, mp.teammates_flashed,
                 mp.enemy_flash_duration, mp.teammate_flash_duration,
@@ -211,6 +211,7 @@ export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Cli
         damage: p.damage,
         roundsPlayed: p.rounds_played,
         rating: p.rating === null ? null : Number(p.rating),
+        kastPct: p.kast_pct != null ? Number(p.kast_pct) : null,
         won: p.won,
         isTracked: p.is_tracked,
         weapons: armasPorJogador.get(p.steam_id64) ?? [],
