@@ -63,14 +63,14 @@ export default function CompararTimes() {
         <>
           <Card className="p-4 sm:p-5">
             <div className="flex items-center justify-between gap-3">
-              <div className="text-center">
-                <p className="font-display text-lg font-bold uppercase text-texto">{dados.a.nome}</p>
-                <p className="font-mono text-xs text-texto-fraco">{dados.a.grupoNome}</p>
+              <div className="min-w-0 flex-1 text-center">
+                <p className="truncate font-display text-lg font-bold uppercase text-texto">{dados.a.nome}</p>
+                <p className="truncate font-mono text-xs text-texto-fraco">{dados.a.grupoNome}</p>
               </div>
-              <span className="font-display text-xs uppercase tracking-widest text-texto-fraco">vs</span>
-              <div className="text-center">
-                <p className="font-display text-lg font-bold uppercase text-texto">{dados.b.nome}</p>
-                <p className="font-mono text-xs text-texto-fraco">{dados.b.grupoNome}</p>
+              <span className="shrink-0 font-display text-xs uppercase tracking-widest text-texto-fraco">vs</span>
+              <div className="min-w-0 flex-1 text-center">
+                <p className="truncate font-display text-lg font-bold uppercase text-texto">{dados.b.nome}</p>
+                <p className="truncate font-mono text-xs text-texto-fraco">{dados.b.grupoNome}</p>
               </div>
             </div>
             <div className="mt-4 divide-y divide-borda border-t border-borda">
@@ -89,7 +89,7 @@ export default function CompararTimes() {
             {dados.confronto.partidasJuntos === 0 ? (
               <p className="font-mono text-sm text-texto-fraco">Esses times nunca se enfrentaram ainda.</p>
             ) : (
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <StatTile rotulo="Partidas" valor={dados.confronto.partidasJuntos} />
                 <StatTile rotulo={`${dados.a.nome} venceu`} valor={dados.confronto.aVenceu} />
                 <StatTile rotulo={`${dados.b.nome} venceu`} valor={dados.confronto.bVenceu} />

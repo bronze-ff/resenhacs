@@ -73,8 +73,13 @@ export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Cli
        left join lateral (
          -- jsonb (não json): o GROUP BY m.id, mvp.mvp exige operador de igualdade,
          -- que o tipo json não tem — com json o Postgres rejeita a query inteira.
-         select jsonb_build_object('steamId', mp3.steam_id64, 'nick', mp3.nick, 'rating', mp3.rating) as mvp
+         select jsonb_build_object(
+           'steamId', mp3.steam_id64, 'nick', mp3.nick, 'rating', mp3.rating,
+           'avatarUrl', coalesce(p3.avatar_url, sa3.avatar_url)
+         ) as mvp
          from match_players mp3
+         left join players p3 on p3.steam_id64 = mp3.steam_id64
+         left join steam_avatares sa3 on sa3.steam_id64 = mp3.steam_id64
          where mp3.match_id = m.id and mp3.is_tracked
          order by mp3.rating desc nulls last, mp3.kills desc
          limit 1

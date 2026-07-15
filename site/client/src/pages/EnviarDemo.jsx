@@ -60,14 +60,22 @@ export default function EnviarDemo() {
     }
   }
 
+  const PASSOS = [
+    { titulo: 'Envie o .dem', feito: true },
+    { titulo: 'Fila de processamento', feito: resultado },
+    { titulo: 'Parseado pelo Coletor (~30min)', feito: false },
+    { titulo: 'Aparece no Feed', feito: false },
+  ]
+
   return (
-    <div className="max-w-lg space-y-4">
+    <div className="max-w-3xl space-y-4">
       <SectionHeader titulo="Enviar demo" />
       <p className="font-mono text-sm leading-relaxed text-texto-fraco">
         Baixe o .dem em CS2 → Assistir → Suas Partidas (ou do Faceit/GC) e envie aqui.
         O processamento roda a cada ~30 minutos — a Partida aparece no Feed quando terminar.
       </p>
 
+      <div className="grid gap-4 lg:grid-cols-[1fr_auto]">
       <Card className="p-4 sm:p-5">
         <form onSubmit={enviar} className="space-y-4">
           <label
@@ -103,7 +111,7 @@ export default function EnviarDemo() {
               value={shareCode}
               onChange={(e) => setShareCode(e.target.value)}
               placeholder="CSGO-xxxxx-xxxxx-xxxxx-xxxxx-xxxxx"
-              className="w-full rounded border border-borda bg-superficie px-3 py-2 font-mono text-sm"
+              className="panel-cut-sm min-h-10 w-full border border-borda bg-superficie px-3 py-2 font-mono text-sm lg:min-h-0"
             />
           </div>
           <div>
@@ -115,7 +123,7 @@ export default function EnviarDemo() {
               type="datetime-local"
               value={playedAt}
               onChange={(e) => setPlayedAt(e.target.value)}
-              className="w-full rounded border border-borda bg-superficie px-3 py-2 font-mono text-sm"
+              className="panel-cut-sm min-h-10 w-full border border-borda bg-superficie px-3 py-2 font-mono text-sm lg:min-h-0"
             />
           </div>
           <button
@@ -134,6 +142,25 @@ export default function EnviarDemo() {
           </p>
         )}
       </Card>
+
+      <Card className="h-fit w-full p-4 sm:p-5 lg:w-60">
+        <p className="mb-3 font-mono text-xs uppercase tracking-wide text-texto-fraco">O que acontece depois</p>
+        <ol className="space-y-3">
+          {PASSOS.map((p, i) => (
+            <li key={p.titulo} className="flex items-start gap-2.5">
+              <span
+                className={`panel-cut-sm mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center border font-mono text-[10px] font-bold ${
+                  p.feito ? 'border-destaque bg-destaque/10 text-destaque' : 'border-borda text-texto-fraco'
+                }`}
+              >
+                {i + 1}
+              </span>
+              <span className={`font-mono text-xs leading-snug ${p.feito ? 'text-texto' : 'text-texto-fraco'}`}>{p.titulo}</span>
+            </li>
+          ))}
+        </ol>
+      </Card>
+      </div>
     </div>
   )
 }

@@ -31,7 +31,7 @@ function CabecalhoJogador({ p, alinhamento }) {
   return (
     <Link
       to={`/jogador/${p.steamId}`}
-      className={`flex min-w-0 flex-1 flex-col items-center gap-2 rounded transition-colors duration-200 hover:text-destaque sm:flex-row ${alinhamento === 'direita' ? 'sm:flex-row-reverse sm:text-right' : 'sm:text-left'}`}
+      className={`flex min-w-0 flex-1 flex-col items-center gap-2 transition-colors duration-200 hover:text-destaque sm:flex-row ${alinhamento === 'direita' ? 'sm:flex-row-reverse sm:text-right' : 'sm:text-left'}`}
     >
       {p.avatarUrl ? (
         <img src={p.avatarUrl} alt="" className="panel-cut-sm h-16 w-16 shrink-0 border border-borda object-cover sm:h-20 sm:w-20" />

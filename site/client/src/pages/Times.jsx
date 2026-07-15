@@ -38,7 +38,7 @@ function FormTime({ jogadoresDoGrupo, onCriado }) {
           value={nome}
           onChange={(e) => setNome(e.target.value)}
           placeholder="Nome do time"
-          className="w-full rounded border border-borda bg-superficie px-3 py-2 font-mono text-sm"
+          className="panel-cut-sm min-h-10 w-full border border-borda bg-superficie px-3 py-2 font-mono text-sm lg:min-h-0"
         />
         <div className="flex flex-wrap gap-2">
           {jogadoresDoGrupo.map((j) => (
@@ -46,7 +46,7 @@ function FormTime({ jogadoresDoGrupo, onCriado }) {
               type="button"
               key={j.steamId}
               onClick={() => alternar(j.steamId)}
-              className={`panel-cut-sm border px-2.5 py-1 font-mono text-xs ${
+              className={`panel-cut-sm flex min-h-10 items-center border px-2.5 py-1 font-mono text-xs lg:min-h-0 ${
                 selecionados.includes(j.steamId) ? 'border-destaque bg-destaque/10 text-destaque' : 'border-borda text-texto-fraco'
               }`}
             >
@@ -86,25 +86,25 @@ function CardTime({ time, isAdmin, onMudou }) {
   return (
     <Card className="p-4 sm:p-5">
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <h3 className="font-display text-base font-semibold uppercase tracking-wide text-texto">{time.nome}</h3>
-          <p className="font-mono text-xs text-texto-fraco">{time.membros.map((m) => m.nick || m.steamId).join(', ')}</p>
+        <div className="min-w-0 flex-1">
+          <h3 className="truncate font-display text-base font-semibold uppercase tracking-wide text-texto">{time.nome}</h3>
+          <p className="truncate font-mono text-xs text-texto-fraco">{time.membros.map((m) => m.nick || m.steamId).join(', ')}</p>
         </div>
-        <Badge tom={time.publico ? 'sucesso' : 'neutro'}>{time.publico ? 'Público' : 'Privado'}</Badge>
+        <Badge tom={time.publico ? 'sucesso' : 'neutro'} className="shrink-0">{time.publico ? 'Público' : 'Privado'}</Badge>
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
         <Link
           to={`/times/comparar?a=${time.id}`}
-          className="panel-cut-sm border border-borda px-2.5 py-1 font-mono text-xs text-texto-fraco hover:border-destaque/60 hover:text-destaque"
+          className="panel-cut-sm flex min-h-10 items-center border border-borda px-2.5 py-1 font-mono text-xs text-texto-fraco hover:border-destaque/60 hover:text-destaque lg:min-h-0"
         >
           Comparar
         </Link>
         {isAdmin && (
           <>
-            <button onClick={alternarPublico} className="panel-cut-sm border border-borda px-2.5 py-1 font-mono text-xs text-texto-fraco hover:border-destaque/60 hover:text-destaque">
+            <button onClick={alternarPublico} className="panel-cut-sm flex min-h-10 items-center border border-borda px-2.5 py-1 font-mono text-xs text-texto-fraco hover:border-destaque/60 hover:text-destaque lg:min-h-0">
               {time.publico ? 'Tornar privado' : 'Tornar público'}
             </button>
-            <button onClick={apagar} className="panel-cut-sm border border-borda px-2.5 py-1 font-mono text-xs text-texto-fraco hover:border-perigo/60 hover:text-perigo">
+            <button onClick={apagar} className="panel-cut-sm flex min-h-10 items-center border border-borda px-2.5 py-1 font-mono text-xs text-texto-fraco hover:border-perigo/60 hover:text-perigo lg:min-h-0">
               Apagar
             </button>
           </>

@@ -75,7 +75,7 @@ export default function PaginaMapa({ mapa, onTrocarMapa }) {
 
           <div className="w-24 lg:w-auto">
             <p className="mb-1 font-mono text-xs uppercase text-texto-fraco">Trocar lado</p>
-            <div className="flex overflow-hidden rounded border border-borda font-mono text-xs uppercase">
+            <div className="panel-cut-sm flex overflow-hidden border border-borda font-mono text-xs uppercase">
               {['T', 'CT'].map((v) => (
                 <button
                   key={v}
@@ -96,7 +96,7 @@ export default function PaginaMapa({ mapa, onTrocarMapa }) {
                   key={v}
                   onClick={() => setTipo(v)}
                   disabled={porTipo[v] === 0}
-                  className={`flex min-h-10 items-center justify-between gap-1.5 rounded border px-3 py-1.5 font-mono text-xs uppercase transition-colors lg:min-h-0 lg:w-full lg:gap-0 ${
+                  className={`panel-cut-sm flex min-h-10 items-center justify-between gap-1.5 border px-3 py-1.5 font-mono text-xs uppercase transition-colors lg:min-h-0 lg:w-full lg:gap-0 ${
                     tipo === v ? 'border-destaque bg-destaque/10 text-destaque'
                       : porTipo[v] === 0 ? 'border-borda text-texto-fraco/40'
                       : 'border-borda text-texto-fraco hover:text-texto'
@@ -111,7 +111,7 @@ export default function PaginaMapa({ mapa, onTrocarMapa }) {
 
           <div className="w-28 lg:w-auto">
             <p className="mb-1 font-mono text-xs uppercase text-texto-fraco">Chamadas</p>
-            <div className="flex overflow-hidden rounded border border-borda font-mono text-xs uppercase">
+            <div className="panel-cut-sm flex overflow-hidden border border-borda font-mono text-xs uppercase">
               {NIVEIS_CALLOUT.map(([v, label]) => (
                 <button
                   key={v}

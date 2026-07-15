@@ -145,7 +145,7 @@ export default function DetectarTaticas({ mapa, callouts, onFechar, onCriada }) 
         type="button"
         onClick={(e) => { e.stopPropagation(); onFechar() }}
         aria-label="Fechar"
-        className="fixed right-3 top-3 z-[60] flex min-h-10 min-w-10 items-center justify-center rounded-full border border-borda bg-superficie font-mono text-sm text-texto-fraco hover:text-texto lg:hidden"
+        className="panel-cut-sm fixed right-3 top-3 z-[60] flex min-h-10 min-w-10 items-center justify-center border border-borda bg-superficie font-mono text-sm text-texto-fraco hover:text-texto lg:hidden"
       >✕</button>
       <div
         onClick={(e) => e.stopPropagation()}
@@ -213,7 +213,7 @@ export default function DetectarTaticas({ mapa, callouts, onFechar, onCriada }) 
                       type="button"
                       onClick={() => criarTatica(c)}
                       disabled={!!criandoChave || jaCriada}
-                      className={`mt-2 min-h-10 w-full rounded border px-3 py-1.5 font-mono text-xs uppercase transition-colors lg:min-h-0 ${
+                      className={`panel-cut-sm mt-2 min-h-10 w-full border px-3 py-1.5 font-mono text-xs uppercase transition-colors lg:min-h-0 ${
                         jaCriada
                           ? 'border-borda text-texto-fraco'
                           : 'border-destaque text-destaque hover:bg-destaque/10 disabled:opacity-50'

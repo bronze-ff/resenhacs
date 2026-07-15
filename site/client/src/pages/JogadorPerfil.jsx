@@ -268,7 +268,7 @@ export default function JogadorPerfil() {
 
         {recentes.length > 0 && (
           <>
-            {/* Mobile: cards no padrão do Ranking (borda esquerda por resultado + grade de stats) */}
+            {/* Mobile: cards no padrão do Ranking (badge V/D + grade de stats) */}
             <div className="space-y-2 lg:hidden">
               {recentes.map((r) => {
                 const kd = r.deaths > 0 ? (r.kills / r.deaths).toFixed(2) : r.kills.toFixed(2)
@@ -276,9 +276,7 @@ export default function JogadorPerfil() {
                   <Link
                     key={r.id}
                     to={`/partida/${r.id}`}
-                    className={`panel-cut flex items-center gap-3 border-y border-r border-l-4 border-borda bg-superficie p-3 transition-colors hover:bg-superficie-alta ${
-                      r.won === true ? 'border-l-sucesso' : r.won === false ? 'border-l-perigo' : 'border-l-texto-fraco'
-                    }`}
+                    className="panel-cut flex items-center gap-3 border border-borda bg-superficie p-3 transition-colors hover:bg-superficie-alta"
                   >
                     <div className="w-14 shrink-0 font-mono text-[11px] leading-tight text-texto-fraco">
                       <div>{new Date(r.playedAt ?? '').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</div>

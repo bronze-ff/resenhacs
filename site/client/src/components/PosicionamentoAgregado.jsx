@@ -70,12 +70,12 @@ export default function PosicionamentoAgregado({ steamId }) {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-3">
-        <div className="flex overflow-hidden rounded border border-borda font-mono text-xs uppercase">
+        <div className="panel-cut-sm flex overflow-hidden border border-borda font-mono text-xs uppercase">
           {[['mortes', 'Onde morre'], ['kills', 'Onde mata']].map(([v, label]) => (
             <button
               key={v}
               onClick={() => setModo(v)}
-              className={`px-3 py-1.5 transition-colors ${modo === v ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'}`}
+              className={`flex min-h-10 items-center px-3 py-1.5 transition-colors lg:min-h-0 ${modo === v ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'}`}
             >
               {label}
             </button>

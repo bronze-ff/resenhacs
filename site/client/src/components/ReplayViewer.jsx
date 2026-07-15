@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { frameIndexAt, duracaoSegundos } from '../lib/replayEngine.js'
-import { nomeMapa, categoriaArma } from '../lib/format.js'
+import { nomeMapa, nomeArma, categoriaArma } from '../lib/format.js'
 import { Select } from './ui'
 
 const TAM = 640 // lado do canvas em px
@@ -24,61 +24,52 @@ function janelaAtiva(itens, f, campoIni = 'tStart', campoFim = 'tEnd') {
   return (itens || []).filter((it) => f >= it[campoIni] && f <= it[campoFim])
 }
 
-// Ícone simples (desenhado, não é imagem) por categoria de arma, sempre apontando pra
-// "direita" antes da rotação — desenharTracadoDeBala rotaciona pra alinhar com o tiro.
-// Bug real (2026-07-11, achado pelo usuário): o ícone desenhava na MESMA cor do
-// traçado (a cor do time) e do mesmo tamanho fino da linha — visualmente se perdia
-// dentro da própria linha, parecia que não tinha ícone nenhum. Corrigido com uma
-// "plaquinha" de fundo escuro contrastando com o mapa + contorno branco na silhueta,
-// tamanho maior — fica destacado não importa a cor do traçado por baixo.
-function desenharIconeArma(ctx, categoria, x, y, anguloRad, cor) {
-  ctx.save()
-  ctx.globalAlpha = 1
-  // fundo (plaquinha escura semi-opaca) pra destacar contra o traçado/mapa
-  ctx.fillStyle = 'rgba(10,13,18,0.85)'
-  ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2); ctx.fill()
-  ctx.strokeStyle = cor; ctx.lineWidth = 1.5
-  ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2); ctx.stroke()
-  ctx.restore()
+// Ícones reais das armas (SVG oficiais do CS2, mesma fonte dos ícones de mapa em
+// public/mapicons/ — Juknum/counter-strike-icons, extraído dos arquivos do jogo) em
+// public/weapons/<nome-interno>.svg. Antes disso o ícone era uma forma geométrica
+// genérica por CATEGORIA (rifle/sniper/pistol/...) — um AK-47 e uma AWP desenhavam a
+// mesma silhueta de "rifle"/"sniper", o que o usuário reportou como "ícone errado,
+// não condiz com a arma". Cache module-level (a mesma imagem serve qualquer instância
+// do viewer); carrega sob demanda e chama `aoCarregar` quando termina, pro componente
+// forçar um redesenho — o ícone pode ainda não estar pronto no frame em que é usado
+// pela primeira vez (SVG local carrega rápido, mas não é instantâneo).
+const cacheIconesArma = new Map()
+function obterIconeArma(weapon, aoCarregar) {
+  if (!weapon) return null
+  let entrada = cacheIconesArma.get(weapon)
+  if (!entrada) {
+    const img = new Image()
+    entrada = { img, pronto: false }
+    cacheIconesArma.set(weapon, entrada)
+    img.onload = () => { entrada.pronto = true; aoCarregar?.() }
+    img.onerror = () => { entrada.pronto = false }
+    img.src = `/weapons/${weapon}.svg`
+  }
+  return entrada.pronto ? entrada.img : null
+}
 
+// Plaquinha de fundo escuro (contrasta com o mapa/traçado por baixo, bug real de
+// 2026-07-11: sem isso o ícone se perdia dentro do traçado colorido) + o ícone real
+// da arma, sempre "em pé" (nunca rotacionado pro ângulo do tiro — uma silhueta de
+// arma virada de lado/de cabeça pra baixo fica irreconhecível; toda referência de
+// killfeed, do HLTV ao Leetify, mostra o ícone sempre na mesma orientação).
+function desenharIconeArma(ctx, weapon, x, y, cor, aoCarregar) {
   ctx.save()
-  ctx.translate(x, y)
-  ctx.rotate(anguloRad)
-  ctx.fillStyle = '#fff'
-  ctx.strokeStyle = '#fff'
-  ctx.lineWidth = 2
-  ctx.lineCap = 'round'
-  switch (categoria) {
-    case 'sniper':
-      ctx.fillRect(-8, -1, 16, 2)
-      ctx.beginPath(); ctx.arc(-2, -2.5, 1.8, 0, Math.PI * 2); ctx.fill() // luneta
-      break
-    case 'rifle':
-      ctx.fillRect(-7, -1.3, 13, 2.6)
-      ctx.fillRect(-7, -3.3, 3.5, 2.6) // coronha
-      break
-    case 'smg':
-      ctx.fillRect(-5, -1.3, 10, 2.6)
-      ctx.beginPath(); ctx.moveTo(-1, 1.3); ctx.quadraticCurveTo(-2.5, 5, -4, 5.5); ctx.stroke() // carregador curvo
-      break
-    case 'shotgun':
-      ctx.fillRect(-6, -1.8, 10, 3.6)
-      ctx.fillRect(-3.5, 1.8, 5, 1.8) // bomba
-      break
-    case 'heavy':
-      ctx.fillRect(-8, -2.2, 15, 4.4)
-      ctx.beginPath(); ctx.moveTo(6, 1.8); ctx.lineTo(9, 4.5); ctx.moveTo(6, -1.8); ctx.lineTo(9, -4.5); ctx.stroke() // bipé
-      break
-    case 'knife':
-      ctx.beginPath(); ctx.moveTo(-3, 0); ctx.lineTo(5, -1.8); ctx.lineTo(5, 1.8); ctx.closePath(); ctx.fill()
-      break
-    case 'nade':
-      ctx.fillStyle = cor
-      ctx.beginPath(); ctx.arc(0, 0, 3.5, 0, Math.PI * 2); ctx.fill()
-      break
-    default: // pistol
-      ctx.fillRect(-4, -1.3, 7, 2.6)
-      ctx.fillRect(-2.5, 1, 2.5, 3.5) // cabo
+  ctx.fillStyle = 'rgba(10,13,18,0.85)'
+  ctx.beginPath(); ctx.arc(x, y, 11, 0, Math.PI * 2); ctx.fill()
+  ctx.strokeStyle = cor; ctx.lineWidth = 1.5
+  ctx.beginPath(); ctx.arc(x, y, 11, 0, Math.PI * 2); ctx.stroke()
+
+  const img = obterIconeArma(weapon, aoCarregar)
+  if (img && img.naturalWidth > 0) {
+    const LADO_MAX = 16 // cabe dentro da plaquinha (raio 11) com folga
+    const escala = Math.min(LADO_MAX / img.naturalWidth, LADO_MAX / img.naturalHeight)
+    const w = img.naturalWidth * escala, h = img.naturalHeight * escala
+    ctx.drawImage(img, x - w / 2, y - h / 2, w, h)
+  } else {
+    // ainda carregando (ou arma sem ícone mapeado): marcador simples no lugar
+    ctx.fillStyle = '#fff'
+    ctx.beginPath(); ctx.arc(x, y, 2.5, 0, Math.PI * 2); ctx.fill()
   }
   ctx.restore()
 }
@@ -92,7 +83,7 @@ function desenharIconeArma(ctx, categoria, x, y, anguloRad, cor) {
 // da lateral) de hit sem morte (round.hits — só a marca de acerto). Miss não dá pra
 // traçar sem simular física de bala contra o mapa (não temos essa geometria), então
 // só cobre tiro que ACERTOU alguém — é a versão honesta de "todo tiro" que dá pra fazer.
-function desenharUmTiro(ctx, t, evento, round, f, replay, hz, fatal) {
+function desenharUmTiro(ctx, t, evento, round, f, replay, hz, fatal, aoCarregarIcone) {
   if (t == null || f < t) return
   const dt = (f - t) / hz
   if (dt > DURACAO_TRACADO_S) return
@@ -114,9 +105,8 @@ function desenharUmTiro(ctx, t, evento, round, f, replay, hz, fatal) {
     ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(vx, vy); ctx.stroke()
     ctx.setLineDash([])
 
-    const angulo = Math.atan2(vy - ay, vx - ax)
     ctx.globalAlpha = alpha * (fatal ? 1 : 0.7)
-    desenharIconeArma(ctx, categoriaArma(evento.weapon), ax + (vx - ax) * 0.5, ay + (vy - ay) * 0.5, angulo, corTiro)
+    desenharIconeArma(ctx, evento.weapon, ax + (vx - ax) * 0.5, ay + (vy - ay) * 0.5, corTiro, aoCarregarIcone)
   }
 
   ctx.globalAlpha = alpha
@@ -141,12 +131,12 @@ function desenharUmTiro(ctx, t, evento, round, f, replay, hz, fatal) {
   ctx.globalAlpha = 1
 }
 
-function desenharTracadoDeBala(ctx, round, f, replay, hz) {
-  for (const k of round.kills || []) desenharUmTiro(ctx, k.t, k, round, f, replay, hz, true)
-  for (const h of round.hits || []) desenharUmTiro(ctx, h.t, h, round, f, replay, hz, false)
+function desenharTracadoDeBala(ctx, round, f, replay, hz, aoCarregarIcone) {
+  for (const k of round.kills || []) desenharUmTiro(ctx, k.t, k, round, f, replay, hz, true, aoCarregarIcone)
+  for (const h of round.hits || []) desenharUmTiro(ctx, h.t, h, round, f, replay, hz, false, aoCarregarIcone)
 }
 
-function desenharFrame(ctx, round, f, radar, replay) {
+function desenharFrame(ctx, round, f, radar, replay, aoCarregarIcone) {
   ctx.clearRect(0, 0, TAM, TAM)
   // Fundo: imagem de radar se carregada; senão, grade neutra.
   if (radar && radar.complete && radar.naturalWidth > 0) {
@@ -259,7 +249,7 @@ function desenharFrame(ctx, round, f, radar, replay) {
   }
 
   // Traçado de bala + ícone de arma + caveira dos kills recentes (por cima dos jogadores).
-  desenharTracadoDeBala(ctx, round, f, replay, hz)
+  desenharTracadoDeBala(ctx, round, f, replay, hz, aoCarregarIcone)
 
   // Flashes (estouro) e HE, por cima — breves.
   for (const fl of (round.flashes || [])) {
@@ -288,6 +278,7 @@ export default function ReplayViewer({ replay, seek }) {
   const [velocidade, setVelocidade] = useState(1)
   const [frameAtual, setFrameAtual] = useState(0)
   const [radarPronto, setRadarPronto] = useState(false)
+  const [iconesVersao, setIconesVersao] = useState(0)
 
   // Deep link (ex.: clicar num Highlight): pula pro round/frame e toca. `seek.key` muda
   // a cada clique (mesmo mirando o mesmo round/frame de novo) pra sempre re-disparar.
@@ -337,11 +328,12 @@ export default function ReplayViewer({ replay, seek }) {
     return () => cancelAnimationFrame(rafRef.current)
   }, [tocando, velocidade, roundIdx]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Redesenha quando o frame muda OU quando o radar termina de carregar.
+  // Redesenha quando o frame muda, quando o radar termina de carregar, ou quando um
+  // ícone de arma usado pela 1ª vez termina de carregar (iconesVersao).
   useEffect(() => {
     const ctx = canvasRef.current?.getContext('2d')
-    if (ctx) desenharFrame(ctx, round, frameAtual, radarRef.current, replay)
-  }, [frameAtual, roundIdx, radarPronto]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (ctx) desenharFrame(ctx, round, frameAtual, radarRef.current, replay, () => setIconesVersao((v) => v + 1))
+  }, [frameAtual, roundIdx, radarPronto, iconesVersao]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const dur = duracaoSegundos(total, replay.tickRate)
 
@@ -407,7 +399,7 @@ export default function ReplayViewer({ replay, seek }) {
                   <span className="font-semibold" style={{ color: COR_LADO[ladoNoTick(round, k.t, k.killer)] ?? '#e6edf3' }}>
                     {replay.names?.[k.killer] ?? k.killer}
                   </span>
-                  <span className="text-texto-fraco">{k.weapon}</span>
+                  <span className="text-texto-fraco">{nomeArma(k.weapon)}</span>
                   {k.headshot && <span className="font-semibold text-perigo">hs</span>}
                 </>
               ) : (

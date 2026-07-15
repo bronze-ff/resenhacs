@@ -33,7 +33,7 @@ export default function DetalheGranada({ granada, onFechar, acoesAdmin = null })
           </div>
           {granada.descricao && <p className="mt-3 font-mono text-sm text-texto-fraco">{granada.descricao}</p>}
 
-          <div className="mt-4 flex overflow-hidden rounded border border-borda font-mono text-xs uppercase">
+          <div className="panel-cut-sm mt-4 flex overflow-hidden border border-borda font-mono text-xs uppercase">
             {[['video', 'Vídeo'], ['passos', 'Passos']].map(([v, label]) => (
               <button
                 key={v}
@@ -51,7 +51,7 @@ export default function DetalheGranada({ granada, onFechar, acoesAdmin = null })
                 <iframe
                   src={embed}
                   title={granada.titulo}
-                  className="h-full w-full rounded border border-borda"
+                  className="panel-cut-sm h-full w-full border border-borda"
                   allow="accelerometer; autoplay; encrypted-media; picture-in-picture"
                   allowFullScreen
                 />

@@ -20,7 +20,7 @@ export default function RankingPublico() {
           <button
             key={a}
             onClick={() => setAba(a)}
-            className={`panel-cut-sm border px-3 py-1.5 font-mono text-xs uppercase tracking-wide ${
+            className={`panel-cut-sm min-h-10 border px-3 py-1.5 font-mono text-xs uppercase tracking-wide lg:min-h-0 ${
               aba === a ? 'border-destaque bg-destaque/10 text-destaque' : 'border-borda text-texto-fraco'
             }`}
           >

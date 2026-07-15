@@ -77,7 +77,7 @@ export default function PaginaMapaTaticas({ mapa, onTrocarMapa }) {
 
           <div className="w-24 lg:w-auto">
             <p className="mb-1 font-mono text-xs uppercase text-texto-fraco">Trocar lado</p>
-            <div className="flex overflow-hidden rounded border border-borda font-mono text-xs uppercase">
+            <div className="panel-cut-sm flex overflow-hidden border border-borda font-mono text-xs uppercase">
               {['T', 'CT'].map((v) => (
                 <button
                   key={v}
@@ -97,7 +97,7 @@ export default function PaginaMapaTaticas({ mapa, onTrocarMapa }) {
                 <button
                   key={v}
                   onClick={() => setTipo(v)}
-                  className={`min-h-10 rounded border px-3 py-1.5 font-mono text-xs uppercase transition-colors lg:min-h-0 lg:block lg:w-full ${
+                  className={`panel-cut-sm min-h-10 border px-3 py-1.5 font-mono text-xs uppercase transition-colors lg:min-h-0 lg:block lg:w-full ${
                     tipo === v ? 'border-destaque bg-destaque/10 text-destaque' : 'border-borda text-texto-fraco hover:text-texto'
                   }`}
                 >
@@ -109,7 +109,7 @@ export default function PaginaMapaTaticas({ mapa, onTrocarMapa }) {
 
           <div className="w-28 lg:w-auto">
             <p className="mb-1 font-mono text-xs uppercase text-texto-fraco">Local</p>
-            <div className="flex overflow-hidden rounded border border-borda font-mono text-xs uppercase">
+            <div className="panel-cut-sm flex overflow-hidden border border-borda font-mono text-xs uppercase">
               {LOCAIS.map(([v, label]) => (
                 <button
                   key={v}
@@ -129,7 +129,7 @@ export default function PaginaMapaTaticas({ mapa, onTrocarMapa }) {
                 <button
                   key={v}
                   onClick={() => setArmas(v)}
-                  className={`min-h-10 rounded border px-3 py-1.5 font-mono text-xs uppercase transition-colors lg:min-h-0 lg:block lg:w-full ${
+                  className={`panel-cut-sm min-h-10 border px-3 py-1.5 font-mono text-xs uppercase transition-colors lg:min-h-0 lg:block lg:w-full ${
                     armas === v ? 'border-destaque bg-destaque/10 text-destaque' : 'border-borda text-texto-fraco hover:text-texto'
                   }`}
                 >

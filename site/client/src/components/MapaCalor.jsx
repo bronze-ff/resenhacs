@@ -128,7 +128,7 @@ export default function MapaCalor({ replay, onSelecionarPonto }) {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-3">
-        <div className="flex overflow-hidden rounded border border-borda font-mono text-xs uppercase">
+        <div className="panel-cut-sm flex overflow-hidden border border-borda font-mono text-xs uppercase">
           {[['mortes', 'Onde morre'], ['kills', 'Onde mata'], ['granadas', 'Granadas']].map(([v, label]) => (
             <button
               key={v}
@@ -145,7 +145,7 @@ export default function MapaCalor({ replay, onSelecionarPonto }) {
               <option value="">Todo mundo</option>
               {jogadoresIds.map((id) => <option key={id} value={id}>{replay.names[id]}</option>)}
             </Select>
-            <div className="flex overflow-hidden rounded border border-borda font-mono text-xs uppercase">
+            <div className="panel-cut-sm flex overflow-hidden border border-borda font-mono text-xs uppercase">
               {LADOS.map(([v, label]) => (
                 <button
                   key={v || 'ambos'}
@@ -160,7 +160,7 @@ export default function MapaCalor({ replay, onSelecionarPonto }) {
           </>
         )}
         {modo === 'granadas' && (
-          <div className="flex overflow-hidden rounded border border-borda font-mono text-xs uppercase">
+          <div className="panel-cut-sm flex overflow-hidden border border-borda font-mono text-xs uppercase">
             {TIPOS_GRANADA.map(([v, label]) => (
               <button
                 key={v || 'todas'}

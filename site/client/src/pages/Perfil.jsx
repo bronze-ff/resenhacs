@@ -67,7 +67,7 @@ export default function Perfil() {
                 id="authCode"
                 value={matchAuthCode}
                 onChange={(e) => setMatchAuthCode(e.target.value)}
-                className="w-full rounded border border-borda bg-superficie px-3 py-2 font-mono text-sm"
+                className="panel-cut-sm min-h-10 w-full border border-borda bg-superficie px-3 py-2 font-mono text-sm lg:min-h-0"
                 placeholder="XXXX-XXXXX-XXXX"
               />
             </div>
@@ -79,7 +79,7 @@ export default function Perfil() {
                 id="shareCode"
                 value={lastShareCode}
                 onChange={(e) => setLastShareCode(e.target.value)}
-                className="w-full rounded border border-borda bg-superficie px-3 py-2 font-mono text-sm"
+                className="panel-cut-sm min-h-10 w-full border border-borda bg-superficie px-3 py-2 font-mono text-sm lg:min-h-0"
                 placeholder="CSGO-xxxxx-xxxxx-xxxxx-xxxxx-xxxxx"
               />
             </div>
@@ -105,7 +105,7 @@ export default function Perfil() {
           </div>
           <button
             onClick={alternarRankingPublico}
-            className={`panel-cut-sm border px-3 py-1.5 font-mono text-xs uppercase tracking-wide ${
+            className={`panel-cut-sm min-h-10 shrink-0 border px-3 py-1.5 font-mono text-xs uppercase tracking-wide lg:min-h-0 ${
               rankingPublico ? 'border-destaque bg-destaque/10 text-destaque' : 'border-borda text-texto-fraco'
             }`}
           >

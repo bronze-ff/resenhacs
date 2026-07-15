@@ -240,7 +240,7 @@ export default function Shell({ children }) {
             onClick={() => setColapsada((v) => !v)}
             aria-label={colapsada ? 'Expandir menu' : 'Recolher menu'}
             title={colapsada ? 'Expandir menu' : 'Recolher menu'}
-            className="flex h-10 w-full cursor-pointer items-center justify-center gap-2 rounded text-texto-fraco transition-colors duration-200 hover:bg-superficie-alta hover:text-texto"
+            className="panel-cut-sm flex h-10 w-full cursor-pointer items-center justify-center gap-2 text-texto-fraco transition-colors duration-200 hover:bg-superficie-alta hover:text-texto"
           >
             {NAV_ICONES[colapsada ? 'expandir' : 'colapsar']}
             {!colapsada && <span className="text-[10px] font-mono uppercase tracking-wide">Recolher</span>}
@@ -255,24 +255,24 @@ export default function Shell({ children }) {
           {/* Sem hambúrguer aqui: a barra inferior mobile cobre as rotas
               principais e o botão "Mais" abre este mesmo drawer, então um
               segundo gatilho no header seria redundante. */}
-          <div className="flex items-center gap-3 lg:hidden">
+          <div className="flex shrink-0 items-center gap-3 lg:hidden">
             <h1 className="font-display text-lg font-bold uppercase tracking-widest text-texto">
               Resenha<span className="text-destaque">.</span>
             </h1>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex min-w-0 items-center gap-3">
             <SeletorGrupo grupoAtivoId={jogador?.grupoAtivoId} />
             {jogador?.avatarUrl && (
               <img
                 src={jogador.avatarUrl}
                 alt=""
-                className="panel-cut-sm h-8 w-8 border border-borda object-cover"
+                className="panel-cut-sm h-8 w-8 shrink-0 border border-borda object-cover"
               />
             )}
-            <span className="font-mono text-sm text-texto">{jogador?.nick}</span>
+            <span className="max-w-[80px] truncate font-mono text-sm text-texto sm:max-w-none">{jogador?.nick}</span>
             <button
               onClick={sair}
-              className="panel-cut-sm border border-borda px-2.5 py-1 text-xs uppercase tracking-wide text-texto-fraco transition-colors hover:border-perigo/50 hover:text-perigo"
+              className="panel-cut-sm min-h-10 shrink-0 border border-borda px-2.5 py-1 text-xs uppercase tracking-wide text-texto-fraco transition-colors hover:border-perigo/50 hover:text-perigo lg:min-h-0"
             >
               Sair
             </button>

@@ -1,8 +1,9 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { nomeMapa, dataHora, origemPartida, corRating } from '../lib/format.js'
+import { orientarPlacar } from '../lib/resultado.js'
 import FiltroPeriodo from '../components/FiltroPeriodo.jsx'
-import { Card, SectionHeader, Badge, MapIcon, Select } from '../components/ui'
+import { Avatar, Card, SectionHeader, Badge, MapIcon, Select, ResultChip } from '../components/ui'
 
 const MAPAS = ['de_anubis', 'de_ancient', 'de_cache', 'de_dust2', 'de_inferno', 'de_mirage', 'de_nuke', 'de_overpass', 'de_train', 'de_vertigo']
 
@@ -19,125 +20,68 @@ function resultadoDoGrupo(m) {
   return 'misto'
 }
 
-// Orienta o placar pra perspectiva do grupo: nosso placar primeiro.
-function placarOrientado(m, resultado) {
-  let a = m.scoreA
-  let b = m.scoreB
-  if (resultado === 'vitoria') [a, b] = [Math.max(a, b), Math.min(a, b)]
-  if (resultado === 'derrota') [a, b] = [Math.min(a, b), Math.max(a, b)]
-  const corNosso = resultado === 'vitoria' ? 'text-sucesso' : resultado === 'derrota' ? 'text-perigo' : 'text-texto'
-  return { a, b, corNosso }
-}
-
-function BadgeResultado({ resultado }) {
-  if (resultado === 'vitoria') return <Badge tom="sucesso">Vitória</Badge>
-  if (resultado === 'derrota') return <Badge tom="perigo">Derrota</Badge>
-  if (resultado === 'empate') return <Badge tom="neutro">Empate</Badge>
-  if (resultado === 'misto') return <Badge tom="neutro" title="O grupo jogou dividido nos dois times">Misto</Badge>
+// Linha de contexto: nomes dos times (partida pro) ou jogadores rastreados, com o MVP
+// destacado por um mini-avatar (dá "rosto" ao dado, igual à referência do Faceit) — mesmo
+// dado nos dois casos, um jeito só de montar.
+function contextoPartida(m) {
+  const mvpChip = m.mvp && (
+    <span className="inline-flex items-center gap-1.5 align-middle">
+      <Avatar p={m.mvp} size={16} />
+      <span className="text-texto">{m.mvp.nick}</span>
+    </span>
+  )
+  if (m.source === 'pro' && m.teamAName && m.teamBName) {
+    return (
+      <>
+        {m.teamAName} x {m.teamBName}
+        {mvpChip && <span> · {mvpChip}</span>}
+      </>
+    )
+  }
+  if (m.tracked?.length > 0) {
+    const outros = m.tracked.filter((t) => t.steamId !== m.mvp?.steamId)
+    return (
+      <>
+        {outros.map((t) => t.nick).join(', ')}
+        {mvpChip && <span>{outros.length > 0 && ', '}{mvpChip}</span>}
+      </>
+    )
+  }
   return null
 }
 
-function Placar({ m }) {
-  const resultado = resultadoDoGrupo(m)
-  const { a, b, corNosso } = placarOrientado(m, resultado)
-  return (
-    <div className="flex items-center gap-3">
-      <BadgeResultado resultado={resultado} />
-      <div className="flex items-center gap-1.5 font-mono text-lg font-bold tabular-nums">
-        <span className={corNosso}>{a ?? '–'}</span>
-        <span className="text-texto-fraco">:</span>
-        <span className="text-texto-fraco">{b ?? '–'}</span>
-      </div>
-    </div>
-  )
-}
-
+// Uma linha por Partida — layout único que reflui (não duas árvores JSX mobile/desktop
+// separadas): mapa+nome+badges numa ponta, chip de resultado sempre grudado na outra,
+// e a linha inteira quebra pro card empilhar em telas estreitas sem duplicar código.
+// Sem side-stripe colorido pra indicar vitória/derrota (ver DESIGN.md, Don't) — o chip
+// preenchido + ícone já comunicam isso sozinhos.
 function CardPartida({ m }) {
   const resultado = resultadoDoGrupo(m)
-  const borda =
-    resultado === 'vitoria' ? 'border-l-2 border-l-sucesso/70' : resultado === 'derrota' ? 'border-l-2 border-l-perigo/70' : ''
   const origem = origemPartida(m.source)
-  const { a, b, corNosso } = placarOrientado(m, resultado)
-  // Partida importada de pro: mostra os nomes dos times em vez dos Jogadores rastreados
-  // (não há Jogador do grupo numa partida profissional). Fallback pro comportamento
-  // normal se a partida não tiver os dois nomes (demos antigas de pro, por exemplo).
-  const timesPro = m.source === 'pro' && m.teamAName && m.teamBName
-  return (
-    <Card
-      as={Link}
-      interativo
-      to={`/partida/${m.id}`}
-      className={`relative block hover:bg-superficie-alta lg:flex lg:items-center lg:justify-between lg:gap-3 lg:p-4 ${borda}`}
-    >
-      {/* Mobile: card estilo app (FACEIT) — placar grande, respiro, sem linha densa de tabela */}
-      <div className="space-y-2 p-4 lg:hidden">
-        <div className="flex items-center justify-between">
-          <span className="font-mono text-xs uppercase text-texto-fraco">{dataHora(m.playedAt)}</span>
-          <div className="flex items-center gap-1.5">
-            {m.source === 'pro' && <Badge tom="destaque" className="shrink-0">PRO</Badge>}
-            <Badge tom="neutro" title={origem.title} className="shrink-0">{origem.label}</Badge>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <BadgeResultado resultado={resultado} />
-          <div className="flex items-baseline gap-1.5 font-display text-2xl font-bold">
-            <span className={corNosso}>{a ?? '–'}</span>
-            <span className="text-texto-fraco">:</span>
-            <span className="text-texto-fraco">{b ?? '–'}</span>
-          </div>
-          <MapIcon map={m.map} size={22} />
-          <span className="truncate font-display text-lg font-semibold uppercase text-texto">{nomeMapa(m.map)}</span>
-        </div>
-        {timesPro ? (
-          <div className="truncate text-xs text-texto-fraco">
-            {m.teamAName} x {m.teamBName}
-            {m.mvp && <span className="ml-1 text-destaque">· ★ {m.mvp.nick}</span>}
-          </div>
-        ) : m.tracked?.length > 0 && (
-          <div className="truncate text-xs text-texto-fraco">
-            {m.tracked.map((t, i) => (
-              <span key={t.steamId}>
-                {i > 0 && ', '}
-                {m.mvp?.steamId === t.steamId ? <span className="text-destaque">★ {t.nick}</span> : t.nick}
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
+  const { a, b } = orientarPlacar(m.scoreA, m.scoreB, resultado)
+  const contexto = contextoPartida(m)
 
-      {/* Desktop: layout original, intocado */}
-      <div className="hidden min-w-0 flex-1 items-center gap-4 lg:flex">
+  return (
+    <Card as={Link} interativo to={`/partida/${m.id}`} className="block p-4 hover:bg-superficie-alta">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <MapIcon map={m.map} size={44} />
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="truncate font-display font-semibold uppercase tracking-wide text-texto">{nomeMapa(m.map)}</span>
-            {m.source === 'pro' && <Badge tom="destaque" className="shrink-0">PRO</Badge>}
-            <Badge tom="neutro" title={origem.title} className="shrink-0">{origem.label}</Badge>
-          </div>
-          <div className="truncate font-mono text-xs text-texto-fraco">
-            {dataHora(m.playedAt)}
-            {timesPro ? (
-              <span>
-                {' '}· {m.teamAName} x {m.teamBName}
-                {m.mvp && <span className="text-destaque"> · ★ {m.mvp.nick}</span>}
-              </span>
-            ) : m.tracked?.length > 0 && (
-              <span>
-                {' '}·{' '}
-                {m.tracked.map((t, i) => (
-                  <span key={t.steamId}>
-                    {i > 0 && ', '}
-                    {m.mvp?.steamId === t.steamId ? <span className="text-destaque">★ {t.nick}</span> : t.nick}
-                  </span>
-                ))}
-              </span>
-            )}
-          </div>
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <span className="truncate font-display text-lg font-bold uppercase tracking-wide text-texto">
+            {nomeMapa(m.map)}
+          </span>
+          {m.source === 'pro' && <Badge tom="destaque" className="shrink-0">PRO</Badge>}
+          <Badge tom="neutro" title={origem.title} className="shrink-0">{origem.label}</Badge>
+        </div>
+        <div className="ml-auto">
+          <ResultChip resultado={resultado} a={a} b={b} />
         </div>
       </div>
-      <div className="hidden shrink-0 lg:block">
-        <Placar m={m} />
-      </div>
+      {(dataHora(m.playedAt) || contexto) && (
+        <div className="mt-2 truncate pl-[60px] font-mono text-xs text-texto-fraco">
+          {dataHora(m.playedAt)}
+          {contexto && <span> · {contexto}</span>}
+        </div>
+      )}
     </Card>
   )
 }
@@ -179,6 +123,37 @@ function SincStatus() {
   )
 }
 
+// Um card de sessão — layout único (sem duplicar mobile/desktop): largura fixa que
+// funciona bem tanto no carrossel touch do celular quanto na fileira do desktop.
+function CardResenha({ s }) {
+  return (
+    <Card className="w-60 shrink-0 snap-start p-3">
+      <div className="flex items-center justify-between font-mono text-xs text-texto-fraco">
+        <span>{dataHora(s.inicio)}</span>
+        <span>{s.partidas} partida{s.partidas === 1 ? '' : 's'}</span>
+      </div>
+      <div className="mt-1.5 flex items-center gap-2 font-display text-lg font-bold">
+        {s.vitorias > 0 && <span className="text-sucesso">{s.vitorias}V</span>}
+        {s.derrotas > 0 && <span className="text-perigo">{s.derrotas}D</span>}
+        {s.empates > 0 && <span className="text-texto-fraco">{s.empates}E</span>}
+        {s.mistos > 0 && <span className="text-texto-fraco">{s.mistos} misto</span>}
+      </div>
+      {s.destaque && (
+        <div className="mt-2 flex items-center gap-2 border-t border-borda pt-2 font-mono text-xs">
+          <Avatar p={s.destaque} size={22} />
+          <div className="min-w-0">
+            <Link to={`/jogador/${s.destaque.steamId}`} className="truncate text-texto hover:text-destaque">
+              {s.destaque.nick}
+            </Link>{' '}
+            <span className={corRating(s.destaque.ratingMedio)}>{s.destaque.ratingMedio.toFixed(2)}</span>
+            {s.destaque.aces > 0 && <span className="ml-1 text-texto-fraco">· {s.destaque.aces} ace{s.destaque.aces > 1 ? 's' : ''}</span>}
+          </div>
+        </div>
+      )}
+    </Card>
+  )
+}
+
 // "Resenhas": partidas jogadas seguidas (gap < 3h) resumidas — quem se destacou,
 // quantas venceu/perdeu, sem precisar abrir partida por partida.
 function Resenhas() {
@@ -199,57 +174,7 @@ function Resenhas() {
         Resenhas recentes
       </h3>
       <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-1">
-        {(sessoes ?? []).map((s) => (
-          <Fragment key={s.matchIds[0]}>
-            {/* Mobile: estilo app (FACEIT) — data em cima, resumo V/D grande, resto embaixo */}
-            <Card className="w-64 shrink-0 snap-start p-3 lg:hidden">
-              <div className="font-mono text-xs uppercase text-texto-fraco">{dataHora(s.inicio)}</div>
-              <div className="mt-1 flex items-center gap-2 font-display text-xl font-bold">
-                {s.vitorias > 0 && <span className="text-sucesso">{s.vitorias}V</span>}
-                {s.derrotas > 0 && <span className="text-perigo">{s.derrotas}D</span>}
-                {s.empates > 0 && <span className="text-texto-fraco">{s.empates}E</span>}
-                {s.mistos > 0 && <span className="text-texto-fraco">{s.mistos} misto</span>}
-              </div>
-              <div className="mt-1 font-mono text-xs text-texto-fraco">
-                {s.partidas} partida{s.partidas === 1 ? '' : 's'}
-              </div>
-              {s.destaque && (
-                <div className="mt-2 border-t border-borda pt-2 font-mono text-xs">
-                  <span className="text-texto-fraco">Destaque: </span>
-                  <Link to={`/jogador/${s.destaque.steamId}`} className="text-texto hover:text-destaque">
-                    {s.destaque.nick}
-                  </Link>{' '}
-                  <span className={corRating(s.destaque.ratingMedio)}>{s.destaque.ratingMedio.toFixed(2)}</span>
-                  {s.destaque.aces > 0 && <span className="ml-1 text-texto-fraco">· {s.destaque.aces} ace{s.destaque.aces > 1 ? 's' : ''}</span>}
-                </div>
-              )}
-            </Card>
-
-            {/* Desktop: layout original, intocado */}
-            <Card className="hidden w-auto min-w-[240px] shrink-0 snap-start p-3 lg:block">
-              <div className="flex items-center justify-between font-mono text-xs text-texto-fraco">
-                <span>{dataHora(s.inicio)}</span>
-                <span>{s.partidas} partida{s.partidas === 1 ? '' : 's'}</span>
-              </div>
-              <div className="mt-1 flex items-center gap-2 font-mono text-sm">
-                {s.vitorias > 0 && <span className="text-sucesso">{s.vitorias}V</span>}
-                {s.derrotas > 0 && <span className="text-perigo">{s.derrotas}D</span>}
-                {s.empates > 0 && <span className="text-texto-fraco">{s.empates}E</span>}
-                {s.mistos > 0 && <span className="text-texto-fraco">{s.mistos} misto</span>}
-              </div>
-              {s.destaque && (
-                <div className="mt-2 border-t border-borda pt-2 font-mono text-xs">
-                  <span className="text-texto-fraco">Destaque: </span>
-                  <Link to={`/jogador/${s.destaque.steamId}`} className="text-texto hover:text-destaque">
-                    {s.destaque.nick}
-                  </Link>{' '}
-                  <span className={corRating(s.destaque.ratingMedio)}>{s.destaque.ratingMedio.toFixed(2)}</span>
-                  {s.destaque.aces > 0 && <span className="ml-1 text-texto-fraco">· {s.destaque.aces} ace{s.destaque.aces > 1 ? 's' : ''}</span>}
-                </div>
-              )}
-            </Card>
-          </Fragment>
-        ))}
+        {sessoes.map((s) => <CardResenha key={s.matchIds[0]} s={s} />)}
       </div>
     </section>
   )
@@ -349,36 +274,36 @@ export default function Feed() {
       <SincStatus />
       <Resenhas />
 
-      <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center lg:gap-x-5 lg:gap-y-3">
-        <div className="flex flex-wrap items-center gap-3 lg:contents">
+      <div className="panel-cut-sm mb-4 flex flex-col gap-3 border border-borda bg-superficie p-3 lg:flex-row lg:flex-wrap lg:items-center lg:gap-x-5 lg:gap-y-3">
+        <div className="flex flex-wrap items-center gap-3">
           <FiltroPeriodo de={de} ate={ate} onDe={setDe} onAte={setAte} />
-          <Select value={mapa} onChange={(e) => setMapa(e.target.value)} selectClassName="lg:py-1 lg:text-xs">
+          <Select value={mapa} onChange={(e) => setMapa(e.target.value)} className="w-auto" selectClassName="py-1.5 text-xs">
             <option value="">Todos os mapas</option>
             {MAPAS.map((m) => <option key={m} value={m}>{nomeMapa(m)}</option>)}
           </Select>
-          <Select value={mvp} onChange={(e) => setMvp(e.target.value)} selectClassName="lg:py-1 lg:text-xs">
+          <Select value={mvp} onChange={(e) => setMvp(e.target.value)} className="w-auto" selectClassName="py-1.5 text-xs">
             <option value="">Todos os MVPs</option>
             {jogadores.map((j) => <option key={j.steamId} value={j.steamId}>{j.nick}</option>)}
           </Select>
         </div>
-        <div className="flex flex-wrap items-center gap-3 lg:contents">
-          <div className="flex overflow-hidden rounded border border-borda font-mono text-xs uppercase">
+        <div className="flex flex-wrap items-center gap-3 lg:ml-auto">
+          <div className="panel-cut-sm flex overflow-hidden border border-borda font-mono text-xs uppercase">
             {[['', 'Tudo'], ['vitoria', 'Vitórias'], ['derrota', 'Derrotas']].map(([v, label]) => (
               <button
                 key={v}
                 onClick={() => setResultado(v)}
-                className={`min-h-10 px-3 py-3 transition-colors lg:min-h-0 lg:px-2.5 lg:py-1 ${resultado === v ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'}`}
+                className={`min-h-10 px-3 py-1.5 transition-colors lg:min-h-0 ${resultado === v ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'}`}
               >
                 {label}
               </button>
             ))}
           </div>
-          <div className="flex overflow-hidden rounded border border-borda font-mono text-xs uppercase">
+          <div className="panel-cut-sm flex overflow-hidden border border-borda font-mono text-xs uppercase">
             {[['', 'Todas'], ['valve_mm', 'Auto'], ['upload', 'Manual']].map(([v, label]) => (
               <button
                 key={v}
                 onClick={() => setOrigem(v)}
-                className={`min-h-10 px-3 py-3 transition-colors lg:min-h-0 lg:px-2.5 lg:py-1 ${origem === v ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'}`}
+                className={`min-h-10 px-3 py-1.5 transition-colors lg:min-h-0 ${origem === v ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'}`}
               >
                 {label}
               </button>
@@ -393,7 +318,7 @@ export default function Feed() {
           Nenhuma Partida encontrada com esses filtros.
         </p>
       )}
-      <div className="space-y-3 lg:space-y-2">
+      <div className="space-y-2">
         {visiveis?.map((m) => <CardPartida key={m.id} m={m} />)}
       </div>
 
@@ -402,7 +327,7 @@ export default function Feed() {
           <button
             onClick={carregarMais}
             disabled={carregandoMais}
-            className="min-h-10 rounded border border-borda bg-superficie px-5 py-2 font-mono text-sm uppercase tracking-wide text-texto transition-colors hover:border-destaque hover:text-destaque disabled:cursor-not-allowed disabled:opacity-60"
+            className="panel-cut-sm min-h-10 border border-borda bg-superficie px-5 py-2 font-mono text-sm uppercase tracking-wide text-texto transition-colors hover:border-destaque hover:text-destaque disabled:cursor-not-allowed disabled:opacity-60"
           >
             {carregandoMais ? 'Carregando…' : 'Carregar mais'}
           </button>

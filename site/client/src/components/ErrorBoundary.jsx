@@ -32,7 +32,7 @@ export default class ErrorBoundary extends Component {
             Algo deu errado ao carregar essa tela. Manda um print dessa mensagem pro grupo
             resolver.
           </p>
-          <p className="overflow-x-auto whitespace-pre-wrap break-words rounded border border-borda bg-fundo p-2 font-mono text-xs text-texto-fraco">
+          <p className="panel-cut-sm overflow-x-auto whitespace-pre-wrap break-words border border-borda bg-fundo p-2 font-mono text-xs text-texto-fraco">
             {this.state.erro?.message || String(this.state.erro)}
           </p>
           <button

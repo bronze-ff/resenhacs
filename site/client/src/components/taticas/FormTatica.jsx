@@ -152,7 +152,7 @@ export default function FormTatica({ mapa, lado: ladoInicial, inicial = null, on
         type="button"
         onClick={(e) => { e.stopPropagation(); onCancelar() }}
         aria-label="Fechar"
-        className="fixed right-3 top-3 z-[60] flex min-h-10 min-w-10 items-center justify-center rounded-full border border-borda bg-superficie font-mono text-sm text-texto-fraco hover:text-texto lg:hidden"
+        className="panel-cut-sm fixed right-3 top-3 z-[60] flex min-h-10 min-w-10 items-center justify-center border border-borda bg-superficie font-mono text-sm text-texto-fraco hover:text-texto lg:hidden"
       >✕</button>
       <form
         onSubmit={salvar}
@@ -169,7 +169,7 @@ export default function FormTatica({ mapa, lado: ladoInicial, inicial = null, on
                 key={i}
                 type="button"
                 onClick={() => setPapelAtivo(i)}
-                className={`min-h-10 rounded border px-2.5 py-1 font-mono text-xs uppercase transition-colors lg:min-h-0 ${
+                className={`panel-cut-sm min-h-10 border px-2.5 py-1 font-mono text-xs uppercase transition-colors lg:min-h-0 ${
                   i === papelAtivoSeguro ? 'border-destaque bg-destaque/10 text-destaque' : 'border-borda text-texto-fraco hover:text-texto'
                 }`}
               >
@@ -209,14 +209,14 @@ export default function FormTatica({ mapa, lado: ladoInicial, inicial = null, on
             value={titulo}
             onChange={(e) => setTitulo(e.target.value)}
             placeholder="Título (ex.: Execute A padrão)"
-            className="min-h-10 w-full rounded border border-borda bg-fundo px-3 py-2 font-mono text-sm lg:min-h-0"
+            className="panel-cut-sm min-h-10 w-full border border-borda bg-fundo px-3 py-2 font-mono text-sm lg:min-h-0"
           />
           <textarea
             value={descricao}
             onChange={(e) => setDescricao(e.target.value)}
             placeholder="Descrição (opcional)"
             rows={1}
-            className="w-full rounded border border-borda bg-fundo px-3 py-1.5 font-mono text-sm"
+            className="panel-cut-sm w-full border border-borda bg-fundo px-3 py-1.5 font-mono text-sm"
           />
 
           <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
@@ -253,7 +253,7 @@ export default function FormTatica({ mapa, lado: ladoInicial, inicial = null, on
               <button
                 type="button"
                 onClick={adicionarPapel}
-                className="min-h-10 lg:min-h-0 rounded border border-borda px-2 py-1 font-mono text-xs uppercase text-texto-fraco hover:text-texto"
+                className="panel-cut-sm min-h-10 lg:min-h-0 border border-borda px-2 py-1 font-mono text-xs uppercase text-texto-fraco hover:text-texto"
               >+ papel</button>
             </div>
 
@@ -286,7 +286,7 @@ export default function FormTatica({ mapa, lado: ladoInicial, inicial = null, on
                     onChange={(e) => atualizarPapel(i, { descricao: e.target.value })}
                     placeholder="Descrição do papel (obrigatória)"
                     rows={2}
-                    className="w-full rounded border border-borda bg-superficie px-3 py-2 font-mono text-sm"
+                    className="panel-cut-sm w-full border border-borda bg-superficie px-3 py-2 font-mono text-sm"
                   />
 
                   <label className="flex min-h-10 lg:min-h-0 w-fit items-center gap-2 font-mono text-xs uppercase text-texto-fraco">

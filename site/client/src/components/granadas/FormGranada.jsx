@@ -51,7 +51,7 @@ export default function FormGranada({ mapa, lado, posicoes, inicial = null, onSa
         type="button"
         onClick={(e) => { e.stopPropagation(); onCancelar() }}
         aria-label="Fechar"
-        className="fixed right-3 top-3 z-[60] flex min-h-10 min-w-10 items-center justify-center rounded-full border border-borda bg-superficie font-mono text-sm text-texto-fraco hover:text-texto lg:hidden"
+        className="panel-cut-sm fixed right-3 top-3 z-[60] flex min-h-10 min-w-10 items-center justify-center border border-borda bg-superficie font-mono text-sm text-texto-fraco hover:text-texto lg:hidden"
       >✕</button>
       <Card
         corte={false}
@@ -64,11 +64,11 @@ export default function FormGranada({ mapa, lado, posicoes, inicial = null, onSa
           {inicial ? 'Editar granada' : 'Nova granada'} — {lado}
         </h3>
         <input value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Título (ex.: Smoke janela da base)"
-          className="min-h-10 w-full rounded border border-borda bg-fundo px-3 py-2 font-mono text-sm lg:min-h-0" />
+          className="panel-cut-sm min-h-10 w-full border border-borda bg-fundo px-3 py-2 font-mono text-sm lg:min-h-0" />
         <textarea value={descricao} onChange={(e) => setDescricao(e.target.value)} placeholder="Descrição (opcional)" rows={2}
-          className="w-full rounded border border-borda bg-fundo px-3 py-2 font-mono text-sm" />
+          className="panel-cut-sm w-full border border-borda bg-fundo px-3 py-2 font-mono text-sm" />
         <input value={videoUrl} onChange={(e) => setVideoUrl(e.target.value)} placeholder="Link do YouTube (opcional)"
-          className="min-h-10 w-full rounded border border-borda bg-fundo px-3 py-2 font-mono text-sm lg:min-h-0" />
+          className="panel-cut-sm min-h-10 w-full border border-borda bg-fundo px-3 py-2 font-mono text-sm lg:min-h-0" />
         <a
           href={linkBuscaYoutube(`${nomeMapa(mapa)} ${tipo} ${titulo}`)}
           target="_blank"
@@ -90,7 +90,7 @@ export default function FormGranada({ mapa, lado, posicoes, inicial = null, onSa
         </div>
         <textarea value={passosTexto} onChange={(e) => setPassosTexto(e.target.value)} rows={4}
           placeholder={'Passos, um por linha:\nFique colado na quina da caixa\nMire no pixel acima da antena\nJumpthrow'}
-          className="w-full rounded border border-borda bg-fundo px-3 py-2 font-mono text-sm" />
+          className="panel-cut-sm w-full border border-borda bg-fundo px-3 py-2 font-mono text-sm" />
         {erro && <p className="font-mono text-sm text-perigo">{erro}</p>}
         <div className="flex justify-end gap-2">
           <button type="button" onClick={onCancelar} className="min-h-10 px-4 py-2 font-mono text-xs uppercase text-texto-fraco hover:text-texto lg:min-h-0">Cancelar</button>

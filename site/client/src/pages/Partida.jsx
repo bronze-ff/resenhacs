@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, Fragment } from 'react'
 import { useParams, useSearchParams, Link } from 'react-router-dom'
 import { nomeMapa, dataHora, origemPartida, nomeArma, corRating, TIPO_COMPRA } from '../lib/format.js'
-import { MapIcon, SectionHeader, Select } from '../components/ui'
+import { orientarPlacar } from '../lib/resultado.js'
+import { Avatar, MapIcon, SectionHeader, Select, ResultChip } from '../components/ui'
 import ReplayViewer from '../components/ReplayViewer.jsx'
 import MapaCalor from '../components/MapaCalor.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
@@ -38,7 +39,7 @@ function SecaoReplay({ replayUrl, seek, onSelecionarPonto }) {
 
   return (
     <div className="space-y-3">
-      <div className="flex overflow-hidden rounded border border-borda font-mono text-xs uppercase">
+      <div className="panel-cut-sm flex overflow-hidden border border-borda font-mono text-xs uppercase">
         {[['replay', 'Replay 2D'], ['calor', 'Mapa de calor']].map(([v, label]) => (
           <button
             key={v}
@@ -58,38 +59,6 @@ function SecaoReplay({ replayUrl, seek, onSelecionarPonto }) {
   )
 }
 
-// Avatar do jogador (mesmo padrão do Ranking: panel-cut-sm + border + object-cover) com
-// fallback pra quem nunca logou no site (avatarUrl null — comum, ~metade do placar de uma
-// partida costuma ser adversário sem conta) — mostra a inicial do nick tingida na cor do
-// time em vez de sumir/quebrar o layout. Compartilhado entre Scoreboard, Economia e Utilitária.
-function Avatar({ p }) {
-  const titulo = p?.nick || p?.steamId || '?'
-  if (p?.avatarUrl) {
-    return (
-      <img
-        src={p.avatarUrl}
-        alt=""
-        title={titulo}
-        className="panel-cut-sm h-6 w-6 flex-shrink-0 border border-borda object-cover"
-      />
-    )
-  }
-  const inicial = titulo.charAt(0).toUpperCase()
-  const cor =
-    p?.team === 'A'
-      ? 'border-time-a/50 bg-time-a/10 text-time-a'
-      : p?.team === 'B'
-        ? 'border-time-b/50 bg-time-b/10 text-time-b'
-        : 'border-borda bg-superficie-alta text-texto-fraco'
-  return (
-    <span
-      title={titulo}
-      className={`panel-cut-sm flex h-6 w-6 flex-shrink-0 items-center justify-center border font-display text-[10px] font-bold ${cor}`}
-    >
-      {inicial}
-    </span>
-  )
-}
 
 function SteamIcon({ className }) {
   return (
@@ -571,14 +540,14 @@ function SugerirTatica({ matchId, map, roundNumber, onFechar, variante = 'bloco'
         onChange={(e) => setNome(e.target.value)}
         placeholder="Nome curto"
         required
-        className="w-full rounded border border-borda bg-fundo px-2 py-1.5 font-mono text-xs"
+        className="panel-cut-sm w-full border border-borda bg-fundo px-2 py-1.5 font-mono text-xs"
       />
       <textarea
         value={descricao}
         onChange={(e) => setDescricao(e.target.value)}
         placeholder="Descrição"
         rows={2}
-        className="w-full rounded border border-borda bg-fundo px-2 py-1.5 font-mono text-xs"
+        className="panel-cut-sm w-full border border-borda bg-fundo px-2 py-1.5 font-mono text-xs"
       />
       {erro && <p className="font-mono text-xs text-perigo">{erro}</p>}
       <div className="flex justify-end gap-2">
@@ -909,13 +878,13 @@ function FormClipe({ matchId, jogadores, onAdicionado }) {
         value={url}
         onChange={(e) => setUrl(e.target.value)}
         placeholder="Link do Allstar/Medal/YouTube"
-        className="flex-1 rounded border border-borda bg-fundo px-3 py-2 font-mono text-sm"
+        className="panel-cut-sm flex-1 border border-borda bg-fundo px-3 py-2 font-mono text-sm"
       />
       <input
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         placeholder="Título (opcional)"
-        className="w-40 rounded border border-borda bg-fundo px-3 py-2 font-mono text-sm"
+        className="panel-cut-sm w-40 border border-borda bg-fundo px-3 py-2 font-mono text-sm"
       />
       <button
         type="submit"
@@ -942,7 +911,7 @@ const ABAS = [
 // toda e com scroll horizontal no mobile (6 abas não cabem em 375px).
 function BarraAbas({ abas, ativa, onSelecionar }) {
   return (
-    <div className="flex overflow-x-auto rounded border border-borda font-mono text-xs uppercase">
+    <div className="panel-cut-sm flex overflow-x-auto border border-borda font-mono text-xs uppercase">
       {abas.map((a) => (
         <button
           key={a.id}
@@ -1065,6 +1034,7 @@ export default function Partida() {
           : doGrupo.every((p) => p.won === null)
             ? 'empate'
             : 'misto'
+  const placar = orientarPlacar(m.scoreA, m.scoreB, resultadoGrupo)
 
   return (
     <div className="space-y-6">
@@ -1083,33 +1053,7 @@ export default function Partida() {
           </div>
           <p className="font-mono text-sm text-texto-fraco">{dataHora(m.playedAt)}</p>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          {resultadoGrupo === 'vitoria' && (
-            <span className="panel-cut-sm border border-sucesso/40 bg-sucesso/10 px-2.5 py-1 font-display text-xs font-bold uppercase tracking-widest text-sucesso">
-              Vitória
-            </span>
-          )}
-          {resultadoGrupo === 'derrota' && (
-            <span className="panel-cut-sm border border-perigo/40 bg-perigo/10 px-2.5 py-1 font-display text-xs font-bold uppercase tracking-widest text-perigo">
-              Derrota
-            </span>
-          )}
-          {resultadoGrupo === 'empate' && (
-            <span className="panel-cut-sm border border-borda bg-superficie px-2.5 py-1 font-display text-xs font-bold uppercase tracking-widest text-texto-fraco">
-              Empate
-            </span>
-          )}
-          {resultadoGrupo === 'misto' && (
-            <span className="panel-cut-sm border border-borda bg-superficie px-2.5 py-1 font-display text-xs font-bold uppercase tracking-widest text-texto-fraco" title="O grupo jogou dividido nos dois times">
-              Misto
-            </span>
-          )}
-          <div className="font-mono text-3xl font-bold tabular-nums">
-            <span className={m.scoreA === m.scoreB ? 'text-texto' : m.scoreA > m.scoreB ? 'text-sucesso' : 'text-perigo'}>{m.scoreA ?? '–'}</span>
-            <span className="mx-2 text-texto-fraco">:</span>
-            <span className={m.scoreA === m.scoreB ? 'text-texto' : m.scoreB > m.scoreA ? 'text-sucesso' : 'text-perigo'}>{m.scoreB ?? '–'}</span>
-          </div>
-        </div>
+        <ResultChip resultado={resultadoGrupo} a={placar.a} b={placar.b} size="lg" />
       </div>
 
       <BarraAbas abas={ABAS} ativa={abaAtiva} onSelecionar={setAbaAtiva} />
@@ -1214,7 +1158,7 @@ export default function Partida() {
                 rel="noreferrer"
                 className="panel-cut-sm flex items-center gap-3 border border-borda bg-superficie p-3 font-mono text-sm transition-colors hover:border-destaque/60"
               >
-                <span className="flex-shrink-0 rounded bg-fundo px-2 py-1 text-xs uppercase tracking-wide text-destaque">{c.provider}</span>
+                <span className="panel-cut-sm flex-shrink-0 bg-fundo px-2 py-1 text-xs uppercase tracking-wide text-destaque">{c.provider}</span>
                 <span className="min-w-0 flex-1 truncate text-texto">{c.title || c.url}</span>
               </a>
             ))}

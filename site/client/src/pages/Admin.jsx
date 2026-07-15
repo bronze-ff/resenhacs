@@ -51,7 +51,7 @@ export default function Admin() {
           id="steamId"
           value={steamId}
           onChange={(e) => setSteamId(e.target.value)}
-          className="w-full rounded border border-borda bg-superficie px-3 py-2 font-mono text-sm"
+          className="panel-cut-sm min-h-10 w-full border border-borda bg-superficie px-3 py-2 font-mono text-sm lg:min-h-0"
           placeholder="76561198…"
         />
         <button

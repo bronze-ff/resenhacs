@@ -22,7 +22,12 @@ export default function Jogadores() {
 
   return (
     <div>
-      <SectionHeader titulo="Jogadores" />
+      <SectionHeader
+        titulo="Jogadores"
+        acao={jogadores.length > 0 && (
+          <span className="font-mono text-xs text-texto-fraco">{jogadores.length} no grupo</span>
+        )}
+      />
       <ul className="space-y-2">
         {jogadores.map((j) => {
           const ban = bans?.get(j.steamId)

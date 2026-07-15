@@ -83,7 +83,7 @@ export default function PartidasPro() {
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           placeholder="Link do demo no HLTV"
-          className="min-h-10 w-full rounded border border-borda bg-superficie px-3 py-2 font-mono text-sm lg:min-h-0 lg:flex-1"
+          className="panel-cut-sm min-h-10 w-full border border-borda bg-superficie px-3 py-2 font-mono text-sm lg:min-h-0 lg:flex-1"
         />
         <button type="submit" className="panel-cut-sm min-h-10 w-full border border-destaque bg-destaque px-4 py-2 font-display text-sm font-semibold uppercase text-fundo lg:min-h-0 lg:w-auto">
           Adicionar

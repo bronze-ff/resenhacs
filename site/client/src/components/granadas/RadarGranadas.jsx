@@ -166,7 +166,7 @@ export default function RadarGranadas({
               <Badge tom="neutro" className="mt-1">{ROTULO_TECNICA[hovered.tecnica]}</Badge>
             )}
             {thumbYoutube(hovered.videoUrl) && (
-              <img src={thumbYoutube(hovered.videoUrl)} alt="" className="mt-2 w-full rounded" />
+              <img src={thumbYoutube(hovered.videoUrl)} alt="" className="panel-cut-sm mt-2 w-full" />
             )}
             <p className="mt-1 font-mono text-[10px] uppercase text-texto-fraco">clique pra ver vídeo e passos</p>
           </Card>
@@ -182,11 +182,11 @@ export default function RadarGranadas({
             <Badge tom="neutro" className="mt-1">{ROTULO_TECNICA[destacada.tecnica]}</Badge>
           )}
           {thumbYoutube(destacada.videoUrl) && (
-            <img src={thumbYoutube(destacada.videoUrl)} alt="" className="mt-2 w-full rounded" />
+            <img src={thumbYoutube(destacada.videoUrl)} alt="" className="panel-cut-sm mt-2 w-full" />
           )}
           <button
             onClick={() => onSelecionar(destacada)}
-            className="mt-2 min-h-10 w-full rounded border border-destaque bg-destaque/10 px-3 font-mono text-xs uppercase text-destaque hover:bg-destaque/20"
+            className="panel-cut-sm mt-2 min-h-10 w-full border border-destaque bg-destaque/10 px-3 font-mono text-xs uppercase text-destaque hover:bg-destaque/20"
           >
             Ver vídeo e passos
           </button>

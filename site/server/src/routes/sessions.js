@@ -25,9 +25,11 @@ export function createSessionsRouter({ db, requireAuth }) {
     )
     const playersQ = await db.query(
       `select mp.match_id, mp.steam_id64, p.nick, mp.kills, mp.deaths, mp.assists,
-              mp.rating, mp.won, mp.clutch_wins, mp.entry_kills
+              mp.rating, mp.won, mp.clutch_wins, mp.entry_kills,
+              coalesce(p.avatar_url, sa.avatar_url) as avatar_url
        from match_players mp
        join players p on p.steam_id64 = mp.steam_id64
+       left join steam_avatares sa on sa.steam_id64 = mp.steam_id64
        where mp.match_id in (select id from matches where status = 'parsed')`,
     )
     const acesQ = await db.query(
@@ -72,7 +74,7 @@ export function createSessionsRouter({ db, requireAuth }) {
         for (const j of jogadores) {
           if (!porJogador.has(j.steam_id64)) {
             porJogador.set(j.steam_id64, {
-              steamId: j.steam_id64, nick: j.nick, partidas: 0, kills: 0, deaths: 0,
+              steamId: j.steam_id64, nick: j.nick, avatarUrl: j.avatar_url, partidas: 0, kills: 0, deaths: 0,
               assists: 0, ratingSoma: 0, clutchWins: 0, entryKills: 0, aces: 0,
             })
           }

@@ -15,7 +15,7 @@ function BlocoGranada({ granada, onAbrir }) {
       className="panel-cut-sm flex w-full items-center gap-3 border border-borda bg-fundo p-2 text-left transition-colors hover:border-destaque"
     >
       {thumbYoutube(granada.videoUrl) && (
-        <img src={thumbYoutube(granada.videoUrl)} alt="" className="h-12 w-20 shrink-0 rounded object-cover" />
+        <img src={thumbYoutube(granada.videoUrl)} alt="" className="panel-cut-sm h-12 w-20 shrink-0 object-cover" />
       )}
       <div className="min-w-0 flex-1">
         <p className="truncate font-display text-sm font-semibold text-texto">{granada.titulo}</p>
@@ -79,7 +79,7 @@ export default function DetalheTatica({ tatica, onFechar, acoesAdmin = null }) {
             <div className="mt-3 flex flex-wrap gap-1.5">
               <button
                 onClick={() => setAba('overview')}
-                className={`min-h-10 rounded border px-3 py-1.5 font-mono text-xs uppercase transition-colors ${
+                className={`panel-cut-sm min-h-10 border px-3 py-1.5 font-mono text-xs uppercase transition-colors ${
                   aba === 'overview' ? 'border-destaque bg-destaque/10 text-destaque' : 'border-borda text-texto-fraco hover:text-texto'
                 }`}
               >Overview</button>
@@ -87,7 +87,7 @@ export default function DetalheTatica({ tatica, onFechar, acoesAdmin = null }) {
                 <button
                   key={p.id}
                   onClick={() => setAba(p.id)}
-                  className={`min-h-10 rounded border px-3 py-1.5 font-mono text-xs uppercase transition-colors ${
+                  className={`panel-cut-sm min-h-10 border px-3 py-1.5 font-mono text-xs uppercase transition-colors ${
                     aba === p.id ? 'border-destaque bg-destaque/10 text-destaque' : 'border-borda text-texto-fraco hover:text-texto'
                   }`}
                 >Jogador {i + 1}</button>

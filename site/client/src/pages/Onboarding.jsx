@@ -46,7 +46,7 @@ export default function Onboarding() {
             value={nome}
             onChange={(e) => setNome(e.target.value)}
             placeholder="Nome do grupo"
-            className="w-full rounded border border-borda bg-superficie px-3 py-2 font-mono text-sm"
+            className="panel-cut-sm min-h-10 w-full border border-borda bg-superficie px-3 py-2 font-mono text-sm lg:min-h-0"
           />
           <button
             type="submit"
@@ -67,7 +67,7 @@ export default function Onboarding() {
             value={tokenConvite}
             onChange={(e) => setTokenConvite(e.target.value)}
             placeholder="Cole o link do convite"
-            className="w-full rounded border border-borda bg-superficie px-3 py-2 font-mono text-sm"
+            className="panel-cut-sm min-h-10 w-full border border-borda bg-superficie px-3 py-2 font-mono text-sm lg:min-h-0"
           />
           <button
             type="submit"

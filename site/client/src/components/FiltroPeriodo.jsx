@@ -7,14 +7,14 @@ export default function FiltroPeriodo({ de, ate, onDe, onAte }) {
         type="date"
         value={de}
         onChange={(e) => onDe(e.target.value)}
-        className="min-h-10 rounded border border-borda bg-superficie px-3 py-2 text-sm text-texto [color-scheme:dark] lg:min-h-0 lg:px-2 lg:py-1 lg:text-xs"
+        className="panel-cut-sm min-h-10 border border-borda bg-superficie px-3 py-2 text-sm text-texto [color-scheme:dark] lg:min-h-0 lg:px-2 lg:py-1 lg:text-xs"
       />
       <span className="text-texto-fraco">→</span>
       <input
         type="date"
         value={ate}
         onChange={(e) => onAte(e.target.value)}
-        className="min-h-10 rounded border border-borda bg-superficie px-3 py-2 text-sm text-texto [color-scheme:dark] lg:min-h-0 lg:px-2 lg:py-1 lg:text-xs"
+        className="panel-cut-sm min-h-10 border border-borda bg-superficie px-3 py-2 text-sm text-texto [color-scheme:dark] lg:min-h-0 lg:px-2 lg:py-1 lg:text-xs"
       />
       {(de || ate) && (
         <button
