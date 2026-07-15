@@ -111,7 +111,7 @@ export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Cli
     if (matchQ.rows.length === 0) return res.status(404).json({ erro: 'Partida não encontrada' })
     const m = matchQ.rows[0]
 
-    const [players, rounds, highlights, clips, econ] = await Promise.all([
+    const [players, rounds, highlights, clips, econ, weapons] = await Promise.all([
       db.query(
         `select mp.steam_id64, mp.nick, mp.team, mp.kills, mp.deaths, mp.assists, mp.headshot_kills,
                 mp.damage, mp.rounds_played, mp.rating, mp.won, mp.is_tracked, mp.team_kills,
@@ -148,7 +148,26 @@ export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Cli
          from match_round_econ where match_id = $1 order by round_number`,
         [id],
       ),
+      // Kills por arma, por Jogador, só dessa Partida — recolhido por padrão na UI,
+      // pra conferir "com que arma ele matou" sem esperar a agregação de carreira.
+      db.query(
+        `select steam_id64, weapon, kills, hs_kills, shots_fired, shots_hit, damage
+         from match_player_weapons where match_id = $1 order by steam_id64, kills desc`,
+        [id],
+      ),
     ])
+    const armasPorJogador = new Map()
+    for (const w of weapons.rows) {
+      if (!armasPorJogador.has(w.steam_id64)) armasPorJogador.set(w.steam_id64, [])
+      armasPorJogador.get(w.steam_id64).push({
+        weapon: w.weapon,
+        kills: w.kills,
+        hsKills: w.hs_kills,
+        shotsFired: w.shots_fired,
+        shotsHit: w.shots_hit,
+        damage: w.damage,
+      })
+    }
 
     res.json({
       id: m.id,
@@ -178,6 +197,7 @@ export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Cli
         rating: p.rating === null ? null : Number(p.rating),
         won: p.won,
         isTracked: p.is_tracked,
+        weapons: armasPorJogador.get(p.steam_id64) ?? [],
         utilitaria: {
           heDamage: p.he_damage,
           molotovDamage: p.molotov_damage,

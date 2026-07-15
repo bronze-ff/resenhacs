@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, Fragment } from 'react'
 import { useParams, useSearchParams, Link } from 'react-router-dom'
-import { nomeMapa, dataHora, origemPartida, corRating, TIPO_COMPRA } from '../lib/format.js'
+import { nomeMapa, dataHora, origemPartida, nomeArma, corRating, TIPO_COMPRA } from '../lib/format.js'
 import { MapIcon, SectionHeader } from '../components/ui'
 import ReplayViewer from '../components/ReplayViewer.jsx'
 import MapaCalor from '../components/MapaCalor.jsx'
@@ -129,7 +129,43 @@ function NomeJogador({ p, mostrarTagGrupo = true, className = '' }) {
   )
 }
 
+// Seta que gira 90° quando aberto — mesmo ícone pros dois estados, só rotaciona.
+function SetaExpandir({ aberto }) {
+  return (
+    <svg
+      viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+      className={`h-3.5 w-3.5 shrink-0 transition-transform ${aberto ? 'rotate-90' : ''}`}
+    >
+      <path d="M9 5L15 12L9 19" />
+    </svg>
+  )
+}
+
+// Recolhido por padrão: kills por arma NESSA partida (não é a agregação de carreira do
+// perfil) — serve pra conferir na hora "com que arma ele matou" (ex.: alguém alega só ter
+// jogado de uma arma específica e o grupo quer confirmar).
+function ArmasDoJogador({ weapons }) {
+  if (!weapons || weapons.length === 0) {
+    return <p className="px-1 py-2 font-mono text-xs text-texto-fraco">Sem kills registrados nessa partida.</p>
+  }
+  return (
+    <div className="flex flex-wrap gap-2 px-1 py-2">
+      {weapons.map((w) => (
+        <div
+          key={w.weapon}
+          className="panel-cut-sm flex items-center gap-2 border border-borda bg-superficie px-2 py-1 font-mono text-xs"
+        >
+          <span className="font-semibold text-texto">{nomeArma(w.weapon)}</span>
+          <span className="text-texto-fraco">{w.kills} kill{w.kills === 1 ? '' : 's'}</span>
+          {w.hsKills > 0 && <span className="text-texto-fraco">· {w.hsKills} HS</span>}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function Scoreboard({ time, jogadores, podePromover, onPromover, promovendo }) {
+  const [expandido, setExpandido] = useState(null)
   return (
     <div className="panel-cut overflow-x-auto border border-borda">
       <table className="w-full text-sm">
@@ -149,34 +185,51 @@ function Scoreboard({ time, jogadores, podePromover, onPromover, promovendo }) {
           {jogadores.map((p) => {
             const adr = p.roundsPlayed ? Math.round((p.damage / p.roundsPlayed) * 10) / 10 : 0
             const hs = p.kills ? Math.round((p.headshotKills / p.kills) * 100) : 0
+            const aberto = expandido === p.steamId
             return (
-              <tr key={p.steamId} className="border-t border-borda transition-colors hover:bg-superficie-alta">
-                <td className="px-3 py-2">
-                  <span className="flex items-center gap-2">
-                    <NomeJogador p={p} />
-                    {!p.isTracked && podePromover && (
+              <Fragment key={p.steamId}>
+                <tr className="border-t border-borda transition-colors hover:bg-superficie-alta">
+                  <td className="px-3 py-2">
+                    <span className="flex items-center gap-2">
                       <button
-                        onClick={() => onPromover(p.steamId)}
-                        disabled={promovendo === p.steamId}
-                        className="panel-cut-sm border border-borda px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-texto-fraco transition-colors hover:border-destaque hover:text-destaque disabled:opacity-50"
+                        onClick={() => setExpandido(aberto ? null : p.steamId)}
+                        title="Ver kills por arma nessa partida"
+                        className="text-texto-fraco transition-colors hover:text-destaque"
                       >
-                        {promovendo === p.steamId ? '…' : '+ grupo'}
+                        <SetaExpandir aberto={aberto} />
                       </button>
-                    )}
-                  </span>
-                </td>
-                <td className="px-2 py-2 text-right tabular-nums">{p.kills}</td>
-                <td className={`hidden px-2 py-2 text-right tabular-nums sm:table-cell ${p.teamKills > 0 ? 'text-perigo' : 'text-texto-fraco'}`}>
-                  {p.teamKills || 0}
-                </td>
-                <td className="px-2 py-2 text-right tabular-nums">{p.deaths}</td>
-                <td className="px-2 py-2 text-right tabular-nums">{p.assists}</td>
-                <td className="px-2 py-2 text-right tabular-nums">{adr}</td>
-                <td className="hidden px-2 py-2 text-right tabular-nums sm:table-cell">{hs}%</td>
-                <td className={`px-3 py-2 text-right font-semibold tabular-nums ${corRating(p.rating)}`}>
-                  {p.rating?.toFixed(2) ?? '–'}
-                </td>
-              </tr>
+                      <NomeJogador p={p} />
+                      {!p.isTracked && podePromover && (
+                        <button
+                          onClick={() => onPromover(p.steamId)}
+                          disabled={promovendo === p.steamId}
+                          className="panel-cut-sm border border-borda px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-texto-fraco transition-colors hover:border-destaque hover:text-destaque disabled:opacity-50"
+                        >
+                          {promovendo === p.steamId ? '…' : '+ grupo'}
+                        </button>
+                      )}
+                    </span>
+                  </td>
+                  <td className="px-2 py-2 text-right tabular-nums">{p.kills}</td>
+                  <td className={`hidden px-2 py-2 text-right tabular-nums sm:table-cell ${p.teamKills > 0 ? 'text-perigo' : 'text-texto-fraco'}`}>
+                    {p.teamKills || 0}
+                  </td>
+                  <td className="px-2 py-2 text-right tabular-nums">{p.deaths}</td>
+                  <td className="px-2 py-2 text-right tabular-nums">{p.assists}</td>
+                  <td className="px-2 py-2 text-right tabular-nums">{adr}</td>
+                  <td className="hidden px-2 py-2 text-right tabular-nums sm:table-cell">{hs}%</td>
+                  <td className={`px-3 py-2 text-right font-semibold tabular-nums ${corRating(p.rating)}`}>
+                    {p.rating?.toFixed(2) ?? '–'}
+                  </td>
+                </tr>
+                {aberto && (
+                  <tr className="border-t border-borda/60 bg-fundo/40">
+                    <td colSpan={8}>
+                      <ArmasDoJogador weapons={p.weapons} />
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
             )
           })}
         </tbody>

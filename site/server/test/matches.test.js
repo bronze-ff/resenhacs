@@ -118,21 +118,38 @@ describe('GET /api/matches/:id', () => {
     expect(res.status).toBe(404)
   })
 
-  it('devolve placar, rounds, highlights e clipes', async () => {
+  it('devolve placar, rounds, highlights, clipes e armas por jogador', async () => {
     const { app } = appWith([
       ['from matches where id', [{ id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9, source: 'valve_mm', status: 'parsed', demo_url: null }]],
       ['from match_players mp', [{ steam_id64: '765', nick: 'fih', team: 'A', kills: 25, team_kills: 1, deaths: 10, assists: 5, headshot_kills: 12, damage: 2500, rounds_played: 22, rating: '1.35', won: true, is_tracked: true, avatar_url: 'https://avatars.steamstatic.com/fih.jpg' }]],
       ['from rounds where match_id', [{ round_number: 1, winner_team: 'A', win_reason: 'elim' }]],
       ['from highlights h', [{ id: 'h1', steam_id64: '765', round_number: 5, kind: 'ace', description: 'ACE', frame: 12, nick: 'fih' }]],
       ['from clips where match_id', [{ id: 'c1', steam_id64: '765', url: 'https://allstar.gg/x', provider: 'allstar', title: 'meu ace', highlight_id: 'h1' }]],
+      ['from match_player_weapons', [
+        { steam_id64: '765', weapon: 'deagle', kills: 22, hs_kills: 10, shots_fired: 60, shots_hit: 25, damage: 2200 },
+        { steam_id64: '765', weapon: 'knife', kills: 3, hs_kills: 0, shots_fired: 0, shots_hit: 0, damage: 150 },
+      ]],
     ])
     const res = await request(app).get('/api/matches/m1').set('Cookie', cookie).set('X-Group-Id', GRUPO)
     expect(res.status).toBe(200)
     expect(res.body.players[0]).toMatchObject({ nick: 'fih', rating: 1.35, isTracked: true, teamKills: 1, avatarUrl: 'https://avatars.steamstatic.com/fih.jpg' })
+    expect(res.body.players[0].weapons).toEqual([
+      { weapon: 'deagle', kills: 22, hsKills: 10, shotsFired: 60, shotsHit: 25, damage: 2200 },
+      { weapon: 'knife', kills: 3, hsKills: 0, shotsFired: 0, shotsHit: 0, damage: 150 },
+    ])
     expect(res.body.rounds[0]).toMatchObject({ roundNumber: 1, winnerTeam: 'A' })
     expect(res.body.highlights[0]).toMatchObject({ kind: 'ace', nick: 'fih', frame: 12 })
     expect(res.body.clips[0]).toMatchObject({ provider: 'allstar', url: 'https://allstar.gg/x' })
     expect(res.body.demoUrl).toBeNull() // sem demo_url no fixture
+  })
+
+  it('jogador sem kills registrados: weapons vem vazio', async () => {
+    const { app } = appWith([
+      ['from matches where id', [{ id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9, source: 'valve_mm', status: 'parsed', demo_url: null }]],
+      ['from match_players mp', [{ steam_id64: '999', nick: 'zerado', team: 'B', kills: 0, team_kills: 0, deaths: 20, assists: 0, headshot_kills: 0, damage: 0, rounds_played: 22, rating: '0.2', won: false, is_tracked: false, avatar_url: null }]],
+    ])
+    const res = await request(app).get('/api/matches/m1').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    expect(res.body.players[0].weapons).toEqual([])
   })
 
   it('jogador sem cadastro no grupo usa o avatar em cache da steam_avatares (fallback)', async () => {
