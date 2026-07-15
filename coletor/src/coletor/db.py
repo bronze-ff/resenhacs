@@ -263,6 +263,31 @@ def _write_round_econ(cur, match_id, round_econ):
         )
 
 
+def _write_player_round_econ(cur, match_id, player_round_econ):
+    cur.execute("delete from match_player_round_econ where match_id = %s", (match_id,))
+    for e in player_round_econ:
+        cur.execute(
+            """
+            insert into match_player_round_econ
+              (match_id, round_number, steam_id64, team, equip_value, buy_type)
+            values (%s, %s, %s, %s, %s, %s)
+            """,
+            (match_id, e["round_number"], e["steam_id64"], e.get("team"), e["equip_value"], e["buy_type"]),
+        )
+
+
+def _write_purchases(cur, match_id, purchases):
+    cur.execute("delete from match_player_purchases where match_id = %s", (match_id,))
+    for c in purchases:
+        cur.execute(
+            """
+            insert into match_player_purchases (match_id, round_number, steam_id64, item, tick)
+            values (%s, %s, %s, %s, %s)
+            """,
+            (match_id, c["round_number"], c["steam_id64"], c["item"], c.get("tick")),
+        )
+
+
 def _write_kill_positions(cur, match_id, kill_positions):
     cur.execute("delete from kill_positions where match_id = %s", (match_id,))
     for k in kill_positions:
@@ -319,6 +344,8 @@ def store_parsed(conn, parsed, share_code=None, source="valve_mm", demo_url=None
         _write_highlights(cur, match_id, parsed.get("highlights", []))
         _write_player_weapons(cur, match_id, parsed.get("players", []))
         _write_round_econ(cur, match_id, parsed.get("round_econ", []))
+        _write_player_round_econ(cur, match_id, parsed.get("player_round_econ", []))
+        _write_purchases(cur, match_id, parsed.get("purchases", []))
         _write_kill_positions(cur, match_id, parsed.get("kill_positions", []))
         _write_lineups(cur, match_id, parsed.get("lineups", []))
     conn.commit()

@@ -306,6 +306,45 @@ def test_fundir_partes_mesmo_mapa_concatena_rounds_com_offset_recalcula_placar_e
     assert fundido["team_a_name"] == "FaZe" and fundido["team_b_name"] == "Vitality"
 
 
+def test_fundir_partes_mesmo_mapa_soma_offset_em_econ_por_jogador_e_compras():
+    parte1 = _parte_base(
+        rounds=[{"round_number": 1, "winner_team": "A", "win_reason": ""}],
+        players=[_jogador("1", "A"), _jogador("2", "B")],
+        player_round_econ=[{"round_number": 1, "steam_id64": "1", "team": "A", "equip_value": 4000, "buy_type": "eco"}],
+        purchases=[{"round_number": 1, "steam_id64": "1", "item": "glock", "tick": 100}],
+    )
+    parte2 = _parte_base(
+        rounds=[{"round_number": 1, "winner_team": "A", "win_reason": ""}],
+        players=[_jogador("1", "A"), _jogador("2", "B")],
+        player_round_econ=[{"round_number": 1, "steam_id64": "1", "team": "A", "equip_value": 9000, "buy_type": "forcado"}],
+        purchases=[{"round_number": 1, "steam_id64": "1", "item": "deagle", "tick": 50}],
+    )
+
+    fundido, _ = parse.fundir_partes_mesmo_mapa([parte1, parte2])
+
+    econ_da_parte2 = next(e for e in fundido["player_round_econ"] if e["equip_value"] == 9000)
+    assert econ_da_parte2["round_number"] == 2  # offset de 1 round (parte1 teve 1)
+    compra_da_parte2 = next(c for c in fundido["purchases"] if c["item"] == "deagle")
+    assert compra_da_parte2["round_number"] == 2
+
+
+def test_fundir_partes_mesmo_mapa_inverte_letra_em_econ_por_jogador():
+    parte1 = _parte_base(
+        rounds=[{"round_number": 1, "winner_team": "A", "win_reason": ""}],
+        players=[_jogador("1", "A"), _jogador("2", "B")],
+    )
+    parte2 = _parte_base(
+        rounds=[{"round_number": 1, "winner_team": "B", "win_reason": ""}],
+        players=[_jogador("1", "B", kills=3), _jogador("2", "A", kills=1)],
+        player_round_econ=[{"round_number": 1, "steam_id64": "1", "team": "B", "equip_value": 9000, "buy_type": "forcado"}],
+    )
+
+    fundido, _ = parse.fundir_partes_mesmo_mapa([parte1, parte2])
+
+    econ_jogador1 = next(e for e in fundido["player_round_econ"] if e["steam_id64"] == "1")
+    assert econ_jogador1["team"] == "A"  # jogador "1" é canonicamente A; letra crua "B" da parte2 corrigida
+
+
 def test_fundir_partes_mesmo_mapa_detecta_e_corrige_letra_ab_invertida_na_parte_2():
     # Parte 1: jogador "1" é A, "2" é B. Parte 2: parse_demo (arquivo diferente)
     # atribuiu a letra oposta pros MESMOS dois jogadores — bug mais fácil de escorregar

@@ -288,6 +288,11 @@ def _corrigir_letra_parte(parte, inverter):
             {**r, "winner_team": _inverter_letra_time(r.get("winner_team"))} for r in parte.get("rounds", [])
         ],
         "round_econ": [{**e, "team": _inverter_letra_time(e.get("team"))} for e in parte.get("round_econ", [])],
+        "player_round_econ": [
+            {**e, "team": _inverter_letra_time(e.get("team"))} for e in parte.get("player_round_econ", [])
+        ],
+        # purchases não tem campo "team" (é por steam_id64, que não muda com a letra).
+        "purchases": parte.get("purchases", []),
     }
 
 
@@ -384,11 +389,14 @@ def fundir_partes_mesmo_mapa(partes, rdatas=None):
         rounds_ja_contados += len(parte.get("rounds", []))
 
     rounds_fundidos, kills_fundidos, econ_fundido, kill_pos_fundidas = [], [], [], []
+    player_econ_fundido, purchases_fundidas = [], []
     for parte, offset in zip(partes_corrigidas, offsets):
         rounds_fundidos += _offset_campo(parte.get("rounds", []), offset, "round_number")
         kills_fundidos += _offset_campo(parte.get("kills", []), offset, "round_number")
         econ_fundido += _offset_campo(parte.get("round_econ", []), offset, "round_number")
         kill_pos_fundidas += _offset_campo(parte.get("kill_positions", []), offset, "round_number")
+        player_econ_fundido += _offset_campo(parte.get("player_round_econ", []), offset, "round_number")
+        purchases_fundidas += _offset_campo(parte.get("purchases", []), offset, "round_number")
 
     score_a = sum(1 for r in rounds_fundidos if r.get("winner_team") == "A")
     score_b = sum(1 for r in rounds_fundidos if r.get("winner_team") == "B")
@@ -402,6 +410,7 @@ def fundir_partes_mesmo_mapa(partes, rdatas=None):
         "team_a_name": nome_a, "team_b_name": nome_b,
         "rounds": rounds_fundidos, "kills": kills_fundidos,
         "round_econ": econ_fundido, "kill_positions": kill_pos_fundidas,
+        "player_round_econ": player_econ_fundido, "purchases": purchases_fundidas,
         "players": _merge_players([p.get("players", []) for p in partes_corrigidas]),
     }
 
@@ -463,7 +472,11 @@ def parse_demo(path):
     # (current_equip_value), classificada no esquema HLTV (_tipo_de_compra). Best-effort:
     # se o nome de campo não bater numa versão do demoparser2, cai pra lista vazia em
     # vez de derrubar o ingest inteiro (mesmo padrão de player_blind acima).
+    # player_round_econ é o MESMO current_equip_value já lido pra somar o round_econ por
+    # time — só não descartamos mais o valor individual. buy_type por jogador usa a mesma
+    # classificação HLTV do time (_tipo_de_compra), só que sobre o gasto individual dele.
     round_econ = []
+    player_round_econ = []
     try:
         tick_to_round = {int(t): int(rn) + 1 for t, rn in zip(freeze["tick"], freeze["total_rounds_played"])}
         econ_df = parser.parse_ticks(["current_equip_value"], ticks=sorted(tick_to_round.keys()))
@@ -476,10 +489,34 @@ def parse_demo(path):
             if not time or equip is None or rn is None:
                 continue
             soma[(rn, time)] = soma.get((rn, time), 0) + equip
+            if sid:
+                player_round_econ.append({
+                    "round_number": rn, "steam_id64": sid, "team": time,
+                    "equip_value": equip, "buy_type": _tipo_de_compra(equip),
+                })
         round_econ = [
             {"round_number": rn, "team": time, "equip_value": equip, "buy_type": _tipo_de_compra(equip)}
             for (rn, time), equip in soma.items()
         ]
+    except Exception:  # noqa: BLE001
+        pass
+
+    # Itens comprados por round×jogador — event bruto, sem agregação (a UI decide como
+    # agrupar). Best-effort igual ao bloco acima: nome de campo pode variar entre versões
+    # do demoparser2, cai pra lista vazia em vez de derrubar o ingest inteiro.
+    purchases = []
+    try:
+        compras_evt = parser.parse_event("item_purchase", other=["total_rounds_played"])
+        for r in compras_evt.to_dict("records"):
+            sid = _sid(r.get("user_steamid"))
+            item = r.get("item")
+            rn = r.get("total_rounds_played")
+            if not sid or not item or rn is None:
+                continue
+            purchases.append({
+                "round_number": int(rn) + 1, "steam_id64": sid,
+                "item": str(item), "tick": _num(r.get("tick")),
+            })
     except Exception:  # noqa: BLE001
         pass
 
@@ -789,6 +826,8 @@ def parse_demo(path):
         "players": players,
         "kills": kills,
         "round_econ": round_econ,
+        "player_round_econ": player_round_econ,
+        "purchases": purchases,
         "kill_positions": kill_positions,
     }
 

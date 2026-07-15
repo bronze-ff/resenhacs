@@ -173,6 +173,24 @@ def test_store_parsed_grava_tudo_e_commita():
     assert any(s.startswith("delete from kill_positions") for s in sqls)
 
 
+def test_store_parsed_grava_economia_por_jogador_e_compras():
+    conn = FakeConn()
+    parsed = _parsed()
+    parsed["player_round_econ"] = [
+        {"round_number": 1, "steam_id64": "A", "team": "A", "equip_value": 4000, "buy_type": "eco"},
+    ]
+    parsed["purchases"] = [
+        {"round_number": 1, "steam_id64": "A", "item": "deagle", "tick": 100},
+    ]
+    db.store_parsed(conn, parsed, share_code="CSGO-x", source="upload")
+    econ_insert = next(c for c in conn.calls if c[0].startswith("insert into match_player_round_econ"))
+    assert econ_insert[1] == ("00000000-0000-0000-0000-000000000001", 1, "A", "A", 4000, "eco")
+    compra_insert = next(c for c in conn.calls if c[0].startswith("insert into match_player_purchases"))
+    assert compra_insert[1] == ("00000000-0000-0000-0000-000000000001", 1, "A", "deagle", 100)
+    assert any(s.startswith("delete from match_player_round_econ") for s, _ in conn.calls)
+    assert any(s.startswith("delete from match_player_purchases") for s, _ in conn.calls)
+
+
 def test_store_parsed_grava_posicoes_de_kill():
     conn = FakeConn()
     parsed = _parsed()
