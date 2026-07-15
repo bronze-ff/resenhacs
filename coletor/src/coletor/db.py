@@ -20,7 +20,7 @@ def match_fingerprint(parsed):
     return hashlib.sha256(base.encode("utf-8")).hexdigest()[:32]
 
 
-def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status, prefer_new_played_at=False):
+def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status, prefer_new_played_at=False, group_id=None):
     fingerprint = match_fingerprint(parsed)
 
     # Dedupe por conteúdo ANTES do insert: se a mesma partida já existe (chegou pelo
@@ -76,8 +76,8 @@ def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status,
     )
     cur.execute(
         f"""
-        insert into matches (share_code, source, map, score_a, score_b, played_at, demo_url, replay_url, status, fingerprint, team_a_name, team_b_name)
-        values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        insert into matches (share_code, source, map, score_a, score_b, played_at, demo_url, replay_url, status, fingerprint, team_a_name, team_b_name, group_id)
+        values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         on conflict (share_code) do update set
           source = excluded.source, map = excluded.map,
           score_a = excluded.score_a, score_b = excluded.score_b,
@@ -103,6 +103,7 @@ def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status,
             fingerprint,
             parsed.get("team_a_name"),
             parsed.get("team_b_name"),
+            group_id,
         ),
     )
     return cur.fetchone()[0]
@@ -301,11 +302,17 @@ def _write_lineups(cur, match_id, lineups):
 
 
 def store_parsed(conn, parsed, share_code=None, source="valve_mm", demo_url=None,
-                 replay_url=None, status="parsed", prefer_new_played_at=False):
-    """Grava a Partida inteira numa transação. Devolve o match_id (uuid)."""
+                 replay_url=None, status="parsed", prefer_new_played_at=False, group_id=None):
+    """Grava a Partida inteira numa transação. Devolve o match_id (uuid).
+
+    group_id só é usado quando a Partida ainda não existe (nem por fingerprint nem por
+    share_code) — se já existe (reprocess, ou union com um 'pending' do discover), o
+    group_id já gravado antes é preservado, nunca sobrescrito aqui.
+    """
     with conn.cursor() as cur:
         match_id = _insert_match(
-            cur, share_code, source, parsed, demo_url, replay_url, status, prefer_new_played_at
+            cur, share_code, source, parsed, demo_url, replay_url, status, prefer_new_played_at,
+            group_id=group_id,
         )
         _write_players(cur, match_id, parsed.get("players", []))
         _write_rounds(cur, match_id, parsed.get("rounds", []))
@@ -318,22 +325,25 @@ def store_parsed(conn, parsed, share_code=None, source="valve_mm", demo_url=None
     return match_id
 
 
-def record_pending_match(conn, share_code, source="valve_mm"):
+def record_pending_match(conn, share_code, group_id, source="valve_mm"):
     """Registra um share code descoberto sem demo ainda (status pending). Idempotente.
 
     Grava played_at = now() (hora da descoberta): é bem mais próximo da hora real
     da Partida do que a mtime do .dem, que só reflete quando o arquivo foi baixado
     (pode ser dias depois — o formato .dem não guarda data em lugar nenhum).
+
+    group_id é obrigatório (matches.group_id é not null) — o chamador (cmd_discover)
+    já sabe de qual Jogador veio esse share code, então usa o grupo_ativo_id dele.
     """
     with conn.cursor() as cur:
         cur.execute(
             """
-            insert into matches (share_code, source, status, played_at)
-            values (%s, %s, 'pending', now())
+            insert into matches (share_code, source, status, played_at, group_id)
+            values (%s, %s, 'pending', now(), %s)
             on conflict (share_code) do nothing
             returning id
             """,
-            (share_code, source),
+            (share_code, source, group_id),
         )
         row = cur.fetchone()
     conn.commit()
@@ -363,13 +373,36 @@ def mark_skipped(conn, share_code):
 
 
 def list_tracked_players(conn):
-    """[(steam_id64, match_auth_code, last_share_code)] dos Jogadores com onboarding feito."""
+    """[(steam_id64, match_auth_code, last_share_code, grupo_ativo_id)] dos Jogadores com
+    onboarding feito. grupo_ativo_id pode vir None se o Jogador nunca escolheu/criou um
+    grupo (o chamador decide o que fazer nesse caso — hoje: pula e avisa)."""
     with conn.cursor() as cur:
         cur.execute(
-            "select steam_id64, match_auth_code, last_share_code from players "
+            "select steam_id64, match_auth_code, last_share_code, grupo_ativo_id from players "
             "where match_auth_code is not null and last_share_code is not null"
         )
         return cur.fetchall()
+
+
+def grupo_para_ingest(conn, steam_ids):
+    """Escolhe o grupo pra atribuir uma Partida ingerida sem contexto explícito de "quem
+    importou" (upload manual, fila de Partidas Pro, reprocess de fingerprint novo): usa o
+    grupo ativo de qualquer Jogador conhecido presente na Partida; se nenhum (ex.: demo pro
+    sem ninguém do sistema), cai no grupo mais antigo. Stopgap enquanto o Coletor não tem um
+    conceito explícito de "grupo de quem fez o upload" — ver spec de multi-tenancy (fora de
+    escopo lá, mas sem isso a inserção falha com not-null violation em matches.group_id)."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "select grupo_ativo_id from players "
+            "where steam_id64 = any(%s) and grupo_ativo_id is not null limit 1",
+            (list(steam_ids),),
+        )
+        row = cur.fetchone()
+        if row:
+            return row[0]
+        cur.execute("select id from groups order by criado_em limit 1")
+        row = cur.fetchone()
+        return row[0] if row else None
 
 
 def set_last_share_code(conn, steam_id64, share_code):

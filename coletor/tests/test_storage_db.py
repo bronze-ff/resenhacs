@@ -104,6 +104,10 @@ class FakeCursor:
         # (None = partida inédita, caminho do insert).
         if self._last.startswith("select id from matches where fingerprint"):
             return self.conn.fingerprint_row
+        if self._last.startswith("select grupo_ativo_id from players"):
+            return self.conn.grupo_ativo_row
+        if self._last.startswith("select id from groups"):
+            return self.conn.grupo_mais_antigo_row
         return ["00000000-0000-0000-0000-000000000001"]
 
     def fetchall(self):
@@ -124,6 +128,8 @@ class FakeConn:
         self.fila_rows = []
         self.avatares_frescos = []
         self.match_players_sem_avatar = []
+        self.grupo_ativo_row = None
+        self.grupo_mais_antigo_row = None
 
     def cursor(self):
         return FakeCursor(self)
@@ -293,11 +299,32 @@ def test_listar_steam_ids_de_match_players_sem_avatar_fresco():
 
 def test_record_pending_match():
     conn = FakeConn()
-    mid = db.record_pending_match(conn, "CSGO-novo")
+    mid = db.record_pending_match(conn, "CSGO-novo", "grupo-1")
     assert mid == "00000000-0000-0000-0000-000000000001"
     assert conn.commits == 1
-    assert conn.calls[0][1] == ("CSGO-novo", "valve_mm")
+    assert conn.calls[0][1] == ("CSGO-novo", "valve_mm", "grupo-1")
     assert "played_at" in conn.calls[0][0] and "now()" in conn.calls[0][0]
+    assert "group_id" in conn.calls[0][0]
+
+
+def test_store_parsed_grava_group_id_na_partida_nova():
+    conn = FakeConn()
+    db.store_parsed(conn, _parsed(), share_code="CSGO-x", source="upload", group_id="grupo-1")
+    match_call = next(c for c in conn.calls if c[0].startswith("insert into matches"))
+    assert match_call[1][-1] == "grupo-1"
+
+
+def test_grupo_para_ingest_usa_grupo_ativo_de_jogador_conhecido():
+    conn = FakeConn()
+    conn.grupo_ativo_row = ["grupo-do-jogador"]
+    assert db.grupo_para_ingest(conn, ["765"]) == "grupo-do-jogador"
+
+
+def test_grupo_para_ingest_cai_no_grupo_mais_antigo_sem_jogador_conhecido():
+    conn = FakeConn()
+    conn.grupo_ativo_row = None
+    conn.grupo_mais_antigo_row = ["grupo-original"]
+    assert db.grupo_para_ingest(conn, ["999"]) == "grupo-original"
 
 
 def test_store_parsed_por_padrao_preserva_played_at_existente():

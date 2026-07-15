@@ -34,7 +34,10 @@ from .config import Config
 def cmd_discover(config, conn):
     config.require("steam_api_key")
     total = 0
-    for steam_id64, auth_code, last_code in dbmod.list_tracked_players(conn):
+    for steam_id64, auth_code, last_code, grupo_ativo_id in dbmod.list_tracked_players(conn):
+        if not grupo_ativo_id:
+            print(f"{steam_id64}: sem grupo ativo — pulando (matches.group_id é obrigatório)")
+            continue
         # Um jogador com auth code inválido/expirado (ou rate limit persistente) não deve
         # abortar a descoberta dos outros.
         try:
@@ -44,7 +47,7 @@ def cmd_discover(config, conn):
             continue
         for code in novos:
             if sharecode.is_valid(code):
-                dbmod.record_pending_match(conn, code)
+                dbmod.record_pending_match(conn, code, grupo_ativo_id)
                 total += 1
         if novos:
             dbmod.set_last_share_code(conn, steam_id64, novos[-1])
@@ -468,10 +471,13 @@ def _finalizar_ingest(config, conn, parsed, replay_json, dem_path_upload, share_
             )
             replay_url = f"{config.r2_endpoint}/{config.r2_bucket}/{rkey}"
 
+    steam_ids = [p["steam_id64"] for p in parsed.get("players", []) if p.get("steam_id64")]
+    group_id = dbmod.grupo_para_ingest(conn, steam_ids)
     return dbmod.store_parsed(
         conn, parsed, share_code=share_code, source=source,
         demo_url=demo_url, replay_url=replay_url,
         prefer_new_played_at=bool(played_at),
+        group_id=group_id,
     )
 
 
