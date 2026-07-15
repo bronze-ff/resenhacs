@@ -177,22 +177,28 @@ const CATEGORIAS_ARMA_ORDEM = ['Rifles', 'Snipers', 'SMGs', 'Pistolas', 'Shotgun
 
 // Uma linha do comparativo: barra espelhada (A cresce pra esquerda, B pra direita) a
 // partir de um valor central — mesma ideia visual do Head to Head do Leetify.
-function LinhaComparativa({ label, valorA, valorB }) {
+function LinhaComparativa({ label, valorA, valorB, corA = 'bg-time-a', corB = 'bg-time-b' }) {
   const max = Math.max(valorA, valorB, 1)
   return (
     <div className="flex items-center gap-2 font-mono text-xs">
       <span className="w-8 shrink-0 text-right tabular-nums text-texto">{valorA}</span>
       <div className="flex h-3 flex-1 flex-row-reverse overflow-hidden rounded-sm bg-fundo">
-        <div className="h-full bg-time-a" style={{ width: `${(valorA / max) * 100}%` }} />
+        <div className={`h-full ${corA}`} style={{ width: `${(valorA / max) * 100}%` }} />
       </div>
       <span className="w-16 shrink-0 text-center uppercase tracking-wide text-texto-fraco">{label}</span>
       <div className="flex h-3 flex-1 overflow-hidden rounded-sm bg-fundo">
-        <div className="h-full bg-time-b" style={{ width: `${(valorB / max) * 100}%` }} />
+        <div className={`h-full ${corB}`} style={{ width: `${(valorB / max) * 100}%` }} />
       </div>
       <span className="w-8 shrink-0 tabular-nums text-texto">{valorB}</span>
     </div>
   )
 }
+
+// Cache em memória do Head to Head (chave = matchId:referenciaId): a aba desmonta
+// quando o usuário sai dela (render condicional em Partida()), então sem isso cada
+// revisita refazia o fetch do zero mesmo pro mesmo jogador — os dados de uma Partida
+// já fechada nunca mudam, então cachear é seguro e evita chamadas repetidas.
+const cacheHeadToHead = new Map()
 
 // Aba Head to Head: jogador de referência (default = você, se jogou essa
 // Partida) comparado contra TODOS os adversários do time contrário de uma
@@ -210,21 +216,35 @@ function AbaHeadToHead({ matchId, jogadores, jogadorLogado }) {
       setDados(null)
       return
     }
+    setErro(false)
+    setExpandido(null)
+    const chave = `${matchId}:${referenciaId}`
+    const emCache = cacheHeadToHead.get(chave)
+    if (emCache) {
+      setDados(emCache)
+      return
+    }
     // Guarda de cancelamento: sem isso, trocar o jogador de referência rápido demais
     // (o select fica sempre visível, dá pra trocar quantas vezes quiser) deixa uma
     // resposta antiga sobrescrever a mais nova se chegar fora de ordem.
     let cancelado = false
     setDados(null)
-    setErro(false)
-    setExpandido(null)
     fetch(`/api/matches/${matchId}/head-to-head/${referenciaId}`)
       .then((res) => (res.ok ? res.json() : Promise.reject()))
-      .then((json) => { if (!cancelado) setDados(json) })
+      .then((json) => {
+        cacheHeadToHead.set(chave, json)
+        if (!cancelado) setDados(json)
+      })
       .catch(() => { if (!cancelado) setErro(true) })
     return () => { cancelado = true }
   }, [matchId, referenciaId])
 
   const referencia = jogadores.find((p) => p.steamId === referenciaId)
+  // As barras usam a cor do TIME real da referência (não sempre "time-a") — senão,
+  // quem tava no Time B via as próprias kills pintadas de laranja (cor do Time A),
+  // contradizendo o Placar da aba Visão Geral.
+  const corReferencia = referencia?.team === 'B' ? 'bg-time-b' : 'bg-time-a'
+  const corAdversario = referencia?.team === 'B' ? 'bg-time-a' : 'bg-time-b'
 
   return (
     <div className="space-y-3">
@@ -262,11 +282,11 @@ function AbaHeadToHead({ matchId, jogadores, jogadorLogado }) {
                 <span className="w-6 shrink-0 text-right font-semibold tabular-nums text-texto">{o.kills}</span>
               </span>
               <div className="flex h-3 min-w-[80px] flex-1 flex-row-reverse overflow-hidden rounded-sm bg-fundo">
-                <div className="h-full bg-time-a" style={{ width: `${(o.dano / Math.max(o.dano, o.danoRecebido, 1)) * 100}%` }} />
+                <div className={`h-full ${corReferencia}`} style={{ width: `${(o.dano / Math.max(o.dano, o.danoRecebido, 1)) * 100}%` }} />
               </div>
               <span className="shrink-0 font-mono text-[10px] uppercase tracking-wide text-texto-fraco">dano</span>
               <div className="flex h-3 min-w-[80px] flex-1 overflow-hidden rounded-sm bg-fundo">
-                <div className="h-full bg-time-b" style={{ width: `${(o.danoRecebido / Math.max(o.dano, o.danoRecebido, 1)) * 100}%` }} />
+                <div className={`h-full ${corAdversario}`} style={{ width: `${(o.danoRecebido / Math.max(o.dano, o.danoRecebido, 1)) * 100}%` }} />
               </div>
               <span className="flex min-w-0 items-center gap-2 font-mono text-sm">
                 <span className="w-6 shrink-0 tabular-nums text-texto">{o.deaths}</span>
@@ -281,12 +301,25 @@ function AbaHeadToHead({ matchId, jogadores, jogadorLogado }) {
                   <p className="font-mono text-xs text-texto-fraco">Nenhuma kill entre os dois nessa Partida.</p>
                 )}
                 {categorias.map((cat) => (
-                  <LinhaComparativa key={cat} label={cat} valorA={o.killsPorCategoria[cat] ?? 0} valorB={o.killsPorCategoriaRecebido[cat] ?? 0} />
+                  <LinhaComparativa
+                    key={cat}
+                    label={cat}
+                    valorA={o.killsPorCategoria[cat] ?? 0}
+                    valorB={o.killsPorCategoriaRecebido[cat] ?? 0}
+                    corA={corReferencia}
+                    corB={corAdversario}
+                  />
                 ))}
                 {semFlash ? (
                   <p className="font-mono text-xs text-texto-fraco">Nenhum dos dois flashou o outro.</p>
                 ) : (
-                  <LinhaComparativa label="Flashes" valorA={o.flashes.porMim.vezes} valorB={o.flashes.porEle.vezes} />
+                  <LinhaComparativa
+                    label="Flashes"
+                    valorA={o.flashes.porMim.vezes}
+                    valorB={o.flashes.porEle.vezes}
+                    corA={corReferencia}
+                    corB={corAdversario}
+                  />
                 )}
               </div>
             )}
@@ -1159,9 +1192,13 @@ export default function Partida() {
         </>
       )}
 
-      {abaAtiva === 'economia' && m.economia?.length > 0 && (
+      {abaAtiva === 'economia' && (
         <section>
-          <LinhaDoTempoEconomia economia={m.economia} timeDoGrupo={timeDoGrupo} timeA={timeA} timeB={timeB} />
+          {m.economia?.length > 0 ? (
+            <LinhaDoTempoEconomia economia={m.economia} timeDoGrupo={timeDoGrupo} timeA={timeA} timeB={timeB} />
+          ) : (
+            <p className="font-mono text-sm text-texto-fraco">Sem dados de economia pra essa Partida (demo antiga).</p>
+          )}
         </section>
       )}
 
