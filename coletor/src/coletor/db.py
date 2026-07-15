@@ -115,7 +115,7 @@ def _write_players(cur, match_id, players):
             """
             insert into match_players
               (match_id, steam_id64, nick, team, kills, deaths, assists,
-               headshot_kills, damage, rounds_played, rating, won, team_kills,
+               headshot_kills, damage, rounds_played, rating, kast_pct, won, team_kills,
                utility_damage, shots_fired, shots_hit,
                entry_kills, entry_deaths, entry_wins,
                trade_kills, traded_deaths, clutch_wins, clutch_attempts,
@@ -124,15 +124,16 @@ def _write_players(cur, match_id, players):
                enemy_flash_duration, teammate_flash_duration, clutch_saves,
                he_team_damage, molotov_team_damage, flash_assists,
                enemy_flash_landed_count, enemy_flash_landed_duration_sum)
-            values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+            values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s)
+                    %s, %s, %s, %s, %s, %s)
             on conflict (match_id, steam_id64) do update set
               nick = excluded.nick, team = excluded.team, kills = excluded.kills,
               deaths = excluded.deaths, assists = excluded.assists,
               headshot_kills = excluded.headshot_kills, damage = excluded.damage,
               rounds_played = excluded.rounds_played, rating = excluded.rating,
+              kast_pct = excluded.kast_pct,
               won = excluded.won, team_kills = excluded.team_kills,
               utility_damage = excluded.utility_damage,
               shots_fired = excluded.shots_fired, shots_hit = excluded.shots_hit,
@@ -166,6 +167,7 @@ def _write_players(cur, match_id, players):
                 p.get("damage", 0),
                 p.get("rounds_played", 0),
                 p.get("rating"),
+                p.get("kast_pct"),
                 p.get("won"),
                 p.get("team_kills", 0),
                 p.get("utility_damage", 0),

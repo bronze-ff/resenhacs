@@ -150,7 +150,7 @@ def _parsed():
         "players": [
             {"steam_id64": "A", "nick": "fih", "team": "A", "kills": 20, "deaths": 10,
              "assists": 4, "headshot_kills": 9, "damage": 2100, "rounds_played": 22,
-             "rating": 1.2, "won": True},
+             "rating": 1.2, "kast_pct": 0.75, "won": True},
         ],
         "rounds": [{"round_number": 1, "winner_team": "A", "win_reason": "elim"}],
         "highlights": [{"steam_id64": "A", "round_number": 1, "kind": "ace", "description": "ACE"}],
@@ -174,6 +174,15 @@ def test_store_parsed_grava_tudo_e_commita():
     assert any(s.startswith("delete from match_player_weapons") for s in sqls)
     assert any(s.startswith("delete from match_round_econ") for s in sqls)
     assert any(s.startswith("delete from kill_positions") for s in sqls)
+
+
+def test_store_parsed_grava_kast_pct_em_match_players():
+    conn = FakeConn()
+    db.store_parsed(conn, _parsed(), share_code="CSGO-x", source="upload")
+    insert = next(c for c in conn.calls if c[0].startswith("insert into match_players"))
+    # Verificar que kast_pct está no índice correto (depois de rating, que está no índice 10)
+    # (match_id, steam_id64, nick, team, kills, deaths, assists, headshot_kills, damage, rounds_played, rating, kast_pct, won, ...)
+    assert insert[1][11] == 0.75  # kast_pct deve estar na posição 11 (0-indexed)
 
 
 def test_store_parsed_grava_economia_por_jogador_e_compras():
