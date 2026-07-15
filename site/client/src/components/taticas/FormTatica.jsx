@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import RadarGranadas from '../granadas/RadarGranadas.jsx'
 import { ROTULO_TIPO_TATICA, ROTULO_ARMAS } from './CardTatica.jsx'
-import { Card } from '../ui'
+import { Card, Select } from '../ui'
 
 const TIPOS = Object.entries(ROTULO_TIPO_TATICA)
 const LOCAIS = [['A', 'A'], ['B', 'B'], ['MID', 'MID']]
@@ -222,32 +222,28 @@ export default function FormTatica({ mapa, lado: ladoInicial, inicial = null, on
           <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
             <div>
               <p className="mb-1 font-mono text-xs uppercase text-texto-fraco">Lado</p>
-              <select value={lado} onChange={(e) => setLado(e.target.value)}
-                className="min-h-10 w-full rounded border border-borda bg-fundo px-2 py-1.5 font-mono text-xs lg:min-h-0">
+              <Select value={lado} onChange={(e) => setLado(e.target.value)} className="w-full" selectClassName="pl-2 pr-7 text-xs">
                 <option value="T">T</option>
                 <option value="CT">CT</option>
-              </select>
+              </Select>
             </div>
             <div>
               <p className="mb-1 font-mono text-xs uppercase text-texto-fraco">Tipo</p>
-              <select value={tipo} onChange={(e) => setTipo(e.target.value)}
-                className="min-h-10 w-full rounded border border-borda bg-fundo px-2 py-1.5 font-mono text-xs lg:min-h-0">
+              <Select value={tipo} onChange={(e) => setTipo(e.target.value)} className="w-full" selectClassName="pl-2 pr-7 text-xs">
                 {TIPOS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-              </select>
+              </Select>
             </div>
             <div>
               <p className="mb-1 font-mono text-xs uppercase text-texto-fraco">Local</p>
-              <select value={local} onChange={(e) => setLocal(e.target.value)}
-                className="min-h-10 w-full rounded border border-borda bg-fundo px-2 py-1.5 font-mono text-xs lg:min-h-0">
+              <Select value={local} onChange={(e) => setLocal(e.target.value)} className="w-full" selectClassName="pl-2 pr-7 text-xs">
                 {LOCAIS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-              </select>
+              </Select>
             </div>
             <div>
               <p className="mb-1 font-mono text-xs uppercase text-texto-fraco">Armas</p>
-              <select value={armas} onChange={(e) => setArmas(e.target.value)}
-                className="min-h-10 w-full rounded border border-borda bg-fundo px-2 py-1.5 font-mono text-xs lg:min-h-0">
+              <Select value={armas} onChange={(e) => setArmas(e.target.value)} className="w-full" selectClassName="pl-2 pr-7 text-xs">
                 {ARMAS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-              </select>
+              </Select>
             </div>
           </div>
 

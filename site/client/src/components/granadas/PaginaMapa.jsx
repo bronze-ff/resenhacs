@@ -5,7 +5,7 @@ import { MAPAS_POOL } from './ExplorarMapas.jsx'
 import RadarGranadas from './RadarGranadas.jsx'
 import DetalheGranada from './DetalheGranada.jsx'
 import FormGranada from './FormGranada.jsx'
-import { SectionHeader } from '../ui'
+import { SectionHeader, Select } from '../ui'
 
 const TIPOS = [['smoke', 'Smoke'], ['flash', 'Flash'], ['molotov', 'Molotov'], ['he', 'HE']]
 const NIVEIS_CALLOUT = [['sem', 'Sem'], ['noob', 'Noob'], ['pro', 'Pro']]
@@ -68,13 +68,9 @@ export default function PaginaMapa({ mapa, onTrocarMapa }) {
         <div className="flex flex-wrap items-end gap-2 lg:block lg:items-stretch lg:gap-0 lg:space-y-4">
           <div className="w-36 lg:w-auto">
             <p className="mb-1 font-mono text-xs uppercase text-texto-fraco">Trocar mapa</p>
-            <select
-              value={mapa}
-              onChange={(e) => onTrocarMapa(e.target.value)}
-              className="min-h-10 w-full rounded border border-borda bg-superficie px-2 py-1 font-mono text-sm lg:min-h-0"
-            >
+            <Select value={mapa} onChange={(e) => onTrocarMapa(e.target.value)} className="w-full">
               {MAPAS_POOL.map((m) => <option key={m} value={m}>{nomeMapa(m)}</option>)}
-            </select>
+            </Select>
           </div>
 
           <div className="w-24 lg:w-auto">

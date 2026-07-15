@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { nomeMapa } from '../lib/format.js'
+import { Select } from './ui'
 
 const TAM = 480
 
@@ -81,15 +82,11 @@ export default function PosicionamentoAgregado({ steamId }) {
           ))}
         </div>
         {dados?.mapas?.length > 0 && (
-          <select
-            value={mapaEscolhido || dados.map}
-            onChange={(e) => setMapaEscolhido(e.target.value)}
-            className="rounded border border-borda bg-superficie px-2 py-1 font-mono text-xs"
-          >
+          <Select value={mapaEscolhido || dados.map} onChange={(e) => setMapaEscolhido(e.target.value)} selectClassName="text-xs">
             {dados.mapas.map((m) => (
               <option key={m.map} value={m.map}>{nomeMapa(m.map)} ({m.pontos})</option>
             ))}
-          </select>
+          </Select>
         )}
         {dados && <span className="font-mono text-xs text-texto-fraco">{dados.pontos.length} pontos</span>}
       </div>

@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { nomeMapa, dataHora, origemPartida, corRating } from '../lib/format.js'
 import FiltroPeriodo from '../components/FiltroPeriodo.jsx'
-import { Card, SectionHeader, Badge, MapIcon } from '../components/ui'
+import { Card, SectionHeader, Badge, MapIcon, Select } from '../components/ui'
 
 const MAPAS = ['de_anubis', 'de_ancient', 'de_cache', 'de_dust2', 'de_inferno', 'de_mirage', 'de_nuke', 'de_overpass', 'de_train', 'de_vertigo']
 
@@ -352,22 +352,14 @@ export default function Feed() {
       <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center lg:gap-x-5 lg:gap-y-3">
         <div className="flex flex-wrap items-center gap-3 lg:contents">
           <FiltroPeriodo de={de} ate={ate} onDe={setDe} onAte={setAte} />
-          <select
-            value={mapa}
-            onChange={(e) => setMapa(e.target.value)}
-            className="min-h-10 rounded border border-borda bg-superficie px-3 py-2 font-mono text-sm lg:min-h-0 lg:px-2 lg:py-1 lg:text-xs"
-          >
+          <Select value={mapa} onChange={(e) => setMapa(e.target.value)} selectClassName="lg:py-1 lg:text-xs">
             <option value="">Todos os mapas</option>
             {MAPAS.map((m) => <option key={m} value={m}>{nomeMapa(m)}</option>)}
-          </select>
-          <select
-            value={mvp}
-            onChange={(e) => setMvp(e.target.value)}
-            className="min-h-10 rounded border border-borda bg-superficie px-3 py-2 font-mono text-sm lg:min-h-0 lg:px-2 lg:py-1 lg:text-xs"
-          >
+          </Select>
+          <Select value={mvp} onChange={(e) => setMvp(e.target.value)} selectClassName="lg:py-1 lg:text-xs">
             <option value="">Todos os MVPs</option>
             {jogadores.map((j) => <option key={j.steamId} value={j.steamId}>{j.nick}</option>)}
-          </select>
+          </Select>
         </div>
         <div className="flex flex-wrap items-center gap-3 lg:contents">
           <div className="flex overflow-hidden rounded border border-borda font-mono text-xs uppercase">

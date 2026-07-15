@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { frameIndexAt, duracaoSegundos } from '../lib/replayEngine.js'
 import { nomeMapa, categoriaArma } from '../lib/format.js'
+import { Select } from './ui'
 
 const TAM = 640 // lado do canvas em px
 // Cor por LADO real (CT/T), não pelo time fixo A/B — pedido do usuário: no jogo de
@@ -358,28 +359,23 @@ export default function ReplayViewer({ replay, seek }) {
         </p>
       )}
       <div className="flex flex-wrap items-center gap-3">
-        <select
+        <Select
           value={roundIdx}
           onChange={(e) => { setRoundIdx(Number(e.target.value)); setFrameAtual(0); setTocando(false) }}
-          className="min-h-10 rounded border border-borda bg-superficie px-2 py-1 font-mono text-sm lg:min-h-0"
         >
           {replay.rounds.map((r, i) => (
             <option key={r.round} value={i}>Round {r.round}</option>
           ))}
-        </select>
+        </Select>
         <button
           onClick={() => setTocando((t) => !t)}
           className="panel-cut-sm flex min-h-10 items-center justify-center border border-destaque bg-destaque px-4 py-1 font-display text-sm font-semibold uppercase tracking-wide text-fundo lg:min-h-0"
         >
           {tocando ? 'Pausar' : 'Play'}
         </button>
-        <select
-          value={velocidade}
-          onChange={(e) => setVelocidade(Number(e.target.value))}
-          className="min-h-10 rounded border border-borda bg-superficie px-2 py-1 font-mono text-sm lg:min-h-0"
-        >
+        <Select value={velocidade} onChange={(e) => setVelocidade(Number(e.target.value))}>
           {[0.5, 1, 2, 4].map((v) => <option key={v} value={v}>{v}x</option>)}
-        </select>
+        </Select>
         <input
           type="range"
           min={0}

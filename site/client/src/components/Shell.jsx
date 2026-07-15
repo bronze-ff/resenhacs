@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { setGrupoAtivo } from '../lib/grupoAtivo.js'
+import { Select } from './ui'
 
 const CHAVE_SIDEBAR_COLAPSADA = 'resenha_sidebar_colapsada'
 
@@ -354,14 +355,10 @@ function SeletorGrupo({ grupoAtivoId }) {
 
   if (grupos.length <= 1) return null
   return (
-    <select
-      value={grupoAtivoId ?? ''}
-      onChange={trocar}
-      className="cursor-pointer rounded border border-borda bg-superficie px-2 py-1 font-mono text-xs"
-    >
+    <Select value={grupoAtivoId ?? ''} onChange={trocar} selectClassName="py-1 pr-7 text-xs">
       {grupos.map((g) => (
         <option key={g.id} value={g.id}>{g.nome}</option>
       ))}
-    </select>
+    </Select>
   )
 }

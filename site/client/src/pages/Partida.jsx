@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, Fragment } from 'react'
 import { useParams, useSearchParams, Link } from 'react-router-dom'
 import { nomeMapa, dataHora, origemPartida, nomeArma, corRating, TIPO_COMPRA } from '../lib/format.js'
-import { MapIcon, SectionHeader } from '../components/ui'
+import { MapIcon, SectionHeader, Select } from '../components/ui'
 import ReplayViewer from '../components/ReplayViewer.jsx'
 import MapaCalor from '../components/MapaCalor.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
@@ -250,16 +250,12 @@ function AbaHeadToHead({ matchId, jogadores, jogadorLogado }) {
     <div className="space-y-3">
       <label className="flex flex-wrap items-center gap-2 font-mono text-xs text-texto-fraco">
         Comparando:
-        <select
-          value={referenciaId}
-          onChange={(e) => setReferenciaId(e.target.value)}
-          className="cursor-pointer rounded border border-borda bg-superficie px-2 py-1.5 font-mono text-xs text-texto"
-        >
+        <Select value={referenciaId} onChange={(e) => setReferenciaId(e.target.value)} selectClassName="py-1.5 text-xs">
           <option value="">Escolha um jogador…</option>
           {jogadores.map((p) => (
             <option key={p.steamId} value={p.steamId}>{p.nick || p.steamId}</option>
           ))}
-        </select>
+        </Select>
       </label>
 
       {!referenciaId && <p className="font-mono text-sm text-texto-fraco">Escolha um jogador pra comparar contra o time adversário.</p>}
@@ -902,15 +898,11 @@ function FormClipe({ matchId, jogadores, onAdicionado }) {
 
   return (
     <form onSubmit={enviar} className="panel-cut flex flex-wrap items-end gap-2 border border-borda bg-superficie p-3">
-      <select
-        value={steamId}
-        onChange={(e) => setSteamId(e.target.value)}
-        className="rounded border border-borda bg-fundo px-2 py-2 font-mono text-sm"
-      >
+      <Select value={steamId} onChange={(e) => setSteamId(e.target.value)}>
         {doGrupo.map((p) => (
           <option key={p.steamId} value={p.steamId}>{p.nick || p.steamId}</option>
         ))}
-      </select>
+      </Select>
       <input
         value={url}
         onChange={(e) => setUrl(e.target.value)}

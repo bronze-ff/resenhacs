@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { linkBuscaYoutube } from '../../lib/youtube.js'
 import { nomeMapa } from '../../lib/format.js'
-import { Card } from '../ui'
+import { Card, Select } from '../ui'
 
 const TIPOS = [['smoke', 'Smoke'], ['flash', 'Flash'], ['molotov', 'Molotov'], ['he', 'HE']]
 const TECNICAS = [
@@ -78,15 +78,15 @@ export default function FormGranada({ mapa, lado, posicoes, inicial = null, onSa
           Buscar vídeo no YouTube
         </a>
         <div className="grid grid-cols-3 gap-2">
-          <select value={tipo} onChange={(e) => setTipo(e.target.value)} className="min-h-10 rounded border border-borda bg-fundo px-2 py-1.5 font-mono text-xs lg:min-h-0">
+          <Select value={tipo} onChange={(e) => setTipo(e.target.value)} className="w-full" selectClassName="px-2 pl-2 pr-7 text-xs">
             {TIPOS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-          </select>
-          <select value={tecnica} onChange={(e) => setTecnica(e.target.value)} className="min-h-10 rounded border border-borda bg-fundo px-2 py-1.5 font-mono text-xs lg:min-h-0">
+          </Select>
+          <Select value={tecnica} onChange={(e) => setTecnica(e.target.value)} className="w-full" selectClassName="px-2 pl-2 pr-7 text-xs">
             {TECNICAS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-          </select>
-          <select value={botao} onChange={(e) => setBotao(e.target.value)} className="min-h-10 rounded border border-borda bg-fundo px-2 py-1.5 font-mono text-xs lg:min-h-0">
+          </Select>
+          <Select value={botao} onChange={(e) => setBotao(e.target.value)} className="w-full" selectClassName="px-2 pl-2 pr-7 text-xs">
             {BOTOES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-          </select>
+          </Select>
         </div>
         <textarea value={passosTexto} onChange={(e) => setPassosTexto(e.target.value)} rows={4}
           placeholder={'Passos, um por linha:\nFique colado na quina da caixa\nMire no pixel acima da antena\nJumpthrow'}

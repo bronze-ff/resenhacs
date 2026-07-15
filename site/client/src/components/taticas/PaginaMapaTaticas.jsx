@@ -6,7 +6,7 @@ import CardTatica, { ROTULO_ARMAS, ROTULO_TIPO_TATICA } from './CardTatica.jsx'
 import CardTaticaReplay from './CardTaticaReplay.jsx'
 import DetalheTatica from './DetalheTatica.jsx'
 import FormTatica from './FormTatica.jsx'
-import { SectionHeader } from '../ui'
+import { SectionHeader, Select } from '../ui'
 
 const TIPOS = [['todas', 'Todas'], ...Object.entries(ROTULO_TIPO_TATICA)]
 const LOCAIS = [['todas', 'Todas'], ['A', 'A'], ['B', 'B'], ['MID', 'MID']]
@@ -70,13 +70,9 @@ export default function PaginaMapaTaticas({ mapa, onTrocarMapa }) {
         <div className="flex flex-wrap items-end gap-2 lg:block lg:items-stretch lg:gap-0 lg:space-y-4">
           <div className="w-36 lg:w-auto">
             <p className="mb-1 font-mono text-xs uppercase text-texto-fraco">Trocar mapa</p>
-            <select
-              value={mapa}
-              onChange={(e) => onTrocarMapa(e.target.value)}
-              className="min-h-10 w-full rounded border border-borda bg-superficie px-2 py-1 font-mono text-sm lg:min-h-0"
-            >
+            <Select value={mapa} onChange={(e) => onTrocarMapa(e.target.value)} className="w-full">
               {MAPAS_POOL.map((m) => <option key={m} value={m}>{nomeMapa(m)}</option>)}
-            </select>
+            </Select>
           </div>
 
           <div className="w-24 lg:w-auto">

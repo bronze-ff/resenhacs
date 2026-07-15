@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Card, SectionHeader, StatTile } from '../components/ui'
+import { Card, SectionHeader, StatTile, Select } from '../components/ui'
 
 const LINHAS = [
   { rotulo: 'Rating', chave: 'rating', formato: (v) => v?.toFixed(2) ?? '–' },
@@ -45,16 +45,16 @@ export default function CompararTimes() {
   return (
     <div className="space-y-6">
       <SectionHeader titulo="Comparar times" />
-      <div className="flex flex-wrap items-center gap-3">
-        <select value={a} onChange={(e) => setA(e.target.value)} className="cursor-pointer rounded border border-borda bg-superficie px-3 py-2 font-mono text-sm">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <Select value={a} onChange={(e) => setA(e.target.value)} className="w-full sm:w-56">
           <option value="">Meu time…</option>
           {meusTimes.map((t) => <option key={t.id} value={t.id}>{t.nome}</option>)}
-        </select>
-        <span className="font-display text-texto-fraco">vs</span>
-        <select value={b} onChange={(e) => setB(e.target.value)} className="cursor-pointer rounded border border-borda bg-superficie px-3 py-2 font-mono text-sm">
+        </Select>
+        <span className="shrink-0 font-display text-texto-fraco">vs</span>
+        <Select value={b} onChange={(e) => setB(e.target.value)} className="w-full sm:w-56">
           <option value="">Time adversário (público)…</option>
           {opcoesB.map((t) => <option key={t.id} value={t.id}>{t.nome}</option>)}
-        </select>
+        </Select>
       </div>
 
       {erro && <p className="font-mono text-sm text-perigo">{erro}</p>}

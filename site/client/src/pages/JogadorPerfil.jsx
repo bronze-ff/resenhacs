@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { nomeMapa, dataHora, corRating, nomeArma, TIPO_COMPRA } from '../lib/format.js'
-import { Card, SectionHeader, StatTile, RatingBadge, DataTable, MapIcon, Badge } from '../components/ui'
+import { Card, SectionHeader, StatTile, RatingBadge, DataTable, MapIcon, Badge, Select } from '../components/ui'
 import LinhaEvolucao from '../components/LinhaEvolucao.jsx'
 import FiltroPeriodo from '../components/FiltroPeriodo.jsx'
 import TagEstilo from '../components/TagEstilo.jsx'
@@ -109,19 +109,19 @@ function SecaoHighlights({ destaques }) {
         ))}
 
         {mapasDisponiveis.length > 1 && (
-          <select
+          <Select
             value={filtroMapa}
             onChange={(e) => {
               setFiltroMapa(e.target.value)
               setLimite(LIMITE_INICIAL_DESTAQUES)
             }}
-            className="panel-cut-sm min-h-10 cursor-pointer border border-borda bg-superficie px-3 py-2 font-mono text-xs uppercase tracking-wide text-texto-fraco transition-colors duration-200 hover:border-destaque/40 hover:text-texto sm:min-h-0"
+            selectClassName="text-xs uppercase tracking-wide"
           >
             <option value="">Todos os mapas</option>
             {mapasDisponiveis.map((m) => (
               <option key={m} value={m}>{nomeMapa(m)}</option>
             ))}
-          </select>
+          </Select>
         )}
       </div>
 

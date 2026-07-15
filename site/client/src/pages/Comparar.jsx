@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { dataHora } from '../lib/format.js'
 import LinhaEvolucao from '../components/LinhaEvolucao.jsx'
 import FiltroPeriodo from '../components/FiltroPeriodo.jsx'
-import { Card, SectionHeader, StatTile, RatingBadge } from '../components/ui'
+import { Card, SectionHeader, StatTile, RatingBadge, Select } from '../components/ui'
 
 const LINHAS_STAT = [
   { rotulo: 'Rating', chave: 'rating', formato: (v) => v?.toFixed(2) ?? '–', rating: true },
@@ -102,16 +102,18 @@ export default function Comparar() {
         <p className="font-mono text-sm text-texto-fraco">Rating, stats e confronto direto entre dois Jogadores do grupo.</p>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <select value={a} onChange={(e) => setA(e.target.value)} className="cursor-pointer rounded border border-borda bg-superficie px-3 py-2 font-mono text-sm">
-          <option value="">Jogador A…</option>
-          {jogadores.map((j) => <option key={j.steamId} value={j.steamId}>{j.nick || j.steamId}</option>)}
-        </select>
-        <span className="font-display text-texto-fraco">vs</span>
-        <select value={b} onChange={(e) => setB(e.target.value)} className="cursor-pointer rounded border border-borda bg-superficie px-3 py-2 font-mono text-sm">
-          <option value="">Jogador B…</option>
-          {jogadores.map((j) => <option key={j.steamId} value={j.steamId}>{j.nick || j.steamId}</option>)}
-        </select>
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+        <div className="flex items-center gap-3">
+          <Select value={a} onChange={(e) => setA(e.target.value)} className="min-w-0 flex-1 sm:w-48 sm:flex-none">
+            <option value="">Jogador A…</option>
+            {jogadores.map((j) => <option key={j.steamId} value={j.steamId}>{j.nick || j.steamId}</option>)}
+          </Select>
+          <span className="shrink-0 font-display text-texto-fraco">vs</span>
+          <Select value={b} onChange={(e) => setB(e.target.value)} className="min-w-0 flex-1 sm:w-48 sm:flex-none">
+            <option value="">Jogador B…</option>
+            {jogadores.map((j) => <option key={j.steamId} value={j.steamId}>{j.nick || j.steamId}</option>)}
+          </Select>
+        </div>
         <FiltroPeriodo de={de} ate={ate} onDe={setDe} onAte={setAte} />
       </div>
 

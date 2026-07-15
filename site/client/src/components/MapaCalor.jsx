@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { nomeMapa } from '../lib/format.js'
+import { Select } from './ui'
 
 const TAM = 640
 const RAIO_CLIQUE = 14 // px — distância máxima do clique até um ponto pra considerar "acertou"
@@ -140,14 +141,10 @@ export default function MapaCalor({ replay, onSelecionarPonto }) {
         </div>
         {modo !== 'granadas' && (
           <>
-            <select
-              value={jogadorFiltro}
-              onChange={(e) => setJogadorFiltro(e.target.value)}
-              className="min-h-10 rounded border border-borda bg-superficie px-2 py-1 font-mono text-xs lg:min-h-0"
-            >
+            <Select value={jogadorFiltro} onChange={(e) => setJogadorFiltro(e.target.value)} selectClassName="text-xs">
               <option value="">Todo mundo</option>
               {jogadoresIds.map((id) => <option key={id} value={id}>{replay.names[id]}</option>)}
-            </select>
+            </Select>
             <div className="flex overflow-hidden rounded border border-borda font-mono text-xs uppercase">
               {LADOS.map(([v, label]) => (
                 <button
