@@ -144,28 +144,111 @@ function SetaExpandir({ aberto }) {
 // Recolhido por padrão: kills por arma NESSA partida (não é a agregação de carreira do
 // perfil) — serve pra conferir na hora "com que arma ele matou" (ex.: alguém alega só ter
 // jogado de uma arma específica e o grupo quer confirmar).
-function ArmasDoJogador({ weapons }) {
-  if (!weapons || weapons.length === 0) {
-    return <p className="px-1 py-2 font-mono text-xs text-texto-fraco">Sem kills registrados nessa partida.</p>
-  }
+function ArmasDoJogador({ weapons, onAbrirDetalhe }) {
   return (
-    <div className="flex flex-wrap gap-2 px-1 py-2">
-      {weapons.map((w) => (
-        <div
-          key={w.weapon}
-          className="panel-cut-sm flex items-center gap-2 border border-borda bg-superficie px-2 py-1 font-mono text-xs"
-        >
-          <span className="font-semibold text-texto">{nomeArma(w.weapon)}</span>
-          <span className="text-texto-fraco">{w.kills} kill{w.kills === 1 ? '' : 's'}</span>
-          {w.hsKills > 0 && <span className="text-texto-fraco">· {w.hsKills} HS</span>}
-        </div>
-      ))}
+    <div className="flex flex-wrap items-center gap-2 px-1 py-2">
+      {(!weapons || weapons.length === 0) ? (
+        <p className="font-mono text-xs text-texto-fraco">Sem kills registrados nessa partida.</p>
+      ) : (
+        weapons.map((w) => (
+          <div
+            key={w.weapon}
+            className="panel-cut-sm flex items-center gap-2 border border-borda bg-superficie px-2 py-1 font-mono text-xs"
+          >
+            <span className="font-semibold text-texto">{nomeArma(w.weapon)}</span>
+            <span className="text-texto-fraco">{w.kills} kill{w.kills === 1 ? '' : 's'}</span>
+            {w.hsKills > 0 && <span className="text-texto-fraco">· {w.hsKills} HS</span>}
+          </div>
+        ))
+      )}
+      <button
+        onClick={onAbrirDetalhe}
+        className="panel-cut-sm ml-auto border border-borda px-2 py-1 font-mono text-xs text-texto-fraco transition-colors hover:border-destaque hover:text-destaque"
+      >
+        Ver detalhe por round →
+      </button>
     </div>
   )
 }
 
-function Scoreboard({ time, jogadores, podePromover, onPromover, promovendo }) {
+const ROTULO_COMPRA = { eco: 'Eco', forcado: 'Forçada', semi: 'Semi', full: 'Full' }
+
+// Modal separado (aberto sob demanda): timeline round-a-round de UM Jogador — o que
+// comprou, quando matou/morreu e com quê. Busca lazy (só quando abre pra esse Jogador).
+function ModalDetalhePartida({ matchId, jogador, onFechar }) {
+  const [dados, setDados] = useState(null)
+  const [erro, setErro] = useState(false)
+
+  useEffect(() => {
+    setDados(null)
+    setErro(false)
+    fetch(`/api/matches/${matchId}/jogador/${jogador.steamId}/detalhe`)
+      .then((res) => (res.ok ? res.json() : Promise.reject()))
+      .then(setDados)
+      .catch(() => setErro(true))
+  }, [matchId, jogador.steamId])
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-fundo/80 p-0 lg:p-4" onClick={onFechar}>
+      <div
+        className="flex h-full w-full flex-col overflow-y-hidden border border-borda bg-superficie lg:panel-cut lg:h-auto lg:max-h-[90vh] lg:w-full lg:max-w-2xl lg:overflow-y-auto lg:p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-borda bg-superficie px-4 py-3 lg:static lg:border-0 lg:bg-transparent lg:px-0 lg:py-0">
+          <div className="flex min-w-0 items-center gap-2">
+            <Avatar p={jogador} />
+            <div className="min-w-0">
+              <h3 className="truncate font-display text-lg font-bold text-texto">{jogador.nick || jogador.steamId}</h3>
+              {jogador.duelWinPct !== null && (
+                <p className="font-mono text-xs text-texto-fraco">
+                  Duelos vencidos: <span className="text-texto">{jogador.duelWinPct}%</span> ({jogador.kills}V/{jogador.deaths}D)
+                </p>
+              )}
+            </div>
+          </div>
+          <button onClick={onFechar} className="flex min-h-10 min-w-10 shrink-0 items-center justify-center font-mono text-sm uppercase text-texto-fraco hover:text-texto">
+            fechar
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-4 py-3 lg:px-0 lg:py-3">
+          {erro && <p className="font-mono text-sm text-perigo">Não foi possível carregar o detalhe.</p>}
+          {!erro && !dados && <p className="font-mono text-sm text-texto-fraco">Carregando…</p>}
+          {dados && dados.rounds.length === 0 && (
+            <p className="font-mono text-sm text-texto-fraco">Sem dados round-a-round pra essa partida (demo antiga).</p>
+          )}
+          {dados && dados.rounds.length > 0 && (
+            <div className="space-y-1.5">
+              {dados.rounds.map((r) => (
+                <div key={r.roundNumber} className="panel-cut-sm flex flex-wrap items-center gap-2 border border-borda bg-fundo px-3 py-2 font-mono text-xs">
+                  <span className="w-14 shrink-0 text-texto-fraco">Round {r.roundNumber}</span>
+                  {r.buyType && (
+                    <span className="text-texto-fraco">
+                      {ROTULO_COMPRA[r.buyType] ?? r.buyType} (${r.equipValue ?? 0})
+                    </span>
+                  )}
+                  {r.compras.length > 0 && (
+                    <span className="text-texto-fraco/80">· {r.compras.map(nomeArma).join(', ')}</span>
+                  )}
+                  <span className="ml-auto flex items-center gap-2">
+                    {r.matou.map((k, i) => (
+                      <span key={i} className="text-sucesso">✚ {nomeArma(k.weapon)}{k.headshot ? ' (HS)' : ''}</span>
+                    ))}
+                    {r.morreu && <span className="text-perigo">✝ {nomeArma(r.morreu.weapon)}</span>}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Scoreboard({ time, jogadores, matchId, podePromover, onPromover, promovendo }) {
   const [expandido, setExpandido] = useState(null)
+  const [detalheAberto, setDetalheAberto] = useState(null)
   return (
     <div className="panel-cut overflow-x-auto border border-borda">
       <table className="w-full text-sm">
@@ -225,7 +308,7 @@ function Scoreboard({ time, jogadores, podePromover, onPromover, promovendo }) {
                 {aberto && (
                   <tr className="border-t border-borda/60 bg-fundo/40">
                     <td colSpan={8}>
-                      <ArmasDoJogador weapons={p.weapons} />
+                      <ArmasDoJogador weapons={p.weapons} onAbrirDetalhe={() => setDetalheAberto(p)} />
                     </td>
                   </tr>
                 )}
@@ -234,6 +317,9 @@ function Scoreboard({ time, jogadores, podePromover, onPromover, promovendo }) {
           })}
         </tbody>
       </table>
+      {detalheAberto && (
+        <ModalDetalhePartida matchId={matchId} jogador={detalheAberto} onFechar={() => setDetalheAberto(null)} />
+      )}
     </div>
   )
 }
@@ -803,8 +889,8 @@ export default function Partida() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Scoreboard time="A" jogadores={timeA} podePromover={jogador?.isSuperAdmin} onPromover={promover} promovendo={promovendo} />
-        <Scoreboard time="B" jogadores={timeB} podePromover={jogador?.isSuperAdmin} onPromover={promover} promovendo={promovendo} />
+        <Scoreboard time="A" jogadores={timeA} matchId={m.id} podePromover={jogador?.isSuperAdmin} onPromover={promover} promovendo={promovendo} />
+        <Scoreboard time="B" jogadores={timeB} matchId={m.id} podePromover={jogador?.isSuperAdmin} onPromover={promover} promovendo={promovendo} />
       </div>
 
       <section ref={replayRef}>

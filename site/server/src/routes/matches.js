@@ -198,6 +198,10 @@ export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Cli
         won: p.won,
         isTracked: p.is_tracked,
         weapons: armasPorJogador.get(p.steam_id64) ?? [],
+        // Taxa de duelo: de todo confronto que terminou em morte envolvendo esse
+        // Jogador (matou OU morreu), quanto % ele venceu. Não identifica "quase matou"
+        // (precisaria de dado de engajamento que não temos) — só confrontos concluídos.
+        duelWinPct: p.kills + p.deaths > 0 ? Math.round((p.kills / (p.kills + p.deaths)) * 1000) / 10 : null,
         utilitaria: {
           heDamage: p.he_damage,
           molotovDamage: p.molotov_damage,
@@ -242,6 +246,64 @@ export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Cli
         equipValue: e.equip_value,
         buyType: e.buy_type,
       })),
+    })
+  })
+
+  // Detalhe round-a-round de UM Jogador nessa Partida: o que matou/morreu, com que arma
+  // e o gasto/itens comprados naquele round. Carregado só quando o modal abre pra esse
+  // Jogador (recolhido por padrão na UI) — não bloa o payload do /:id pros outros 9.
+  router.get('/:id/jogador/:steamId/detalhe', requireAuth, requireGroupMember, async (req, res) => {
+    const { id, steamId } = req.params
+    const matchQ = await db.query('select id from matches where id = $1 and group_id = $2', [id, req.groupId])
+    if (matchQ.rows.length === 0) return res.status(404).json({ erro: 'Partida não encontrada' })
+
+    const [kills, econ, compras] = await Promise.all([
+      db.query(
+        `select round_number, tick, killer, victim, weapon, headshot
+         from kill_positions
+         where match_id = $1 and (killer = $2 or victim = $2)
+         order by round_number, tick`,
+        [id, steamId],
+      ),
+      db.query(
+        `select round_number, equip_value, buy_type
+         from match_player_round_econ
+         where match_id = $1 and steam_id64 = $2
+         order by round_number`,
+        [id, steamId],
+      ),
+      db.query(
+        `select round_number, item, tick
+         from match_player_purchases
+         where match_id = $1 and steam_id64 = $2
+         order by round_number, tick`,
+        [id, steamId],
+      ),
+    ])
+
+    const porRound = new Map()
+    const linha = (rn) => {
+      if (!porRound.has(rn)) {
+        porRound.set(rn, { roundNumber: rn, matou: [], morreu: null, equipValue: null, buyType: null, compras: [] })
+      }
+      return porRound.get(rn)
+    }
+    for (const k of kills.rows) {
+      if (k.killer === steamId) linha(k.round_number).matou.push({ weapon: k.weapon, headshot: k.headshot, tick: k.tick })
+      if (k.victim === steamId) linha(k.round_number).morreu = { weapon: k.weapon, headshot: k.headshot, tick: k.tick }
+    }
+    for (const e of econ.rows) {
+      const l = linha(e.round_number)
+      l.equipValue = e.equip_value
+      l.buyType = e.buy_type
+    }
+    for (const c of compras.rows) {
+      linha(c.round_number).compras.push(c.item)
+    }
+
+    res.json({
+      steamId,
+      rounds: [...porRound.values()].sort((a, b) => a.roundNumber - b.roundNumber),
     })
   })
 
