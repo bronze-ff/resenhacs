@@ -38,15 +38,6 @@ describe('GET /api/health', () => {
   })
 })
 
-describe('POST /api/upload sem Coletor local configurado', () => {
-  it('responde 503 com mensagem clara em vez de deixar a rota inexistente', async () => {
-    const app = createApp({ config: testConfig })
-    const res = await request(app).post('/api/upload')
-    expect(res.status).toBe(503)
-    expect(res.body.erro).toMatch(/não está disponível nessa hospedagem/)
-  })
-})
-
 describe('produção: static + fallback SPA', () => {
   it('serve index.html para rotas que não são /api', async () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'resenha-dist-'))

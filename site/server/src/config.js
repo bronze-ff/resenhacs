@@ -11,11 +11,6 @@ export function loadConfig(env = process.env) {
     appUrl: env.APP_URL ?? 'http://localhost:5173',
     port: Number(env.PORT ?? 3001),
     isProduction: env.NODE_ENV === 'production',
-    // Upload manual de demo (roda o Coletor Python local via child_process). Só faz
-    // sentido em dev/self-hosted — indefinido no ambiente serverless da Vercel, onde
-    // a rota fica desligada (não há Python nem filesystem persistente na função).
-    coletorDir: env.COLETOR_DIR ?? null,
-    pythonBin: env.COLETOR_PYTHON ?? null,
     // R2 (Cloudflare) — o bucket é PRIVADO de propósito (replays/demos têm dados
     // reais dos 10 participantes de cada Partida, incluindo randoms não whitelistados
     // que nunca consentiram ficar públicos). O server faz proxy autenticado; nunca

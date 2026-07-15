@@ -48,7 +48,7 @@ function patchRouterAsync() {
   }
 }
 
-export function createApp({ config, db, verifySteamLogin, fetchPersona, fetchBans, staticDir, execFileImpl, r2Client: r2ClientOverride } = {}) {
+export function createApp({ config, db, verifySteamLogin, fetchPersona, fetchBans, staticDir, r2Client: r2ClientOverride } = {}) {
   const app = express()
   app.use(express.json())
   app.use(cookieParser())
@@ -83,30 +83,7 @@ export function createApp({ config, db, verifySteamLogin, fetchPersona, fetchBan
   app.use('/api/partidas-pro-fila', createPartidasProRouter({ db, requireAuth, r2Client, r2Bucket: config.r2Bucket }))
   app.use('/api/granadas', createGranadasRouter({ db, requireAuth }))
 
-  // Upload manual via web só existe quando o Coletor Python está no mesmo host
-  // (dev/self-hosted). Na Vercel (serverless) config.coletorDir/pythonBin ficam
-  // indefinidos e a rota nem é montada — evita um 500 confuso em produção.
-  if (config.coletorDir && config.pythonBin) {
-    app.use(
-      '/api/upload',
-      createUploadRouter({
-        requireAuth,
-        coletorDir: config.coletorDir,
-        pythonBin: config.pythonBin,
-        ...(execFileImpl ? { execFileImpl } : {}),
-      }),
-    )
-  } else {
-    // Sem essa rota, um POST em /api/upload cairia no fallback SPA (200 com o HTML do
-    // index) ou num 404 sem corpo JSON — o client tenta parsear como JSON, falha, e
-    // mostra o erro genérico "Erro ao processar o demo" (engana sobre a causa real:
-    // essa hospedagem não roda o Coletor local, não é falha no processamento).
-    app.use('/api/upload', (req, res) => {
-      res.status(503).json({
-        erro: 'Envio manual de demo não está disponível nessa hospedagem — use a fila de Partidas Pro ou aguarde a descoberta automática da partida.',
-      })
-    })
-  }
+  app.use('/api/upload', createUploadRouter({ db, requireAuth, requireGroupMember, r2Client, r2Bucket: config.r2Bucket }))
 
   if (staticDir) {
     app.use(express.static(staticDir))
