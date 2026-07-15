@@ -254,48 +254,58 @@ describe('GET /api/matches/:id/jogador/:steamId/detalhe', () => {
   })
 })
 
-describe('GET /api/matches/:id/head-to-head/:steamIdA/:steamIdB', () => {
+describe('GET /api/matches/:id/head-to-head/:steamId', () => {
   it('sem login: 401', async () => {
     const { app } = appWith([])
-    expect((await request(app).get('/api/matches/m1/head-to-head/1/2')).status).toBe(401)
+    expect((await request(app).get('/api/matches/m1/head-to-head/765')).status).toBe(401)
   })
 
-  it('partida nao encontrada no grupo: 404', async () => {
-    const { app } = appWith([['from matches where id', []]])
-    const res = await request(app).get('/api/matches/m1/head-to-head/1/2').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+  it('jogador nao encontrado nessa partida do grupo: 404', async () => {
+    const { app } = appWith([['from matches m join match_players mp', []]])
+    const res = await request(app).get('/api/matches/m1/head-to-head/765').set('Cookie', cookie).set('X-Group-Id', GRUPO)
     expect(res.status).toBe(404)
   })
 
-  it('agrega kills por categoria, dano e flashes nas duas direcoes', async () => {
+  it('compara o jogador contra todos os adversarios do time contrario numa chamada so', async () => {
     const { app } = appWith([
-      ['from matches where id', [{ id: 'm1' }]],
+      ['from matches m join match_players mp', [{ team: 'A' }]],
+      ['from match_players mp\n       left join players p', [
+        { steam_id64: '999', nick: 'adversario', team: 'B', avatar_url: null },
+      ]],
       ['from kill_positions', [
-        { killer: '1', victim: '2', weapon: 'ak47' },
-        { killer: '1', victim: '2', weapon: 'awp' },
-        { killer: '2', victim: '1', weapon: 'deagle' },
+        { killer: '765', victim: '999', weapon: 'deagle' },
+        { killer: '999', victim: '765', weapon: 'ak47' },
       ]],
       ['from match_player_damage', [
-        { attacker: '1', damage: 300 },
-        { attacker: '2', damage: 120 },
+        { attacker: '765', victim: '999', damage: 100 },
+        { attacker: '999', victim: '765', damage: 40 },
       ]],
       ['from match_player_flashes', [
-        { attacker: '1', count: 2, duration_sum: '3.5' },
+        { attacker: '765', victim: '999', count: 1, duration_sum: '1.50' },
       ]],
     ])
-    const res = await request(app).get('/api/matches/m1/head-to-head/1/2').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    const res = await request(app).get('/api/matches/m1/head-to-head/765').set('Cookie', cookie).set('X-Group-Id', GRUPO)
     expect(res.status).toBe(200)
-    expect(res.body.a).toEqual({
-      steamId: '1',
-      killsPorCategoria: { Rifles: 1, Snipers: 1 },
-      dano: 300,
-      flashes: { vezes: 2, duracao: 3.5 },
+    expect(res.body).toEqual({
+      steamId: '765',
+      oponentes: [{
+        steamId: '999', nick: 'adversario', avatarUrl: null, team: 'B',
+        kills: 1, deaths: 1,
+        killsPorCategoria: { Pistolas: 1 }, killsPorCategoriaRecebido: { Rifles: 1 },
+        dano: 100, danoRecebido: 40,
+        flashes: { porMim: { vezes: 1, duracao: 1.5 }, porEle: { vezes: 0, duracao: 0 } },
+      }],
     })
-    expect(res.body.b).toEqual({
-      steamId: '2',
-      killsPorCategoria: { Pistolas: 1 },
-      dano: 120,
-      flashes: { vezes: 0, duracao: 0 },
-    })
+  })
+
+  it('sem adversario do outro time: retorna lista vazia', async () => {
+    const { app } = appWith([
+      ['from matches m join match_players mp', [{ team: 'A' }]],
+      ['from match_players mp\n       left join players p', []],
+    ])
+    const res = await request(app).get('/api/matches/m1/head-to-head/765').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    expect(res.status).toBe(200)
+    expect(res.body).toEqual({ steamId: '765', oponentes: [] })
   })
 })
 

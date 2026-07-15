@@ -327,54 +327,95 @@ export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Cli
     })
   })
 
-  // Head to Head: kills por categoria de arma, dano total e flashes trocados entre
-  // DOIS jogadores específicos dessa Partida (estilo Leetify) — nas duas direções.
-  router.get('/:id/head-to-head/:steamIdA/:steamIdB', requireAuth, requireGroupMember, async (req, res) => {
-    const { id, steamIdA, steamIdB } = req.params
-    const matchQ = await db.query('select id from matches where id = $1 and group_id = $2', [id, req.groupId])
-    if (matchQ.rows.length === 0) return res.status(404).json({ erro: 'Partida não encontrada' })
+  // Head to Head: jogador de referência (steamId) comparado contra TODOS os
+  // adversários do time contrário nessa Partida (estilo Leetify) — kills por
+  // categoria de arma, dano e flashes, nas duas direções, numa chamada só.
+  router.get('/:id/head-to-head/:steamId', requireAuth, requireGroupMember, async (req, res) => {
+    const { id, steamId } = req.params
+    const jogadorQ = await db.query(
+      `select mp.team from matches m join match_players mp on mp.match_id = m.id
+       where m.id = $1 and m.group_id = $2 and mp.steam_id64 = $3`,
+      [id, req.groupId, steamId],
+    )
+    if (jogadorQ.rows.length === 0) return res.status(404).json({ erro: 'Partida ou jogador não encontrado' })
+    const timeReferencia = jogadorQ.rows[0].team
+
+    const oponentesQ = await db.query(
+      `select mp.steam_id64, mp.nick, mp.team, coalesce(p.avatar_url, sa.avatar_url) as avatar_url
+       from match_players mp
+       left join players p on p.steam_id64 = mp.steam_id64
+       left join steam_avatares sa on sa.steam_id64 = mp.steam_id64
+       where mp.match_id = $1 and mp.team != $2`,
+      [id, timeReferencia],
+    )
+    const oponentes = oponentesQ.rows
+    const steamIdsOponentes = oponentes.map((o) => o.steam_id64)
+    if (steamIdsOponentes.length === 0) return res.json({ steamId, oponentes: [] })
 
     const [kills, damage, flashes] = await Promise.all([
       db.query(
-        `select killer, victim, weapon
-         from kill_positions
-         where match_id = $1 and ((killer = $2 and victim = $3) or (killer = $3 and victim = $2))`,
-        [id, steamIdA, steamIdB],
+        `select killer, victim, weapon from kill_positions
+         where match_id = $1 and ((killer = $2 and victim = any($3)) or (victim = $2 and killer = any($3)))`,
+        [id, steamId, steamIdsOponentes],
       ),
       db.query(
-        `select attacker, damage
-         from match_player_damage
-         where match_id = $1 and ((attacker = $2 and victim = $3) or (attacker = $3 and victim = $2))`,
-        [id, steamIdA, steamIdB],
+        `select attacker, victim, damage from match_player_damage
+         where match_id = $1 and ((attacker = $2 and victim = any($3)) or (victim = $2 and attacker = any($3)))`,
+        [id, steamId, steamIdsOponentes],
       ),
       db.query(
-        `select attacker, count, duration_sum
-         from match_player_flashes
-         where match_id = $1 and ((attacker = $2 and victim = $3) or (attacker = $3 and victim = $2))`,
-        [id, steamIdA, steamIdB],
+        `select attacker, victim, count, duration_sum from match_player_flashes
+         where match_id = $1 and ((attacker = $2 and victim = any($3)) or (victim = $2 and attacker = any($3)))`,
+        [id, steamId, steamIdsOponentes],
       ),
     ])
 
-    const vazio = () => ({ killsPorCategoria: {}, dano: 0, flashes: { vezes: 0, duracao: 0 } })
-    const porJogador = { [steamIdA]: vazio(), [steamIdB]: vazio() }
+    const vazio = () => ({
+      kills: 0, deaths: 0, killsPorCategoria: {}, killsPorCategoriaRecebido: {},
+      dano: 0, danoRecebido: 0,
+      flashes: { porMim: { vezes: 0, duracao: 0 }, porEle: { vezes: 0, duracao: 0 } },
+    })
+    const porOponente = new Map(steamIdsOponentes.map((sid) => [sid, vazio()]))
+
     for (const k of kills.rows) {
-      if (!porJogador[k.killer]) continue
+      const oponente = k.killer === steamId ? k.victim : k.killer
+      const linha = porOponente.get(oponente)
+      if (!linha) continue
       const cat = categoriaArma(k.weapon)
-      porJogador[k.killer].killsPorCategoria[cat] = (porJogador[k.killer].killsPorCategoria[cat] ?? 0) + 1
+      if (k.killer === steamId) {
+        linha.kills += 1
+        linha.killsPorCategoria[cat] = (linha.killsPorCategoria[cat] ?? 0) + 1
+      } else {
+        linha.deaths += 1
+        linha.killsPorCategoriaRecebido[cat] = (linha.killsPorCategoriaRecebido[cat] ?? 0) + 1
+      }
     }
     for (const d of damage.rows) {
-      if (!porJogador[d.attacker]) continue
-      porJogador[d.attacker].dano += d.damage
+      const oponente = d.attacker === steamId ? d.victim : d.attacker
+      const linha = porOponente.get(oponente)
+      if (!linha) continue
+      if (d.attacker === steamId) linha.dano += d.damage
+      else linha.danoRecebido += d.damage
     }
     for (const f of flashes.rows) {
-      if (!porJogador[f.attacker]) continue
-      porJogador[f.attacker].flashes.vezes += f.count
-      porJogador[f.attacker].flashes.duracao += Number(f.duration_sum)
+      const oponente = f.attacker === steamId ? f.victim : f.attacker
+      const linha = porOponente.get(oponente)
+      if (!linha) continue
+      if (f.attacker === steamId) {
+        linha.flashes.porMim.vezes += f.count
+        linha.flashes.porMim.duracao += Number(f.duration_sum)
+      } else {
+        linha.flashes.porEle.vezes += f.count
+        linha.flashes.porEle.duracao += Number(f.duration_sum)
+      }
     }
 
     res.json({
-      a: { steamId: steamIdA, ...porJogador[steamIdA] },
-      b: { steamId: steamIdB, ...porJogador[steamIdB] },
+      steamId,
+      oponentes: oponentes.map((o) => ({
+        steamId: o.steam_id64, nick: o.nick, avatarUrl: o.avatar_url, team: o.team,
+        ...porOponente.get(o.steam_id64),
+      })),
     })
   })
 
