@@ -13,7 +13,12 @@ const ITENS = [
   { to: '/jogadores', label: 'Jogadores', num: '05', icone: 'jogadores' },
   { to: '/comparar', label: 'Comparar', num: '06', icone: 'comparar' },
   { to: '/times', label: 'Times', num: '07', icone: 'jogadores' },
-  { to: '/conta', label: 'Minha conta', num: '08', icone: 'perfil' },
+  // Granadas/Táticas são públicos pra visualização (só criar/editar é admin — cada
+  // página já esconde os controles de edição sozinha via isSuperAdmin) — por isso
+  // ficam aqui, fora do bloco condicional a isSuperAdmin logo abaixo.
+  { to: '/granadas', label: 'Granadas', num: '08', icone: 'granadas' },
+  { to: '/taticas', label: 'Táticas', num: '09', icone: 'taticas' },
+  { to: '/conta', label: 'Minha conta', num: '10', icone: 'perfil' },
 ]
 
 // Itens da barra inferior mobile (estilo app da FACEIT): 4 rotas principais
@@ -107,12 +112,11 @@ const NAV_ICONES = {
   ),
 }
 
+// Granadas/Táticas são públicos pra visualização — entram direto na barra mobile
+// pra todo mundo (só criar/editar continua admin, escondido dentro da própria página).
 const NAV_INFERIOR_BASE = [
   { to: '/', end: true, label: 'Partidas', icone: 'partidas' },
   { to: '/ranking', label: 'Ranking', icone: 'ranking' },
-]
-
-const NAV_INFERIOR_ADMIN = [
   { to: '/granadas', label: 'Granadas', icone: 'granadas' },
   { to: '/taticas', label: 'Táticas', icone: 'taticas' },
 ]
@@ -205,28 +209,6 @@ export default function Shell({ children }) {
           {jogador?.isSuperAdmin && (
             <>
               <NavLink
-                to="/granadas"
-                className={classeItem}
-                onClick={fecharMenu}
-                title={colapsada ? 'Granadas' : undefined}
-                aria-label={colapsada ? 'Granadas' : undefined}
-              >
-                <span className="shrink-0">{NAV_ICONES.granadas}</span>
-                <span className={`font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque ${colapsada ? 'lg:hidden' : ''}`}>07</span>
-                <span className={colapsada ? 'lg:hidden' : ''}>Granadas</span>
-              </NavLink>
-              <NavLink
-                to="/taticas"
-                className={classeItem}
-                onClick={fecharMenu}
-                title={colapsada ? 'Táticas' : undefined}
-                aria-label={colapsada ? 'Táticas' : undefined}
-              >
-                <span className="shrink-0">{NAV_ICONES.taticas}</span>
-                <span className={`font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque ${colapsada ? 'lg:hidden' : ''}`}>08</span>
-                <span className={colapsada ? 'lg:hidden' : ''}>Táticas</span>
-              </NavLink>
-              <NavLink
                 to="/admin"
                 className={classeItem}
                 onClick={fecharMenu}
@@ -234,7 +216,7 @@ export default function Shell({ children }) {
                 aria-label={colapsada ? 'Admin' : undefined}
               >
                 <span className="shrink-0">{NAV_ICONES.admin}</span>
-                <span className={`font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque ${colapsada ? 'lg:hidden' : ''}`}>09</span>
+                <span className={`font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque ${colapsada ? 'lg:hidden' : ''}`}>11</span>
                 <span className={colapsada ? 'lg:hidden' : ''}>Admin</span>
               </NavLink>
               <NavLink
@@ -245,7 +227,7 @@ export default function Shell({ children }) {
                 aria-label={colapsada ? 'Partidas pro' : undefined}
               >
                 <span className="shrink-0">{NAV_ICONES.partidasPro}</span>
-                <span className={`font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque ${colapsada ? 'lg:hidden' : ''}`}>10</span>
+                <span className={`font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque ${colapsada ? 'lg:hidden' : ''}`}>12</span>
                 <span className={colapsada ? 'lg:hidden' : ''}>Partidas pro</span>
               </NavLink>
             </>
@@ -297,7 +279,7 @@ export default function Shell({ children }) {
         </header>
         <main className="px-4 pb-20 pt-4 lg:px-6 lg:py-6">{children}</main>
       </div>
-      <BarraInferior menuAberto={menuAberto} onAbrirMenu={() => setMenuAberto(true)} isAdmin={jogador?.isSuperAdmin} />
+      <BarraInferior menuAberto={menuAberto} onAbrirMenu={() => setMenuAberto(true)} />
     </div>
   )
 }
@@ -305,11 +287,9 @@ export default function Shell({ children }) {
 // Barra de navegação inferior mobile (estilo app da FACEIT): fica sempre
 // visível em telas pequenas (lg:hidden), abaixo do overlay (z-30) e do
 // drawer (z-40) pra não competir visualmente quando o menu completo abre.
-function BarraInferior({ menuAberto, onAbrirMenu, isAdmin }) {
+function BarraInferior({ menuAberto, onAbrirMenu }) {
   const location = useLocation()
-  // Granadas/Táticas só entram na barra mobile pra admin — o grid tem que
-  // ganhar/perder coluna junto, senão sobra espaço vazio ou "Mais" some.
-  const itens = isAdmin ? [...NAV_INFERIOR_BASE, ...NAV_INFERIOR_ADMIN] : NAV_INFERIOR_BASE
+  const itens = NAV_INFERIOR_BASE
 
   function itemNavClasse({ isActive }) {
     return `flex h-14 flex-col items-center justify-center gap-1 text-[10px] font-mono uppercase tracking-wide transition-colors ${

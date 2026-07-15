@@ -61,7 +61,9 @@ function validarCorpo(body) {
 export function createGranadasRouter({ db, requireAuth }) {
   const router = Router()
 
-  router.get('/', requireAuth, requireSuperAdmin, async (req, res) => {
+  // Leitura é pública (qualquer jogador logado, de qualquer grupo) — a biblioteca de
+  // lineups não é dado sensível por grupo. Só criar/editar/excluir continua admin.
+  router.get('/', requireAuth, async (req, res) => {
     const cond = []
     const params = []
     const { map, lado, tipo } = req.query
@@ -87,7 +89,7 @@ export function createGranadasRouter({ db, requireAuth }) {
     res.json(rows.map(paraCamel))
   })
 
-  router.get('/contagem', requireAuth, requireSuperAdmin, async (req, res) => {
+  router.get('/contagem', requireAuth, async (req, res) => {
     const { rows } = await db.query(
       'select map, tipo, count(*) as total from lineups_curados group by map, tipo',
     )

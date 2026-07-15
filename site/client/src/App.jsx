@@ -61,8 +61,8 @@ export default function App() {
           <Route path="/times" element={<RotaProtegida><Times /></RotaProtegida>} />
           <Route path="/times/comparar" element={<RotaProtegida><CompararTimes /></RotaProtegida>} />
           <Route path="/ranking-publico" element={<RotaProtegida><RankingPublico /></RotaProtegida>} />
-          <Route path="/granadas" element={<RotaAdmin><Granadas /></RotaAdmin>} />
-          <Route path="/taticas" element={<RotaAdmin><Taticas /></RotaAdmin>} />
+          <Route path="/granadas" element={<RotaProtegida><Granadas /></RotaProtegida>} />
+          <Route path="/taticas" element={<RotaProtegida><Taticas /></RotaProtegida>} />
           <Route path="/conta" element={<RotaProtegida><Perfil /></RotaProtegida>} />
           <Route path="/admin" element={<RotaAdmin><Admin /></RotaAdmin>} />
           <Route path="/partidas-pro" element={<RotaAdmin><PartidasPro /></RotaAdmin>} />

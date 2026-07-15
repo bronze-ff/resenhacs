@@ -33,9 +33,9 @@ describe('GET /api/granadas', () => {
     expect((await request(app).get('/api/granadas')).status).toBe(401)
   })
 
-  it('jogador comum: 403 (pagina ainda em teste, admin-only)', async () => {
-    const { app } = appWith([])
-    expect((await request(app).get('/api/granadas').set('Cookie', cookieJogador)).status).toBe(403)
+  it('jogador comum: 200 (leitura e publica, so escrita e admin)', async () => {
+    const { app } = appWith([['from lineups_curados', [LINHA]]])
+    expect((await request(app).get('/api/granadas').set('Cookie', cookieJogador)).status).toBe(200)
   })
 
   it('admin lista com filtros validados e camelCase', async () => {
@@ -59,9 +59,9 @@ describe('GET /api/granadas', () => {
 })
 
 describe('GET /api/granadas/contagem', () => {
-  it('jogador comum: 403', async () => {
-    const { app } = appWith([])
-    expect((await request(app).get('/api/granadas/contagem').set('Cookie', cookieJogador)).status).toBe(403)
+  it('jogador comum: 200 (leitura e publica)', async () => {
+    const { app } = appWith([['group by map, tipo', []]])
+    expect((await request(app).get('/api/granadas/contagem').set('Cookie', cookieJogador)).status).toBe(200)
   })
 
   it('agrupa por mapa e tipo', async () => {
