@@ -502,20 +502,23 @@ def parse_demo(path):
         pass
 
     # Itens comprados por round×jogador — event bruto, sem agregação (a UI decide como
-    # agrupar). Best-effort igual ao bloco acima: nome de campo pode variar entre versões
-    # do demoparser2, cai pra lista vazia em vez de derrubar o ingest inteiro.
+    # agrupar). Campos confirmados lendo o código-fonte do demoparser2 (create_custom_
+    # event_weapon_purchase em second_pass/game_events.rs): o item_purchase NASCE com
+    # "steamid" puro (não "user_steamid" — ele não passa pela tradução userid→user_*
+    # que outros eventos como player_death/weapon_fire recebem) e o nome do item vem em
+    # "item_name" (não "item"/"weapon"). "cost" é o preço pago POR ESSE item específico.
     purchases = []
     try:
         compras_evt = parser.parse_event("item_purchase", other=["total_rounds_played"])
         for r in compras_evt.to_dict("records"):
-            sid = _sid(r.get("user_steamid"))
-            item = r.get("item")
+            sid = _sid(r.get("steamid"))
+            item = r.get("item_name")
             rn = r.get("total_rounds_played")
             if not sid or not item or rn is None:
                 continue
             purchases.append({
                 "round_number": int(rn) + 1, "steam_id64": sid,
-                "item": str(item), "tick": _num(r.get("tick")),
+                "item": str(item), "cost": _num(r.get("cost")), "tick": _num(r.get("tick")),
             })
     except Exception:  # noqa: BLE001
         pass
@@ -579,13 +582,16 @@ def parse_demo(path):
     try:
         death_ticks = sorted({int(k["tick"]) for k in kills})
         if death_ticks:
-            pos_df = parser.parse_ticks(["X", "Y"], ticks=death_ticks)
+            # active_weapon_name: o que a VÍTIMA tinha na mão ao morrer — diferente de
+            # "weapon" (a arma do ATACANTE, usada pra matar). Responde "eu morri de AWP
+            # mas eu tava jogando de pistola" sem confundir com a arma de quem matou.
+            pos_df = parser.parse_ticks(["X", "Y", "active_weapon_name"], ticks=death_ticks)
             pos_by_sid_tick = {}
             for r in pos_df.to_dict("records"):
                 sid = _sid(r.get("steamid"))
                 x, y = _flt(r.get("X")), _flt(r.get("Y"))
                 if sid and x is not None and y is not None:
-                    pos_by_sid_tick[(sid, int(r["tick"]))] = (x, y)
+                    pos_by_sid_tick[(sid, int(r["tick"]))] = (x, y, r.get("active_weapon_name"))
             for k in kills:
                 if k["team_kill"]:
                     continue
@@ -600,6 +606,7 @@ def parse_demo(path):
                         "killer": k["attacker"],
                         "victim": k["victim"],
                         "weapon": k["weapon"],
+                        "victim_weapon": vic_pos[2],
                         "headshot": k["headshot"],
                         "killer_x": atk_pos[0] if atk_pos else None,
                         "killer_y": atk_pos[1] if atk_pos else None,

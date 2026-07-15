@@ -281,10 +281,10 @@ def _write_purchases(cur, match_id, purchases):
     for c in purchases:
         cur.execute(
             """
-            insert into match_player_purchases (match_id, round_number, steam_id64, item, tick)
-            values (%s, %s, %s, %s, %s)
+            insert into match_player_purchases (match_id, round_number, steam_id64, item, cost, tick)
+            values (%s, %s, %s, %s, %s, %s)
             """,
-            (match_id, c["round_number"], c["steam_id64"], c["item"], c.get("tick")),
+            (match_id, c["round_number"], c["steam_id64"], c["item"], c.get("cost"), c.get("tick")),
         )
 
 
@@ -294,13 +294,13 @@ def _write_kill_positions(cur, match_id, kill_positions):
         cur.execute(
             """
             insert into kill_positions
-              (match_id, round_number, tick, killer, victim, weapon, headshot,
+              (match_id, round_number, tick, killer, victim, weapon, victim_weapon, headshot,
                killer_x, killer_y, victim_x, victim_y)
-            values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 match_id, k["round_number"], k["tick"], k.get("killer"), k["victim"],
-                k.get("weapon", ""), k.get("headshot", False),
+                k.get("weapon", ""), k.get("victim_weapon"), k.get("headshot", False),
                 k.get("killer_x"), k.get("killer_y"), k["victim_x"], k["victim_y"],
             ),
         )
