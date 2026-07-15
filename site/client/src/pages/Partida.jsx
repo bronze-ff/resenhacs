@@ -200,7 +200,7 @@ function ModalDetalhePartida({ matchId, jogador, onFechar }) {
             <div className="min-w-0">
               <h3 className="truncate font-display text-lg font-bold text-texto">{jogador.nick || jogador.steamId}</h3>
               {jogador.duelWinPct !== null && (
-                <p className="font-mono text-xs text-texto-fraco">
+                <p className="font-mono text-xs text-texto-fraco" title="De todo confronto que terminou em morte envolvendo ele (matou ou morreu), quantos % ele venceu (saiu vivo)">
                   Duelos vencidos: <span className="text-texto">{jogador.duelWinPct}%</span> ({jogador.kills}V/{jogador.deaths}D)
                 </p>
               )}
@@ -218,27 +218,37 @@ function ModalDetalhePartida({ matchId, jogador, onFechar }) {
             <p className="font-mono text-sm text-texto-fraco">Sem dados round-a-round pra essa partida (demo antiga).</p>
           )}
           {dados && dados.rounds.length > 0 && (
-            <div className="space-y-1.5">
-              {dados.rounds.map((r) => (
-                <div key={r.roundNumber} className="panel-cut-sm flex flex-wrap items-center gap-2 border border-borda bg-fundo px-3 py-2 font-mono text-xs">
-                  <span className="w-14 shrink-0 text-texto-fraco">Round {r.roundNumber}</span>
-                  {r.buyType && (
-                    <span className="text-texto-fraco">
-                      {ROTULO_COMPRA[r.buyType] ?? r.buyType} (${r.equipValue ?? 0})
+            <>
+              {/* Legenda fixa: explica de cara o que cada coluna/cor significa, sem
+                  precisar perguntar — mesma dúvida que já apareceu uma vez. */}
+              <p className="mb-3 font-mono text-[11px] leading-relaxed text-texto-fraco">
+                Cada linha é um round: o tipo/valor da compra dele naquele round, e do lado
+                direito, em <span className="text-sucesso">verde</span> as kills (arma e se foi
+                headshot) e em <span className="text-perigo">vermelho</span> a morte dele
+                (arma que o matou) — quando ele sobrevive o round, não aparece nada em vermelho.
+              </p>
+              <div className="space-y-1.5">
+                {dados.rounds.map((r) => (
+                  <div key={r.roundNumber} className="panel-cut-sm flex flex-wrap items-center gap-2 border border-borda bg-fundo px-3 py-2 font-mono text-xs">
+                    <span className="w-14 shrink-0 text-texto-fraco">Round {r.roundNumber}</span>
+                    {r.buyType && (
+                      <span className="text-texto-fraco">
+                        {ROTULO_COMPRA[r.buyType] ?? r.buyType} (${r.equipValue ?? 0})
+                      </span>
+                    )}
+                    {r.compras.length > 0 && (
+                      <span className="text-texto-fraco/80">· comprou: {r.compras.map(nomeArma).join(', ')}</span>
+                    )}
+                    <span className="ml-auto flex flex-wrap items-center justify-end gap-x-2">
+                      {r.matou.map((k, i) => (
+                        <span key={i} className="text-sucesso">matou: {nomeArma(k.weapon)}{k.headshot ? ' (HS)' : ''}</span>
+                      ))}
+                      {r.morreu && <span className="text-perigo">morreu: {nomeArma(r.morreu.weapon)}</span>}
                     </span>
-                  )}
-                  {r.compras.length > 0 && (
-                    <span className="text-texto-fraco/80">· {r.compras.map(nomeArma).join(', ')}</span>
-                  )}
-                  <span className="ml-auto flex items-center gap-2">
-                    {r.matou.map((k, i) => (
-                      <span key={i} className="text-sucesso">✚ {nomeArma(k.weapon)}{k.headshot ? ' (HS)' : ''}</span>
-                    ))}
-                    {r.morreu && <span className="text-perigo">✝ {nomeArma(r.morreu.weapon)}</span>}
-                  </span>
-                </div>
-              ))}
-            </div>
+                  </div>
+                ))}
+              </div>
+            </>
           )}
         </div>
       </div>
