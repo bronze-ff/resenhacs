@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './auth/AuthContext.jsx'
 import Shell from './components/Shell.jsx'
+import ErrorBoundary from './components/ErrorBoundary.jsx'
 import Entrar from './pages/Entrar.jsx'
 import AcessoNegado from './pages/AcessoNegado.jsx'
 import Feed from './pages/Feed.jsx'
@@ -43,6 +44,7 @@ export default function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
+        <ErrorBoundary>
         <Routes>
           <Route path="/entrar" element={<Entrar />} />
           <Route path="/acesso-negado" element={<AcessoNegado />} />
@@ -65,6 +67,7 @@ export default function App() {
           <Route path="/admin" element={<RotaAdmin><Admin /></RotaAdmin>} />
           <Route path="/partidas-pro" element={<RotaAdmin><PartidasPro /></RotaAdmin>} />
         </Routes>
+        </ErrorBoundary>
       </BrowserRouter>
     </AuthProvider>
   )
