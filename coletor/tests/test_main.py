@@ -121,6 +121,39 @@ def test_montar_lineups_e_o_mesmo_independente_de_quem_chama():
     assert len(de_reprocess) == 1
 
 
+# ---- ingest_demo / group_id explicito ----
+
+def test_ingest_demo_com_group_id_explicito_nao_chama_grupo_para_ingest(monkeypatch, tmp_path):
+    chamou_grupo_para_ingest = []
+    monkeypatch.setattr(
+        main.dbmod, "grupo_para_ingest",
+        lambda conn, steam_ids: chamou_grupo_para_ingest.append(1) or "grupo-errado",
+    )
+    store_calls = []
+    monkeypatch.setattr(
+        main.dbmod, "store_parsed",
+        lambda conn, parsed, **kw: store_calls.append(kw) or "m1",
+    )
+    monkeypatch.setattr(main.parsemod, "parse_demo", lambda path: {"players": [], "kills": [], "map": "de_mirage"})
+    monkeypatch.setattr(main.transform, "fill_kd_from_kills", lambda players, kills: players)
+    monkeypatch.setattr(main.transform, "enrich", lambda parsed: {**parsed, "kills": [], "highlights": []})
+    # extract_replay chama o parser Rust de verdade num .dem falso; um erro comum
+    # (KeyError/ValueError etc.) o próprio ingest_demo engole (best-effort, replay 2D
+    # não é o que este teste verifica) — mocka pra não depender do parser real aqui.
+    monkeypatch.setattr(
+        main.parsemod, "extract_replay",
+        lambda path: (_ for _ in ()).throw(RuntimeError("sem replay nesse teste")),
+    )
+
+    config = Config(env={})
+    dem = tmp_path / "demo.dem"
+    dem.write_bytes(b"x")
+    main.ingest_demo(config, None, dem, group_id="g-explicito", upload=False)
+
+    assert chamou_grupo_para_ingest == []
+    assert store_calls[-1]["group_id"] == "g-explicito"
+
+
 # ---- cmd_processar_fila_pro ----
 
 
@@ -352,3 +385,97 @@ def test_processar_fila_pro_funde_partes_adjacentes_do_mesmo_mapa_num_so_match_i
     match_ids = update[1][3]
     assert match_ids == ["m-anubis-fundido", "m-inferno"]
     assert len(match_ids) == 2
+
+
+# ---- cmd_processar_uploads_pendentes ----
+
+
+class _UploadsCursor:
+    def __init__(self, conn):
+        self.conn = conn
+        self._last = ""
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def execute(self, sql, params=None):
+        self._last = " ".join(sql.split())
+        self.conn.calls.append((self._last, params))
+
+    def fetchall(self):
+        if self._last.startswith(
+            "select id, group_id, adicionado_por, arquivo_r2_key, share_code, played_at from uploads_pendentes"
+        ):
+            return self.conn.upload_rows
+        return []
+
+
+class _UploadsConn:
+    def __init__(self, upload_rows):
+        self.calls = []
+        self.commits = 0
+        self.rollbacks = 0
+        self.upload_rows = upload_rows
+
+    def cursor(self):
+        return _UploadsCursor(self)
+
+    def commit(self):
+        self.commits += 1
+
+    def rollback(self):
+        self.rollbacks += 1
+
+
+def test_processar_uploads_pendentes_baixa_do_r2_ingere_com_group_id_e_apaga_em_sucesso(monkeypatch):
+    conn = _UploadsConn([("u1", "g1", "765", "uploads-pendentes/abc.dem", None, None)])
+    config = _config_com_r2()
+
+    monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
+    downloads = []
+    monkeypatch.setattr(
+        main.storage_r2, "download_bytes",
+        lambda client, bucket, key: (downloads.append((client, bucket, key)), b"dem-bytes")[1],
+    )
+    deletes = []
+    monkeypatch.setattr(
+        main.storage_r2, "delete_object",
+        lambda client, bucket, key: deletes.append((bucket, key)),
+    )
+    ingests = []
+
+    def _ingest_fake(cfg, cn, dem_path, share_code=None, source=None, upload=None, played_at=None, group_id=None):
+        ingests.append((dem_path.name, source, upload, group_id))
+        return "m1"
+
+    monkeypatch.setattr(main, "ingest_demo", _ingest_fake)
+
+    total = main.cmd_processar_uploads_pendentes(config, conn)
+
+    assert total == 1
+    assert downloads == [("fake-client", "resenha-demos", "uploads-pendentes/abc.dem")]
+    assert ingests == [("demo.dem", "upload", True, "g1")]
+    assert deletes == [("resenha-demos", "uploads-pendentes/abc.dem")]
+    update = next(c for c in conn.calls if c[0].startswith("update uploads_pendentes") and c[1][0] == "concluido")
+    assert update[1][1] == "m1"
+
+
+def test_processar_uploads_pendentes_mantem_staging_no_r2_quando_falha(monkeypatch):
+    conn = _UploadsConn([("u1", "g1", "765", "uploads-pendentes/abc.dem", None, None)])
+    config = _config_com_r2()
+
+    monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
+    monkeypatch.setattr(main.storage_r2, "download_bytes", lambda client, bucket, key: b"dem-bytes")
+    deletes = []
+    monkeypatch.setattr(main.storage_r2, "delete_object", lambda client, bucket, key: deletes.append((bucket, key)))
+    monkeypatch.setattr(main, "ingest_demo", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("parser explodiu")))
+
+    total = main.cmd_processar_uploads_pendentes(config, conn)
+
+    assert total == 0
+    assert deletes == []
+    update = next(c for c in conn.calls if c[0].startswith("update uploads_pendentes") and c[1][0] == "falhou")
+    assert "parser explodiu" in update[1][2]

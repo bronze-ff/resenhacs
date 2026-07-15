@@ -329,6 +329,52 @@ def cmd_processar_fila_pro(config, conn):
     return total
 
 
+def cmd_processar_uploads_pendentes(config, conn):
+    """Processa a fila de uploads manuais de demo (qualquer membro do grupo, via
+    'Enviar Demo' no site): baixa o .dem do R2 (staging de upload direto via URL
+    pré-assinada — a Vercel não aguenta receber o arquivo síncrono, ver
+    site/server/src/routes/upload.js) e ingere com o group_id de quem enviou
+    (não usa grupo_para_ingest aqui: já sabemos com certeza de qual grupo veio)."""
+    import tempfile
+    from pathlib import Path
+
+    pendentes = dbmod.listar_uploads_pendentes(conn)
+    if not pendentes:
+        print("processar-uploads-pendentes: nenhum upload pendente")
+        return 0
+
+    client = storage_r2.make_client(config)
+    total = 0
+    for upload_id, group_id, adicionado_por, arquivo_r2_key, share_code, played_at in pendentes:
+        dbmod.atualizar_upload_pendente(conn, upload_id, "processando")
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                tmp = Path(tmp)
+                print(f"  {upload_id}: baixando do R2 ({arquivo_r2_key})")
+                dados = storage_r2.download_bytes(client, config.r2_bucket, arquivo_r2_key)
+                dem_path = tmp / "demo.dem"
+                dem_path.write_bytes(dados)
+
+                match_id = ingest_demo(
+                    config, conn, dem_path,
+                    share_code=share_code, source="upload", upload=True,
+                    played_at=played_at, group_id=group_id,
+                )
+                dbmod.atualizar_upload_pendente(conn, upload_id, "concluido", match_id=match_id)
+                print(f"  {upload_id}: concluido ({match_id})")
+                total += 1
+                # Apaga o staging só em sucesso — numa falha o arquivo continua no R2
+                # pro reprocessamento futuro reaproveitar sem o jogador subir de novo.
+                storage_r2.delete_object(client, config.r2_bucket, arquivo_r2_key)
+        except Exception as e:  # noqa: BLE001
+            conn.rollback()
+            dbmod.atualizar_upload_pendente(conn, upload_id, "falhou", erro=str(e)[:500])
+            print(f"  {upload_id}: FALHOU ({e})")
+
+    print(f"processar-uploads-pendentes: {total} partida(s) processada(s)")
+    return total
+
+
 TIPO_POR_CHAVE = {"smokes": "smoke", "fires": "molotov", "flashes": "flash", "hes": "he"}
 
 
@@ -448,11 +494,15 @@ def cmd_reprocess(config, conn, match_id=None):
     return total
 
 
-def _finalizar_ingest(config, conn, parsed, replay_json, dem_path_upload, share_code, source, upload, played_at):
+def _finalizar_ingest(config, conn, parsed, replay_json, dem_path_upload, share_code, source, upload, played_at, group_id=None):
     """Cauda comum de ingest_demo/ingest_demo_multiparte: arquiva demo+replay no R2 (se
     configurado) e grava no banco. Devolve match_id. `dem_path_upload` é o .dem cujos
     bytes brutos sobem pro R2 (partida de arquivo único: o próprio; partida fundida de
-    várias partes: ver escolha em ingest_demo_multiparte)."""
+    várias partes: ver escolha em ingest_demo_multiparte).
+
+    `group_id` (opcional): quando o chamador já sabe com certeza de qual grupo a Partida
+    veio (ex.: fila de uploads manuais — cmd_processar_uploads_pendentes — onde o upload
+    já está associado a um group_id explícito), pula o guess de grupo_para_ingest."""
     demo_url = replay_url = None
     if upload and config.r2_endpoint:
         client = storage_r2.make_client(config)
@@ -471,8 +521,9 @@ def _finalizar_ingest(config, conn, parsed, replay_json, dem_path_upload, share_
             )
             replay_url = f"{config.r2_endpoint}/{config.r2_bucket}/{rkey}"
 
-    steam_ids = [p["steam_id64"] for p in parsed.get("players", []) if p.get("steam_id64")]
-    group_id = dbmod.grupo_para_ingest(conn, steam_ids)
+    if group_id is None:
+        steam_ids = [p["steam_id64"] for p in parsed.get("players", []) if p.get("steam_id64")]
+        group_id = dbmod.grupo_para_ingest(conn, steam_ids)
     return dbmod.store_parsed(
         conn, parsed, share_code=share_code, source=source,
         demo_url=demo_url, replay_url=replay_url,
@@ -498,13 +549,15 @@ def _atualizar_avatares(config, conn, steam_ids):
         print(f"aviso: avatares Steam não atualizados ({e})")
 
 
-def ingest_demo(config, conn, path, share_code=None, source="upload", upload=True, played_at=None):
+def ingest_demo(config, conn, path, share_code=None, source="upload", upload=True, played_at=None, group_id=None):
     """Parseia um .dem, arquiva no R2 (se configurado) e grava no banco. Devolve match_id.
 
     `played_at` (ISO 8601, opcional): quando o operador sabe a hora real da Partida,
     essa informação é mais confiável que a mtime do arquivo (que só reflete quando o
     .dem foi baixado/copiado — pode ser dias depois) e vence mesmo sobre um played_at
     já gravado por descoberta automática (prefer_new_played_at=True em store_parsed).
+
+    `group_id` (opcional): repassado direto pra _finalizar_ingest — ver docstring lá.
     """
     parsed = parsemod.parse_demo(path)
     parsed["players"] = transform.fill_kd_from_kills(parsed["players"], parsed["kills"])
@@ -531,7 +584,7 @@ def ingest_demo(config, conn, path, share_code=None, source="upload", upload=Tru
     except Exception as e:  # noqa: BLE001
         print(f"aviso: replay 2D / clutch não gerado ({e})")
 
-    match_id = _finalizar_ingest(config, conn, parsed, replay_json, path, share_code, source, upload, played_at)
+    match_id = _finalizar_ingest(config, conn, parsed, replay_json, path, share_code, source, upload, played_at, group_id=group_id)
     _atualizar_avatares(config, conn, [p["steam_id64"] for p in parsed.get("players", [])])
     return match_id
 
@@ -637,6 +690,10 @@ def main(argv=None):
         help="Processa a fila de partidas profissionais: baixa .rar do HLTV, extrai o .dem e ingere (source='pro').",
     )
     sub.add_parser(
+        "processar-uploads-pendentes",
+        help="Processa a fila de uploads manuais de demo (qualquer membro do grupo, via 'Enviar Demo').",
+    )
+    sub.add_parser(
         "configurar-cors",
         help="Configura CORS no bucket R2 (uma vez) pra aceitar upload direto do navegador.",
     )
@@ -672,6 +729,8 @@ def main(argv=None):
             cmd_reprocess(config, conn, match_id=args.match_id)
         elif args.cmd == "processar-fila-pro":
             cmd_processar_fila_pro(config, conn)
+        elif args.cmd == "processar-uploads-pendentes":
+            cmd_processar_uploads_pendentes(config, conn)
         elif args.cmd == "configurar-cors":
             client = storage_r2.make_client(config)
             storage_r2.configurar_cors(

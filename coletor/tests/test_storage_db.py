@@ -113,6 +113,8 @@ class FakeCursor:
     def fetchall(self):
         if self._last.startswith("select id, hltv_url, arquivo_r2_key from partidas_pro_fila"):
             return self.conn.fila_rows
+        if self._last.startswith("select id, group_id, adicionado_por, arquivo_r2_key, share_code, played_at from uploads_pendentes"):
+            return self.conn.uploads_rows
         if self._last.startswith("select steam_id64 from steam_avatares"):
             return [(s,) for s in self.conn.avatares_frescos]
         if "distinct mp.steam_id64" in self._last:
@@ -126,6 +128,7 @@ class FakeConn:
         self.commits = 0
         self.fingerprint_row = fingerprint_row
         self.fila_rows = []
+        self.uploads_rows = []
         self.avatares_frescos = []
         self.match_players_sem_avatar = []
         self.grupo_ativo_row = None
@@ -269,6 +272,26 @@ def test_atualizar_fila_pro_com_match_ids():
     db.atualizar_fila_pro(conn, "f1", "concluida", match_id="m1", match_ids=["m1", "m2", "m3"])
     update = next(c for c in conn.calls if c[0].startswith("update partidas_pro_fila"))
     assert update[1] == ("concluida", "m1", None, ["m1", "m2", "m3"], "f1")
+    assert conn.commits == 1
+
+
+# ---- uploads pendentes ----
+
+def test_listar_uploads_pendentes_devolve_so_status_pendente():
+    conn = FakeConn()
+    conn.uploads_rows = [
+        ("u1", "g1", "765", "uploads-pendentes/abc.dem", None, None),
+    ]
+    resultado = db.listar_uploads_pendentes(conn)
+    assert resultado == [("u1", "g1", "765", "uploads-pendentes/abc.dem", None, None)]
+    assert any("uploads_pendentes" in c[0] and "pendente" in c[0] for c in conn.calls)
+
+
+def test_atualizar_upload_pendente_grava_status_match_id_e_erro():
+    conn = FakeConn()
+    db.atualizar_upload_pendente(conn, "u1", "concluido", match_id="m1")
+    update = next(c for c in conn.calls if c[0].startswith("update uploads_pendentes"))
+    assert update[1] == ("concluido", "m1", None, "u1")
     assert conn.commits == 1
 
 

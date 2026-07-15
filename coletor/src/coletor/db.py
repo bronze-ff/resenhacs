@@ -485,6 +485,27 @@ def atualizar_fila_pro(conn, fila_id, status, match_id=None, erro=None, match_id
     conn.commit()
 
 
+def listar_uploads_pendentes(conn):
+    """Fila de uploads manuais (qualquer membro do grupo, via 'Enviar Demo' no site) —
+    par simplificado de listar_fila_pro_pendente: um .dem só por item, sem .rar/multi-mapa,
+    e já sabendo o group_id de quem enviou (não precisa de grupo_para_ingest)."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "select id, group_id, adicionado_por, arquivo_r2_key, share_code, played_at "
+            "from uploads_pendentes where status = 'pendente' order by adicionado_em"
+        )
+        return cur.fetchall()
+
+
+def atualizar_upload_pendente(conn, upload_id, status, match_id=None, erro=None):
+    with conn.cursor() as cur:
+        cur.execute(
+            "update uploads_pendentes set status = %s, match_id = %s, erro = %s where id = %s",
+            (status, match_id, erro, upload_id),
+        )
+    conn.commit()
+
+
 def upsert_avatares(conn, mapa):
     """Grava/atualiza o cache de avatares (dict steam_id64 -> avatar_url). Idempotente:
     reprocessar o mesmo id só atualiza avatar_url e atualizado_em."""
