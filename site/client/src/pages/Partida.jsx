@@ -250,6 +250,10 @@ function Scoreboard({ time, jogadores, matchId, podePromover, onPromover, promov
   const [expandido, setExpandido] = useState(null)
   const [detalheAberto, setDetalheAberto] = useState(null)
   return (
+    // O modal (fixed inset-0) precisa ficar FORA do painel com panel-cut: clip-path
+    // cria um containing block novo pra descendentes fixed (igual transform/filter) —
+    // por dentro do card, o modal ficava preso e minúsculo em vez de cobrir a tela.
+    <>
     <div className="panel-cut overflow-x-auto border border-borda">
       <table className="w-full text-sm">
         <thead>
@@ -317,10 +321,11 @@ function Scoreboard({ time, jogadores, matchId, podePromover, onPromover, promov
           })}
         </tbody>
       </table>
-      {detalheAberto && (
-        <ModalDetalhePartida matchId={matchId} jogador={detalheAberto} onFechar={() => setDetalheAberto(null)} />
-      )}
     </div>
+    {detalheAberto && (
+      <ModalDetalhePartida matchId={matchId} jogador={detalheAberto} onFechar={() => setDetalheAberto(null)} />
+    )}
+    </>
   )
 }
 
