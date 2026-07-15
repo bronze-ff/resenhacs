@@ -185,6 +185,22 @@ def test_store_parsed_grava_kast_pct_em_match_players():
     assert insert[1][11] == 0.75  # kast_pct deve estar na posição 11 (0-indexed)
 
 
+def test_todas_as_queries_de_store_parsed_tem_placeholders_e_params_alinhados():
+    # Regra geral, não só match_players: nº de %s na SQL tem que bater com o nº de
+    # params na tupla — achado real (revisão da Task 3 do plano de KAST): um %s a
+    # mais no values() de match_players (41 vs 40 colunas/params) quebraria TODO
+    # ingest em produção, mas passava despercebido porque FakeCursor só grava
+    # (sql, params) sem validar a contagem — os testes específicos de cada campo
+    # (ex.: o de kast_pct acima) checam a POSIÇÃO certa mas não pegam esse
+    # desalinhamento de contagem sozinhos.
+    conn = FakeConn()
+    db.store_parsed(conn, _parsed(), share_code="CSGO-x", source="upload")
+    for sql, params in conn.calls:
+        esperado = sql.count("%s")
+        recebido = len(params) if params is not None else 0
+        assert esperado == recebido, f"{sql[:60]}...: {esperado} placeholders vs {recebido} params"
+
+
 def test_store_parsed_grava_economia_por_jogador_e_compras():
     conn = FakeConn()
     parsed = _parsed()
