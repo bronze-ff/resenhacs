@@ -1,6 +1,22 @@
 import { Router } from 'express'
 import { keyFromR2Url, streamObject } from '../r2.js'
 
+// Categoria de arma pro Head to Head (estilo Leetify: agrupa kills por família de
+// arma em vez de listar cada uma). Faca/granadas caem em "Outras".
+const CATEGORIA_ARMA = {
+  ak47: 'Rifles', m4a1: 'Rifles', m4a1_silencer: 'Rifles', galilar: 'Rifles', famas: 'Rifles',
+  aug: 'Rifles', sg556: 'Rifles',
+  ssg08: 'Snipers', awp: 'Snipers', g3sg1: 'Snipers', scar20: 'Snipers',
+  mp9: 'SMGs', mac10: 'SMGs', mp7: 'SMGs', ump45: 'SMGs', p90: 'SMGs', bizon: 'SMGs', mp5sd: 'SMGs',
+  deagle: 'Pistolas', usp_silencer: 'Pistolas', hkp2000: 'Pistolas', glock: 'Pistolas', p250: 'Pistolas',
+  fiveseven: 'Pistolas', tec9: 'Pistolas', cz75a: 'Pistolas', elite: 'Pistolas', revolver: 'Pistolas',
+  nova: 'Shotguns', xm1014: 'Shotguns', sawedoff: 'Shotguns', mag7: 'Shotguns',
+  m249: 'Pesadas', negev: 'Pesadas',
+}
+function categoriaArma(weapon) {
+  return CATEGORIA_ARMA[weapon] ?? 'Outras'
+}
+
 export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Client, r2Bucket }) {
   const router = Router()
 
@@ -259,7 +275,7 @@ export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Cli
 
     const [kills, econ, compras] = await Promise.all([
       db.query(
-        `select round_number, tick, killer, victim, weapon, headshot
+        `select round_number, tick, killer, victim, weapon, victim_weapon, headshot
          from kill_positions
          where match_id = $1 and (killer = $2 or victim = $2)
          order by round_number, tick`,
@@ -273,7 +289,7 @@ export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Cli
         [id, steamId],
       ),
       db.query(
-        `select round_number, item, tick
+        `select round_number, item, cost, tick
          from match_player_purchases
          where match_id = $1 and steam_id64 = $2
          order by round_number, tick`,
@@ -290,7 +306,11 @@ export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Cli
     }
     for (const k of kills.rows) {
       if (k.killer === steamId) linha(k.round_number).matou.push({ weapon: k.weapon, headshot: k.headshot, tick: k.tick })
-      if (k.victim === steamId) linha(k.round_number).morreu = { weapon: k.weapon, headshot: k.headshot, tick: k.tick }
+      // victimWeapon: o que ELE (a vítima) tinha na mão — diferente de "weapon" (arma
+      // de quem matou). Responde "eu morri de AWP mas tava jogando de pistola".
+      if (k.victim === steamId) {
+        linha(k.round_number).morreu = { weapon: k.weapon, victimWeapon: k.victim_weapon, headshot: k.headshot, tick: k.tick }
+      }
     }
     for (const e of econ.rows) {
       const l = linha(e.round_number)
@@ -298,12 +318,63 @@ export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Cli
       l.buyType = e.buy_type
     }
     for (const c of compras.rows) {
-      linha(c.round_number).compras.push(c.item)
+      linha(c.round_number).compras.push({ item: c.item, cost: c.cost })
     }
 
     res.json({
       steamId,
       rounds: [...porRound.values()].sort((a, b) => a.roundNumber - b.roundNumber),
+    })
+  })
+
+  // Head to Head: kills por categoria de arma, dano total e flashes trocados entre
+  // DOIS jogadores específicos dessa Partida (estilo Leetify) — nas duas direções.
+  router.get('/:id/head-to-head/:steamIdA/:steamIdB', requireAuth, requireGroupMember, async (req, res) => {
+    const { id, steamIdA, steamIdB } = req.params
+    const matchQ = await db.query('select id from matches where id = $1 and group_id = $2', [id, req.groupId])
+    if (matchQ.rows.length === 0) return res.status(404).json({ erro: 'Partida não encontrada' })
+
+    const [kills, damage, flashes] = await Promise.all([
+      db.query(
+        `select killer, victim, weapon
+         from kill_positions
+         where match_id = $1 and ((killer = $2 and victim = $3) or (killer = $3 and victim = $2))`,
+        [id, steamIdA, steamIdB],
+      ),
+      db.query(
+        `select attacker, damage
+         from match_player_damage
+         where match_id = $1 and ((attacker = $2 and victim = $3) or (attacker = $3 and victim = $2))`,
+        [id, steamIdA, steamIdB],
+      ),
+      db.query(
+        `select attacker, count, duration_sum
+         from match_player_flashes
+         where match_id = $1 and ((attacker = $2 and victim = $3) or (attacker = $3 and victim = $2))`,
+        [id, steamIdA, steamIdB],
+      ),
+    ])
+
+    const vazio = () => ({ killsPorCategoria: {}, dano: 0, flashes: { vezes: 0, duracao: 0 } })
+    const porJogador = { [steamIdA]: vazio(), [steamIdB]: vazio() }
+    for (const k of kills.rows) {
+      if (!porJogador[k.killer]) continue
+      const cat = categoriaArma(k.weapon)
+      porJogador[k.killer].killsPorCategoria[cat] = (porJogador[k.killer].killsPorCategoria[cat] ?? 0) + 1
+    }
+    for (const d of damage.rows) {
+      if (!porJogador[d.attacker]) continue
+      porJogador[d.attacker].dano += d.damage
+    }
+    for (const f of flashes.rows) {
+      if (!porJogador[f.attacker]) continue
+      porJogador[f.attacker].flashes.vezes += f.count
+      porJogador[f.attacker].flashes.duracao += Number(f.duration_sum)
+    }
+
+    res.json({
+      a: { steamId: steamIdA, ...porJogador[steamIdA] },
+      b: { steamId: steamIdB, ...porJogador[steamIdB] },
     })
   })
 

@@ -191,6 +191,24 @@ def test_store_parsed_grava_economia_por_jogador_e_compras():
     assert any(s.startswith("delete from match_player_purchases") for s, _ in conn.calls)
 
 
+def test_store_parsed_grava_dano_e_flashes_por_par():
+    conn = FakeConn()
+    parsed = _parsed()
+    parsed["player_damage"] = [
+        {"attacker": "A", "victim": "B", "weapon": "ak47", "damage": 300, "hits": 4},
+    ]
+    parsed["player_flashes"] = [
+        {"attacker": "A", "victim": "B", "count": 2, "duration_sum": 3.5},
+    ]
+    db.store_parsed(conn, parsed, share_code="CSGO-x", source="upload")
+    dano_insert = next(c for c in conn.calls if c[0].startswith("insert into match_player_damage"))
+    assert dano_insert[1] == ("00000000-0000-0000-0000-000000000001", "A", "B", "ak47", 300, 4)
+    flash_insert = next(c for c in conn.calls if c[0].startswith("insert into match_player_flashes"))
+    assert flash_insert[1] == ("00000000-0000-0000-0000-000000000001", "A", "B", 2, 3.5)
+    assert any(s.startswith("delete from match_player_damage") for s, _ in conn.calls)
+    assert any(s.startswith("delete from match_player_flashes") for s, _ in conn.calls)
+
+
 def test_store_parsed_grava_posicoes_de_kill():
     conn = FakeConn()
     parsed = _parsed()

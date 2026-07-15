@@ -288,6 +288,30 @@ def _write_purchases(cur, match_id, purchases):
         )
 
 
+def _write_player_damage(cur, match_id, player_damage):
+    cur.execute("delete from match_player_damage where match_id = %s", (match_id,))
+    for d in player_damage:
+        cur.execute(
+            """
+            insert into match_player_damage (match_id, attacker, victim, weapon, damage, hits)
+            values (%s, %s, %s, %s, %s, %s)
+            """,
+            (match_id, d["attacker"], d["victim"], d["weapon"], d["damage"], d["hits"]),
+        )
+
+
+def _write_player_flashes(cur, match_id, player_flashes):
+    cur.execute("delete from match_player_flashes where match_id = %s", (match_id,))
+    for f in player_flashes:
+        cur.execute(
+            """
+            insert into match_player_flashes (match_id, attacker, victim, count, duration_sum)
+            values (%s, %s, %s, %s, %s)
+            """,
+            (match_id, f["attacker"], f["victim"], f["count"], f["duration_sum"]),
+        )
+
+
 def _write_kill_positions(cur, match_id, kill_positions):
     cur.execute("delete from kill_positions where match_id = %s", (match_id,))
     for k in kill_positions:
@@ -346,6 +370,8 @@ def store_parsed(conn, parsed, share_code=None, source="valve_mm", demo_url=None
         _write_round_econ(cur, match_id, parsed.get("round_econ", []))
         _write_player_round_econ(cur, match_id, parsed.get("player_round_econ", []))
         _write_purchases(cur, match_id, parsed.get("purchases", []))
+        _write_player_damage(cur, match_id, parsed.get("player_damage", []))
+        _write_player_flashes(cur, match_id, parsed.get("player_flashes", []))
         _write_kill_positions(cur, match_id, parsed.get("kill_positions", []))
         _write_lineups(cur, match_id, parsed.get("lineups", []))
     conn.commit()

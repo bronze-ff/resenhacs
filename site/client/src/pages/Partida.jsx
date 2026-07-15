@@ -144,7 +144,8 @@ function SetaExpandir({ aberto }) {
 // Recolhido por padrão: kills por arma NESSA partida (não é a agregação de carreira do
 // perfil) — serve pra conferir na hora "com que arma ele matou" (ex.: alguém alega só ter
 // jogado de uma arma específica e o grupo quer confirmar).
-function ArmasDoJogador({ weapons, onAbrirDetalhe }) {
+function ArmasDoJogador({ weapons, oponentes, onAbrirDetalhe, onAbrirHeadToHead }) {
+  const [oponenteEscolhido, setOponenteEscolhido] = useState('')
   return (
     <div className="flex flex-wrap items-center gap-2 px-1 py-2">
       {(!weapons || weapons.length === 0) ? (
@@ -161,17 +162,127 @@ function ArmasDoJogador({ weapons, onAbrirDetalhe }) {
           </div>
         ))
       )}
-      <button
-        onClick={onAbrirDetalhe}
-        className="panel-cut-sm ml-auto border border-borda px-2 py-1 font-mono text-xs text-texto-fraco transition-colors hover:border-destaque hover:text-destaque"
-      >
-        Ver detalhe por round →
-      </button>
+      <div className="ml-auto flex items-center gap-2">
+        {oponentes?.length > 0 && (
+          <>
+            <select
+              value={oponenteEscolhido}
+              onChange={(e) => setOponenteEscolhido(e.target.value)}
+              className="cursor-pointer rounded border border-borda bg-superficie px-2 py-1 font-mono text-xs"
+            >
+              <option value="">Comparar com…</option>
+              {oponentes.map((o) => (
+                <option key={o.steamId} value={o.steamId}>{o.nick || o.steamId}</option>
+              ))}
+            </select>
+            <button
+              onClick={() => oponenteEscolhido && onAbrirHeadToHead(oponenteEscolhido)}
+              disabled={!oponenteEscolhido}
+              className="panel-cut-sm border border-borda px-2 py-1 font-mono text-xs text-texto-fraco transition-colors hover:border-destaque hover:text-destaque disabled:opacity-40"
+            >
+              Head to Head
+            </button>
+          </>
+        )}
+        <button
+          onClick={onAbrirDetalhe}
+          className="panel-cut-sm border border-borda px-2 py-1 font-mono text-xs text-texto-fraco transition-colors hover:border-destaque hover:text-destaque"
+        >
+          Ver detalhe por round →
+        </button>
+      </div>
     </div>
   )
 }
 
 const ROTULO_COMPRA = { eco: 'Eco', forcado: 'Forçada', semi: 'Semi', full: 'Full' }
+
+const CATEGORIAS_ARMA_ORDEM = ['Rifles', 'Snipers', 'SMGs', 'Pistolas', 'Shotguns', 'Pesadas', 'Outras']
+
+// Uma linha do comparativo: barra espelhada (A cresce pra esquerda, B pra direita) a
+// partir de um valor central — mesma ideia visual do Head to Head do Leetify.
+function LinhaComparativa({ label, valorA, valorB }) {
+  const max = Math.max(valorA, valorB, 1)
+  return (
+    <div className="flex items-center gap-2 font-mono text-xs">
+      <span className="w-8 shrink-0 text-right tabular-nums text-texto">{valorA}</span>
+      <div className="flex h-3 flex-1 flex-row-reverse overflow-hidden rounded-sm bg-fundo">
+        <div className="h-full bg-time-a" style={{ width: `${(valorA / max) * 100}%` }} />
+      </div>
+      <span className="w-16 shrink-0 text-center uppercase tracking-wide text-texto-fraco">{label}</span>
+      <div className="flex h-3 flex-1 overflow-hidden rounded-sm bg-fundo">
+        <div className="h-full bg-time-b" style={{ width: `${(valorB / max) * 100}%` }} />
+      </div>
+      <span className="w-8 shrink-0 tabular-nums text-texto">{valorB}</span>
+    </div>
+  )
+}
+
+// Modal separado: comparativo direto entre 2 jogadores específicos dessa partida (kills
+// por categoria de arma, dano total e flashes trocados entre os dois) — Head to Head
+// estilo Leetify, com o que já dá pra calcular sem tracking de mira.
+function ModalHeadToHead({ matchId, jogadorA, jogadorB, onFechar }) {
+  const [dados, setDados] = useState(null)
+  const [erro, setErro] = useState(false)
+
+  useEffect(() => {
+    setDados(null)
+    setErro(false)
+    fetch(`/api/matches/${matchId}/head-to-head/${jogadorA.steamId}/${jogadorB.steamId}`)
+      .then((res) => (res.ok ? res.json() : Promise.reject()))
+      .then(setDados)
+      .catch(() => setErro(true))
+  }, [matchId, jogadorA.steamId, jogadorB.steamId])
+
+  const categorias = dados
+    ? CATEGORIAS_ARMA_ORDEM.filter((cat) => dados.a.killsPorCategoria[cat] || dados.b.killsPorCategoria[cat])
+    : []
+  const seEnfrentaram = dados && (categorias.length > 0 || dados.a.dano > 0 || dados.b.dano > 0)
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-fundo/80 p-0 lg:p-4" onClick={onFechar}>
+      <div
+        className="flex h-full w-full flex-col overflow-y-hidden border border-borda bg-superficie lg:panel-cut lg:h-auto lg:max-h-[90vh] lg:w-full lg:max-w-xl lg:overflow-y-auto lg:p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-borda bg-superficie px-4 py-3 lg:static lg:border-0 lg:bg-transparent lg:px-0 lg:py-0 lg:pb-3">
+          <div className="flex flex-1 items-center justify-between gap-2 overflow-hidden">
+            <span className="flex min-w-0 items-center gap-2 font-mono text-sm font-bold text-texto">
+              <Avatar p={jogadorA} />
+              <span className="truncate">{jogadorA.nick || jogadorA.steamId}</span>
+            </span>
+            <span className="shrink-0 font-display text-xs uppercase tracking-widest text-texto-fraco">vs</span>
+            <span className="flex min-w-0 items-center gap-2 font-mono text-sm font-bold text-texto">
+              <span className="truncate">{jogadorB.nick || jogadorB.steamId}</span>
+              <Avatar p={jogadorB} />
+            </span>
+          </div>
+          <button onClick={onFechar} className="flex min-h-10 min-w-10 shrink-0 items-center justify-center font-mono text-sm uppercase text-texto-fraco hover:text-texto">
+            fechar
+          </button>
+        </div>
+
+        <div className="flex-1 space-y-2 overflow-y-auto px-4 py-3 lg:px-0 lg:py-3">
+          {erro && <p className="font-mono text-sm text-perigo">Não foi possível carregar o comparativo.</p>}
+          {!erro && !dados && <p className="font-mono text-sm text-texto-fraco">Carregando…</p>}
+          {dados && !seEnfrentaram && (
+            <p className="font-mono text-sm text-texto-fraco">Esses dois não se enfrentaram (kills/dano) nessa partida.</p>
+          )}
+          {dados && seEnfrentaram && (
+            <>
+              {categorias.map((cat) => (
+                <LinhaComparativa key={cat} label={cat} valorA={dados.a.killsPorCategoria[cat] || 0} valorB={dados.b.killsPorCategoria[cat] || 0} />
+              ))}
+              <div className="my-2 border-t border-borda/60" />
+              <LinhaComparativa label="Dano" valorA={dados.a.dano} valorB={dados.b.dano} />
+              <LinhaComparativa label="Flashes" valorA={dados.a.flashes.vezes} valorB={dados.b.flashes.vezes} />
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
 
 // Modal separado (aberto sob demanda): timeline round-a-round de UM Jogador — o que
 // comprou, quando matou/morreu e com quê. Busca lazy (só quando abre pra esse Jogador).
@@ -222,10 +333,12 @@ function ModalDetalhePartida({ matchId, jogador, onFechar }) {
               {/* Legenda fixa: explica de cara o que cada coluna/cor significa, sem
                   precisar perguntar — mesma dúvida que já apareceu uma vez. */}
               <p className="mb-3 font-mono text-[11px] leading-relaxed text-texto-fraco">
-                Cada linha é um round: o tipo/valor da compra dele naquele round, e do lado
-                direito, em <span className="text-sucesso">verde</span> as kills (arma e se foi
+                Cada linha é um round: o tipo/valor da compra dele naquele round (com o
+                detalhe de cada item), e do lado direito, em{' '}
+                <span className="text-sucesso">verde</span> as kills (arma e se foi
                 headshot) e em <span className="text-perigo">vermelho</span> a morte dele
-                (arma que o matou) — quando ele sobrevive o round, não aparece nada em vermelho.
+                — arma de quem matou e, entre parênteses, a arma que ELE estava segurando
+                na hora — quando ele sobrevive o round, não aparece nada em vermelho.
               </p>
               <div className="space-y-1.5">
                 {dados.rounds.map((r) => (
@@ -237,13 +350,27 @@ function ModalDetalhePartida({ matchId, jogador, onFechar }) {
                       </span>
                     )}
                     {r.compras.length > 0 && (
-                      <span className="text-texto-fraco/80">· comprou: {r.compras.map(nomeArma).join(', ')}</span>
+                      <span className="text-texto-fraco/80">
+                        · comprou: {r.compras.map((c, i) => (
+                          <span key={i}>
+                            {i > 0 && ', '}
+                            {nomeArma(c.item)}{c.cost != null ? ` ($${c.cost})` : ''}
+                          </span>
+                        ))}
+                      </span>
                     )}
                     <span className="ml-auto flex flex-wrap items-center justify-end gap-x-2">
                       {r.matou.map((k, i) => (
                         <span key={i} className="text-sucesso">matou: {nomeArma(k.weapon)}{k.headshot ? ' (HS)' : ''}</span>
                       ))}
-                      {r.morreu && <span className="text-perigo">morreu: {nomeArma(r.morreu.weapon)}</span>}
+                      {r.morreu && (
+                        <span className="text-perigo">
+                          morreu: {nomeArma(r.morreu.weapon)}
+                          {r.morreu.victimWeapon && r.morreu.victimWeapon !== r.morreu.weapon && (
+                            <> (segurando: {nomeArma(r.morreu.victimWeapon)})</>
+                          )}
+                        </span>
+                      )}
                     </span>
                   </div>
                 ))}
@@ -256,9 +383,10 @@ function ModalDetalhePartida({ matchId, jogador, onFechar }) {
   )
 }
 
-function Scoreboard({ time, jogadores, matchId, podePromover, onPromover, promovendo }) {
+function Scoreboard({ time, jogadores, oponentes, matchId, podePromover, onPromover, promovendo }) {
   const [expandido, setExpandido] = useState(null)
   const [detalheAberto, setDetalheAberto] = useState(null)
+  const [head2head, setHead2head] = useState(null)
   return (
     // O modal (fixed inset-0) precisa ficar FORA do painel com panel-cut: clip-path
     // cria um containing block novo pra descendentes fixed (igual transform/filter) —
@@ -322,7 +450,15 @@ function Scoreboard({ time, jogadores, matchId, podePromover, onPromover, promov
                 {aberto && (
                   <tr className="border-t border-borda/60 bg-fundo/40">
                     <td colSpan={8}>
-                      <ArmasDoJogador weapons={p.weapons} onAbrirDetalhe={() => setDetalheAberto(p)} />
+                      <ArmasDoJogador
+                        weapons={p.weapons}
+                        oponentes={oponentes}
+                        onAbrirDetalhe={() => setDetalheAberto(p)}
+                        onAbrirHeadToHead={(steamIdB) => {
+                          const jogadorB = oponentes?.find((o) => o.steamId === steamIdB)
+                          if (jogadorB) setHead2head({ jogadorA: p, jogadorB })
+                        }}
+                      />
                     </td>
                   </tr>
                 )}
@@ -334,6 +470,14 @@ function Scoreboard({ time, jogadores, matchId, podePromover, onPromover, promov
     </div>
     {detalheAberto && (
       <ModalDetalhePartida matchId={matchId} jogador={detalheAberto} onFechar={() => setDetalheAberto(null)} />
+    )}
+    {head2head && (
+      <ModalHeadToHead
+        matchId={matchId}
+        jogadorA={head2head.jogadorA}
+        jogadorB={head2head.jogadorB}
+        onFechar={() => setHead2head(null)}
+      />
     )}
     </>
   )
@@ -904,8 +1048,8 @@ export default function Partida() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Scoreboard time="A" jogadores={timeA} matchId={m.id} podePromover={jogador?.isSuperAdmin} onPromover={promover} promovendo={promovendo} />
-        <Scoreboard time="B" jogadores={timeB} matchId={m.id} podePromover={jogador?.isSuperAdmin} onPromover={promover} promovendo={promovendo} />
+        <Scoreboard time="A" jogadores={timeA} oponentes={timeB} matchId={m.id} podePromover={jogador?.isSuperAdmin} onPromover={promover} promovendo={promovendo} />
+        <Scoreboard time="B" jogadores={timeB} oponentes={timeA} matchId={m.id} podePromover={jogador?.isSuperAdmin} onPromover={promover} promovendo={promovendo} />
       </div>
 
       <section ref={replayRef}>

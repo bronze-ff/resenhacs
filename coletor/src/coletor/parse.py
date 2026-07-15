@@ -315,6 +315,25 @@ def _offset_campo(items, offset, campo):
     return [{**it, campo: it[campo] + offset} for it in items]
 
 
+def _somar_pares(items, chaves):
+    """Funde itens repetidos (mesma chave-de-agrupamento) somando os campos numéricos
+    restantes — usado pra player_damage/player_flashes quando um mapa vem em 2+ .dem
+    (Partidas Pro): não tem round_number pra offsetar nem letra de time pra inverter
+    (attacker/victim já são steam_id64, não mudam), só soma o que se repete entre partes."""
+    acumulado = {}
+    for item in items:
+        chave = tuple(item[k] for k in chaves)
+        if chave not in acumulado:
+            acumulado[chave] = dict(item)
+            continue
+        alvo = acumulado[chave]
+        for k, v in item.items():
+            if k in chaves or not isinstance(v, (int, float)):
+                continue
+            alvo[k] = alvo.get(k, 0) + v
+    return list(acumulado.values())
+
+
 def _somar_weapons(a, b):
     saida = {arma: dict(stats) for arma, stats in a.items()}
     for arma, stats in b.items():
@@ -404,6 +423,15 @@ def fundir_partes_mesmo_mapa(partes, rdatas=None):
     nome_a = next((p.get("team_a_name") for p in partes_corrigidas if p.get("team_a_name")), None)
     nome_b = next((p.get("team_b_name") for p in partes_corrigidas if p.get("team_b_name")), None)
 
+    player_damage_fundido = _somar_pares(
+        [d for p in partes_corrigidas for d in p.get("player_damage", [])],
+        ("attacker", "victim", "weapon"),
+    )
+    player_flashes_fundido = _somar_pares(
+        [f for p in partes_corrigidas for f in p.get("player_flashes", [])],
+        ("attacker", "victim"),
+    )
+
     parsed_fundido = {
         **partes_corrigidas[0],
         "score_a": score_a, "score_b": score_b,
@@ -411,6 +439,7 @@ def fundir_partes_mesmo_mapa(partes, rdatas=None):
         "rounds": rounds_fundidos, "kills": kills_fundidos,
         "round_econ": econ_fundido, "kill_positions": kill_pos_fundidas,
         "player_round_econ": player_econ_fundido, "purchases": purchases_fundidas,
+        "player_damage": player_damage_fundido, "player_flashes": player_flashes_fundido,
         "players": _merge_players([p.get("players", []) for p in partes_corrigidas]),
     }
 
@@ -628,16 +657,20 @@ def parse_demo(path):
     damage, utility_damage, shots_hit = {}, {}, {}
     he_damage, molotov_damage = {}, {}
     he_team_damage, molotov_team_damage = {}, {}
+    # Dano por PAR (quem bateu em quem, com quê) — base do "Head to Head": o player_hurt
+    # já carrega atacante+vítima+arma+dano, só nunca guardávamos o par, só o total do
+    # atacante. Chave (atacante, vítima, arma) pra já vir separado por arma na consulta.
+    damage_pares = {}
     for r in hurt.to_dict("records"):
         atk = _sid(r.get("attacker_steamid"))
         if not atk:
             continue
         dmg = int(r["dmg_health"])
         damage[atk] = damage.get(atk, 0) + dmg
+        vic = _sid(r.get("user_steamid"))
         arma = r.get("weapon")
         if arma in _ARMAS_UTILITARIAS:
             utility_damage[atk] = utility_damage.get(atk, 0) + dmg
-            vic = _sid(r.get("user_steamid"))
             time_kill = bool(vic and fixed.get(atk) == fixed.get(vic))
             if arma == "hegrenade":
                 if time_kill:
@@ -649,6 +682,7 @@ def parse_demo(path):
                     molotov_team_damage[atk] = molotov_team_damage.get(atk, 0) + dmg
                 else:
                     molotov_damage[atk] = molotov_damage.get(atk, 0) + dmg
+            arma_par = _arma_limpa(arma) or str(arma)
         elif _eh_arma_de_fogo(arma):
             shots_hit[atk] = shots_hit.get(atk, 0) + 1
             round_no = int(r["total_rounds_played"]) + 1
@@ -656,6 +690,14 @@ def parse_demo(path):
             slot = weapon_slot(atk, arma_resolvida)
             slot["shots_hit"] += 1
             slot["damage"] += dmg
+            arma_par = arma_resolvida
+        else:
+            arma_par = _arma_limpa(arma) or str(arma)
+        if vic:
+            chave = (atk, vic, arma_par)
+            par = damage_pares.setdefault(chave, {"damage": 0, "hits": 0})
+            par["damage"] += dmg
+            par["hits"] += 1
 
     # Tiros disparados (só armas de fogo — exclui faca e granadas) → precisão.
     # Granadas lançadas por tipo: mesmo evento (weapon_fire), filtrando o outro lado
@@ -730,6 +772,10 @@ def parse_demo(path):
     # Sem isso nosso "tempo médio" saía sistematicamente mais alto (contava todo mundo
     # que a flash pegou, não só o pior caso de cada uma).
     enemy_flash_landed_count, enemy_flash_landed_duration_sum = {}, {}
+    # Flashes por PAR (quem cegou quem) — mesma ideia do damage_pares acima, pra
+    # alimentar o Head to Head ("flashes que X deu em Y"). Conta as duas direções
+    # (aliado ou não), o consumidor decide o que exibir.
+    flash_pares = {}
     for (thrower, tick0), vitimas in flashbangs.items():
         creditou_assist = False
         maior_duracao_inimigo = 0.0
@@ -738,6 +784,9 @@ def parse_demo(path):
                 maior_duracao_inimigo = max(maior_duracao_inimigo, v["duracao"])
             if v["duracao"] <= LIMIAR_CEGUEIRA_S:
                 continue  # meio-cego não conta em nada (nem contagem, nem assist)
+            par = flash_pares.setdefault((thrower, v["vitima"]), {"count": 0, "duracao": 0.0})
+            par["count"] += 1
+            par["duracao"] += v["duracao"]
             if v["aliado"]:
                 teammates_flashed[thrower] = teammates_flashed.get(thrower, 0) + 1
                 teammate_flash_duration[thrower] = teammate_flash_duration.get(thrower, 0.0) + v["duracao"]
@@ -822,6 +871,15 @@ def parse_demo(path):
         os.path.getmtime(path), tz=datetime.timezone.utc
     ).isoformat()
 
+    player_damage = [
+        {"attacker": atk, "victim": vic, "weapon": arma, "damage": v["damage"], "hits": v["hits"]}
+        for (atk, vic, arma), v in damage_pares.items()
+    ]
+    player_flashes = [
+        {"attacker": atk, "victim": vic, "count": v["count"], "duration_sum": round(v["duracao"], 2)}
+        for (atk, vic), v in flash_pares.items()
+    ]
+
     return {
         "map": mapa,
         "score_a": score["A"],
@@ -835,6 +893,8 @@ def parse_demo(path):
         "round_econ": round_econ,
         "player_round_econ": player_round_econ,
         "purchases": purchases,
+        "player_damage": player_damage,
+        "player_flashes": player_flashes,
         "kill_positions": kill_positions,
     }
 

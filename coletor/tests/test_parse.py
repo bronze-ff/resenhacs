@@ -328,6 +328,29 @@ def test_fundir_partes_mesmo_mapa_soma_offset_em_econ_por_jogador_e_compras():
     assert compra_da_parte2["round_number"] == 2
 
 
+def test_fundir_partes_mesmo_mapa_soma_dano_e_flashes_por_par_entre_partes():
+    # player_damage/player_flashes não têm round_number nem letra de time — quando o
+    # MESMO par (atacante, vítima, arma) aparece nas duas partes (o duelo se repetiu),
+    # soma os totais em vez de duplicar a linha.
+    parte1 = _parte_base(
+        rounds=[{"round_number": 1, "winner_team": "A", "win_reason": ""}],
+        players=[_jogador("1", "A"), _jogador("2", "B")],
+        player_damage=[{"attacker": "1", "victim": "2", "weapon": "ak47", "damage": 100, "hits": 1}],
+        player_flashes=[{"attacker": "1", "victim": "2", "count": 1, "duration_sum": 1.5}],
+    )
+    parte2 = _parte_base(
+        rounds=[{"round_number": 1, "winner_team": "A", "win_reason": ""}],
+        players=[_jogador("1", "A"), _jogador("2", "B")],
+        player_damage=[{"attacker": "1", "victim": "2", "weapon": "ak47", "damage": 50, "hits": 1}],
+        player_flashes=[{"attacker": "1", "victim": "2", "count": 1, "duration_sum": 2.0}],
+    )
+
+    fundido, _ = parse.fundir_partes_mesmo_mapa([parte1, parte2])
+
+    assert fundido["player_damage"] == [{"attacker": "1", "victim": "2", "weapon": "ak47", "damage": 150, "hits": 2}]
+    assert fundido["player_flashes"] == [{"attacker": "1", "victim": "2", "count": 2, "duration_sum": 3.5}]
+
+
 def test_fundir_partes_mesmo_mapa_inverte_letra_em_econ_por_jogador():
     parte1 = _parte_base(
         rounds=[{"round_number": 1, "winner_team": "A", "win_reason": ""}],
