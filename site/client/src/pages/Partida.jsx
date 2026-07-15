@@ -104,23 +104,23 @@ function SteamIcon({ className }) {
 // perfil Steam (ícone separado, pra não competir com o clique do nome).
 function NomeJogador({ p, mostrarTagGrupo = true, className = '' }) {
   return (
-    <span className={`flex items-center gap-2 font-mono ${className}`.trim()}>
+    <span className={`flex min-w-0 items-center gap-2 font-mono ${className}`.trim()}>
       <Link
         to={`/jogador/${p.steamId}`}
-        className="flex items-center gap-2 text-texto transition-colors hover:text-destaque"
+        className="flex min-w-0 items-center gap-2 text-texto transition-colors hover:text-destaque"
       >
         <Avatar p={p} />
-        {p.nick || p.steamId}
+        <span className="max-w-[92px] truncate sm:max-w-none">{p.nick || p.steamId}</span>
       </Link>
       {mostrarTagGrupo && p.isTracked && (
-        <span className="text-[10px] uppercase tracking-widest text-destaque">grupo</span>
+        <span className="hidden shrink-0 text-[10px] uppercase tracking-widest text-destaque sm:inline">grupo</span>
       )}
       <a
         href={`https://steamcommunity.com/profiles/${p.steamId}`}
         target="_blank"
         rel="noreferrer"
         title="Abrir perfil na Steam"
-        className="text-texto-fraco/60 transition-colors hover:text-texto"
+        className="shrink-0 text-texto-fraco/60 transition-colors hover:text-texto"
         onClick={(e) => e.stopPropagation()}
       >
         <SteamIcon className="h-3.5 w-3.5" />
@@ -438,13 +438,13 @@ function Scoreboard({ time, jogadores, matchId, podePromover, onPromover, promov
         <thead>
           <tr className="bg-superficie text-left font-mono text-[10px] uppercase tracking-wider text-texto-fraco">
             <th className="px-3 py-2">Time {time}</th>
-            <th className="px-2 py-2 text-right">K</th>
-            <th className="hidden px-2 py-2 text-right sm:table-cell" title="Team kills (não contam pro K nem pro rating)">TK</th>
-            <th className="px-2 py-2 text-right">D</th>
-            <th className="px-2 py-2 text-right">A</th>
-            <th className="px-2 py-2 text-right">ADR</th>
-            <th className="hidden px-2 py-2 text-right sm:table-cell">HS%</th>
-            <th className="px-3 py-2 text-right">Rating</th>
+            <th className="cursor-help px-2 py-2 text-right underline decoration-dotted underline-offset-2" title="Kills — abates confirmados (fogo amigo não conta)">K</th>
+            <th className="hidden cursor-help px-2 py-2 text-right underline decoration-dotted underline-offset-2 sm:table-cell" title="Team kills (não contam pro K nem pro rating)">TK</th>
+            <th className="cursor-help px-2 py-2 text-right underline decoration-dotted underline-offset-2" title="Deaths — vezes que morreu">D</th>
+            <th className="hidden cursor-help px-2 py-2 text-right underline decoration-dotted underline-offset-2 sm:table-cell" title="Assists — dano/flash que ajudou a matar sem ser o abate final">A</th>
+            <th className="hidden cursor-help px-2 py-2 text-right underline decoration-dotted underline-offset-2 sm:table-cell" title="Average Damage per Round — dano médio causado por round (contando também rounds sem kill)">ADR</th>
+            <th className="hidden cursor-help px-2 py-2 text-right underline decoration-dotted underline-offset-2 sm:table-cell" title="% dos abates que foram headshot">HS%</th>
+            <th className="cursor-help px-3 py-2 text-right underline decoration-dotted underline-offset-2" title="Aproximação do HLTV Rating 1.0: combina kills/round, sobrevivência/round e multi-kills (2K/3K/4K/5K) num único número — acima de 1.00 é acima da média">Rating</th>
           </tr>
         </thead>
         <tbody>
@@ -481,8 +481,8 @@ function Scoreboard({ time, jogadores, matchId, podePromover, onPromover, promov
                     {p.teamKills || 0}
                   </td>
                   <td className="px-2 py-2 text-right tabular-nums">{p.deaths}</td>
-                  <td className="px-2 py-2 text-right tabular-nums">{p.assists}</td>
-                  <td className="px-2 py-2 text-right tabular-nums">{adr}</td>
+                  <td className="hidden px-2 py-2 text-right tabular-nums sm:table-cell">{p.assists}</td>
+                  <td className="hidden px-2 py-2 text-right tabular-nums sm:table-cell">{adr}</td>
                   <td className="hidden px-2 py-2 text-right tabular-nums sm:table-cell">{hs}%</td>
                   <td className={`px-3 py-2 text-right font-semibold tabular-nums ${corRating(p.rating)}`}>
                     {p.rating?.toFixed(2) ?? '–'}
