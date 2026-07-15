@@ -210,13 +210,18 @@ function AbaHeadToHead({ matchId, jogadores, jogadorLogado }) {
       setDados(null)
       return
     }
+    // Guarda de cancelamento: sem isso, trocar o jogador de referência rápido demais
+    // (o select fica sempre visível, dá pra trocar quantas vezes quiser) deixa uma
+    // resposta antiga sobrescrever a mais nova se chegar fora de ordem.
+    let cancelado = false
     setDados(null)
     setErro(false)
     setExpandido(null)
     fetch(`/api/matches/${matchId}/head-to-head/${referenciaId}`)
       .then((res) => (res.ok ? res.json() : Promise.reject()))
-      .then(setDados)
-      .catch(() => setErro(true))
+      .then((json) => { if (!cancelado) setDados(json) })
+      .catch(() => { if (!cancelado) setErro(true) })
+    return () => { cancelado = true }
   }, [matchId, referenciaId])
 
   const referencia = jogadores.find((p) => p.steamId === referenciaId)
