@@ -146,6 +146,47 @@ def test_clutch_1v1_registra_o_vencedor_mesmo_quando_o_perdedor_chega_primeiro()
     assert por_sid["D"]["venceu"] is False and por_sid["D"]["vs"] == 2  # o perdedor (chegou 1º) tbm
 
 
+def test_kast_pct_conta_kill_assist_sobrevivencia_e_trade_cada_um_isolado():
+    teams = {"A": "A", "B": "A", "C": "B", "D": "B"}
+    kills = [
+        # Round 1: A mata C (kill de A). D sobrevive (não morre, não mata, não assiste).
+        {"round_number": 1, "tick": 100, "attacker": "A", "victim": "C", "assister": None, "headshot": False, "team_kill": False},
+        # Round 2: B mata D com assist de A (kill de B, assist de A). C morre sem ser vingado ainda.
+        {"round_number": 2, "tick": 200, "attacker": "B", "victim": "D", "assister": "A", "headshot": False, "team_kill": False},
+    ]
+    trades = []  # nenhum trade nesse cenário
+    out = transform.kast_pct(kills, trades, ["A", "B", "C", "D"], rounds_total=2)
+    # A: kill no r1 (conta), assist no r2 (conta) -> 2/2 = 100%
+    assert out["A"] == 100.0
+    # B: não fez nada no r1 mas não morreu (sobreviveu, conta); kill no r2 (conta) -> 100%
+    assert out["B"] == 100.0
+    # C: morreu no r1 sem K/A/T -> não conta; sobreviveu o r2 (não é vítima) -> conta. 1/2 = 50%
+    assert out["C"] == 50.0
+    # D: sobreviveu r1 (conta); morreu no r2 sem ser vingado (não conta) -> 1/2 = 50%
+    assert out["D"] == 50.0
+
+
+def test_kast_pct_conta_trade_e_exclui_morte_sem_kill_assist_sobrevivencia_ou_trade():
+    # 4 jogadores (3 vs 1, tanto faz pro cálculo — só o rótulo de time importa pro trade):
+    # C mata A e D no mesmo round; B trada só a morte de A (a de D não é vingada por ninguém).
+    teams = {"A": "A", "B": "A", "D": "A", "C": "B"}
+    kills = [
+        {"round_number": 1, "tick": 1000, "attacker": "C", "victim": "A", "assister": None, "headshot": False, "team_kill": False},
+        {"round_number": 1, "tick": 1020, "attacker": "C", "victim": "D", "assister": None, "headshot": False, "team_kill": False},
+        {"round_number": 1, "tick": 1050, "attacker": "B", "victim": "C", "assister": None, "headshot": False, "team_kill": False},
+    ]
+    trades = [{"round_number": 1, "attacker": "B", "avenged_teammate": "A"}]
+    out = transform.kast_pct(kills, trades, ["A", "B", "C", "D"], rounds_total=1)
+    # A morreu mas foi vingado (trade) -> conta. B matou C (kill) -> conta.
+    # C matou A e D (kill) -> conta, mesmo tendo morrido depois (kill não exige sobreviver o round).
+    # D morreu sem kill/assist/trade -> NÃO conta — o caso que esse teste existe pra provar.
+    assert out == {"A": 100.0, "B": 100.0, "C": 100.0, "D": 0.0}
+
+
+def test_kast_pct_rounds_total_zero_devolve_vazio():
+    assert transform.kast_pct([], [], ["A"], rounds_total=0) == {}
+
+
 def test_hltv_rating_arredonda_e_zera_sem_rounds():
     assert transform.hltv_rating(20, 15, 0, {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}) == 0.0
     r = transform.hltv_rating(20, 10, 22, {1: 8, 2: 4, 3: 1, 4: 0, 5: 0})

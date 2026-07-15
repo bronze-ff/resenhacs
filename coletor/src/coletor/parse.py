@@ -585,6 +585,7 @@ def parse_demo(path):
                 "tick": int(r["tick"]),
                 "attacker": atk,
                 "victim": vic,
+                "assister": ast,
                 "headshot": headshot,
                 "team_kill": team_kill,
                 "weapon": _arma_limpa(r.get("weapon")) or "",
