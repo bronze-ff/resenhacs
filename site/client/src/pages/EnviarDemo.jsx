@@ -123,7 +123,7 @@ export default function EnviarDemo() {
             disabled={!arquivo || enviando}
             className="panel-cut-sm min-h-10 w-full border border-destaque bg-destaque px-4 py-2 font-display text-sm font-semibold uppercase tracking-wide text-fundo transition-opacity disabled:opacity-40 lg:min-h-0 lg:w-auto"
           >
-            {enviando ? 'Processando… (pode levar até 1 min)' : 'Enviar'}
+            {enviando ? 'Enviando…' : 'Enviar'}
           </button>
         </form>
 
