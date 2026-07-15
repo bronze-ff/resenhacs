@@ -194,6 +194,23 @@ def test_store_parsed_grava_economia_por_jogador_e_compras():
     assert any(s.startswith("delete from match_player_purchases") for s, _ in conn.calls)
 
 
+def test_write_player_round_econ_e_idempotente_contra_duplicata_no_mesmo_lote():
+    # Achado real: uma demo com reinício técnico no meio do round 1 gera 2 leituras de
+    # current_equip_value pro mesmo (round_number, steam_id64) — sem ON CONFLICT, a 2a
+    # linha duplicada estourava a PK (match_id, round_number, steam_id64) e derrubava o
+    # ingest inteiro do upload manual.
+    conn = FakeConn()
+    parsed = _parsed()
+    parsed["player_round_econ"] = [
+        {"round_number": 1, "steam_id64": "A", "team": "A", "equip_value": 800, "buy_type": "eco"},
+        {"round_number": 1, "steam_id64": "A", "team": "A", "equip_value": 4000, "buy_type": "eco"},
+    ]
+    db.store_parsed(conn, parsed, share_code="CSGO-x", source="upload")
+    inserts = [c for c in conn.calls if c[0].startswith("insert into match_player_round_econ")]
+    assert len(inserts) == 2
+    assert all("on conflict (match_id, round_number, steam_id64) do update" in sql for sql, _ in inserts)
+
+
 def test_store_parsed_grava_dano_e_flashes_por_par():
     conn = FakeConn()
     parsed = _parsed()

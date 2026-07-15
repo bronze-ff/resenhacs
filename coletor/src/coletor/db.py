@@ -264,6 +264,12 @@ def _write_round_econ(cur, match_id, round_econ):
 
 
 def _write_player_round_econ(cur, match_id, player_round_econ):
+    # ON CONFLICT DO UPDATE (não só o delete por match_id acima): uma partida com
+    # reinício técnico no meio do round 1 gera 2 leituras de current_equip_value pro
+    # mesmo (round_number, steam_id64) — sem isso, a segunda linha duplicada estoura
+    # a PK e derruba o ingest inteiro (achado real: upload manual que travava com
+    # "duplicate key value... match_player_round_econ_pkey"). Fica o valor mais
+    # recente (excluded.*), que reflete o estado após o reinício.
     cur.execute("delete from match_player_round_econ where match_id = %s", (match_id,))
     for e in player_round_econ:
         cur.execute(
@@ -271,6 +277,8 @@ def _write_player_round_econ(cur, match_id, player_round_econ):
             insert into match_player_round_econ
               (match_id, round_number, steam_id64, team, equip_value, buy_type)
             values (%s, %s, %s, %s, %s, %s)
+            on conflict (match_id, round_number, steam_id64) do update set
+              team = excluded.team, equip_value = excluded.equip_value, buy_type = excluded.buy_type
             """,
             (match_id, e["round_number"], e["steam_id64"], e.get("team"), e["equip_value"], e["buy_type"]),
         )
