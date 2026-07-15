@@ -91,6 +91,44 @@ function Avatar({ p }) {
   )
 }
 
+function SteamIcon({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+      <path d="M11.98 2C6.68 2 2.32 5.94 1.5 11.03l5.62 2.32a3.05 3.05 0 0 1 1.75-.55c.06 0 .12 0 .18.01l2.5-3.63v-.05a3.83 3.83 0 1 1 3.83 3.83h-.07l-3.57 2.55v.16a3.05 3.05 0 1 1-6.1.24L.1 14.5C.85 18.85 4.65 22 11.98 22c6.63 0 12-5.37 12-12s-5.37-8-12-8zm-2.4 15.44-1.3-.54a2.3 2.3 0 0 0 4.24-1.65l1.3.53a3.62 3.62 0 0 1-4.24 1.66zm7.65-8.6a2.5 2.5 0 1 0 0 5.01 2.5 2.5 0 0 0 0-5.01zm0 4.13a1.62 1.62 0 1 1 0-3.24 1.62 1.62 0 0 1 0 3.24z" />
+    </svg>
+  )
+}
+
+// Nome do Jogador: sempre um link pro perfil dele no Resenha (mesmo se for adversário/fora
+// do grupo — o perfil já sabe lidar com quem nunca fez onboarding), + link direto pro
+// perfil Steam (ícone separado, pra não competir com o clique do nome).
+function NomeJogador({ p, mostrarTagGrupo = true, className = '' }) {
+  return (
+    <span className={`flex items-center gap-2 font-mono ${className}`.trim()}>
+      <Link
+        to={`/jogador/${p.steamId}`}
+        className="flex items-center gap-2 text-texto transition-colors hover:text-destaque"
+      >
+        <Avatar p={p} />
+        {p.nick || p.steamId}
+      </Link>
+      {mostrarTagGrupo && p.isTracked && (
+        <span className="text-[10px] uppercase tracking-widest text-destaque">grupo</span>
+      )}
+      <a
+        href={`https://steamcommunity.com/profiles/${p.steamId}`}
+        target="_blank"
+        rel="noreferrer"
+        title="Abrir perfil na Steam"
+        className="text-texto-fraco/60 transition-colors hover:text-texto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <SteamIcon className="h-3.5 w-3.5" />
+      </a>
+    </span>
+  )
+}
+
 function Scoreboard({ time, jogadores, podePromover, onPromover, promovendo }) {
   return (
     <div className="panel-cut overflow-x-auto border border-borda">
@@ -111,32 +149,21 @@ function Scoreboard({ time, jogadores, podePromover, onPromover, promovendo }) {
           {jogadores.map((p) => {
             const adr = p.roundsPlayed ? Math.round((p.damage / p.roundsPlayed) * 10) / 10 : 0
             const hs = p.kills ? Math.round((p.headshotKills / p.kills) * 100) : 0
-            const conteudoNome = (
-              <span className="flex items-center gap-2 font-mono">
-                <Avatar p={p} />
-                {p.nick || p.steamId}
-                {p.isTracked && <span className="text-[10px] uppercase tracking-widest text-destaque">grupo</span>}
-                {!p.isTracked && podePromover && (
-                  <button
-                    onClick={(e) => { e.preventDefault(); onPromover(p.steamId) }}
-                    disabled={promovendo === p.steamId}
-                    className="panel-cut-sm border border-borda px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-texto-fraco transition-colors hover:border-destaque hover:text-destaque disabled:opacity-50"
-                  >
-                    {promovendo === p.steamId ? '…' : '+ grupo'}
-                  </button>
-                )}
-              </span>
-            )
             return (
               <tr key={p.steamId} className="border-t border-borda transition-colors hover:bg-superficie-alta">
                 <td className="px-3 py-2">
-                  {p.isTracked ? (
-                    <Link to={`/jogador/${p.steamId}`} className="cursor-pointer transition-colors hover:text-destaque">
-                      {conteudoNome}
-                    </Link>
-                  ) : (
-                    conteudoNome
-                  )}
+                  <span className="flex items-center gap-2">
+                    <NomeJogador p={p} />
+                    {!p.isTracked && podePromover && (
+                      <button
+                        onClick={() => onPromover(p.steamId)}
+                        disabled={promovendo === p.steamId}
+                        className="panel-cut-sm border border-borda px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-texto-fraco transition-colors hover:border-destaque hover:text-destaque disabled:opacity-50"
+                      >
+                        {promovendo === p.steamId ? '…' : '+ grupo'}
+                      </button>
+                    )}
+                  </span>
                 </td>
                 <td className="px-2 py-2 text-right tabular-nums">{p.kills}</td>
                 <td className={`hidden px-2 py-2 text-right tabular-nums sm:table-cell ${p.teamKills > 0 ? 'text-perigo' : 'text-texto-fraco'}`}>
@@ -467,21 +494,7 @@ function TabelaUtilitariaTime({ time, jogadores }) {
             return (
               <tr key={p.steamId} className="border-t border-borda transition-colors hover:bg-superficie-alta">
                 <td className="px-3 py-2.5">
-                  {p.isTracked ? (
-                    <Link
-                      to={`/jogador/${p.steamId}`}
-                      className="flex items-center gap-2 font-mono text-texto cursor-pointer transition-colors hover:text-destaque"
-                    >
-                      <Avatar p={p} />
-                      {p.nick || p.steamId}
-                      <span className="text-[9px] uppercase tracking-widest text-destaque">grupo</span>
-                    </Link>
-                  ) : (
-                    <span className="flex items-center gap-2 font-mono text-texto">
-                      <Avatar p={p} />
-                      {p.nick || p.steamId}
-                    </span>
-                  )}
+                  <NomeJogador p={p} />
                 </td>
                 <td className="px-2 py-2.5 text-right font-mono text-xs tabular-nums text-texto-fraco">
                   {u.smokesThrown ?? 0}/{u.flashesThrown ?? 0}/{u.heThrown ?? 0}/{u.molotovsThrown ?? 0}

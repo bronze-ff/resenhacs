@@ -365,8 +365,23 @@ export function createProfileRouter({ db, requireAuth, requireGroupMember }) {
        where p.steam_id64 = $1`,
       [steamId],
     )
-    if (playerQ.rows.length === 0) return res.status(404).json({ erro: 'Jogador não encontrado' })
-    const jogador = playerQ.rows[0]
+    let jogador = playerQ.rows[0]
+    if (!jogador) {
+      // Nunca fez onboarding (ex.: adversário visto só numa demo) — ainda tem perfil,
+      // com nick vindo do último match_players dele e avatar do cache (steam_avatares
+      // já cobre todo mundo visto em alguma demo, não só o grupo).
+      const fallbackQ = await db.query(
+        `select mp.nick, sa.avatar_url
+         from match_players mp
+         join matches m on m.id = mp.match_id
+         left join steam_avatares sa on sa.steam_id64 = mp.steam_id64
+         where mp.steam_id64 = $1 and m.group_id = $2
+         order by m.played_at desc nulls last limit 1`,
+        [steamId, req.groupId],
+      )
+      if (fallbackQ.rows.length === 0) return res.status(404).json({ erro: 'Jogador não encontrado' })
+      jogador = { steam_id64: steamId, nick: fallbackQ.rows[0].nick, avatar_url: fallbackQ.rows[0].avatar_url }
+    }
 
     const mapaParams = [steamId]
     const mapaPeriodo = periodoWhere(from, to, mapaParams)

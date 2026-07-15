@@ -52,10 +52,26 @@ describe('GET /api/profile/:steamId/posicoes', () => {
 })
 
 describe('GET /api/profile/:steamId', () => {
-  it('404 quando jogador não existe', async () => {
+  it('404 quando jogador não existe nem em players nem em match_players do grupo', async () => {
     const { app } = appWith([['where p.steam_id64 = $1', []]])
     const res = await request(app).get('/api/profile/765').set('Cookie', cookie).set('X-Group-Id', GRUPO)
     expect(res.status).toBe(404)
+  })
+
+  it('adversário sem onboarding: monta perfil com nick do match_players (fallback)', async () => {
+    const { app } = appWith([
+      ['where p.steam_id64 = $1', []],
+      ['mp.steam_id64 = $1 and m.group_id = $2', [{ nick: 'adversario', avatar_url: 'https://cache/x.jpg' }]],
+      ['count(*)::int as partidas', [{
+        partidas: 1, vitorias: 0, kills: 10, deaths: 15, assists: 2, hs: 3, damage: 1200, rounds: 22, rating: '0.85',
+        he_thrown: 0, he_damage: 0, he_team_damage: 0, molotovs_thrown: 0, molotov_damage: 0, molotov_team_damage: 0,
+        flashes_thrown: 0, enemies_flashed: 0, enemy_flash_duration: '0', flash_assists: 0,
+        enemy_flash_landed_count: 0, enemy_flash_landed_duration_sum: '0',
+      }]],
+    ])
+    const res = await request(app).get('/api/profile/765').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    expect(res.status).toBe(200)
+    expect(res.body.jogador).toEqual({ steamId: '765', nick: 'adversario', avatarUrl: 'https://cache/x.jpg' })
   })
 
   it('agrega stats, winrate, ADR, HS% e sinergia', async () => {
