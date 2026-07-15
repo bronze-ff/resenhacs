@@ -1,5 +1,4 @@
 import { useState, useCallback } from 'react'
-import { Link } from 'react-router-dom'
 import { Card, SectionHeader } from '../components/ui'
 
 function formatarTamanho(bytes) {
@@ -33,18 +32,27 @@ export default function EnviarDemo() {
     setEnviando(true)
     setErro(null)
     setResultado(null)
-    const form = new FormData()
-    form.append('demo', arquivo)
-    if (shareCode) form.append('shareCode', shareCode)
-    if (playedAt) form.append('playedAt', playedAt)
     try {
-      const res = await fetch('/api/upload', { method: 'POST', body: form })
-      const body = await res.json().catch(() => ({}))
-      if (res.ok) {
-        setResultado(body)
-      } else {
-        setErro(body.erro ?? 'Erro ao processar o demo')
+      const resUrl = await fetch('/api/upload/upload-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: arquivo.name, shareCode, playedAt }),
+      })
+      const bodyUrl = await resUrl.json().catch(() => ({}))
+      if (!resUrl.ok) {
+        setErro(bodyUrl.erro ?? 'Erro ao preparar o envio')
+        return
       }
+      const resPut = await fetch(bodyUrl.uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: arquivo,
+      })
+      if (!resPut.ok) {
+        setErro('Falha ao enviar o arquivo pro armazenamento')
+        return
+      }
+      setResultado(true)
     } catch {
       setErro('Falha de rede ao enviar')
     } finally {
@@ -57,7 +65,7 @@ export default function EnviarDemo() {
       <SectionHeader titulo="Enviar demo" />
       <p className="font-mono text-sm leading-relaxed text-texto-fraco">
         Baixe o .dem em CS2 → Assistir → Suas Partidas (ou do Faceit/GC) e envie aqui.
-        O processamento roda no Coletor local e pode levar até um minuto.
+        O processamento roda a cada ~30 minutos — a Partida aparece no Feed quando terminar.
       </p>
 
       <Card className="p-4 sm:p-5">
@@ -122,12 +130,7 @@ export default function EnviarDemo() {
         {erro && <p className="mt-4 font-mono text-sm text-perigo">{erro}</p>}
         {resultado && (
           <p className="mt-4 font-mono text-sm text-sucesso">
-            Partida gravada!{' '}
-            {resultado.matchId && (
-              <Link to={`/partida/${resultado.matchId}`} className="underline">
-                Ver partida
-              </Link>
-            )}
+            Envio recebido! Processando em até 30 minutos — a Partida aparece no Feed quando terminar.
           </p>
         )}
       </Card>
