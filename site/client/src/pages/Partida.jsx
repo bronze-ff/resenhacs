@@ -144,8 +144,7 @@ function SetaExpandir({ aberto }) {
 // Recolhido por padrão: kills por arma NESSA partida (não é a agregação de carreira do
 // perfil) — serve pra conferir na hora "com que arma ele matou" (ex.: alguém alega só ter
 // jogado de uma arma específica e o grupo quer confirmar).
-function ArmasDoJogador({ weapons, oponentes, onAbrirDetalhe, onAbrirHeadToHead }) {
-  const [oponenteEscolhido, setOponenteEscolhido] = useState('')
+function ArmasDoJogador({ weapons, onAbrirDetalhe }) {
   return (
     <div className="flex flex-wrap items-center gap-2 px-1 py-2">
       {(!weapons || weapons.length === 0) ? (
@@ -162,35 +161,12 @@ function ArmasDoJogador({ weapons, oponentes, onAbrirDetalhe, onAbrirHeadToHead 
           </div>
         ))
       )}
-      <div className="ml-auto flex items-center gap-2">
-        {oponentes?.length > 0 && (
-          <>
-            <select
-              value={oponenteEscolhido}
-              onChange={(e) => setOponenteEscolhido(e.target.value)}
-              className="cursor-pointer rounded border border-borda bg-superficie px-2 py-1 font-mono text-xs"
-            >
-              <option value="">Comparar com…</option>
-              {oponentes.map((o) => (
-                <option key={o.steamId} value={o.steamId}>{o.nick || o.steamId}</option>
-              ))}
-            </select>
-            <button
-              onClick={() => oponenteEscolhido && onAbrirHeadToHead(oponenteEscolhido)}
-              disabled={!oponenteEscolhido}
-              className="panel-cut-sm border border-borda px-2 py-1 font-mono text-xs text-texto-fraco transition-colors hover:border-destaque hover:text-destaque disabled:opacity-40"
-            >
-              Head to Head
-            </button>
-          </>
-        )}
-        <button
-          onClick={onAbrirDetalhe}
-          className="panel-cut-sm border border-borda px-2 py-1 font-mono text-xs text-texto-fraco transition-colors hover:border-destaque hover:text-destaque"
-        >
-          Ver detalhe por round →
-        </button>
-      </div>
+      <button
+        onClick={onAbrirDetalhe}
+        className="ml-auto panel-cut-sm border border-borda px-2 py-1 font-mono text-xs text-texto-fraco transition-colors hover:border-destaque hover:text-destaque"
+      >
+        Ver detalhe por round →
+      </button>
     </div>
   )
 }
@@ -218,68 +194,100 @@ function LinhaComparativa({ label, valorA, valorB }) {
   )
 }
 
-// Modal separado: comparativo direto entre 2 jogadores específicos dessa partida (kills
-// por categoria de arma, dano total e flashes trocados entre os dois) — Head to Head
-// estilo Leetify, com o que já dá pra calcular sem tracking de mira.
-function ModalHeadToHead({ matchId, jogadorA, jogadorB, onFechar }) {
+// Aba Head to Head: jogador de referência (default = você, se jogou essa
+// Partida) comparado contra TODOS os adversários do time contrário de uma
+// vez — kills/dano em cada linha, expande pra ver o weapon breakdown +
+// flashes trocados com aquele adversário específico.
+function AbaHeadToHead({ matchId, jogadores, jogadorLogado }) {
+  const jogouEssaPartida = jogadores.some((p) => p.steamId === jogadorLogado?.steamId)
+  const [referenciaId, setReferenciaId] = useState(jogouEssaPartida ? jogadorLogado.steamId : '')
   const [dados, setDados] = useState(null)
   const [erro, setErro] = useState(false)
+  const [expandido, setExpandido] = useState(null)
 
   useEffect(() => {
+    if (!referenciaId) {
+      setDados(null)
+      return
+    }
     setDados(null)
     setErro(false)
-    fetch(`/api/matches/${matchId}/head-to-head/${jogadorA.steamId}/${jogadorB.steamId}`)
+    setExpandido(null)
+    fetch(`/api/matches/${matchId}/head-to-head/${referenciaId}`)
       .then((res) => (res.ok ? res.json() : Promise.reject()))
       .then(setDados)
       .catch(() => setErro(true))
-  }, [matchId, jogadorA.steamId, jogadorB.steamId])
+  }, [matchId, referenciaId])
 
-  const categorias = dados
-    ? CATEGORIAS_ARMA_ORDEM.filter((cat) => dados.a.killsPorCategoria[cat] || dados.b.killsPorCategoria[cat])
-    : []
-  const seEnfrentaram = dados && (categorias.length > 0 || dados.a.dano > 0 || dados.b.dano > 0)
+  const referencia = jogadores.find((p) => p.steamId === referenciaId)
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-fundo/80 p-0 lg:p-4" onClick={onFechar}>
-      <div
-        className="flex h-full w-full flex-col overflow-y-hidden border border-borda bg-superficie lg:panel-cut lg:h-auto lg:max-h-[90vh] lg:w-full lg:max-w-xl lg:overflow-y-auto lg:p-5"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-borda bg-superficie px-4 py-3 lg:static lg:border-0 lg:bg-transparent lg:px-0 lg:py-0 lg:pb-3">
-          <div className="flex flex-1 items-center justify-between gap-2 overflow-hidden">
-            <span className="flex min-w-0 items-center gap-2 font-mono text-sm font-bold text-texto">
-              <Avatar p={jogadorA} />
-              <span className="truncate">{jogadorA.nick || jogadorA.steamId}</span>
-            </span>
-            <span className="shrink-0 font-display text-xs uppercase tracking-widest text-texto-fraco">vs</span>
-            <span className="flex min-w-0 items-center gap-2 font-mono text-sm font-bold text-texto">
-              <span className="truncate">{jogadorB.nick || jogadorB.steamId}</span>
-              <Avatar p={jogadorB} />
-            </span>
-          </div>
-          <button onClick={onFechar} className="flex min-h-10 min-w-10 shrink-0 items-center justify-center font-mono text-sm uppercase text-texto-fraco hover:text-texto">
-            fechar
-          </button>
-        </div>
+    <div className="space-y-3">
+      <label className="flex flex-wrap items-center gap-2 font-mono text-xs text-texto-fraco">
+        Comparando:
+        <select
+          value={referenciaId}
+          onChange={(e) => setReferenciaId(e.target.value)}
+          className="cursor-pointer rounded border border-borda bg-superficie px-2 py-1.5 font-mono text-xs text-texto"
+        >
+          <option value="">Escolha um jogador…</option>
+          {jogadores.map((p) => (
+            <option key={p.steamId} value={p.steamId}>{p.nick || p.steamId}</option>
+          ))}
+        </select>
+      </label>
 
-        <div className="flex-1 space-y-2 overflow-y-auto px-4 py-3 lg:px-0 lg:py-3">
-          {erro && <p className="font-mono text-sm text-perigo">Não foi possível carregar o comparativo.</p>}
-          {!erro && !dados && <p className="font-mono text-sm text-texto-fraco">Carregando…</p>}
-          {dados && !seEnfrentaram && (
-            <p className="font-mono text-sm text-texto-fraco">Esses dois não se enfrentaram (kills/dano) nessa partida.</p>
-          )}
-          {dados && seEnfrentaram && (
-            <>
-              {categorias.map((cat) => (
-                <LinhaComparativa key={cat} label={cat} valorA={dados.a.killsPorCategoria[cat] || 0} valorB={dados.b.killsPorCategoria[cat] || 0} />
-              ))}
-              <div className="my-2 border-t border-borda/60" />
-              <LinhaComparativa label="Dano" valorA={dados.a.dano} valorB={dados.b.dano} />
-              <LinhaComparativa label="Flashes" valorA={dados.a.flashes.vezes} valorB={dados.b.flashes.vezes} />
-            </>
-          )}
-        </div>
-      </div>
+      {!referenciaId && <p className="font-mono text-sm text-texto-fraco">Escolha um jogador pra comparar contra o time adversário.</p>}
+      {referenciaId && erro && <p className="font-mono text-sm text-perigo">Não foi possível carregar o comparativo.</p>}
+      {referenciaId && !erro && !dados && <p className="font-mono text-sm text-texto-fraco">Carregando…</p>}
+      {dados && dados.oponentes.length === 0 && <p className="font-mono text-sm text-texto-fraco">Sem adversários pra comparar.</p>}
+
+      {dados?.oponentes.map((o) => {
+        const aberto = expandido === o.steamId
+        const categorias = CATEGORIAS_ARMA_ORDEM.filter((c) => o.killsPorCategoria[c] || o.killsPorCategoriaRecebido[c])
+        const semFlash = o.flashes.porMim.vezes === 0 && o.flashes.porEle.vezes === 0
+        return (
+          <div key={o.steamId} className="panel-cut-sm border border-borda bg-superficie">
+            <button
+              onClick={() => setExpandido(aberto ? null : o.steamId)}
+              className="flex w-full flex-wrap items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-superficie-alta"
+            >
+              <span className="flex min-w-0 items-center gap-2 font-mono text-sm">
+                <Avatar p={referencia} />
+                <span className="w-6 shrink-0 text-right font-semibold tabular-nums text-texto">{o.kills}</span>
+              </span>
+              <div className="flex h-3 min-w-[80px] flex-1 flex-row-reverse overflow-hidden rounded-sm bg-fundo">
+                <div className="h-full bg-time-a" style={{ width: `${(o.dano / Math.max(o.dano, o.danoRecebido, 1)) * 100}%` }} />
+              </div>
+              <span className="shrink-0 font-mono text-[10px] uppercase tracking-wide text-texto-fraco">dano</span>
+              <div className="flex h-3 min-w-[80px] flex-1 overflow-hidden rounded-sm bg-fundo">
+                <div className="h-full bg-time-b" style={{ width: `${(o.danoRecebido / Math.max(o.dano, o.danoRecebido, 1)) * 100}%` }} />
+              </div>
+              <span className="flex min-w-0 items-center gap-2 font-mono text-sm">
+                <span className="w-6 shrink-0 tabular-nums text-texto">{o.deaths}</span>
+                <Avatar p={o} />
+                <span className="truncate text-texto">{o.nick || o.steamId}</span>
+              </span>
+              <SetaExpandir aberto={aberto} />
+            </button>
+            {aberto && (
+              <div className="space-y-1.5 border-t border-borda/60 px-3 py-2.5">
+                {categorias.length === 0 && (
+                  <p className="font-mono text-xs text-texto-fraco">Nenhuma kill entre os dois nessa Partida.</p>
+                )}
+                {categorias.map((cat) => (
+                  <LinhaComparativa key={cat} label={cat} valorA={o.killsPorCategoria[cat] ?? 0} valorB={o.killsPorCategoriaRecebido[cat] ?? 0} />
+                ))}
+                {semFlash ? (
+                  <p className="font-mono text-xs text-texto-fraco">Nenhum dos dois flashou o outro.</p>
+                ) : (
+                  <LinhaComparativa label="Flashes" valorA={o.flashes.porMim.vezes} valorB={o.flashes.porEle.vezes} />
+                )}
+              </div>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -383,10 +391,9 @@ function ModalDetalhePartida({ matchId, jogador, onFechar }) {
   )
 }
 
-function Scoreboard({ time, jogadores, oponentes, matchId, podePromover, onPromover, promovendo }) {
+function Scoreboard({ time, jogadores, matchId, podePromover, onPromover, promovendo }) {
   const [expandido, setExpandido] = useState(null)
   const [detalheAberto, setDetalheAberto] = useState(null)
-  const [head2head, setHead2head] = useState(null)
   return (
     // O modal (fixed inset-0) precisa ficar FORA do painel com panel-cut: clip-path
     // cria um containing block novo pra descendentes fixed (igual transform/filter) —
@@ -450,15 +457,7 @@ function Scoreboard({ time, jogadores, oponentes, matchId, podePromover, onPromo
                 {aberto && (
                   <tr className="border-t border-borda/60 bg-fundo/40">
                     <td colSpan={8}>
-                      <ArmasDoJogador
-                        weapons={p.weapons}
-                        oponentes={oponentes}
-                        onAbrirDetalhe={() => setDetalheAberto(p)}
-                        onAbrirHeadToHead={(steamIdB) => {
-                          const jogadorB = oponentes?.find((o) => o.steamId === steamIdB)
-                          if (jogadorB) setHead2head({ jogadorA: p, jogadorB })
-                        }}
-                      />
+                      <ArmasDoJogador weapons={p.weapons} onAbrirDetalhe={() => setDetalheAberto(p)} />
                     </td>
                   </tr>
                 )}
@@ -470,14 +469,6 @@ function Scoreboard({ time, jogadores, oponentes, matchId, podePromover, onPromo
     </div>
     {detalheAberto && (
       <ModalDetalhePartida matchId={matchId} jogador={detalheAberto} onFechar={() => setDetalheAberto(null)} />
-    )}
-    {head2head && (
-      <ModalHeadToHead
-        matchId={matchId}
-        jogadorA={head2head.jogadorA}
-        jogadorB={head2head.jogadorB}
-        onFechar={() => setHead2head(null)}
-      />
     )}
     </>
   )
@@ -1094,8 +1085,8 @@ export default function Partida() {
       {abaAtiva === 'geral' && (
         <>
           <div className="grid gap-4 lg:grid-cols-2">
-            <Scoreboard time="A" jogadores={timeA} oponentes={timeB} matchId={m.id} podePromover={jogador?.isSuperAdmin} onPromover={promover} promovendo={promovendo} />
-            <Scoreboard time="B" jogadores={timeB} oponentes={timeA} matchId={m.id} podePromover={jogador?.isSuperAdmin} onPromover={promover} promovendo={promovendo} />
+            <Scoreboard time="A" jogadores={timeA} matchId={m.id} podePromover={jogador?.isSuperAdmin} onPromover={promover} promovendo={promovendo} />
+            <Scoreboard time="B" jogadores={timeB} matchId={m.id} podePromover={jogador?.isSuperAdmin} onPromover={promover} promovendo={promovendo} />
           </div>
 
           {m.highlights.length > 0 && (
@@ -1133,12 +1124,15 @@ export default function Partida() {
         </>
       )}
 
-      {abaAtiva === 'h2h' && <p className="font-mono text-sm text-texto-fraco">Em construção.</p>}
+      {abaAtiva === 'h2h' && (
+        <section>
+          <AbaHeadToHead matchId={m.id} jogadores={m.players} jogadorLogado={jogador} />
+        </section>
+      )}
 
       {abaAtiva === 'replay' && (
         <>
           <section ref={replayRef}>
-            <SectionHeader titulo="Replay 2D" />
             <SecaoReplay
               replayUrl={m.replayUrl}
               seek={seek}
@@ -1147,7 +1141,6 @@ export default function Partida() {
           </section>
 
           <section>
-            <SectionHeader titulo="Linha do tempo dos rounds" />
             <LinhaDoTempoRounds
               rounds={m.rounds}
               highlights={m.highlights}
@@ -1163,21 +1156,18 @@ export default function Partida() {
 
       {abaAtiva === 'economia' && m.economia?.length > 0 && (
         <section>
-          <SectionHeader titulo="Economia" />
           <LinhaDoTempoEconomia economia={m.economia} timeDoGrupo={timeDoGrupo} timeA={timeA} timeB={timeB} />
         </section>
       )}
 
       {abaAtiva === 'utilitaria' && (
         <section>
-          <SectionHeader titulo="Utilitária" />
           <TabelaUtilitaria timeA={timeA} timeB={timeB} />
         </section>
       )}
 
       {abaAtiva === 'clipes' && (
         <section>
-          <SectionHeader titulo="Clipes" />
           <div className="mb-3 space-y-2">
             {m.clips.length === 0 && <p className="font-mono text-sm text-texto-fraco">Nenhum clipe anexado ainda.</p>}
             {m.clips.map((c) => (
