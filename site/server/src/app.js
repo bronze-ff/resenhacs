@@ -96,6 +96,16 @@ export function createApp({ config, db, verifySteamLogin, fetchPersona, fetchBan
         ...(execFileImpl ? { execFileImpl } : {}),
       }),
     )
+  } else {
+    // Sem essa rota, um POST em /api/upload cairia no fallback SPA (200 com o HTML do
+    // index) ou num 404 sem corpo JSON — o client tenta parsear como JSON, falha, e
+    // mostra o erro genérico "Erro ao processar o demo" (engana sobre a causa real:
+    // essa hospedagem não roda o Coletor local, não é falha no processamento).
+    app.use('/api/upload', (req, res) => {
+      res.status(503).json({
+        erro: 'Envio manual de demo não está disponível nessa hospedagem — use a fila de Partidas Pro ou aguarde a descoberta automática da partida.',
+      })
+    })
   }
 
   if (staticDir) {

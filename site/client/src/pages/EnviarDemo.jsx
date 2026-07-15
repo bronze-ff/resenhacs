@@ -71,7 +71,7 @@ export default function EnviarDemo() {
               arrastando ? 'border-destaque bg-destaque/5' : 'border-borda hover:border-destaque/60'
             }`}
           >
-            <span className="font-display text-sm font-semibold uppercase tracking-wide text-texto">
+            <span className="block w-full truncate px-2 text-center font-display text-sm font-semibold uppercase tracking-wide text-texto" title={arquivo?.name}>
               {arquivo ? arquivo.name : 'Arraste o .dem aqui ou clique pra escolher'}
             </span>
             {arquivo && (
