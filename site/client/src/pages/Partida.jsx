@@ -905,6 +905,36 @@ function FormClipe({ matchId, jogadores, onAdicionado }) {
   )
 }
 
+const ABAS = [
+  { id: 'geral', label: 'Visão Geral' },
+  { id: 'h2h', label: 'Head to Head' },
+  { id: 'replay', label: 'Replay 2D' },
+  { id: 'economia', label: 'Economia' },
+  { id: 'utilitaria', label: 'Utilitária' },
+  { id: 'clipes', label: 'Clipes' },
+]
+
+// Barra de abas da Partida — mesmo padrão visual do toggle Replay 2D/Mapa de
+// calor (botões num trilho, aba ativa em destaque), só que ocupando a largura
+// toda e com scroll horizontal no mobile (6 abas não cabem em 375px).
+function BarraAbas({ abas, ativa, onSelecionar }) {
+  return (
+    <div className="flex overflow-x-auto rounded border border-borda font-mono text-xs uppercase">
+      {abas.map((a) => (
+        <button
+          key={a.id}
+          onClick={() => onSelecionar(a.id)}
+          className={`flex-shrink-0 whitespace-nowrap px-3 py-2 transition-colors ${
+            ativa === a.id ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'
+          }`}
+        >
+          {a.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export default function Partida() {
   const { id } = useParams()
   const [searchParams] = useSearchParams()
@@ -913,14 +943,15 @@ export default function Partida() {
   const [erro, setErro] = useState(false)
   const [promovendo, setPromovendo] = useState(null)
   const [seek, setSeek] = useState(null)
+  const [abaAtiva, setAbaAtiva] = useState('geral')
   const replayRef = useRef(null)
   const autoJumpFeito = useRef(false)
 
   // Usado tanto pelos Highlights (clicar num "ACE round 5") quanto pelo Mapa de calor
   // (clicar num ponto de morte/kill) — os dois só precisam saber round + frame.
   function irParaMomento(round, frame) {
+    setAbaAtiva('replay')
     setSeek({ round, frame, key: `${round}-${frame}-${Date.now()}` })
-    replayRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
   function irParaHighlight(h) {
@@ -974,6 +1005,17 @@ export default function Partida() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [m])
+
+  // O scroll pro Replay 2D só pode rodar depois que a aba 'replay' estiver montada —
+  // irParaMomento troca a aba e o seek na mesma função, mas o scrollIntoView ali
+  // ainda veria o DOM antigo (a troca de aba só aplica no próximo paint). Por isso
+  // o scroll mora aqui, reagindo à mudança de abaAtiva.
+  useEffect(() => {
+    if (abaAtiva === 'replay' && seek) {
+      replayRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [abaAtiva])
 
   if (erro && !m) return <p className="font-mono text-sm text-texto-fraco">Partida não encontrada.</p>
   if (!m) return <p className="font-mono text-sm text-texto-fraco">Carregando…</p>
@@ -1047,97 +1089,113 @@ export default function Partida() {
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Scoreboard time="A" jogadores={timeA} oponentes={timeB} matchId={m.id} podePromover={jogador?.isSuperAdmin} onPromover={promover} promovendo={promovendo} />
-        <Scoreboard time="B" jogadores={timeB} oponentes={timeA} matchId={m.id} podePromover={jogador?.isSuperAdmin} onPromover={promover} promovendo={promovendo} />
-      </div>
+      <BarraAbas abas={ABAS} ativa={abaAtiva} onSelecionar={setAbaAtiva} />
 
-      <section ref={replayRef}>
-        <SectionHeader titulo="Replay 2D" />
-        <SecaoReplay
-          replayUrl={m.replayUrl}
-          seek={seek}
-          onSelecionarPonto={({ round, frame }) => irParaMomento(round, frame)}
-        />
-      </section>
-
-      <section>
-        <SectionHeader titulo="Linha do tempo dos rounds" />
-        <LinhaDoTempoRounds
-          rounds={m.rounds}
-          highlights={m.highlights}
-          timeDoGrupo={timeDoGrupo}
-          onClicarHighlight={irParaHighlight}
-          replayDisponivel={!!m.replayUrl}
-          matchId={m.id}
-          map={m.map}
-        />
-      </section>
-
-      {m.highlights.length > 0 && (
-        <section>
-          <SectionHeader titulo="Highlights" />
-          <div className="flex flex-wrap gap-2">
-            {m.highlights.map((h) => {
-              const podeAssistir = h.frame != null && m.replayUrl
-              const conteudo = (
-                <>
-                  <span className="font-display font-semibold uppercase text-destaque">{h.kind}</span>{' '}
-                  <span className="text-texto">{h.nick || h.steamId}</span>{' '}
-                  <span className="text-texto-fraco">round {h.roundNumber}</span>
-                  {podeAssistir && <span className="ml-1.5 text-texto-fraco">▶</span>}
-                </>
-              )
-              return podeAssistir ? (
-                <button
-                  key={h.id}
-                  onClick={() => irParaHighlight(h)}
-                  className="panel-cut-sm border border-borda bg-superficie px-3 py-2 font-mono text-sm transition-colors hover:border-destaque/60 hover:bg-superficie-alta"
-                  title="Assistir no Replay 2D"
-                >
-                  {conteudo}
-                </button>
-              ) : (
-                <div key={h.id} className="panel-cut-sm border border-borda bg-superficie px-3 py-2 font-mono text-sm">
-                  {conteudo}
-                </div>
-              )
-            })}
+      {abaAtiva === 'geral' && (
+        <>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Scoreboard time="A" jogadores={timeA} oponentes={timeB} matchId={m.id} podePromover={jogador?.isSuperAdmin} onPromover={promover} promovendo={promovendo} />
+            <Scoreboard time="B" jogadores={timeB} oponentes={timeA} matchId={m.id} podePromover={jogador?.isSuperAdmin} onPromover={promover} promovendo={promovendo} />
           </div>
-        </section>
+
+          {m.highlights.length > 0 && (
+            <section>
+              <SectionHeader titulo="Highlights" />
+              <div className="flex flex-wrap gap-2">
+                {m.highlights.map((h) => {
+                  const podeAssistir = h.frame != null && m.replayUrl
+                  const conteudo = (
+                    <>
+                      <span className="font-display font-semibold uppercase text-destaque">{h.kind}</span>{' '}
+                      <span className="text-texto">{h.nick || h.steamId}</span>{' '}
+                      <span className="text-texto-fraco">round {h.roundNumber}</span>
+                      {podeAssistir && <span className="ml-1.5 text-texto-fraco">▶</span>}
+                    </>
+                  )
+                  return podeAssistir ? (
+                    <button
+                      key={h.id}
+                      onClick={() => irParaHighlight(h)}
+                      className="panel-cut-sm border border-borda bg-superficie px-3 py-2 font-mono text-sm transition-colors hover:border-destaque/60 hover:bg-superficie-alta"
+                      title="Assistir no Replay 2D"
+                    >
+                      {conteudo}
+                    </button>
+                  ) : (
+                    <div key={h.id} className="panel-cut-sm border border-borda bg-superficie px-3 py-2 font-mono text-sm">
+                      {conteudo}
+                    </div>
+                  )
+                })}
+              </div>
+            </section>
+          )}
+        </>
       )}
 
-      {m.economia?.length > 0 && (
+      {abaAtiva === 'h2h' && <p className="font-mono text-sm text-texto-fraco">Em construção.</p>}
+
+      {abaAtiva === 'replay' && (
+        <>
+          <section ref={replayRef}>
+            <SectionHeader titulo="Replay 2D" />
+            <SecaoReplay
+              replayUrl={m.replayUrl}
+              seek={seek}
+              onSelecionarPonto={({ round, frame }) => irParaMomento(round, frame)}
+            />
+          </section>
+
+          <section>
+            <SectionHeader titulo="Linha do tempo dos rounds" />
+            <LinhaDoTempoRounds
+              rounds={m.rounds}
+              highlights={m.highlights}
+              timeDoGrupo={timeDoGrupo}
+              onClicarHighlight={irParaHighlight}
+              replayDisponivel={!!m.replayUrl}
+              matchId={m.id}
+              map={m.map}
+            />
+          </section>
+        </>
+      )}
+
+      {abaAtiva === 'economia' && m.economia?.length > 0 && (
         <section>
           <SectionHeader titulo="Economia" />
           <LinhaDoTempoEconomia economia={m.economia} timeDoGrupo={timeDoGrupo} timeA={timeA} timeB={timeB} />
         </section>
       )}
 
-      <section>
-        <SectionHeader titulo="Utilitária" />
-        <TabelaUtilitaria timeA={timeA} timeB={timeB} />
-      </section>
+      {abaAtiva === 'utilitaria' && (
+        <section>
+          <SectionHeader titulo="Utilitária" />
+          <TabelaUtilitaria timeA={timeA} timeB={timeB} />
+        </section>
+      )}
 
-      <section>
-        <SectionHeader titulo="Clipes" />
-        <div className="mb-3 space-y-2">
-          {m.clips.length === 0 && <p className="font-mono text-sm text-texto-fraco">Nenhum clipe anexado ainda.</p>}
-          {m.clips.map((c) => (
-            <a
-              key={c.id}
-              href={c.url}
-              target="_blank"
-              rel="noreferrer"
-              className="panel-cut-sm flex items-center gap-3 border border-borda bg-superficie p-3 font-mono text-sm transition-colors hover:border-destaque/60"
-            >
-              <span className="flex-shrink-0 rounded bg-fundo px-2 py-1 text-xs uppercase tracking-wide text-destaque">{c.provider}</span>
-              <span className="min-w-0 flex-1 truncate text-texto">{c.title || c.url}</span>
-            </a>
-          ))}
-        </div>
-        <FormClipe matchId={m.id} jogadores={m.players} onAdicionado={carregar} />
-      </section>
+      {abaAtiva === 'clipes' && (
+        <section>
+          <SectionHeader titulo="Clipes" />
+          <div className="mb-3 space-y-2">
+            {m.clips.length === 0 && <p className="font-mono text-sm text-texto-fraco">Nenhum clipe anexado ainda.</p>}
+            {m.clips.map((c) => (
+              <a
+                key={c.id}
+                href={c.url}
+                target="_blank"
+                rel="noreferrer"
+                className="panel-cut-sm flex items-center gap-3 border border-borda bg-superficie p-3 font-mono text-sm transition-colors hover:border-destaque/60"
+              >
+                <span className="flex-shrink-0 rounded bg-fundo px-2 py-1 text-xs uppercase tracking-wide text-destaque">{c.provider}</span>
+                <span className="min-w-0 flex-1 truncate text-texto">{c.title || c.url}</span>
+              </a>
+            ))}
+          </div>
+          <FormClipe matchId={m.id} jogadores={m.players} onAdicionado={carregar} />
+        </section>
+      )}
     </div>
   )
 }
