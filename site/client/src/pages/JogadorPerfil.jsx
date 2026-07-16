@@ -214,6 +214,28 @@ export default function JogadorPerfil() {
         </div>
         <div className="flex flex-wrap items-center gap-3 lg:gap-4">
           <FiltroPeriodo de={de} ate={ate} onDe={setDe} onAte={setAte} />
+          {/* Perfis externos: Steam sempre existe (o id é o steam_id64); FACEIT só pra
+              quem vinculou a conta — sem chip "sem dado" pra quem nunca vinculou. */}
+          <a
+            href={`https://steamcommunity.com/profiles/${jogador.steamId}`}
+            target="_blank"
+            rel="noreferrer"
+            title="Abrir perfil na Steam"
+            className="panel-cut-sm min-h-10 border border-borda px-3 py-2 font-mono text-xs uppercase tracking-wide text-texto-fraco transition-colors hover:border-destaque/60 hover:text-destaque lg:min-h-0"
+          >
+            Steam ↗
+          </a>
+          {jogador.faceitNick && (
+            <a
+              href={`https://www.faceit.com/en/players/${encodeURIComponent(jogador.faceitNick)}`}
+              target="_blank"
+              rel="noreferrer"
+              title={`Abrir perfil na FACEIT (${jogador.faceitNick})`}
+              className="panel-cut-sm min-h-10 border border-borda px-3 py-2 font-mono text-xs uppercase tracking-wide text-texto-fraco transition-colors hover:border-destaque/60 hover:text-destaque lg:min-h-0"
+            >
+              FACEIT ↗
+            </a>
+          )}
           <Link
             to={`/comparar?a=${jogador.steamId}`}
             className="panel-cut-sm min-h-10 border border-borda px-3 py-2 font-mono text-xs uppercase tracking-wide text-texto-fraco transition-colors hover:border-destaque/60 hover:text-destaque lg:min-h-0"
