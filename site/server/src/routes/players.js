@@ -101,5 +101,10 @@ export function createPlayersRouter({ db, requireAuth, requireGroupMember, fetch
     res.json({ ok: true, publico })
   })
 
+  router.put('/me/tour-concluido', requireAuth, async (req, res) => {
+    await db.query('update players set tour_concluido = true where steam_id64 = $1', [req.player.steamId])
+    res.json({ ok: true })
+  })
+
   return router
 }
