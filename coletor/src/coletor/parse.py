@@ -372,6 +372,27 @@ def _somar_pares(items, chaves):
     return list(acumulado.values())
 
 
+def _dedupe_purchases_por_reinicio(purchases_por_parte):
+    """purchases pode ter 2 lotes pro MESMO (round_number, steam_id64) quando o
+    reinício técnico cai no meio da fase de compra: o jogador reabre o buy menu e
+    recompra tudo na parte seguinte. Diferente de player_damage/player_flashes
+    (_somar_pares) — aqui não dá pra somar, um jogador pode legitimamente comprar 2
+    flashbangs no mesmo round, então somar contaria a recompra-por-restart junto com
+    uma recompra real. Em vez disso, mesma semântica do fix de player_round_econ
+    (commit 92a3a25, "fica o mais recente"): se uma parte MAIS NOVA tem qualquer
+    compra pro mesmo par, descarta o lote INTEIRO da parte mais velha pra esse par.
+    `purchases_por_parte` é a lista de listas de compras já com offset aplicado, na
+    ordem cronológica das partes."""
+    pares_em_parte_mais_nova = set()
+    mantidas_por_parte = []
+    for compras in reversed(purchases_por_parte):
+        mantidas = [c for c in compras if (c["round_number"], c["steam_id64"]) not in pares_em_parte_mais_nova]
+        pares_em_parte_mais_nova |= {(c["round_number"], c["steam_id64"]) for c in compras}
+        mantidas_por_parte.append(mantidas)
+    mantidas_por_parte.reverse()
+    return [c for compras in mantidas_por_parte for c in compras]
+
+
 def _somar_weapons(a, b):
     saida = {arma: dict(stats) for arma, stats in a.items()}
     for arma, stats in b.items():
@@ -458,14 +479,15 @@ def fundir_partes_mesmo_mapa(partes, rdatas=None):
         rounds_ja_contados += len(parte.get("rounds", []))
 
     rounds_fundidos, kills_fundidos, econ_fundido, kill_pos_fundidas = [], [], [], []
-    player_econ_fundido, purchases_fundidas = [], []
+    player_econ_fundido, purchases_por_parte = [], []
     for parte, offset in zip(partes_corrigidas, offsets):
         rounds_fundidos += _offset_campo(parte.get("rounds", []), offset, "round_number")
         kills_fundidos += _offset_campo(parte.get("kills", []), offset, "round_number")
         econ_fundido += _offset_campo(parte.get("round_econ", []), offset, "round_number")
         kill_pos_fundidas += _offset_campo(parte.get("kill_positions", []), offset, "round_number")
         player_econ_fundido += _offset_campo(parte.get("player_round_econ", []), offset, "round_number")
-        purchases_fundidas += _offset_campo(parte.get("purchases", []), offset, "round_number")
+        purchases_por_parte.append(_offset_campo(parte.get("purchases", []), offset, "round_number"))
+    purchases_fundidas = _dedupe_purchases_por_reinicio(purchases_por_parte)
 
     score_a = sum(1 for r in rounds_fundidos if r.get("winner_team") == "A")
     score_b = sum(1 for r in rounds_fundidos if r.get("winner_team") == "B")

@@ -365,6 +365,37 @@ def test_fundir_partes_mesmo_mapa_soma_offset_em_econ_por_jogador_e_compras():
     assert compra_da_parte2["round_number"] == 2
 
 
+def test_fundir_partes_mesmo_mapa_descarta_compras_da_parte_antiga_quando_restart_recompra_no_mesmo_round():
+    # Reinicio tecnico no meio da fase de compra: parte1 so tem 1 round COMPLETO na
+    # lista "rounds" (o round 2 nunca resolveu, entao nao entra ali, mas o jogador ja
+    # tinha comprado antes do corte) e parte2 recomeca o mesmo round do zero, com o
+    # jogador recomprando tudo. Apos o offset (parte2 desloca +1, ja que parte1 teve
+    # 1 round completo), as duas listas de compra caem no MESMO round_number+steam_id64
+    # - so a mais recente (parte2) deve sobreviver, igual ja acontece pra
+    # player_round_econ (commit 92a3a25).
+    parte1 = _parte_base(
+        rounds=[{"round_number": 1, "winner_team": "A", "win_reason": ""}],
+        players=[_jogador("1", "A"), _jogador("2", "B")],
+        purchases=[
+            {"round_number": 2, "steam_id64": "1", "item": "ak47", "cost": 2700, "tick": 500},
+            {"round_number": 2, "steam_id64": "1", "item": "flashbang", "cost": 200, "tick": 505},
+        ],
+    )
+    parte2 = _parte_base(
+        rounds=[{"round_number": 1, "winner_team": "B", "win_reason": ""}],
+        players=[_jogador("1", "A"), _jogador("2", "B")],
+        purchases=[
+            {"round_number": 1, "steam_id64": "1", "item": "m4a1_silencer", "cost": 3100, "tick": 50},
+            {"round_number": 1, "steam_id64": "1", "item": "flashbang", "cost": 200, "tick": 55},
+        ],
+    )
+
+    fundido, _ = parse.fundir_partes_mesmo_mapa([parte1, parte2])
+
+    compras_round2_jogador1 = [c for c in fundido["purchases"] if c["round_number"] == 2 and c["steam_id64"] == "1"]
+    assert sorted(c["item"] for c in compras_round2_jogador1) == ["flashbang", "m4a1_silencer"]
+
+
 def test_fundir_partes_mesmo_mapa_soma_dano_e_flashes_por_par_entre_partes():
     # player_damage/player_flashes não têm round_number nem letra de time — quando o
     # MESMO par (atacante, vítima, arma) aparece nas duas partes (o duelo se repetiu),
