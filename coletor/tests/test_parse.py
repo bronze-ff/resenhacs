@@ -216,6 +216,16 @@ def test_lado_de_team_num_converte_2_e_3_e_devolve_none_pro_resto():
     assert parse._lado_de_team_num(None) is None  # sem correlação/desconectado
 
 
+def test_txt_converte_nan_e_none_em_none_e_o_resto_em_str():
+    # Bug real achado pelo usuário: active_weapon_name do pandas vem NaN (float, não
+    # None) quando o jogador não tinha arma equipada naquele tick exato — sem essa
+    # conversão, o NaN vazava pra victim_weapon gravado no banco (coluna text) e
+    # aparecia literalmente como "segurando: NaN" no modal de detalhe por round.
+    assert parse._txt(float("nan")) is None
+    assert parse._txt(None) is None
+    assert parse._txt("ak47") == "ak47"
+
+
 # ---- fundir_partes_mesmo_mapa (reinício técnico: 1 mapa vira 2+ .dem) ----
 
 

@@ -78,6 +78,18 @@ def _flt(v):
     return float(v)
 
 
+def _txt(v):
+    """str(v), ou None pra NaN/None — active_weapon_name vem NaN (não None) quando o
+    jogador não tinha arma equipada naquele tick exato; sem isso o texto "NaN" vazava
+    pra victim_weapon gravado no banco e aparecia literalmente na tela ("segurando: NaN",
+    achado pelo usuário no modal de detalhe por round)."""
+    import pandas as pd
+
+    if v is None or (isinstance(v, float) and pd.isna(v)):
+        return None
+    return str(v)
+
+
 # Descoberta empírica (mesmo demo real): armas em weapon_fire vêm prefixadas "weapon_"
 # (ex.: "weapon_ak47"); em player_hurt vêm sem prefixo (ex.: "ak47"). O dano de molotov/
 # incendiary aparece com weapon="inferno" no player_hurt, não "molotov" — só se descobre
@@ -621,7 +633,7 @@ def parse_demo(path):
                 sid = _sid(r.get("steamid"))
                 x, y = _flt(r.get("X")), _flt(r.get("Y"))
                 if sid and x is not None and y is not None:
-                    pos_by_sid_tick[(sid, int(r["tick"]))] = (x, y, r.get("active_weapon_name"))
+                    pos_by_sid_tick[(sid, int(r["tick"]))] = (x, y, _txt(r.get("active_weapon_name")))
             for k in kills:
                 if k["team_kill"]:
                     continue

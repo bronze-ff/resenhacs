@@ -684,50 +684,57 @@ function LinhaDoTempoEconomia({ economia, timeDoGrupo, timeA, timeB }) {
     porRound.get(e.roundNumber)[e.team] = e
   }
   const maiorEquip = Math.max(...economia.map((e) => e.equipValue), 1)
-  const ALTURA_MAX = 44 // px — precisa bater com h-11 (44px) das caixas abaixo
-  const altura = (equip) => (equip ? Math.max(4, (equip / maiorEquip) * ALTURA_MAX) : 4)
+  // Bem maior que antes (era 44px) — o gráfico ficava "pequeno e confuso" (feedback
+  // direto de uso) com tanto espaço do card sobrando ao redor de barras minúsculas.
+  const ALTURA_MAX = 108 // px — precisa bater com h-27/[108px] das caixas abaixo
+  const altura = (equip) => (equip ? Math.max(6, (equip / maiorEquip) * ALTURA_MAX) : 6)
   const rounds = [...porRound.keys()].sort((a, b) => a - b)
 
   return (
     <div className="panel-cut border border-borda bg-superficie p-3">
-      <div className="mb-2">
+      <div className="mb-3">
         <CabecalhoTimeEconomia time="A" jogadores={timeA} timeDoGrupo={timeDoGrupo} />
       </div>
 
-      <div className="flex items-stretch gap-1 overflow-x-auto py-1">
+      {/* flex-1 (não largura fixa): com poucos rounds, cada coluna estica pra preencher
+          o card inteiro em vez de deixar um vão vazio do lado — só volta a scrollar
+          horizontal quando o mínimo (min-w) não cabe mais (partida com muitos rounds). */}
+      <div className="flex items-stretch gap-1.5 overflow-x-auto py-1">
         {rounds.map((rn) => {
           const r = porRound.get(rn)
           const a = r.A
           const b = r.B
           return (
-            <div key={rn} className="flex w-[30px] flex-shrink-0 flex-col items-center">
-              <span className="whitespace-nowrap font-mono text-[8px] font-semibold tabular-nums text-time-a">
+            <div key={rn} className="flex min-w-[40px] flex-1 flex-col items-center">
+              <span className="whitespace-nowrap font-mono text-[10px] font-semibold tabular-nums text-time-a">
                 {a ? fmtEquip(a.equipValue) : '–'}
               </span>
-              <div className="flex h-11 w-full items-end justify-center">
+              <div className="flex w-full items-end justify-center" style={{ height: ALTURA_MAX }}>
                 <div
                   title={
                     a
                       ? `Round ${rn} · Time A: $${a.equipValue} (${TIPO_COMPRA[a.buyType]?.label ?? a.buyType})`
                       : `Round ${rn} · Time A: sem dado`
                   }
-                  className={`w-4 rounded-t-sm border-2 ${a ? `${COR_BARRA_COMPRA[a.buyType]} border-time-a/70` : 'border-borda bg-borda'}`}
+                  className={`w-6 rounded-t-sm border-2 ${a ? `${COR_BARRA_COMPRA[a.buyType]} border-time-a/70` : 'border-borda bg-borda'}`}
                   style={{ height: altura(a?.equipValue) }}
                 />
               </div>
-              <span className="my-0.5 font-mono text-[9px] font-semibold text-texto-fraco">{rn}</span>
-              <div className="flex h-11 w-full items-start justify-center">
+              <div className="relative my-1 w-full border-t border-borda text-center font-mono text-[10px] font-semibold text-texto-fraco">
+                <span className="relative -top-[9px] bg-superficie px-1.5">{rn}</span>
+              </div>
+              <div className="flex w-full items-start justify-center" style={{ height: ALTURA_MAX }}>
                 <div
                   title={
                     b
                       ? `Round ${rn} · Time B: $${b.equipValue} (${TIPO_COMPRA[b.buyType]?.label ?? b.buyType})`
                       : `Round ${rn} · Time B: sem dado`
                   }
-                  className={`w-4 rounded-b-sm border-2 ${b ? `${COR_BARRA_COMPRA[b.buyType]} border-time-b/70` : 'border-borda bg-borda'}`}
+                  className={`w-6 rounded-b-sm border-2 ${b ? `${COR_BARRA_COMPRA[b.buyType]} border-time-b/70` : 'border-borda bg-borda'}`}
                   style={{ height: altura(b?.equipValue) }}
                 />
               </div>
-              <span className="whitespace-nowrap font-mono text-[8px] font-semibold tabular-nums text-time-b">
+              <span className="whitespace-nowrap font-mono text-[10px] font-semibold tabular-nums text-time-b">
                 {b ? fmtEquip(b.equipValue) : '–'}
               </span>
             </div>
@@ -735,7 +742,7 @@ function LinhaDoTempoEconomia({ economia, timeDoGrupo, timeA, timeB }) {
         })}
       </div>
 
-      <div className="mt-2">
+      <div className="mt-3">
         <CabecalhoTimeEconomia time="B" jogadores={timeB} timeDoGrupo={timeDoGrupo} />
       </div>
 
