@@ -13,7 +13,11 @@ export default function Tour() {
   const [mensagem, setMensagem] = useState(null)
 
   async function concluir() {
-    await fetch('/api/players/me/tour-concluido', { method: 'PUT' })
+    const res = await fetch('/api/players/me/tour-concluido', { method: 'PUT' }).catch(() => null)
+    if (!res || !res.ok) {
+      setMensagem('Erro ao concluir o tour. Tente novamente.')
+      return
+    }
     window.location.href = '/'
   }
 
