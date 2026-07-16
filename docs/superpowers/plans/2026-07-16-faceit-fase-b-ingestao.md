@@ -828,10 +828,16 @@ Expected: AttributeError (cmd não existe)
 
 - [ ] **Step 3: Implementar em `main.py`**
 
-Import no topo (junto dos outros módulos do pacote): `from coletor import faceit` — CONFERIR o
-estilo real de import do arquivo (pode ser `from . import faceit`; seguir o padrão dos imports
-de `parse`/`db` já presentes) e usar `main.faceit` referenciável (import de módulo, não de
-funções soltas — os testes monkeypatcham `main.faceit.*`).
+Confirmado em `main.py:19-31`: o arquivo importa módulos como `from . import db as dbmod`,
+`from . import parse as parsemod` etc. Adicionar, no mesmo bloco (depois de `from . import
+steam_api`):
+
+```python
+from . import faceit
+```
+
+(sem alias — os testes monkeypatcham `main.faceit.*` diretamente, igual já fazem com
+`main.steam_api.*`.)
 
 Adicionar a função (depois de `cmd_avatares`):
 
