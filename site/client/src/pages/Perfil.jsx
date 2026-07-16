@@ -80,7 +80,10 @@ export default function Perfil() {
             <SetaExpandir aberto={passoAPassoAberto} />
           </button>
           {passoAPassoAberto && (
-            <div className="mt-4">
+            // Altura limitada com scroll INTERNO: expandido, o guia inteiro empurrava o
+            // formulário e as outras seções pra fora da tela — agora rola dentro do
+            // próprio quadro e a página continua cabendo sem scroll.
+            <div className="mt-4 max-h-[45vh] overflow-y-auto border-b border-borda pb-3 pr-2">
               <PassoAPassoSteam />
             </div>
           )}
