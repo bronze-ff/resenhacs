@@ -385,10 +385,22 @@ def _somar_jogador(a, b):
     """Funde as stats de UM jogador presente nas duas partes: soma todo campo
     numérico (kills, damage, etc.), funde `weapons` campo a campo por arma, mantém
     steam_id64/nick/team de `a` (já normalizados pra letra canônica antes de chegar
-    aqui — são o mesmo jogador nas duas partes)."""
+    aqui — são o mesmo jogador nas duas partes). `premier_rating_before`/`_after` não
+    são somáveis (são leituras pontuais de rating, não contadores): o restart técnico
+    funde partes do MESMO Premier real, então "before" fica o mais antigo (estado
+    antes de tudo começar) e "after" o mais recente (resultado real final) — nunca
+    soma."""
     saida = dict(a)
     for k, v in b.items():
         if k in ("steam_id64", "nick", "team", "weapons"):
+            continue
+        if k == "premier_rating_before":
+            if saida.get(k) is None and v is not None:
+                saida[k] = v
+            continue
+        if k == "premier_rating_after":
+            if v is not None:
+                saida[k] = v
             continue
         if isinstance(v, (int, float)) and isinstance(a.get(k), (int, float)):
             saida[k] = a.get(k, 0) + v

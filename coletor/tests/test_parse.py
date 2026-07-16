@@ -456,6 +456,38 @@ def test_fundir_partes_mesmo_mapa_tres_partes_acumula_offset_na_terceira():
     assert fundido["score_a"] == 2 and fundido["score_b"] == 1
 
 
+def test_fundir_partes_mesmo_mapa_premier_rating_before_e_after_nao_somam():
+    # premier_rating_before/after são leituras pontuais (snapshot), não contadores —
+    # restart técnico funde partes do MESMO Premier real: "before" tem que ficar o
+    # mais antigo (estado antes de tudo começar, da parte1) e "after" o mais recente
+    # (resultado real final, da parte2). Nunca soma (5200 + 5150 = 10350 não faz sentido).
+    parte1 = _parte_base(
+        rounds=[{"round_number": 1, "winner_team": "A", "win_reason": ""}],
+        players=[
+            _jogador("1", "A", premier_rating_before=5200, premier_rating_after=5250),
+            _jogador("2", "B", premier_rating_before=4800, premier_rating_after=None),
+        ],
+    )
+    parte2 = _parte_base(
+        rounds=[{"round_number": 1, "winner_team": "A", "win_reason": ""}],
+        players=[
+            _jogador("1", "A", premier_rating_before=5250, premier_rating_after=5150),
+            _jogador("2", "B", premier_rating_before=None, premier_rating_after=4900),
+        ],
+    )
+
+    fundido, _ = parse.fundir_partes_mesmo_mapa([parte1, parte2])
+
+    jogador1 = next(p for p in fundido["players"] if p["steam_id64"] == "1")
+    jogador2 = next(p for p in fundido["players"] if p["steam_id64"] == "2")
+    # jogador1: ambas as partes têm valor -> before fica o da parte1, after o da parte2
+    assert jogador1["premier_rating_before"] == 5200
+    assert jogador1["premier_rating_after"] == 5150
+    # jogador2: só uma parte tem valor de cada campo -> preservado, não somado nem perdido
+    assert jogador2["premier_rating_before"] == 4800
+    assert jogador2["premier_rating_after"] == 4900
+
+
 def test_fundir_partes_mesmo_mapa_funde_rdata_com_mesmo_offset_e_letra():
     parte1 = _parte_base(
         rounds=[{"round_number": 1, "winner_team": "A", "win_reason": ""}],
