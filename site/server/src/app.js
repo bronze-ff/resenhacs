@@ -3,6 +3,7 @@ import express from 'express'
 import cookieParser from 'cookie-parser'
 import { createAuthRouter } from './routes/auth.js'
 import { createPlayersRouter } from './routes/players.js'
+import { createFaceitRouter } from './routes/faceit.js'
 import { createMatchesRouter } from './routes/matches.js'
 import { createProfileRouter } from './routes/profile.js'
 import { createClipsRouter } from './routes/clips.js'
@@ -48,7 +49,7 @@ function patchRouterAsync() {
   }
 }
 
-export function createApp({ config, db, verifySteamLogin, fetchPersona, fetchBans, staticDir, r2Client: r2ClientOverride } = {}) {
+export function createApp({ config, db, verifySteamLogin, fetchPersona, fetchBans, staticDir, r2Client: r2ClientOverride, faceitFetchImpl } = {}) {
   const app = express()
   app.use(express.json())
   app.use(cookieParser())
@@ -70,6 +71,7 @@ export function createApp({ config, db, verifySteamLogin, fetchPersona, fetchBan
   app.use('/api/groups', requireAuth, createGroupsRouter({ db }))
   app.use('/api/convites', requireAuth, createConvitesRouter({ db }))
   app.use('/api/players', createPlayersRouter({ db, requireAuth, requireGroupMember, fetchBans }))
+  app.use('/api/faceit', requireAuth, createFaceitRouter({ config, db, ...(faceitFetchImpl ? { fetchImpl: faceitFetchImpl } : {}) }))
   app.use('/api/teams', createTeamsRouter({ db, requireAuth, requireGroupMember }))
   app.use('/api/ranking-publico', requireAuth, createRankingPublicoRouter({ db }))
   app.use('/api/matches', createMatchesRouter({ db, requireAuth, requireGroupMember, r2Client, r2Bucket: config.r2Bucket }))

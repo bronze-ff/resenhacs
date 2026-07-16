@@ -19,5 +19,9 @@ export function loadConfig(env = process.env) {
     r2AccessKeyId: env.R2_ACCESS_KEY_ID ?? null,
     r2SecretAccessKey: env.R2_SECRET_ACCESS_KEY ?? null,
     r2Bucket: env.R2_BUCKET ?? null,
+    // OAuth de vínculo FACEIT (Fase A) — client id é público, mas fica em env var pra
+    // poder trocar sem novo deploy. Sem ele, a rota de vínculo devolve 503 (mesmo padrão
+    // do upload manual quando falta config de Coletor).
+    faceitClientId: env.FACEIT_CLIENT_ID ?? null,
   }
 }
