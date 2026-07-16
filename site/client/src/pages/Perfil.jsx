@@ -121,9 +121,22 @@ export default function Perfil() {
         <Card className="flex items-center justify-between gap-3 p-4 sm:p-5">
           <div>
             <p className="font-display text-sm font-semibold uppercase tracking-wide text-texto">FACEIT</p>
-            <p className="font-mono text-xs text-texto-fraco">Vincule pra importar suas partidas da FACEIT automaticamente.</p>
+            <p className="font-mono text-xs text-texto-fraco">
+              {jogador?.faceitNick
+                ? `Vinculado como ${jogador.faceitNick}.`
+                : 'Vincule pra importar suas partidas da FACEIT automaticamente.'}
+            </p>
           </div>
-          <Badge tom="neutro">Em breve</Badge>
+          {jogador?.faceitNick ? (
+            <Badge tom="sucesso">Vinculado</Badge>
+          ) : (
+            <a
+              href="/api/faceit/login"
+              className="panel-cut-sm border border-destaque px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-destaque hover:bg-destaque/10"
+            >
+              Vincular
+            </a>
+          )}
         </Card>
       </section>
     </div>
