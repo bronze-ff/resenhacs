@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Card, SectionHeader, Badge } from '../components/ui'
 import { useAuth } from '../auth/AuthContext.jsx'
+import PassoAPassoSteam from '../components/PassoAPassoSteam.jsx'
 
 export default function Perfil() {
   const { jogador } = useAuth()
@@ -43,22 +44,8 @@ export default function Perfil() {
           Importação automática (Steam)
         </h3>
         <Card className="p-4 sm:p-5">
-          <p className="mb-4 font-mono text-sm leading-relaxed text-texto-fraco">
-            Para o Resenha achar suas Partidas de matchmaking, cole seu código de autenticação de
-            histórico e um share code de partida. Pegue os dois em{' '}
-            <a
-              className="text-destaque underline"
-              href="https://help.steampowered.com/en/wizard/HelpWithGameIssue/?appid=730&issueid=128"
-              target="_blank"
-              rel="noreferrer"
-            >
-              Steam → Ajuda → Compartilhar histórico de partidas
-            </a>
-            . A busca anda <span className="text-texto">pra frente</span> a partir do código informado —
-            use o <span className="text-texto">"primeiro código de partilha"</span> dessa página da Steam
-            pra puxar seu histórico inteiro, ou um código recente pra começar só das partidas novas.
-          </p>
-          <form onSubmit={salvar} className="space-y-3">
+          <PassoAPassoSteam />
+          <form onSubmit={salvar} className="mt-4 space-y-3">
             <div>
               <label className="block font-mono text-xs uppercase tracking-wide text-texto-fraco" htmlFor="authCode">
                 Código de autenticação de histórico
