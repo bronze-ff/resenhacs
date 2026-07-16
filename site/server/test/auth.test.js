@@ -17,6 +17,7 @@ const JOGADOR = {
   grupo_ativo_id: 'g1',
   ranking_publico: false,
   faceit_nick: null,
+  tour_concluido: false,
 }
 
 // Fake que roteia por SQL: players devolve `rows`; o insert de nonce devolve
@@ -133,6 +134,7 @@ describe('GET /api/auth/me', () => {
       grupoAtivoId: 'g1',
       rankingPublico: false,
       faceitNick: null,
+      tourConcluido: false,
       souAdminDoGrupo: true,
     })
   })

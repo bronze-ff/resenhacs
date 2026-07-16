@@ -62,7 +62,7 @@ export function createAuthRouter({ config, db, verifySteamLogin, fetchPersona, r
 
   router.get('/me', requireAuth, async (req, res) => {
     const { rows } = await db.query(
-      'select steam_id64, nick, avatar_url, is_super_admin, grupo_ativo_id, ranking_publico, faceit_nick from players where steam_id64 = $1',
+      'select steam_id64, nick, avatar_url, is_super_admin, grupo_ativo_id, ranking_publico, faceit_nick, tour_concluido from players where steam_id64 = $1',
       [req.player.steamId],
     )
     if (rows.length === 0) return res.status(401).json({ erro: 'Jogador não encontrado' })
@@ -83,6 +83,7 @@ export function createAuthRouter({ config, db, verifySteamLogin, fetchPersona, r
       grupoAtivoId: p.grupo_ativo_id,
       rankingPublico: p.ranking_publico,
       faceitNick: p.faceit_nick,
+      tourConcluido: p.tour_concluido,
       ...(souAdminDoGrupo !== undefined ? { souAdminDoGrupo } : {}),
     })
   })
