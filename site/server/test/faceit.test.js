@@ -23,6 +23,9 @@ describe('GET /api/faceit/login', () => {
     expect(res.status).toBe(302)
     expect(res.headers.location).toContain('https://accounts.faceit.com')
     expect(res.headers.location).toContain('code_challenge_method=S256')
+    // Sem redirect_popup=true a FACEIT autentica mas fica parada na tela "Sucesso,
+    // feche essa janela" (ela assume fluxo de popup por padrão) — confirmado ao vivo.
+    expect(res.headers.location).toContain('redirect_popup=true')
     const cookies = res.headers['set-cookie'].join(';')
     expect(cookies).toContain('resenha_faceit_state=')
     expect(cookies).toContain('resenha_faceit_verifier=')

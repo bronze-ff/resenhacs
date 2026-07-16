@@ -33,6 +33,12 @@ export function createFaceitRouter({ config, db, fetchImpl = fetch }) {
       state,
       code_challenge: challenge,
       code_challenge_method: 'S256',
+      // A FACEIT assume fluxo de POPUP por padrão: sem isso, ela autentica e fica
+      // parada na própria tela "Sucesso, você pode fechar essa janela" em vez de
+      // redirecionar pro redirect_uri (confirmado ao vivo). Como aqui navegamos a
+      // página inteira (não popup), redirect_popup=true faz ELA redirecionar a
+      // própria janela — docs.faceit.com/getting-started/authentication/oauth2.
+      redirect_popup: 'true',
     })
     res.redirect(`${AUTHORIZE_URL}?${params}`)
   })
