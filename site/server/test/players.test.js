@@ -203,3 +203,19 @@ describe('PUT /api/players/me/ranking-publico', () => {
     expect(db.query.mock.calls[0][1]).toEqual(['76561198000000002', true])
   })
 })
+
+describe('PUT /api/players/me/tour-concluido', () => {
+  it('sem login: 401', async () => {
+    const { app } = appWith()
+    expect((await request(app).put('/api/players/me/tour-concluido')).status).toBe(401)
+  })
+
+  it('marca o tour como concluido pro jogador logado', async () => {
+    const { app, db } = appWith()
+    const res = await request(app).put('/api/players/me/tour-concluido').set('Cookie', memberCookie)
+    expect(res.status).toBe(200)
+    expect(res.body).toEqual({ ok: true })
+    expect(db.query.mock.calls[0][0]).toContain('update players set tour_concluido = true')
+    expect(db.query.mock.calls[0][1]).toEqual(['76561198000000002'])
+  })
+})

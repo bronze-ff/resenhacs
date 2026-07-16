@@ -270,6 +270,13 @@ export default function Shell({ children }) {
               />
             )}
             <span className="max-w-[80px] truncate font-mono text-sm text-texto sm:max-w-none">{jogador?.nick}</span>
+            <a
+              href="/tour"
+              title="Como usar o Resenha"
+              className="panel-cut-sm flex min-h-10 shrink-0 items-center border border-borda px-2.5 py-1 text-xs uppercase tracking-wide text-texto-fraco transition-colors hover:border-destaque/50 hover:text-destaque lg:min-h-0"
+            >
+              Ajuda
+            </a>
             <button
               onClick={sair}
               className="panel-cut-sm min-h-10 shrink-0 border border-borda px-2.5 py-1 text-xs uppercase tracking-wide text-texto-fraco transition-colors hover:border-perigo/50 hover:text-perigo lg:min-h-0"
