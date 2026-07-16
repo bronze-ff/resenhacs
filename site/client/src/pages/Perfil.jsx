@@ -57,11 +57,11 @@ export default function Perfil() {
   }
 
   return (
-    // 2 colunas no desktop (Steam | Ranking+Contas) pra caber tudo sem scroll — uma
-    // coluna única de max-w-lg deixava um deserto horizontal à direita e empurrava as
-    // seções de baixo pra fora da tela. 6xl = o maior container do site (FormTatica);
-    // mais largo que isso os cards de configuração esticam feio. Mobile continua empilhado.
-    <div className="max-w-6xl space-y-6">
+    // 2 colunas no desktop (Steam | Ranking+Contas) pra caber tudo sem scroll, largura
+    // cheia igual Feed/Ranking — uma coluna única de max-w-lg deixava um deserto
+    // horizontal à direita e empurrava as seções de baixo pra fora da tela. Mobile
+    // continua empilhado.
+    <div className="space-y-6">
       <SectionHeader titulo="Minha conta" />
 
       <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
@@ -83,8 +83,10 @@ export default function Perfil() {
           {passoAPassoAberto && (
             // Altura limitada com scroll INTERNO: expandido, o guia inteiro empurrava o
             // formulário e as outras seções pra fora da tela — agora rola dentro do
-            // próprio quadro e a página continua cabendo sem scroll.
-            <div className="mt-4 max-h-[45vh] overflow-y-auto border-b border-borda pb-3 pr-2">
+            // próprio quadro e a página continua cabendo sem scroll. O pl-2 é necessário:
+            // os números da lista (list-decimal) desenham FORA do recuo do <ol> e o
+            // overflow do quadro cortava eles no meio.
+            <div className="mt-4 max-h-[45vh] overflow-y-auto border-b border-borda pb-3 pl-2 pr-2">
               <PassoAPassoSteam />
             </div>
           )}
