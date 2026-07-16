@@ -16,19 +16,22 @@ mostrar a tela de "atualização de rank" no fim de uma Premier:
   a pontuação viraria em cada cenário de resultado. O próprio CS2 pré-calcula essas 3 previsões
   durante a partida; não precisamos simular nada, só escolher a previsão certa depois de saber o
   resultado real do jogador naquela Partida (vitória/derrota/empate).
-- `comp_rank_type` (`m_iCompetitiveRankType`) — identifica o modo (Premier vs. Wingman vs.
-  Competitivo por mapa vs. nenhum). Só gravamos pontuação quando esse campo indica Premier.
-
 Isso significa: **nenhuma API externa, nenhuma chave, nenhum bot logado como amigo de ninguém** —
 é um dado que o Coletor já tem disponível assim que baixa e processa a Partida, do mesmo jeito que
 já lê X/Y/arma equipada pro Replay 2D.
 
-**Spike necessário antes de implementar de verdade** (não é ambiguidade de design, é verificação
-empírica de um valor específico): qual o valor exato de `comp_rank_type` que identifica Premier
-(vs. os outros modos), e em que tick da partida esses campos ficam estáveis/corretos pra leitura
-(provavelmente perto do fim, quando o resultado já é conhecido pelo motor do jogo — precisa
-testar contra um demo real do grupo). Isso vira a primeira tarefa do plano de implementação, com
-teste escrito contra um fixture real.
+**Atualização após investigação técnica (sem precisar de spike com demo real):** não usamos
+`comp_rank_type` pra decidir se a Partida foi Premier — o valor exato desse enum não é
+documentado publicamente e não foi necessário. Em vez disso, gravamos a pontuação sempre que
+`rank` existir no replay (via a mesma conversão seguro-contra-NaN já usada em outros campos do
+parser); Wingman/Competitivo por mapa/Partida Pro simplesmente não têm esse campo, então saem
+como `null` naturalmente — o mesmo efeito de "só grava quando é Premier", sem depender de um
+valor de enum que teríamos que adivinhar. O tick de leitura também já está resolvido: é o mesmo
+`end_tick` (perto do painel de fim de partida) que o parser já usa pra ler o placar final — um
+padrão já validado em produção, não uma escolha nova. Isso elimina a necessidade de um spike
+contra demo real antes de implementar; o plano de implementação testa a lógica de escolha
+`rank_if_win/loss/tie` com dados sintéticos (dicts construídos à mão), que é suficiente porque
+essa lógica é pura e não depende de nada específico do parsing em si.
 
 ## Onde os dados ficam gravados
 
