@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { nomeMapa, dataHora, corRating, nomeArma, TIPO_COMPRA, plataformaPartida } from '../lib/format.js'
-import { Card, SectionHeader, StatTile, RatingBadge, DataTable, MapIcon, Badge, Select, PremierBadge } from '../components/ui'
+import { nomeMapa, dataHora, corRating, nomeArma, TIPO_COMPRA } from '../lib/format.js'
+import { Card, SectionHeader, StatTile, RatingBadge, DataTable, MapIcon, Badge, Select, PremierBadge, PlataformaBadge, SteamIcon, FaceitIcon } from '../components/ui'
 import LinhaEvolucao from '../components/LinhaEvolucao.jsx'
 import FiltroPeriodo from '../components/FiltroPeriodo.jsx'
 import TagEstilo from '../components/TagEstilo.jsx'
@@ -221,9 +221,10 @@ export default function JogadorPerfil() {
             target="_blank"
             rel="noreferrer"
             title="Abrir perfil na Steam"
-            className="panel-cut-sm min-h-10 border border-borda px-3 py-2 font-mono text-xs uppercase tracking-wide text-texto-fraco transition-colors hover:border-destaque/60 hover:text-destaque lg:min-h-0"
+            aria-label="Abrir perfil na Steam"
+            className="panel-cut-sm flex min-h-10 items-center border border-borda px-3 py-2 text-texto-fraco transition-colors hover:border-destaque/60 hover:text-destaque lg:min-h-0"
           >
-            Steam ↗
+            <SteamIcon className="h-4 w-4" />
           </a>
           {jogador.faceitNick && (
             <a
@@ -231,9 +232,10 @@ export default function JogadorPerfil() {
               target="_blank"
               rel="noreferrer"
               title={`Abrir perfil na FACEIT (${jogador.faceitNick})`}
-              className="panel-cut-sm min-h-10 border border-borda px-3 py-2 font-mono text-xs uppercase tracking-wide text-texto-fraco transition-colors hover:border-destaque/60 hover:text-destaque lg:min-h-0"
+              aria-label="Abrir perfil na FACEIT"
+              className="panel-cut-sm flex min-h-10 items-center border border-borda px-3 py-2 text-texto-fraco transition-colors hover:border-destaque/60 hover:text-destaque lg:min-h-0"
             >
-              FACEIT ↗
+              <FaceitIcon className="h-4 w-4" />
             </a>
           )}
           <Link
@@ -317,9 +319,7 @@ export default function JogadorPerfil() {
                         <span className="font-display text-lg font-bold tabular-nums text-texto">{r.scoreA} : {r.scoreB}</span>
                         <MapIcon map={r.map} size={18} />
                         <span className="truncate font-mono text-xs text-texto-fraco">{nomeMapa(r.map)}</span>
-                        {plataformaPartida(r.source) && (
-                          <Badge tom={plataformaPartida(r.source).tom} className="shrink-0">{plataformaPartida(r.source).label}</Badge>
-                        )}
+                        <PlataformaBadge source={r.source} className="shrink-0" />
                       </div>
                       <div className="mt-2 grid grid-cols-4 gap-2">
                         <Stat rotulo="Rating" valor={r.rating != null ? r.rating.toFixed(2) : '–'} rating={r.rating} />
@@ -386,9 +386,7 @@ export default function JogadorPerfil() {
                         <span className="flex items-center gap-2">
                           <MapIcon map={r.map} size={20} />
                           {nomeMapa(r.map)}
-                          {plataformaPartida(r.source) && (
-                            <Badge tom={plataformaPartida(r.source).tom} className="shrink-0">{plataformaPartida(r.source).label}</Badge>
-                          )}
+                          <PlataformaBadge source={r.source} className="shrink-0" />
                         </span>
                       </td>
                     </tr>

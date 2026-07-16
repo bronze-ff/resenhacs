@@ -32,14 +32,6 @@ export function origemPartida(source) {
     : { label: 'AUTO', title: 'Baixada automaticamente pelo Coletor' }
 }
 
-// Badge de plataforma (Premier da Valve vs FACEIT) — null pra upload/pro, que já têm
-// suas próprias tags (MANUAL/AUTO e PRO) e não precisam de uma terceira.
-export function plataformaPartida(source) {
-  if (source === 'valve_mm') return { label: 'PREMIER', tom: 'neutro' }
-  if (source === 'faceit') return { label: 'FACEIT', tom: 'destaque' }
-  return null
-}
-
 // Verde/vermelho/neutro para rating estilo HLTV.
 export function corRating(rating) {
   if (rating == null) return 'text-texto-fraco'

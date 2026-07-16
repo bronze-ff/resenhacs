@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { render } from '@testing-library/react'
-import { Card, SectionHeader, StatTile, Badge, RatingBadge, DataTable, PremierBadge } from '../components/ui/index.js'
+import { Card, SectionHeader, StatTile, Badge, RatingBadge, DataTable, PremierBadge, PlataformaBadge } from '../components/ui/index.js'
 
 // Teste de fumaça: cada primitivo renderiza sem crashar e mostra seu conteúdo essencial.
 describe('primitivos de UI', () => {
@@ -56,6 +56,16 @@ describe('primitivos de UI', () => {
     )
     expect(getByText('Nick')).toBeInTheDocument()
     expect(getByText('fih')).toBeInTheDocument()
+  })
+
+  it('PlataformaBadge mostra PREMIER/FACEIT com logo e nada pra outros sources', () => {
+    const { getByText, container } = render(<PlataformaBadge source="valve_mm" />)
+    expect(getByText('PREMIER')).toBeInTheDocument()
+    expect(container.querySelector('svg')).not.toBeNull()
+    const { getByText: getFaceit } = render(<PlataformaBadge source="faceit" />)
+    expect(getFaceit('FACEIT')).toBeInTheDocument()
+    const { container: vazio } = render(<PlataformaBadge source="upload" />)
+    expect(vazio.firstChild).toBeNull()
   })
 
   it('PremierBadge mostra o valor e não renderiza nada quando null', () => {

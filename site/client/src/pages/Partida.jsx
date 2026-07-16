@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, Fragment } from 'react'
 import { useParams, useSearchParams, Link } from 'react-router-dom'
 import { nomeMapa, dataHora, origemPartida, nomeArma, corRating, TIPO_COMPRA } from '../lib/format.js'
 import { orientarPlacar } from '../lib/resultado.js'
-import { Avatar, MapIcon, SectionHeader, Select, ResultChip } from '../components/ui'
+import { Avatar, MapIcon, SectionHeader, Select, ResultChip, PlataformaBadge, SteamIcon } from '../components/ui'
 import ReplayViewer from '../components/ReplayViewer.jsx'
 import MapaCalor from '../components/MapaCalor.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
@@ -59,14 +59,6 @@ function SecaoReplay({ replayUrl, seek, onSelecionarPonto }) {
   )
 }
 
-
-function SteamIcon({ className }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
-      <path d="M11.98 2C6.68 2 2.32 5.94 1.5 11.03l5.62 2.32a3.05 3.05 0 0 1 1.75-.55c.06 0 .12 0 .18.01l2.5-3.63v-.05a3.83 3.83 0 1 1 3.83 3.83h-.07l-3.57 2.55v.16a3.05 3.05 0 1 1-6.1.24L.1 14.5C.85 18.85 4.65 22 11.98 22c6.63 0 12-5.37 12-12s-5.37-8-12-8zm-2.4 15.44-1.3-.54a2.3 2.3 0 0 0 4.24-1.65l1.3.53a3.62 3.62 0 0 1-4.24 1.66zm7.65-8.6a2.5 2.5 0 1 0 0 5.01 2.5 2.5 0 0 0 0-5.01zm0 4.13a1.62 1.62 0 1 1 0-3.24 1.62 1.62 0 0 1 0 3.24z" />
-    </svg>
-  )
-}
 
 // Nome do Jogador: sempre um link pro perfil dele no Resenha (mesmo se for adversário/fora
 // do grupo — o perfil já sabe lidar com quem nunca fez onboarding), + link direto pro
@@ -1069,6 +1061,7 @@ export default function Partida() {
           <div className="mt-1 flex flex-wrap items-center gap-2">
             <MapIcon map={m.map} size={40} />
             <h2 className="font-display text-2xl font-bold uppercase tracking-wide text-texto">{nomeMapa(m.map)}</h2>
+            <PlataformaBadge source={m.source} />
             <span
               title={origemPartida(m.source).title}
               className="panel-cut-sm border border-borda bg-superficie px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-widest text-texto-fraco"

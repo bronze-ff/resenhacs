@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { nomeMapa, dataHora, origemPartida, plataformaPartida, corRating } from '../lib/format.js'
+import { nomeMapa, dataHora, origemPartida, corRating } from '../lib/format.js'
 import { orientarPlacar } from '../lib/resultado.js'
 import FiltroPeriodo from '../components/FiltroPeriodo.jsx'
-import { Avatar, Card, SectionHeader, Badge, MapIcon, Select, ResultChip } from '../components/ui'
+import { Avatar, Card, SectionHeader, Badge, MapIcon, Select, ResultChip, PlataformaBadge } from '../components/ui'
 
 const MAPAS = ['de_anubis', 'de_ancient', 'de_cache', 'de_dust2', 'de_inferno', 'de_mirage', 'de_nuke', 'de_overpass', 'de_train', 'de_vertigo']
 
@@ -58,7 +58,6 @@ function contextoPartida(m) {
 function CardPartida({ m }) {
   const resultado = resultadoDoGrupo(m)
   const origem = origemPartida(m.source)
-  const plataforma = plataformaPartida(m.source)
   const { a, b } = orientarPlacar(m.scoreA, m.scoreB, resultado)
   const contexto = contextoPartida(m)
 
@@ -71,7 +70,7 @@ function CardPartida({ m }) {
             {nomeMapa(m.map)}
           </span>
           {m.source === 'pro' && <Badge tom="destaque" className="shrink-0">PRO</Badge>}
-          {plataforma && <Badge tom={plataforma.tom} className="shrink-0">{plataforma.label}</Badge>}
+          <PlataformaBadge source={m.source} className="shrink-0" />
           <Badge tom="neutro" title={origem.title} className="shrink-0">{origem.label}</Badge>
         </div>
         <div className="ml-auto">
