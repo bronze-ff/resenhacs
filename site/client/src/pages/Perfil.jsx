@@ -57,9 +57,13 @@ export default function Perfil() {
   }
 
   return (
-    <div className="max-w-lg space-y-6">
+    // 2 colunas no desktop (Steam | Ranking+Contas) pra caber tudo sem scroll — uma
+    // coluna única de max-w-lg deixava um deserto horizontal à direita e empurrava as
+    // seções de baixo pra fora da tela. Mobile continua empilhado.
+    <div className="max-w-4xl space-y-6">
       <SectionHeader titulo="Minha conta" />
 
+      <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
       <section className="space-y-3">
         <h3 className="font-display text-sm font-semibold uppercase tracking-wide text-texto-fraco">
           Importação automática (Steam)
@@ -116,6 +120,7 @@ export default function Perfil() {
         </Card>
       </section>
 
+      <div className="space-y-6">
       <section className="space-y-3">
         <h3 className="font-display text-sm font-semibold uppercase tracking-wide text-texto-fraco">
           Ranking público
@@ -172,6 +177,8 @@ export default function Perfil() {
           </p>
         )}
       </section>
+      </div>
+      </div>
     </div>
   )
 }
