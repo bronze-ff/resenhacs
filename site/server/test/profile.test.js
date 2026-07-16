@@ -91,7 +91,8 @@ describe('GET /api/profile/:steamId', () => {
         flash_assists: 8, enemy_flash_landed_count: 20, enemy_flash_landed_duration_sum: '60',
       }]],
       ['group by m.map', [{ map: 'de_mirage', partidas: 5, vitorias: 3, rating: '1.2' }]],
-      ['m.score_a, m.score_b', [{ id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9, kills: 20, deaths: 15, rating: '1.1', won: true }]],
+      ['m.score_a, m.score_b', [{ id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9, kills: 20, deaths: 15, rating: '1.1', won: true, premier_rating_before: 15420, premier_rating_after: 15480 }]],
+      ['mp.premier_rating_after is not null', [{ premier_rating_after: 16250 }]],
       ['from synergy_pairs', [{ steam_id64: '999', nick: 'parça', avatar_url: null, partidas: 8, vitorias: 6 }]],
       ['mp.rating is not null', [{ id: 'm1', played_at: null, rating: '1.1' }, { id: 'm2', played_at: null, rating: '1.4' }]],
       ['mp.won from match_players', [{ won: true }, { won: true }, { won: false }, { won: true }]],
@@ -147,6 +148,40 @@ describe('GET /api/profile/:steamId', () => {
       semi: { rounds: 0, won: 0, winPct: 0 },
       full: { rounds: 15, won: 10, winPct: 66.7 },
     })
+    // premierAtual: Premier rating mais recente de TODO o histórico (sem filtro de período/mesma
+    // convenção dos badges), separado do premierBefore/After por partida em recentes[].
+    expect(res.body.premierAtual).toBe(16250)
+    expect(res.body.recentes[0]).toMatchObject({ premierBefore: 15420, premierAfter: 15480 })
+  })
+
+  it('sem Premier rating registrado: premierAtual e recentes[].premierBefore/After vêm null', async () => {
+    const { app } = appWith([
+      ['where p.steam_id64 = $1', [{ steam_id64: '765', nick: 'fih', avatar_url: null }]],
+      ['group by mp.steam_id64', [
+        { steam_id64: '765', partidas: 10, entry_kills: 30, entry_deaths: 5, utility_damage: 200, rounds: 200, clutch_wins: 2, clutch_attempts: 3, shots_fired: 300, shots_hit: 90 },
+      ]],
+      ['count(*)::int as partidas', [{
+        partidas: 10, vitorias: 6, kills: 200, deaths: 150, assists: 40, hs: 100, damage: 3300, rounds: 220, rating: '1.15',
+        he_thrown: 20, he_damage: 800, he_team_damage: 100,
+        molotovs_thrown: 10, molotov_damage: 300, molotov_team_damage: 50,
+        flashes_thrown: 40, enemies_flashed: 30, enemy_flash_duration: '90',
+        flash_assists: 8, enemy_flash_landed_count: 20, enemy_flash_landed_duration_sum: '60',
+      }]],
+      ['group by m.map', [{ map: 'de_mirage', partidas: 5, vitorias: 3, rating: '1.2' }]],
+      // Partida antiga (coletada antes da Task 2): recentes vem sem premier_rating_before/after.
+      ['m.score_a, m.score_b', [{ id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9, kills: 20, deaths: 15, rating: '1.1', won: true }]],
+      ['from synergy_pairs', []],
+      ['mp.rating is not null', []],
+      ['mp.won from match_players', [{ won: true }]],
+      ['from highlights h join matches m on m.id = h.match_id', []],
+      ['from match_player_weapons w join matches m', []],
+      ['join match_round_econ e on e.match_id', []],
+      // Sem handler pra 'mp.premier_rating_after is not null' -> cai no default (rows: []).
+    ])
+    const res = await request(app).get('/api/profile/765').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    expect(res.status).toBe(200)
+    expect(res.body.premierAtual).toBeNull()
+    expect(res.body.recentes[0]).toMatchObject({ premierBefore: null, premierAfter: null })
   })
 })
 

@@ -392,8 +392,10 @@ export function createProfileRouter({ db, requireAuth, requireGroupMember }) {
     const destaquesParams = [steamId]
     const destaquesPeriodo = periodoWhere(from, to, destaquesParams)
     const destaquesGrupo = grupoWhere(req.groupId, destaquesParams)
+    const premierParams = [steamId]
+    const premierGrupo = grupoWhere(req.groupId, premierParams)
 
-    const [stats, porMapa, recentes, sinergia, evolucao, statsGerais, sequencia, estilo, destaques, armas, economia] = await Promise.all([
+    const [stats, porMapa, recentes, sinergia, evolucao, statsGerais, sequencia, estilo, destaques, armas, economia, premierRow] = await Promise.all([
       statsAgregados(db, steamId, from, to, req.groupId),
       db.query(
         `select m.map, count(*)::int as partidas,
@@ -406,7 +408,8 @@ export function createProfileRouter({ db, requireAuth, requireGroupMember }) {
       db.query(
         `select m.id, m.map, m.played_at, m.score_a, m.score_b,
                 mp.kills, mp.deaths, mp.assists, mp.rating, mp.won,
-                mp.damage, mp.rounds_played, mp.headshot_kills
+                mp.damage, mp.rounds_played, mp.headshot_kills,
+                mp.premier_rating_before, mp.premier_rating_after
          from match_players mp join matches m on m.id = mp.match_id
          where mp.steam_id64 = $1 and m.status = 'parsed'${recentesPeriodo}${recentesGrupo}
          order by m.played_at desc nulls last limit 20`,
@@ -440,6 +443,13 @@ export function createProfileRouter({ db, requireAuth, requireGroupMember }) {
       ),
       armasDoJogador(db, steamId, from, to, req.groupId),
       economiaDoJogador(db, steamId, from, to, req.groupId),
+      db.query(
+        `select mp.premier_rating_after
+         from match_players mp join matches m on m.id = mp.match_id
+         where mp.steam_id64 = $1 and m.status = 'parsed' and mp.premier_rating_after is not null${premierGrupo}
+         order by m.played_at desc nulls last limit 1`,
+        premierParams,
+      ),
     ])
 
     const badges = calcularBadges({
@@ -453,6 +463,7 @@ export function createProfileRouter({ db, requireAuth, requireGroupMember }) {
 
     res.json({
       jogador: { steamId: jogador.steam_id64, nick: jogador.nick, avatarUrl: jogador.avatar_url },
+      premierAtual: premierRow.rows[0]?.premier_rating_after != null ? Number(premierRow.rows[0].premier_rating_after) : null,
       stats,
       evolucao,
       badges,
@@ -488,6 +499,8 @@ export function createProfileRouter({ db, requireAuth, requireGroupMember }) {
         won: r.won,
         adr: r.rounds_played ? Math.round((r.damage / r.rounds_played) * 10) / 10 : 0,
         hsPct: r.kills ? Math.round((r.headshot_kills / r.kills) * 100) : 0,
+        premierBefore: r.premier_rating_before == null ? null : Number(r.premier_rating_before),
+        premierAfter: r.premier_rating_after == null ? null : Number(r.premier_rating_after),
       })),
       sinergia: sinergia.rows.map((s) => ({
         steamId: s.steam_id64,
