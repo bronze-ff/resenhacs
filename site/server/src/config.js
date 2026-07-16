@@ -23,5 +23,9 @@ export function loadConfig(env = process.env) {
     // poder trocar sem novo deploy. Sem ele, a rota de vínculo devolve 503 (mesmo padrão
     // do upload manual quando falta config de Coletor).
     faceitClientId: env.FACEIT_CLIENT_ID ?? null,
+    // Alguns apps FACEIT criados como "Authorization Code with PKCE" ainda exigem
+    // Basic Auth (client_id:client_secret) no POST do token endpoint, mesmo com PKCE —
+    // opcional aqui: se não vier, a troca de token segue só com code_verifier.
+    faceitClientSecret: env.FACEIT_CLIENT_SECRET ?? null,
   }
 }

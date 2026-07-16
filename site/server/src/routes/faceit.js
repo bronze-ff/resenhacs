@@ -50,7 +50,12 @@ export function createFaceitRouter({ config, db, fetchImpl = fetch }) {
 
     const tokenRes = await fetchImpl(TOKEN_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        ...(config.faceitClientSecret
+          ? { Authorization: `Basic ${Buffer.from(`${config.faceitClientId}:${config.faceitClientSecret}`).toString('base64')}` }
+          : {}),
+      },
       body: new URLSearchParams({
         grant_type: 'authorization_code',
         code: String(code),

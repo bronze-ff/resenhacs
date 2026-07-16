@@ -62,4 +62,42 @@ describe('GET /api/faceit/callback', () => {
     expect(res.headers.location).toContain('faceit=vinculado')
     expect(db.query.mock.calls[0][1]).toEqual(['111', 'abc-123', 'ProPlayer'])
   })
+
+  it('com FACEIT_CLIENT_SECRET configurado: manda Authorization Basic na troca de token', async () => {
+    const configComSecret = { ...config, faceitClientSecret: 'segredo-123' }
+    const db = { query: vi.fn().mockResolvedValue({ rows: [] }) }
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ access_token: 'tok' }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ guid: 'abc-123', nickname: 'ProPlayer' }) })
+    const app = createApp({ config: configComSecret, db, faceitFetchImpl: fetchImpl })
+    const loginRes = await request(app).get('/api/faceit/login').set('Cookie', cookie)
+    const setCookies = loginRes.headers['set-cookie']
+    const stateCookie = setCookies.find((c) => c.startsWith('resenha_faceit_state=')).split(';')[0]
+    const verifierCookie = setCookies.find((c) => c.startsWith('resenha_faceit_verifier=')).split(';')[0]
+    const stateValue = stateCookie.split('=')[1]
+    await request(app)
+      .get(`/api/faceit/callback?code=abc&state=${stateValue}`)
+      .set('Cookie', [cookie, stateCookie, verifierCookie].join('; '))
+    const tokenCall = fetchImpl.mock.calls.find(([url]) => url === 'https://api.faceit.com/auth/v1/oauth/token')
+    const esperado = `Basic ${Buffer.from('client-123:segredo-123').toString('base64')}`
+    expect(tokenCall[1].headers.Authorization).toBe(esperado)
+  })
+
+  it('sem FACEIT_CLIENT_SECRET: nao manda header Authorization na troca de token', async () => {
+    const db = { query: vi.fn().mockResolvedValue({ rows: [] }) }
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ access_token: 'tok' }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ guid: 'abc-123', nickname: 'ProPlayer' }) })
+    const app = createApp({ config, db, faceitFetchImpl: fetchImpl })
+    const loginRes = await request(app).get('/api/faceit/login').set('Cookie', cookie)
+    const setCookies = loginRes.headers['set-cookie']
+    const stateCookie = setCookies.find((c) => c.startsWith('resenha_faceit_state=')).split(';')[0]
+    const verifierCookie = setCookies.find((c) => c.startsWith('resenha_faceit_verifier=')).split(';')[0]
+    const stateValue = stateCookie.split('=')[1]
+    await request(app)
+      .get(`/api/faceit/callback?code=abc&state=${stateValue}`)
+      .set('Cookie', [cookie, stateCookie, verifierCookie].join('; '))
+    const tokenCall = fetchImpl.mock.calls.find(([url]) => url === 'https://api.faceit.com/auth/v1/oauth/token')
+    expect(tokenCall[1].headers.Authorization).toBeUndefined()
+  })
 })
