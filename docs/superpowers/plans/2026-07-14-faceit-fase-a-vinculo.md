@@ -23,18 +23,28 @@ em `auth.js`.
   - `token_endpoint`: `https://api.faceit.com/auth/v1/oauth/token`
   - `userinfo_endpoint`: `https://api.faceit.com/auth/v1/resources/userinfo`
   - scopes suportados: `openid`, `email`, `profile`, `membership`.
-- `FACEIT_CLIENT_ID` é público (`ed8a32aa-38c9-4e5d-a76b-012576acc6ff`) — vai como env var
-  `FACEIT_CLIENT_ID` (não como secret, mas também não hardcoded no código-fonte, pra poder
-  trocar sem novo deploy). **Nunca** printar/pedir `FACEIT_CLIENT_SECRET` — o app é PKCE puro,
-  não deveria precisar de um.
-- **Risco conhecido, documentado no Step de teste manual do Task 2**: alguns apps FACEIT
-  criados como PKCE ainda exigem `client_secret` no POST do token endpoint (a doc geral da
-  FACEIT Connect menciona Basic Auth com client_id+secret para clients confidenciais). Se o
-  primeiro teste real do fluxo devolver 401 no callback, o admin precisa checar em
-  developers.faceit.com se esse Client ID tem um secret associado e adicionar
-  `FACEIT_CLIENT_SECRET` ao env — nesse caso, uma pequena revisão no Task 2 Step 3
-  (Authorization Basic no POST) resolve. Não é possível confirmar isso sem testar com
-  credenciais reais.
+- `FACEIT_CLIENT_ID` é público (`469009a5-4ae7-4f2b-9eda-2989ee2276a7`) — vai como env var
+  `FACEIT_CLIENT_ID` no projeto **resenhacs** (a API; é lá que o Express lê env var), não como
+  secret, mas também não hardcoded no código-fonte, pra poder trocar sem novo deploy.
+  **Nunca** printar/pedir `FACEIT_CLIENT_SECRET`.
+- **Redirect URI tem que ser no domínio do SITE, não da API** (achado ao vivo em 2026-07-16):
+  `https://resenha-phi.vercel.app/api/faceit/callback`. O site faz proxy de `/api/*` pra API
+  (`site/client/vercel.json`), então o navegador nunca sai de `resenha-phi` — é lá que ficam
+  os cookies `resenha_token` (sessão) e `resenha_faceit_state`/`_verifier` (PKCE/CSRF). Um
+  callback em `resenhacs.vercel.app` seria outro domínio: o navegador não mandaria nenhum
+  desses cookies e o vínculo falharia (401 no requireAuth / state divergente), mesmo com o
+  redirect_uri cadastrado batendo. Pelo mesmo motivo, `APP_URL` (que alimenta o `redirect_uri`)
+  deve continuar `https://resenha-phi.vercel.app` — ela também é usada pelo login Steam
+  (`buildSteamRedirectUrl`, redirect pós-login), então apontá-la pra API quebra o login.
+  Sintoma do descompasso: a FACEIT autentica mas não volta pro Resenha — mostra a própria tela
+  genérica "Sucesso, você pode fechar essa janela".
+- **Risco conhecido (código já pronto, desativado por padrão)**: alguns apps FACEIT criados
+  como PKCE ainda exigem `client_secret` no POST do token endpoint (a doc geral da FACEIT
+  Connect menciona Basic Auth com client_id+secret para clients confidenciais) — e o app criado
+  aqui de fato tem um Client Secret provisionado. `faceit.js` já manda `Authorization: Basic`
+  quando `FACEIT_CLIENT_SECRET` está no env, e mantém PKCE puro quando não está (commit
+  a25ca65). Se o fluxo real voltar com `?erro=faceit-invalido`, adicionar essa env var ao
+  projeto resenhacs e redeployar.
 - `players` continua global (identidade Steam) — vínculo FACEIT não tem nada a ver com
   `group_id`/multi-tenancy.
 
