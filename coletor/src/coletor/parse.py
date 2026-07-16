@@ -90,6 +90,32 @@ def _txt(v):
     return str(v)
 
 
+def _premier_ratings(rows, fixed, score):
+    """A partir de um snapshot de tick (rank/rank_if_win/rank_if_loss/rank_if_tie por
+    jogador, lido no mesmo end_tick do placar final) + o time fixo de cada um + o
+    placar final por time, devolve {steam_id64: {"before": x, "after": y}} só pra quem
+    tem dado de Premier (rank presente) — Wingman/Competitivo por mapa/Partida Pro não
+    têm esse campo no replay, então saem de fora naturalmente (sem precisar detectar o
+    modo por um enum separado, que não é documentado publicamente)."""
+    resultado = {}
+    for r in rows:
+        sid = _sid(r.get("steamid"))
+        antes = _num(r.get("rank"))
+        time = fixed.get(sid)
+        if not sid or antes is None or not time:
+            continue
+        outro = "B" if time == "A" else "A"
+        if score.get(time, 0) > score.get(outro, 0):
+            depois = _num(r.get("rank_if_win"))
+        elif score.get(time, 0) < score.get(outro, 0):
+            depois = _num(r.get("rank_if_loss"))
+        else:
+            depois = _num(r.get("rank_if_tie"))
+        if depois is not None:
+            resultado[sid] = {"before": antes, "after": depois}
+    return resultado
+
+
 # Descoberta empírica (mesmo demo real): armas em weapon_fire vêm prefixadas "weapon_"
 # (ex.: "weapon_ak47"); em player_hurt vêm sem prefixo (ex.: "ak47"). O dano de molotov/
 # incendiary aparece com weapon="inferno" no player_hurt, não "molotov" — só se descobre
@@ -822,6 +848,18 @@ def parse_demo(path):
                 enemy_flash_landed_duration_sum.get(thrower, 0.0) + maior_duracao_inimigo
             )
 
+    # Premier: mesmo tick (end_tick) onde o placar final já é lido acima. Best-effort —
+    # se o replay não tiver esses campos (Wingman/Competitivo por mapa/Partida Pro),
+    # cai pra dict vazio em vez de derrubar o ingest inteiro (mesmo padrão do round_econ).
+    premier = {}
+    try:
+        premier_snap = parser.parse_ticks(
+            ["rank", "rank_if_win", "rank_if_loss", "rank_if_tie"], ticks=[end_tick],
+        )
+        premier = _premier_ratings(premier_snap.to_dict("records"), fixed, score)
+    except Exception:  # noqa: BLE001
+        pass
+
     players = [
         {
             "steam_id64": sid,
@@ -851,6 +889,8 @@ def parse_demo(path):
             "enemy_flash_duration": round(enemy_flash_duration.get(sid, 0.0), 2),
             "teammate_flash_duration": round(teammate_flash_duration.get(sid, 0.0), 2),
             "weapons": weapons.get(sid, {}),
+            "premier_rating_before": premier.get(sid, {}).get("before"),
+            "premier_rating_after": premier.get(sid, {}).get("after"),
         }
         for sid, ft in fixed.items()
         if sid

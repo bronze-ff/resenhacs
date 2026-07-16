@@ -123,11 +123,13 @@ def _write_players(cur, match_id, players):
                he_thrown, molotovs_thrown, enemies_flashed, teammates_flashed,
                enemy_flash_duration, teammate_flash_duration, clutch_saves,
                he_team_damage, molotov_team_damage, flash_assists,
-               enemy_flash_landed_count, enemy_flash_landed_duration_sum)
+               enemy_flash_landed_count, enemy_flash_landed_duration_sum,
+               premier_rating_before, premier_rating_after)
             values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s)
+                    %s, %s, %s, %s, %s,
+                    %s, %s)
             on conflict (match_id, steam_id64) do update set
               nick = excluded.nick, team = excluded.team, kills = excluded.kills,
               deaths = excluded.deaths, assists = excluded.assists,
@@ -153,7 +155,9 @@ def _write_players(cur, match_id, players):
               molotov_team_damage = excluded.molotov_team_damage,
               flash_assists = excluded.flash_assists,
               enemy_flash_landed_count = excluded.enemy_flash_landed_count,
-              enemy_flash_landed_duration_sum = excluded.enemy_flash_landed_duration_sum
+              enemy_flash_landed_duration_sum = excluded.enemy_flash_landed_duration_sum,
+              premier_rating_before = excluded.premier_rating_before,
+              premier_rating_after = excluded.premier_rating_after
             """,
             (
                 match_id,
@@ -196,6 +200,8 @@ def _write_players(cur, match_id, players):
                 p.get("flash_assists", 0),
                 p.get("enemy_flash_landed_count", 0),
                 p.get("enemy_flash_landed_duration_sum", 0),
+                p.get("premier_rating_before"),
+                p.get("premier_rating_after"),
             ),
         )
     # is_tracked é cache de "é Jogador": liga para quem está na whitelist.

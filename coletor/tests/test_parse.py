@@ -226,6 +226,33 @@ def test_txt_converte_nan_e_none_em_none_e_o_resto_em_str():
     assert parse._txt("ak47") == "ak47"
 
 
+def test_premier_ratings_escolhe_previsao_certa_pelo_placar_e_ignora_quem_nao_tem_rank():
+    # time A venceu (13x5): quem é do time A usa rank_if_win, quem é do time B usa
+    # rank_if_loss. "3" não tem campo "rank" (None) — Partida Pro/Wingman/Competitivo
+    # por mapa não têm Premier, então some do resultado em vez de aparecer com lixo.
+    rows = [
+        {"steamid": "1", "rank": 5200, "rank_if_win": 5242, "rank_if_loss": 5150, "rank_if_tie": 5200},
+        {"steamid": "2", "rank": 8100, "rank_if_win": 8151, "rank_if_loss": 8040, "rank_if_tie": 8100},
+        {"steamid": "3", "rank": float("nan"), "rank_if_win": float("nan"), "rank_if_loss": float("nan"), "rank_if_tie": float("nan")},
+    ]
+    fixed = {"1": "A", "2": "B", "3": "A"}
+    score = {"A": 13, "B": 5}
+    resultado = parse._premier_ratings(rows, fixed, score)
+    assert resultado == {
+        "1": {"before": 5200, "after": 5242},  # time A, venceu -> rank_if_win
+        "2": {"before": 8100, "after": 8040},  # time B, perdeu -> rank_if_loss
+    }
+    assert "3" not in resultado
+
+
+def test_premier_ratings_empate_usa_rank_if_tie():
+    rows = [{"steamid": "1", "rank": 12000, "rank_if_win": 12050, "rank_if_loss": 11940, "rank_if_tie": 12000}]
+    fixed = {"1": "A"}
+    score = {"A": 12, "B": 12}
+    resultado = parse._premier_ratings(rows, fixed, score)
+    assert resultado == {"1": {"before": 12000, "after": 12000}}
+
+
 # ---- fundir_partes_mesmo_mapa (reinício técnico: 1 mapa vira 2+ .dem) ----
 
 

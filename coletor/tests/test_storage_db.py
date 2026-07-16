@@ -185,6 +185,16 @@ def test_store_parsed_grava_kast_pct_em_match_players():
     assert insert[1][11] == 0.75  # kast_pct deve estar na posição 11 (0-indexed)
 
 
+def test_store_parsed_grava_premier_rating_em_match_players():
+    conn = FakeConn()
+    parsed = _parsed()
+    parsed["players"][0]["premier_rating_before"] = 5200
+    parsed["players"][0]["premier_rating_after"] = 5242
+    db.store_parsed(conn, parsed, share_code="CSGO-x", source="upload")
+    insert = next(c for c in conn.calls if c[0].startswith("insert into match_players"))
+    assert insert[1][-2:] == (5200, 5242)
+
+
 def test_todas_as_queries_de_store_parsed_tem_placeholders_e_params_alinhados():
     # Regra geral, não só match_players: nº de %s na SQL tem que bater com o nº de
     # params na tupla — achado real (revisão da Task 3 do plano de KAST): um %s a
