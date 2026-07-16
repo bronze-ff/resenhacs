@@ -91,7 +91,7 @@ describe('GET /api/profile/:steamId', () => {
         flash_assists: 8, enemy_flash_landed_count: 20, enemy_flash_landed_duration_sum: '60',
       }]],
       ['group by m.map', [{ map: 'de_mirage', partidas: 5, vitorias: 3, rating: '1.2' }]],
-      ['m.score_a, m.score_b', [{ id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9, kills: 20, deaths: 15, rating: '1.1', won: true, premier_rating_before: 15420, premier_rating_after: 15480 }]],
+      ['m.score_a, m.score_b', [{ id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9, kills: 20, deaths: 15, rating: '1.1', won: true, premier_rating_before: 15420, premier_rating_after: 15480, source: 'faceit' }]],
       ['mp.premier_rating_after is not null', [{ premier_rating_after: 16250 }]],
       ['from synergy_pairs', [{ steam_id64: '999', nick: 'parça', avatar_url: null, partidas: 8, vitorias: 6 }]],
       ['mp.rating is not null', [{ id: 'm1', played_at: null, rating: '1.1' }, { id: 'm2', played_at: null, rating: '1.4' }]],
@@ -151,7 +151,7 @@ describe('GET /api/profile/:steamId', () => {
     // premierAtual: Premier rating mais recente de TODO o histórico (sem filtro de período/mesma
     // convenção dos badges), separado do premierBefore/After por partida em recentes[].
     expect(res.body.premierAtual).toBe(16250)
-    expect(res.body.recentes[0]).toMatchObject({ premierBefore: 15420, premierAfter: 15480 })
+    expect(res.body.recentes[0]).toMatchObject({ premierBefore: 15420, premierAfter: 15480, source: 'faceit' })
   })
 
   it('sem Premier rating registrado: premierAtual e recentes[].premierBefore/After vêm null', async () => {
