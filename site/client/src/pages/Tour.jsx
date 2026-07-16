@@ -47,6 +47,8 @@ export default function Tour() {
         }
       />
 
+      {mensagem && <p className="font-mono text-sm text-texto-fraco">{mensagem}</p>}
+
       {passo === 0 && (
         <Card className="p-4 sm:p-5">
           <p className="font-mono text-sm leading-relaxed text-texto-fraco">
@@ -95,7 +97,6 @@ export default function Tour() {
               Salvar códigos
             </button>
           </form>
-          {mensagem && <p className="font-mono text-sm text-texto-fraco">{mensagem}</p>}
         </Card>
       )}
 
