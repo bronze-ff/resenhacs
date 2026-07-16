@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { nomeMapa, dataHora, corRating, nomeArma, TIPO_COMPRA } from '../lib/format.js'
+import { nomeMapa, dataHora, corRating, nomeArma, TIPO_COMPRA, plataformaPartida } from '../lib/format.js'
 import { Card, SectionHeader, StatTile, RatingBadge, DataTable, MapIcon, Badge, Select, PremierBadge } from '../components/ui'
 import LinhaEvolucao from '../components/LinhaEvolucao.jsx'
 import FiltroPeriodo from '../components/FiltroPeriodo.jsx'
@@ -295,6 +295,9 @@ export default function JogadorPerfil() {
                         <span className="font-display text-lg font-bold tabular-nums text-texto">{r.scoreA} : {r.scoreB}</span>
                         <MapIcon map={r.map} size={18} />
                         <span className="truncate font-mono text-xs text-texto-fraco">{nomeMapa(r.map)}</span>
+                        {plataformaPartida(r.source) && (
+                          <Badge tom={plataformaPartida(r.source).tom} className="shrink-0">{plataformaPartida(r.source).label}</Badge>
+                        )}
                       </div>
                       <div className="mt-2 grid grid-cols-4 gap-2">
                         <Stat rotulo="Rating" valor={r.rating != null ? r.rating.toFixed(2) : '–'} rating={r.rating} />
@@ -361,6 +364,9 @@ export default function JogadorPerfil() {
                         <span className="flex items-center gap-2">
                           <MapIcon map={r.map} size={20} />
                           {nomeMapa(r.map)}
+                          {plataformaPartida(r.source) && (
+                            <Badge tom={plataformaPartida(r.source).tom} className="shrink-0">{plataformaPartida(r.source).label}</Badge>
+                          )}
                         </span>
                       </td>
                     </tr>

@@ -406,7 +406,7 @@ export function createProfileRouter({ db, requireAuth, requireGroupMember }) {
         mapaParams,
       ),
       db.query(
-        `select m.id, m.map, m.played_at, m.score_a, m.score_b,
+        `select m.id, m.map, m.played_at, m.score_a, m.score_b, m.source,
                 mp.kills, mp.deaths, mp.assists, mp.rating, mp.won,
                 mp.damage, mp.rounds_played, mp.headshot_kills,
                 mp.premier_rating_before, mp.premier_rating_after
@@ -501,6 +501,7 @@ export function createProfileRouter({ db, requireAuth, requireGroupMember }) {
         hsPct: r.kills ? Math.round((r.headshot_kills / r.kills) * 100) : 0,
         premierBefore: r.premier_rating_before == null ? null : Number(r.premier_rating_before),
         premierAfter: r.premier_rating_after == null ? null : Number(r.premier_rating_after),
+        source: r.source,
       })),
       sinergia: sinergia.rows.map((s) => ({
         steamId: s.steam_id64,
