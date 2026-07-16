@@ -3,12 +3,25 @@ import { Card, SectionHeader, Badge } from '../components/ui'
 import { useAuth } from '../auth/AuthContext.jsx'
 import PassoAPassoSteam from '../components/PassoAPassoSteam.jsx'
 
+// Seta que gira 90° quando aberto — mesmo ícone pros dois estados, só rotaciona.
+function SetaExpandir({ aberto }) {
+  return (
+    <svg
+      viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+      className={`h-3.5 w-3.5 shrink-0 transition-transform ${aberto ? 'rotate-90' : ''}`}
+    >
+      <path d="M9 5L15 12L9 19" />
+    </svg>
+  )
+}
+
 export default function Perfil() {
   const { jogador } = useAuth()
   const [matchAuthCode, setMatchAuthCode] = useState('')
   const [lastShareCode, setLastShareCode] = useState('')
   const [mensagem, setMensagem] = useState(null)
   const [rankingPublico, setRankingPublico] = useState(false)
+  const [passoAPassoAberto, setPassoAPassoAberto] = useState(false)
 
   useEffect(() => {
     if (jogador) setRankingPublico(Boolean(jogador.rankingPublico))
@@ -44,7 +57,21 @@ export default function Perfil() {
           Importação automática (Steam)
         </h3>
         <Card className="p-4 sm:p-5">
-          <PassoAPassoSteam />
+          <button
+            type="button"
+            onClick={() => setPassoAPassoAberto((v) => !v)}
+            className="flex w-full items-center justify-between gap-2 text-left"
+          >
+            <span className="font-mono text-sm text-texto-fraco">
+              Não sabe onde pegar os códigos? <span className="text-destaque">Veja o passo a passo</span>
+            </span>
+            <SetaExpandir aberto={passoAPassoAberto} />
+          </button>
+          {passoAPassoAberto && (
+            <div className="mt-4">
+              <PassoAPassoSteam />
+            </div>
+          )}
           <form onSubmit={salvar} className="mt-4 space-y-3">
             <div>
               <label className="block font-mono text-xs uppercase tracking-wide text-texto-fraco" htmlFor="authCode">
