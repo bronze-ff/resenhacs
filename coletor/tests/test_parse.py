@@ -396,6 +396,42 @@ def test_fundir_partes_mesmo_mapa_descarta_compras_da_parte_antiga_quando_restar
     assert sorted(c["item"] for c in compras_round2_jogador1) == ["flashbang", "m4a1_silencer"]
 
 
+def test_filtrar_ecos_de_compra_limita_flashbang_a_2_e_resto_a_1_por_item():
+    # demoparser2 sintetiza item_purchase a partir da CRIACAO da entidade de arma - pra
+    # granadas/consumiveis, a entidade e recriada quando o jogador reequipa da reserva,
+    # gerando uma 2a/3a "compra" fantasma do MESMO item/round/jogador num tick bem mais
+    # tarde (github.com/LaihoE/demoparser/issues/214). O CS2 limita quantas unidades de
+    # cada item da pra comprar por round (2 flashbang, 1 do resto) - mantem so as N
+    # ocorrencias de tick mais cedo, o resto e eco de reequipar.
+    purchases = [
+        {"round_number": 1, "steam_id64": "1", "item": "Flashbang", "cost": 200, "tick": 100},
+        {"round_number": 1, "steam_id64": "1", "item": "Flashbang", "cost": 200, "tick": 105},
+        {"round_number": 1, "steam_id64": "1", "item": "Flashbang", "cost": 200, "tick": 4000},
+        {"round_number": 1, "steam_id64": "1", "item": "Flashbang", "cost": 200, "tick": 8000},
+        {"round_number": 1, "steam_id64": "1", "item": "High Explosive Grenade", "cost": 300, "tick": 110},
+        {"round_number": 1, "steam_id64": "1", "item": "High Explosive Grenade", "cost": 300, "tick": 5000},
+    ]
+
+    limpas = parse._filtrar_ecos_de_compra(purchases)
+
+    flashbangs = sorted(c["tick"] for c in limpas if c["item"] == "Flashbang")
+    hes = [c["tick"] for c in limpas if c["item"] == "High Explosive Grenade"]
+    assert flashbangs == [100, 105]
+    assert hes == [110]
+
+
+def test_filtrar_ecos_de_compra_nao_mexe_em_itens_de_jogadores_ou_rounds_diferentes():
+    purchases = [
+        {"round_number": 1, "steam_id64": "1", "item": "AK-47", "cost": 2700, "tick": 100},
+        {"round_number": 1, "steam_id64": "2", "item": "AK-47", "cost": 2700, "tick": 100},
+        {"round_number": 2, "steam_id64": "1", "item": "AK-47", "cost": 2700, "tick": 5000},
+    ]
+
+    limpas = parse._filtrar_ecos_de_compra(purchases)
+
+    assert len(limpas) == 3
+
+
 def test_fundir_partes_mesmo_mapa_soma_dano_e_flashes_por_par_entre_partes():
     # player_damage/player_flashes não têm round_number nem letra de time — quando o
     # MESMO par (atacante, vítima, arma) aparece nas duas partes (o duelo se repetiu),

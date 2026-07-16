@@ -372,6 +372,31 @@ def _somar_pares(items, chaves):
     return list(acumulado.values())
 
 
+_MAX_COMPRAS_POR_ROUND = {"Flashbang": 2}
+_MAX_COMPRAS_POR_ROUND_PADRAO = 1
+
+
+def _filtrar_ecos_de_compra(purchases):
+    """demoparser2 sintetiza "item_purchase" a partir da CRIAÇÃO da entidade de arma (não
+    existe evento nativo de compra no CS2) — funciona bem pra armas (a entidade dura o
+    round todo), mas granadas/consumíveis (Flashbang, HE, Smoke, Incendiary, Zeus) têm a
+    entidade recriada quando o jogador reequipa/saca da reserva, gerando uma 2ª (ou 3ª)
+    "compra" fantasma do MESMO item/round/jogador, sempre num tick DEPOIS da compra real
+    (limitação documentada do parser: github.com/LaihoE/demoparser/issues/214). Como o
+    CS2 limita quantas unidades de cada item dá pra comprar por round (2 flashbang, 1 de
+    qualquer outra coisa), mantém só as N ocorrências de tick mais cedo por
+    (round_number, steam_id64, item) — o resto é eco de reequipar, não compra nova."""
+    agrupado = {}
+    for c in purchases:
+        agrupado.setdefault((c["round_number"], c["steam_id64"], c["item"]), []).append(c)
+    limpas = []
+    for (_rn, _sid, item), grupo in agrupado.items():
+        limite = _MAX_COMPRAS_POR_ROUND.get(item, _MAX_COMPRAS_POR_ROUND_PADRAO)
+        grupo_ordenado = sorted(grupo, key=lambda c: c.get("tick") or 0)
+        limpas.extend(grupo_ordenado[:limite])
+    return limpas
+
+
 def _dedupe_purchases_por_reinicio(purchases_por_parte):
     """purchases pode ter 2 lotes pro MESMO (round_number, steam_id64) quando o
     reinício técnico cai no meio da fase de compra: o jogador reabre o buy menu e
@@ -621,6 +646,7 @@ def parse_demo(path):
                 "round_number": int(rn) + 1, "steam_id64": sid,
                 "item": str(item), "cost": _num(r.get("cost")), "tick": _num(r.get("tick")),
             })
+        purchases = _filtrar_ecos_de_compra(purchases)
     except Exception:  # noqa: BLE001
         pass
 
