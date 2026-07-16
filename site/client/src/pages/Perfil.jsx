@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Card, SectionHeader, Badge } from '../components/ui'
 import { useAuth } from '../auth/AuthContext.jsx'
 import PassoAPassoSteam from '../components/PassoAPassoSteam.jsx'
@@ -22,6 +23,13 @@ export default function Perfil() {
   const [mensagem, setMensagem] = useState(null)
   const [rankingPublico, setRankingPublico] = useState(false)
   const [passoAPassoAberto, setPassoAPassoAberto] = useState(false)
+  // Resultado do callback OAuth da FACEIT (?faceit=vinculado / ?erro=faceit-invalido) —
+  // sem isso a falha era silenciosa: o callback redirecionava de volta pra cá e nada
+  // na tela dizia se deu certo ou errado.
+  const [searchParams] = useSearchParams()
+  const faceitResultado = searchParams.get('faceit') === 'vinculado'
+    ? 'ok'
+    : searchParams.get('erro') === 'faceit-invalido' ? 'erro' : null
 
   useEffect(() => {
     if (jogador) setRankingPublico(Boolean(jogador.rankingPublico))
@@ -152,6 +160,17 @@ export default function Perfil() {
             </a>
           )}
         </Card>
+        {faceitResultado === 'erro' && (
+          <p className="font-mono text-xs text-perigo">
+            Não deu pra concluir o vínculo com a FACEIT — a autenticação passou, mas a troca de
+            credenciais falhou do nosso lado. Tenta de novo; se persistir, avisa o admin.
+          </p>
+        )}
+        {faceitResultado === 'ok' && !jogador?.faceitNick && (
+          <p className="font-mono text-xs text-texto-fraco">
+            Vínculo concluído — recarregue a página se o status ainda não atualizou.
+          </p>
+        )}
       </section>
     </div>
   )

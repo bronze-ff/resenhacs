@@ -51,6 +51,13 @@ export function createFaceitRouter({ config, db, fetchImpl = fetch }) {
     res.clearCookie('resenha_faceit_state')
     res.clearCookie('resenha_faceit_verifier')
     if (!code || !state || !stateCookie || !verifier || state !== stateCookie) {
+      // Log de diagnóstico (sem valores — só QUAL pré-condição falhou): a falha vira
+      // um redirect genérico pro usuário, e sem isso não dá pra saber o motivo em prod.
+      console.log('faceit callback rejeitado:', {
+        temCode: Boolean(code), temState: Boolean(state),
+        temStateCookie: Boolean(stateCookie), temVerifier: Boolean(verifier),
+        stateBate: Boolean(state && stateCookie && state === stateCookie),
+      })
       return res.redirect(erroRedirect)
     }
 
@@ -70,17 +77,29 @@ export function createFaceitRouter({ config, db, fetchImpl = fetch }) {
         code_verifier: verifier,
       }),
     })
-    if (!tokenRes.ok) return res.redirect(erroRedirect)
+    if (!tokenRes.ok) {
+      const corpo = await tokenRes.text().catch(() => '')
+      // Status + começo do corpo de erro da FACEIT (a resposta de erro não tem segredo
+      // nenhum — é o suficiente pra distinguir "exige client_secret" de outra causa).
+      console.log(`faceit token exchange falhou: ${tokenRes.status} ${corpo.slice(0, 300)}`)
+      return res.redirect(erroRedirect)
+    }
     const tokenBody = await tokenRes.json()
 
     const userRes = await fetchImpl(USERINFO_URL, {
       headers: { Authorization: `Bearer ${tokenBody.access_token}` },
     })
-    if (!userRes.ok) return res.redirect(erroRedirect)
+    if (!userRes.ok) {
+      console.log(`faceit userinfo falhou: ${userRes.status}`)
+      return res.redirect(erroRedirect)
+    }
     const userBody = await userRes.json()
     const faceitId = userBody.guid ?? userBody.sub
     const faceitNick = userBody.nickname ?? null
-    if (!faceitId) return res.redirect(erroRedirect)
+    if (!faceitId) {
+      console.log('faceit userinfo sem guid/sub:', Object.keys(userBody).join(','))
+      return res.redirect(erroRedirect)
+    }
 
     await db.query('update players set faceit_id = $2, faceit_nick = $3 where steam_id64 = $1', [
       req.player.steamId,
