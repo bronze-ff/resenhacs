@@ -37,11 +37,19 @@ describe('App', () => {
   })
 
   it('logado: mostra o shell com o nick do jogador', async () => {
-    mockMe({ steamId: '765', nick: 'fih', avatarUrl: null, isSuperAdmin: false, grupoAtivoId: 'g1' })
+    mockMe({ steamId: '765', nick: 'fih', avatarUrl: null, isSuperAdmin: false, grupoAtivoId: 'g1', tourConcluido: true })
     render(<App />)
     expect(await screen.findByText('fih')).toBeInTheDocument()
     // /api/matches é um fetch separado do /api/auth/me (que resolveu findByText acima);
     // precisa de findByText (assíncrono) aqui também, senão às vezes ainda não resolveu.
     expect(await screen.findByText(/nenhuma partida/i)).toBeInTheDocument()
+    expect(await screen.findByRole('link', { name: /ajuda/i })).toHaveAttribute('href', '/tour')
+  })
+
+  it('logado com grupo mas tour nao concluido: redireciona pro tour', async () => {
+    mockMe({ steamId: '765', nick: 'fih', avatarUrl: null, isSuperAdmin: false, grupoAtivoId: 'g1', tourConcluido: false })
+    render(<App />)
+    expect(await screen.findByText('Bem-vindo ao Resenha')).toBeInTheDocument()
+    expect(await screen.findByText(/pular tour/i)).toBeInTheDocument()
   })
 })
