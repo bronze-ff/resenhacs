@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { render } from '@testing-library/react'
-import { Card, SectionHeader, StatTile, Badge, RatingBadge, DataTable } from '../components/ui/index.js'
+import { Card, SectionHeader, StatTile, Badge, RatingBadge, DataTable, PremierBadge } from '../components/ui/index.js'
 
 // Teste de fumaça: cada primitivo renderiza sem crashar e mostra seu conteúdo essencial.
 describe('primitivos de UI', () => {
@@ -56,5 +56,12 @@ describe('primitivos de UI', () => {
     )
     expect(getByText('Nick')).toBeInTheDocument()
     expect(getByText('fih')).toBeInTheDocument()
+  })
+
+  it('PremierBadge mostra o valor e não renderiza nada quando null', () => {
+    const { getByText } = render(<PremierBadge valor={5200} />)
+    expect(getByText('5200')).toBeInTheDocument()
+    const { container: vazio } = render(<PremierBadge valor={null} />)
+    expect(vazio.firstChild).toBeNull()
   })
 })

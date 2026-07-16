@@ -397,6 +397,7 @@ function ModalDetalhePartida({ matchId, jogador, onFechar }) {
 function Scoreboard({ time, jogadores, matchId, podePromover, onPromover, promovendo }) {
   const [expandido, setExpandido] = useState(null)
   const [detalheAberto, setDetalheAberto] = useState(null)
+  const temPremier = jogadores.some((p) => p.premierBefore != null)
   return (
     // O modal (fixed inset-0) precisa ficar FORA do painel com panel-cut: clip-path
     // cria um containing block novo pra descendentes fixed (igual transform/filter) —
@@ -414,6 +415,9 @@ function Scoreboard({ time, jogadores, matchId, podePromover, onPromover, promov
             <th className="hidden cursor-help px-2 py-2 text-right underline decoration-dotted underline-offset-2 sm:table-cell" title="Average Damage per Round — dano médio causado por round (contando também rounds sem kill)">ADR</th>
             <th className="hidden cursor-help px-2 py-2 text-right underline decoration-dotted underline-offset-2 sm:table-cell" title="% dos abates que foram headshot">HS%</th>
             <th className="hidden cursor-help px-2 py-2 text-right underline decoration-dotted underline-offset-2 sm:table-cell" title="KAST — % dos rounds em que ele teve kill, assist, sobreviveu ou foi vingado (trade)">KAST</th>
+            {temPremier && (
+              <th className="hidden cursor-help px-2 py-2 text-right underline decoration-dotted underline-offset-2 sm:table-cell" title="Pontuação de Premier (CS Rating) antes dessa partida, e quanto ganhou/perdeu">Premier</th>
+            )}
             <th className="cursor-help px-3 py-2 text-right underline decoration-dotted underline-offset-2" title="Aproximação do HLTV Rating 1.0: combina kills/round, sobrevivência/round e multi-kills (2K/3K/4K/5K) num único número — acima de 1.00 é acima da média">Rating</th>
           </tr>
         </thead>
@@ -455,13 +459,27 @@ function Scoreboard({ time, jogadores, matchId, podePromover, onPromover, promov
                   <td className="hidden px-2 py-2 text-right tabular-nums sm:table-cell">{adr}</td>
                   <td className="hidden px-2 py-2 text-right tabular-nums sm:table-cell">{hs}%</td>
                   <td className="hidden px-2 py-2 text-right tabular-nums sm:table-cell">{p.kastPct != null ? `${p.kastPct}%` : '–'}</td>
+                  {temPremier && (
+                    <td className="hidden px-2 py-2 text-right sm:table-cell">
+                      {p.premierBefore != null && (
+                        <>
+                          <span className="font-mono text-xs tabular-nums text-texto-fraco">{Math.round(p.premierBefore)}</span>
+                          {p.premierAfter != null && (
+                            <span className={`ml-1 font-mono text-xs font-semibold tabular-nums ${p.premierAfter >= p.premierBefore ? 'text-sucesso' : 'text-perigo'}`}>
+                              {p.premierAfter >= p.premierBefore ? '▲' : '▼'}{Math.abs(Math.round(p.premierAfter - p.premierBefore))}
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </td>
+                  )}
                   <td className={`px-3 py-2 text-right font-semibold tabular-nums ${corRating(p.rating)}`}>
                     {p.rating?.toFixed(2) ?? '–'}
                   </td>
                 </tr>
                 {aberto && (
                   <tr className="border-t border-borda/60 bg-fundo/40">
-                    <td colSpan={9}>
+                    <td colSpan={temPremier ? 10 : 9}>
                       <ArmasDoJogador weapons={p.weapons} onAbrirDetalhe={() => setDetalheAberto(p)} />
                     </td>
                   </tr>

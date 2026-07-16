@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { nomeMapa, dataHora, corRating, nomeArma, TIPO_COMPRA } from '../lib/format.js'
-import { Card, SectionHeader, StatTile, RatingBadge, DataTable, MapIcon, Badge, Select } from '../components/ui'
+import { Card, SectionHeader, StatTile, RatingBadge, DataTable, MapIcon, Badge, Select, PremierBadge } from '../components/ui'
 import LinhaEvolucao from '../components/LinhaEvolucao.jsx'
 import FiltroPeriodo from '../components/FiltroPeriodo.jsx'
 import TagEstilo from '../components/TagEstilo.jsx'
@@ -191,7 +191,7 @@ export default function JogadorPerfil() {
   if (erro) return <p className="font-mono text-sm text-texto-fraco">Jogador não encontrado.</p>
   if (!data) return <p className="font-mono text-sm text-texto-fraco">Carregando…</p>
 
-  const { jogador, stats, porMapa, recentes, sinergia, evolucao, badges, estilo, destaques, armas, economia } = data
+  const { jogador, stats, porMapa, recentes, sinergia, evolucao, badges, estilo, destaques, armas, economia, premierAtual } = data
 
   return (
     <div className="space-y-6">
@@ -207,6 +207,7 @@ export default function JogadorPerfil() {
                 {jogador.nick || jogador.steamId}
               </h2>
               <TagEstilo estilo={estilo} />
+              <PremierBadge valor={premierAtual} />
             </div>
             <p className="font-mono text-sm text-texto-fraco">{stats.partidas} partidas · {stats.winrate}% de vitória</p>
           </div>
