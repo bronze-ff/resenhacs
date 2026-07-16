@@ -59,8 +59,9 @@ export default function Perfil() {
   return (
     // 2 colunas no desktop (Steam | Ranking+Contas) pra caber tudo sem scroll — uma
     // coluna única de max-w-lg deixava um deserto horizontal à direita e empurrava as
-    // seções de baixo pra fora da tela. Mobile continua empilhado.
-    <div className="max-w-4xl space-y-6">
+    // seções de baixo pra fora da tela. 6xl = o maior container do site (FormTatica);
+    // mais largo que isso os cards de configuração esticam feio. Mobile continua empilhado.
+    <div className="max-w-6xl space-y-6">
       <SectionHeader titulo="Minha conta" />
 
       <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
