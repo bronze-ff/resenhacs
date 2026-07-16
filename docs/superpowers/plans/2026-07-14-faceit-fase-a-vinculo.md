@@ -373,6 +373,13 @@ git commit -m "feat: botao vincular FACEIT em minha conta"
 
 ### Task 4: Client — badge PREMIER/FACEIT no Feed e no histórico do perfil
 
+> **Nota de atualização (2026-07-16):** este Task foi escrito em 2026-07-14, antes do redesign
+> visual completo do site (commit `476d11b`). `Feed.jsx` não tem mais duas árvores JSX
+> mobile/desktop separadas — é um `CardPartida` único e responsivo. A query de `recentes` em
+> `profile.js` também já foi modificada por uma feature posterior (Premier Rating) e hoje já
+> inclui `mp.premier_rating_before`/`mp.premier_rating_after`. Os Steps abaixo foram corrigidos
+> pra bater com o código atual — sem mudar a intenção original.
+
 **Files:**
 - Modify: `site/client/src/lib/format.js`
 - Modify: `site/client/src/pages/Feed.jsx`
@@ -384,7 +391,7 @@ git commit -m "feat: botao vincular FACEIT em minha conta"
 
 - [ ] **Step 1: `plataformaPartida` em `format.js`**
 
-Adicionar, logo abaixo de `origemPartida`:
+Adicionar, logo abaixo de `origemPartida` (`site/client/src/lib/format.js:29-33`):
 
 ```js
 // Badge de plataforma (Premier da Valve vs FACEIT) — null pra upload/pro, que já têm
@@ -396,38 +403,48 @@ export function plataformaPartida(source) {
 }
 ```
 
-- [ ] **Step 2: `Feed.jsx` — badge ao lado do `origem` já existente**
+- [ ] **Step 2: `Feed.jsx` — badge ao lado do `origem` já existente (CORRIGIDO: um único bloco, não dois)**
 
-Import: trocar `import { nomeMapa, dataHora, origemPartida, corRating } from '../lib/format.js'`
+Import (`site/client/src/pages/Feed.jsx:3`): trocar
+`import { nomeMapa, dataHora, origemPartida, corRating } from '../lib/format.js'`
 por `import { nomeMapa, dataHora, origemPartida, plataformaPartida, corRating } from '../lib/format.js'`.
 
-Dentro de `CardPartida`, logo após `const origem = origemPartida(m.source)`:
+Dentro de `CardPartida` (`Feed.jsx:58-60`), logo após `const origem = origemPartida(m.source)`:
 
 ```js
   const plataforma = plataformaPartida(m.source)
 ```
 
-E nos dois blocos (mobile linha ~76-79 e desktop linha ~113-116 do arquivo atual), adicionar
-o badge de plataforma antes do badge de `origem`:
+`Feed.jsx` tem HOJE um único bloco de badges (não mobile/desktop separados — unificado no
+redesign de `476d11b`), em `Feed.jsx:72-73`. Trocar:
 
 ```jsx
-            {m.source === 'pro' && <Badge tom="destaque" className="shrink-0">PRO</Badge>}
-            {plataforma && <Badge tom={plataforma.tom} className="shrink-0">{plataforma.label}</Badge>}
-            <Badge tom="neutro" title={origem.title} className="shrink-0">{origem.label}</Badge>
+          {m.source === 'pro' && <Badge tom="destaque" className="shrink-0">PRO</Badge>}
+          <Badge tom="neutro" title={origem.title} className="shrink-0">{origem.label}</Badge>
 ```
 
-(repetir a mesma linha nova nos dois blocos — mobile e desktop — sem alterar mais nada ao
-redor.)
+por:
 
-- [ ] **Step 3: `profile.js` — incluir `m.source` na query de `recentes`**
+```jsx
+          {m.source === 'pro' && <Badge tom="destaque" className="shrink-0">PRO</Badge>}
+          {plataforma && <Badge tom={plataforma.tom} className="shrink-0">{plataforma.label}</Badge>}
+          <Badge tom="neutro" title={origem.title} className="shrink-0">{origem.label}</Badge>
+```
 
-Trocar a query de `recentes` (dentro de `GET /:steamId`):
+(um único ponto de inserção, não dois — confirmar contra o arquivo atual antes de editar, já
+que o redesign pode ter deslocado a linha exata desde esta nota.)
+
+- [ ] **Step 3: `profile.js` — incluir `m.source` na query de `recentes` (CORRIGIDO: query já tem colunas de Premier)**
+
+A query de `recentes` (`site/server/src/routes/profile.js:408-417`, dentro de `GET /:steamId`)
+já foi estendida por uma feature posterior (Premier Rating) e hoje é:
 
 ```js
       db.query(
-        `select m.id, m.map, m.played_at, m.score_a, m.score_b, m.source,
+        `select m.id, m.map, m.played_at, m.score_a, m.score_b,
                 mp.kills, mp.deaths, mp.assists, mp.rating, mp.won,
-                mp.damage, mp.rounds_played, mp.headshot_kills
+                mp.damage, mp.rounds_played, mp.headshot_kills,
+                mp.premier_rating_before, mp.premier_rating_after
          from match_players mp join matches m on m.id = mp.match_id
          where mp.steam_id64 = $1 and m.status = 'parsed'${recentesPeriodo}${recentesGrupo}
          order by m.played_at desc nulls last limit 20`,
@@ -435,15 +452,41 @@ Trocar a query de `recentes` (dentro de `GET /:steamId`):
       ),
 ```
 
-E no `res.json`, dentro do `.map` de `recentes`, adicionar `source: r.source,` junto dos
-outros campos.
+Só adicionar `m.source` ao SELECT (junto de `m.score_a, m.score_b`), sem tocar nas colunas de
+Premier já presentes:
 
-- [ ] **Step 4: `JogadorPerfil.jsx` — badge no card mobile e na tabela desktop**
+```js
+      db.query(
+        `select m.id, m.map, m.played_at, m.score_a, m.score_b, m.source,
+                mp.kills, mp.deaths, mp.assists, mp.rating, mp.won,
+                mp.damage, mp.rounds_played, mp.headshot_kills,
+                mp.premier_rating_before, mp.premier_rating_after
+         from match_players mp join matches m on m.id = mp.match_id
+         where mp.steam_id64 = $1 and m.status = 'parsed'${recentesPeriodo}${recentesGrupo}
+         order by m.played_at desc nulls last limit 20`,
+        recentesParams,
+      ),
+```
 
-Import: adicionar `plataformaPartida` ao import de `../lib/format.js` (mesmo padrão do Step 2).
+E no mapeamento de `recentes` (`profile.js:490-503`), adicionar `source: r.source,` junto dos
+outros campos (não remover `premierBefore`/`premierAfter` que já estão lá):
 
-No card mobile (dentro do `.map` de `recentes`, próximo à linha `<MapIcon map={r.map} size={18} />`),
-trocar:
+```js
+        adr: r.rounds_played ? Math.round((r.damage / r.rounds_played) * 10) / 10 : 0,
+        hsPct: r.kills ? Math.round((r.headshot_kills / r.kills) * 100) : 0,
+        premierBefore: r.premier_rating_before == null ? null : Number(r.premier_rating_before),
+        premierAfter: r.premier_rating_after == null ? null : Number(r.premier_rating_after),
+        source: r.source,
+      })),
+```
+
+- [ ] **Step 4: `JogadorPerfil.jsx` — badge no card mobile e na tabela desktop (linhas atualizadas)**
+
+Import: adicionar `plataformaPartida` ao import de `../lib/format.js` no topo do arquivo (mesmo
+padrão do Step 2). `Badge` já está importado de `../components/ui` (`JogadorPerfil.jsx:4`) —
+não precisa adicionar.
+
+No card mobile (`JogadorPerfil.jsx:296-297`, dentro do `.map` de `recentes`), trocar:
 
 ```jsx
                         <MapIcon map={r.map} size={18} />
@@ -460,7 +503,7 @@ por:
                         )}
 ```
 
-Na tabela desktop, trocar a célula "Mapa":
+Na tabela desktop (`JogadorPerfil.jsx:360-365`), trocar a célula "Mapa":
 
 ```jsx
                       <td className="px-3 py-2 font-mono text-texto-fraco">
@@ -484,9 +527,6 @@ por:
                         </span>
                       </td>
 ```
-
-(confirmar que `Badge` já está importado no topo do arquivo — já é usado em `SecaoHighlights`
-mais abaixo no mesmo arquivo; se não estiver no import de `../components/ui`, adicionar.)
 
 - [ ] **Step 5: Build e testes**
 
