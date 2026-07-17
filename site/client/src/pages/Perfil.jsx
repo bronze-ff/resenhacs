@@ -23,6 +23,12 @@ export default function Perfil() {
   const [mensagem, setMensagem] = useState(null)
   const [rankingPublico, setRankingPublico] = useState(false)
   const [passoAPassoAberto, setPassoAPassoAberto] = useState(false)
+  // Convite de grupo: só o admin gera (backend devolve 403 pro resto), então a
+  // seção inteira é escondida quando jogador.souAdminDoGrupo é falso.
+  const [linkConvite, setLinkConvite] = useState(null)
+  const [erroConvite, setErroConvite] = useState(null)
+  const [gerandoConvite, setGerandoConvite] = useState(false)
+  const [conviteCopiado, setConviteCopiado] = useState(false)
   // Resultado do callback OAuth da FACEIT (?faceit=vinculado / ?erro=faceit-invalido) —
   // sem isso a falha era silenciosa: o callback redirecionava de volta pra cá e nada
   // na tela dizia se deu certo ou errado.
@@ -43,6 +49,27 @@ export default function Perfil() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ publico: novo }),
     })
+  }
+
+  async function gerarConvite() {
+    setGerandoConvite(true)
+    setErroConvite(null)
+    const res = await fetch(`/api/groups/${jogador.grupoAtivoId}/convites`, { method: 'POST' })
+    const body = await res.json().catch(() => ({}))
+    setGerandoConvite(false)
+    if (!res.ok) return setErroConvite(body.erro ?? 'Erro ao gerar convite')
+    setLinkConvite(`${window.location.origin}/convite/${body.token}`)
+  }
+
+  async function copiarConvite() {
+    try {
+      await navigator.clipboard.writeText(linkConvite)
+      setConviteCopiado(true)
+      setTimeout(() => setConviteCopiado(false), 2000)
+    } catch {
+      // clipboard indisponível (ex.: contexto não-HTTPS) — o link já fica visível
+      // na tela pra seleção manual, então não precisa de tratamento além de não quebrar.
+    }
   }
 
   async function salvar(e) {
@@ -127,6 +154,45 @@ export default function Perfil() {
       </section>
 
       <div className="space-y-6">
+      {jogador?.souAdminDoGrupo && (
+      <section className="space-y-3">
+        <h3 className="font-display text-sm font-semibold uppercase tracking-wide text-texto-fraco">
+          Convidar amigos
+        </h3>
+        <Card className="p-4 sm:p-5">
+          <p className="font-mono text-xs text-texto-fraco">
+            Gere um link e mande pro seu amigo — ele entra direto no grupo depois de fazer login com a Steam.
+          </p>
+          <button
+            type="button"
+            onClick={gerarConvite}
+            disabled={gerandoConvite}
+            className="panel-cut-sm mt-3 min-h-10 w-full border border-destaque bg-destaque px-4 py-2 font-display text-sm font-semibold uppercase tracking-wide text-fundo disabled:opacity-40 lg:min-h-0 lg:w-auto"
+          >
+            {gerandoConvite ? 'Gerando…' : 'Gerar link de convite'}
+          </button>
+          {linkConvite && (
+            <div className="mt-3 space-y-2">
+              <input
+                readOnly
+                value={linkConvite}
+                onFocus={(e) => e.target.select()}
+                className="panel-cut-sm min-h-10 w-full border border-borda bg-superficie px-3 py-2 font-mono text-xs lg:min-h-0"
+              />
+              <button
+                type="button"
+                onClick={copiarConvite}
+                className="panel-cut-sm min-h-10 w-full border border-borda px-4 py-2 font-display text-sm font-semibold uppercase tracking-wide text-texto transition-colors hover:border-destaque/50 hover:text-destaque lg:min-h-0 lg:w-auto"
+              >
+                {conviteCopiado ? 'Copiado!' : 'Copiar link'}
+              </button>
+            </div>
+          )}
+          {erroConvite && <p className="mt-3 font-mono text-sm text-perigo">{erroConvite}</p>}
+        </Card>
+      </section>
+      )}
+
       <section className="space-y-3">
         <h3 className="font-display text-sm font-semibold uppercase tracking-wide text-texto-fraco">
           Ranking público
