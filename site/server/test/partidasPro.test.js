@@ -16,6 +16,9 @@ const cookieAdmin = `resenha_token=${signToken({ steamId: '999', isSuperAdmin: t
 function appWith(handlers) {
   const db = {
     query: vi.fn().mockImplementation((sql) => {
+      if (typeof sql === 'string' && sql.includes('is_super_admin from players')) {
+        return Promise.resolve({ rows: [{ is_super_admin: true }] })
+      }
       for (const [needle, rows] of handlers) {
         if (sql.includes(needle)) return Promise.resolve({ rows })
       }
@@ -58,7 +61,8 @@ describe('POST /api/partidas-pro-fila', () => {
     const { app, db } = appWith([['insert into partidas_pro_fila', [{ id: 'f2' }]]])
     const res = await request(app).post('/api/partidas-pro-fila').set('Cookie', cookieAdmin).send({ hltvUrl: 'https://hltv.org/download/demo/999' })
     expect(res.status).toBe(201)
-    expect(db.query.mock.calls[0][1][1]).toBe('999') // steamId de quem adicionou
+    const chamada = db.query.mock.calls.find((c) => c[0].includes('insert into partidas_pro_fila'))
+    expect(chamada[1][1]).toBe('999') // steamId de quem adicionou
   })
 
   it('sem url: 400', async () => {
@@ -97,7 +101,8 @@ describe('POST /api/partidas-pro-fila/upload-url', () => {
     expect(res.body.id).toBe('f9')
     expect(res.body.uploadUrl).toBe('https://r2.example/presigned-put')
     expect(res.body.key).toMatch(/^partidas-pro-pendentes\/.+\.dem$/)
-    expect(db.query.mock.calls[0][1][1]).toBe('999') // steamId de quem enviou
+    const chamada = db.query.mock.calls.find((c) => c[0].includes('insert into partidas_pro_fila'))
+    expect(chamada[1][1]).toBe('999') // steamId de quem enviou
     expect(presignUpload).toHaveBeenCalledWith(
       expect.anything(), 'resenha-demos', res.body.key, 'application/octet-stream',
     )
@@ -115,7 +120,8 @@ describe('PATCH /api/partidas-pro-fila/:id/retry', () => {
     const res = await request(app).patch('/api/partidas-pro-fila/f1/retry').set('Cookie', cookieAdmin)
     expect(res.status).toBe(200)
     expect(res.body).toMatchObject({ ok: true, status: 'pendente' })
-    expect(db.query.mock.calls[0][1]).toEqual(['f1'])
+    const chamada = db.query.mock.calls.find((c) => c[0].includes('update partidas_pro_fila'))
+    expect(chamada[1]).toEqual(['f1'])
   })
 
   it('item nao encontrado ou nao esta falhou: 404', async () => {

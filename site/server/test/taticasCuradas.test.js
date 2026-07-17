@@ -9,6 +9,9 @@ const cookieAdmin = `resenha_token=${signToken({ steamId: '999', isSuperAdmin: t
 
 function appWith(handlers) {
   const query = vi.fn().mockImplementation((sql) => {
+    if (typeof sql === 'string' && sql.includes('is_super_admin from players')) {
+      return Promise.resolve({ rows: [{ is_super_admin: true }] })
+    }
     for (const [needle, rows] of handlers) {
       if (sql.includes(needle)) return Promise.resolve({ rows })
     }
@@ -158,7 +161,9 @@ describe('PUT /api/taticas-curadas/:id', () => {
     const { app, db } = appWith([])
     const res = await request(app).put('/api/taticas-curadas/abc').set('Cookie', cookieAdmin).send(PAYLOAD_VALIDO)
     expect(res.status).toBe(404)
-    expect(db.query).not.toHaveBeenCalled()
+    // Além do recheck de admin (requireSuperAdmin agora reconsulta o banco), nenhuma query
+    // do handler rodou — id malformado é rejeitado antes de qualquer trabalho de banco.
+    expect(db.query.mock.calls.filter((c) => !c[0].includes('is_super_admin from players'))).toHaveLength(0)
   })
 })
 
@@ -172,7 +177,8 @@ describe('DELETE /api/taticas-curadas/:id', () => {
     const { app, db } = appWith([['delete from taticas_curadas', [{ id: UUID_T1 }]]])
     const res = await request(app).delete(`/api/taticas-curadas/${UUID_T1}`).set('Cookie', cookieAdmin)
     expect(res.status).toBe(200)
-    expect(db.query.mock.calls[0][1]).toEqual([UUID_T1])
+    const chamada = db.query.mock.calls.find((c) => c[0].includes('delete from taticas_curadas'))
+    expect(chamada[1]).toEqual([UUID_T1])
   })
 
   it('id inexistente: 404', async () => {
@@ -185,6 +191,8 @@ describe('DELETE /api/taticas-curadas/:id', () => {
     const { app, db } = appWith([])
     const res = await request(app).delete('/api/taticas-curadas/abc').set('Cookie', cookieAdmin)
     expect(res.status).toBe(404)
-    expect(db.query).not.toHaveBeenCalled()
+    // Além do recheck de admin (requireSuperAdmin agora reconsulta o banco), nenhuma query
+    // do handler rodou — id malformado é rejeitado antes de qualquer trabalho de banco.
+    expect(db.query.mock.calls.filter((c) => !c[0].includes('is_super_admin from players'))).toHaveLength(0)
   })
 })

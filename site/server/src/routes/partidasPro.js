@@ -1,12 +1,13 @@
 import crypto from 'node:crypto'
 import { Router } from 'express'
-import { requireSuperAdmin } from '../auth/middleware.js'
+import { createRequireSuperAdmin } from '../auth/middleware.js'
 import { presignUpload } from '../r2.js'
 
 const EXTENSOES_ACEITAS = ['.rar', '.dem']
 
 export function createPartidasProRouter({ db, requireAuth, r2Client, r2Bucket }) {
   const router = Router()
+  const requireSuperAdmin = createRequireSuperAdmin(db)
 
   router.get('/', requireAuth, requireSuperAdmin, async (req, res) => {
     const { rows } = await db.query(

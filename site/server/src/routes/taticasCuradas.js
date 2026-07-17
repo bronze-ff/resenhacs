@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { requireSuperAdmin } from '../auth/middleware.js'
+import { createRequireSuperAdmin } from '../auth/middleware.js'
 import { paraCamel } from './granadas.js'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -66,6 +66,7 @@ async function inserirPapeis(client, taticaId, papeis) {
 
 export function createTaticasCuradasRouter({ db, requireAuth }) {
   const router = Router()
+  const requireSuperAdmin = createRequireSuperAdmin(db)
 
   router.get('/', requireAuth, async (req, res) => {
     const cond = []

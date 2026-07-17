@@ -1,8 +1,9 @@
 import { Router } from 'express'
-import { requireSuperAdmin } from '../auth/middleware.js'
+import { createRequireSuperAdmin } from '../auth/middleware.js'
 
 export function createTaticasRouter({ db, requireAuth }) {
   const router = Router()
+  const requireSuperAdmin = createRequireSuperAdmin(db)
 
   router.get('/', requireAuth, requireSuperAdmin, async (req, res) => {
     const cond = ["status = 'aprovada'"]

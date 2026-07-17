@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { requireSuperAdmin } from '../auth/middleware.js'
+import { createRequireSuperAdmin } from '../auth/middleware.js'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const LADOS = new Set(['T', 'CT'])
@@ -60,6 +60,7 @@ function validarCorpo(body) {
 
 export function createGranadasRouter({ db, requireAuth }) {
   const router = Router()
+  const requireSuperAdmin = createRequireSuperAdmin(db)
 
   // Leitura é pública (qualquer jogador logado, de qualquer grupo) — a biblioteca de
   // lineups não é dado sensível por grupo. Só criar/editar/excluir continua admin.

@@ -10,6 +10,9 @@ const cookieAdmin = `resenha_token=${signToken({ steamId: '999', isSuperAdmin: t
 function appWith(handlers) {
   const db = {
     query: vi.fn().mockImplementation((sql) => {
+      if (typeof sql === 'string' && sql.includes('is_super_admin from players')) {
+        return Promise.resolve({ rows: [{ is_super_admin: true }] })
+      }
       for (const [needle, rows] of handlers) {
         if (sql.includes(needle)) return Promise.resolve({ rows })
       }
@@ -28,7 +31,8 @@ describe('GET /api/taticas', () => {
   it('admin lista só aprovadas por padrao', async () => {
     const { app, db } = appWith([['from taticas', []]])
     await request(app).get('/api/taticas?map=de_mirage').set('Cookie', cookieAdmin)
-    expect(db.query.mock.calls[0][0]).toContain("status = 'aprovada'")
+    const chamada = db.query.mock.calls.find((c) => c[0].includes('from taticas'))
+    expect(chamada[0]).toContain("status = 'aprovada'")
   })
 })
 
@@ -64,6 +68,7 @@ describe('PATCH /api/taticas/:id', () => {
     const { app, db } = appWith([['update taticas', [{ id: 't1' }]]])
     const res = await request(app).patch('/api/taticas/t1').set('Cookie', cookieAdmin).send({ status: 'aprovada' })
     expect(res.status).toBe(200)
-    expect(db.query.mock.calls[0][1]).toEqual(['aprovada', 't1'])
+    const chamada = db.query.mock.calls.find((c) => c[0].includes('update taticas'))
+    expect(chamada[1]).toEqual(['aprovada', 't1'])
   })
 })

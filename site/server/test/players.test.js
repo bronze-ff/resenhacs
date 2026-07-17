@@ -10,7 +10,14 @@ const config = {
 }
 
 function appWith(rows = []) {
-  const db = { query: vi.fn().mockResolvedValue({ rows }) }
+  const db = {
+    query: vi.fn().mockImplementation((sql) => {
+      if (typeof sql === 'string' && sql.includes('is_super_admin from players')) {
+        return Promise.resolve({ rows: [{ is_super_admin: true }] })
+      }
+      return Promise.resolve({ rows })
+    }),
+  }
   return { app: createApp({ config, db }), db }
 }
 
@@ -88,9 +95,10 @@ describe('POST /api/players', () => {
       .set('Cookie', adminCookie)
       .send({ steamId: '76561198000000003' })
     expect(res.status).toBe(201)
-    expect(db.query.mock.calls[0][1]).toEqual(['76561198000000003'])
-    expect(db.query.mock.calls[1][0]).toContain('update match_players set is_tracked')
-    expect(db.query.mock.calls[1][1]).toEqual(['76561198000000003'])
+    const insertCall = db.query.mock.calls.find((c) => c[0].includes('insert into players'))
+    expect(insertCall[1]).toEqual(['76561198000000003'])
+    const trackCall = db.query.mock.calls.find((c) => c[0].includes('update match_players set is_tracked'))
+    expect(trackCall[1]).toEqual(['76561198000000003'])
   })
 })
 
@@ -98,6 +106,7 @@ describe('POST /api/players/promote', () => {
   function appWithNick(nick) {
     const db = {
       query: vi.fn().mockImplementation((sql) => {
+        if (sql.includes('is_super_admin from players')) return Promise.resolve({ rows: [{ is_super_admin: true }] })
         if (sql.includes('from match_players mp')) return Promise.resolve({ rows: nick ? [{ nick }] : [] })
         return Promise.resolve({ rows: [] })
       }),

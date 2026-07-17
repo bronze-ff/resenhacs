@@ -10,6 +10,9 @@ const cookieAdmin = `resenha_token=${signToken({ steamId: '999', isSuperAdmin: t
 function appWith(handlers) {
   const db = {
     query: vi.fn().mockImplementation((sql) => {
+      if (typeof sql === 'string' && sql.includes('is_super_admin from players')) {
+        return Promise.resolve({ rows: [{ is_super_admin: true }] })
+      }
       for (const [needle, rows] of handlers) {
         if (sql.includes(needle)) return Promise.resolve({ rows })
       }
@@ -89,7 +92,7 @@ describe('POST /api/granadas', () => {
     const res = await request(app).post('/api/granadas').set('Cookie', cookieAdmin).send(valido)
     expect(res.status).toBe(201)
     expect(res.body.id).toBe('g2')
-    const params = db.query.mock.calls[0][1]
+    const params = db.query.mock.calls.find((c) => c[0].includes('insert into lineups_curados'))[1]
     expect(params).toContain('de_mirage')
     expect(params).toContain('999')
   })
@@ -127,7 +130,8 @@ describe('PATCH /api/granadas/:id', () => {
         tecnica: 'normal', botao: 'direito', passos: [], arremessoX: 0.1, arremessoY: 0.1,
         alvoX: 0.2, alvoY: 0.2 })
     expect(res.status).toBe(200)
-    expect(db.query.mock.calls[0][0]).toContain('atualizado_em = now()')
+    const chamada = db.query.mock.calls.find((c) => c[0].includes('update lineups_curados'))
+    expect(chamada[0]).toContain('atualizado_em = now()')
   })
 
   it('id inexistente: 404', async () => {
@@ -144,7 +148,9 @@ describe('PATCH /api/granadas/:id', () => {
       .send({ map: 'de_mirage', lado: 'CT', tipo: 'flash', titulo: 'x', tecnica: 'normal',
         botao: 'direito', passos: [], arremessoX: 0.1, arremessoY: 0.1, alvoX: 0.2, alvoY: 0.2 })
     expect(res.status).toBe(404)
-    expect(db.query).not.toHaveBeenCalled()
+    // Além do recheck de admin (requireSuperAdmin agora reconsulta o banco), nenhuma query
+    // do handler rodou — id malformado é rejeitado antes de qualquer trabalho de banco.
+    expect(db.query.mock.calls.filter((c) => !c[0].includes('is_super_admin from players'))).toHaveLength(0)
   })
 })
 
@@ -158,14 +164,17 @@ describe('DELETE /api/granadas/:id', () => {
     const { app, db } = appWith([['delete from lineups_curados', [{ id: UUID_G1 }]]])
     const res = await request(app).delete(`/api/granadas/${UUID_G1}`).set('Cookie', cookieAdmin)
     expect(res.status).toBe(200)
-    expect(db.query.mock.calls[0][1]).toEqual([UUID_G1])
+    const chamada = db.query.mock.calls.find((c) => c[0].includes('delete from lineups_curados'))
+    expect(chamada[1]).toEqual([UUID_G1])
   })
 
   it('id nao-uuid: 404 sem tocar no db', async () => {
     const { app, db } = appWith([])
     const res = await request(app).delete('/api/granadas/abc').set('Cookie', cookieAdmin)
     expect(res.status).toBe(404)
-    expect(db.query).not.toHaveBeenCalled()
+    // Além do recheck de admin (requireSuperAdmin agora reconsulta o banco), nenhuma query
+    // do handler rodou — id malformado é rejeitado antes de qualquer trabalho de banco.
+    expect(db.query.mock.calls.filter((c) => !c[0].includes('is_super_admin from players'))).toHaveLength(0)
   })
 })
 
@@ -212,7 +221,8 @@ describe('GET /api/granadas/rounds-utilitaria', () => {
       tipo: 'smoke', tick: 100, throwerSteamId: '111', throwerNick: 'Jogador1',
       arremessoX: 0.2, arremessoY: 0.8, alvoX: 0.4, alvoY: 0.3,
     })
-    expect(db.query.mock.calls[0][1]).toEqual(['de_mirage'])
+    const chamada = db.query.mock.calls.find((c) => c[0].includes('round_number'))
+    expect(chamada[1]).toEqual(['de_mirage'])
   })
 })
 
@@ -232,7 +242,8 @@ describe('GET /api/granadas/sugestoes', () => {
     expect(res.body[0]).toEqual({
       tipo: 'smoke', origem: 'pro', lado: 'T', total: 12, alvoX: 0.4, alvoY: 0.3, arremessoX: 0.2, arremessoY: 0.8,
     })
-    expect(db.query.mock.calls[0][1]).toEqual(['de_mirage'])
+    const chamada = db.query.mock.calls.find((c) => c[0].includes('from lineups'))
+    expect(chamada[1]).toEqual(['de_mirage'])
   })
 
   it('exclui granadas sem lado (demo antiga) direto na query', async () => {
@@ -241,7 +252,8 @@ describe('GET /api/granadas/sugestoes', () => {
     const { app, db } = appWith([['from lineups', []]])
     const res = await request(app).get('/api/granadas/sugestoes?map=de_mirage').set('Cookie', cookieAdmin)
     expect(res.status).toBe(200)
-    expect(db.query.mock.calls[0][0]).toContain('lado is not null')
+    const chamada = db.query.mock.calls.find((c) => c[0].includes('from lineups'))
+    expect(chamada[0]).toContain('lado is not null')
   })
 
   it('sem map valido: 400', async () => {

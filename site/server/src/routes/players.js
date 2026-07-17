@@ -1,8 +1,9 @@
 import { Router } from 'express'
-import { requireSuperAdmin } from '../auth/middleware.js'
+import { createRequireSuperAdmin } from '../auth/middleware.js'
 
 export function createPlayersRouter({ db, requireAuth, requireGroupMember, fetchBans }) {
   const router = Router()
+  const requireSuperAdmin = createRequireSuperAdmin(db)
 
   // Alerta de ban/smurf: cruza os Jogadores do grupo com GetPlayerBans da Steam —
   // "a conta de alguém do grupo tomou VAC/Overwatch ban?" Precisa vir antes de

@@ -41,6 +41,9 @@ beforeEach(() => {
 function appWith({ progresso = [] } = {}) {
   const db = {
     query: vi.fn().mockImplementation((sql) => {
+      if (typeof sql === 'string' && sql.includes('is_super_admin from players')) {
+        return Promise.resolve({ rows: [{ is_super_admin: true }] })
+      }
       if (sql.includes('group_members where group_id')) return Promise.resolve({ rows: [{}] })
       if (sql.includes('from curso_progresso')) return Promise.resolve({ rows: progresso })
       if (sql.includes('insert into curso_progresso')) return Promise.resolve({ rows: [] })

@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { requireSuperAdmin } from '../auth/middleware.js'
+import { createRequireSuperAdmin } from '../auth/middleware.js'
 import {
   presignDownload, iniciarMultipart, presignUploadPart, concluirMultipart,
   abortarMultipart, objetoExiste,
@@ -51,6 +51,7 @@ function validarUpload(req, res, r2Client, { exigirUploadId = false } = {}) {
 
 export function createCursoRouter({ db, requireAuth, requireGroupMember, r2Client, r2Bucket }) {
   const router = Router()
+  const requireSuperAdmin = createRequireSuperAdmin(db)
 
   router.get('/', requireAuth, requireGroupMember, async (req, res) => {
     const { rows } = await db.query(
