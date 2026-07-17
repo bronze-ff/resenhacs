@@ -578,3 +578,119 @@ def connect(database_url):
     import psycopg
 
     return psycopg.connect(database_url)
+
+
+# ---------------------------------------------------------------------------
+# FACEIT Fase B: fila de partidas descobertas + ELO (ver spec 2026-07-16)
+
+
+def listar_vinculados_faceit(conn):
+    """Membros com conta FACEIT vinculada (Fase A) e grupo ativo — a descoberta roda
+    pra cada um deles."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "select steam_id64, faceit_id, grupo_ativo_id from players "
+            "where faceit_id is not null and grupo_ativo_id is not null"
+        )
+        return cur.fetchall()
+
+
+def faceit_match_ids_conhecidos(conn):
+    """Tudo que já foi visto: ingerido (matches) ou enfileirado (qualquer status)."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "select faceit_match_id from matches where faceit_match_id is not null "
+            "union select faceit_match_id from faceit_pendentes"
+        )
+        return {r[0] for r in cur.fetchall()}
+
+
+def membro_ja_sincronizou_faceit(conn, steam_id64):
+    """True se a descoberta já rodou alguma vez pra esse membro (linhas na fila, em
+    qualquer status, são o marcador persistente — itens 'done' nunca são apagados)."""
+    with conn.cursor() as cur:
+        cur.execute("select 1 from faceit_pendentes where steam_id64 = %s limit 1", (steam_id64,))
+        return cur.fetchone() is not None
+
+
+def enfileirar_faceit(conn, faceit_match_id, steam_id64, group_id):
+    with conn.cursor() as cur:
+        cur.execute(
+            "insert into faceit_pendentes (faceit_match_id, steam_id64, group_id) "
+            "values (%s, %s, %s) on conflict (faceit_match_id) do nothing",
+            (faceit_match_id, steam_id64, group_id),
+        )
+    conn.commit()
+
+
+def listar_faceit_pendentes(conn, limite=10):
+    with conn.cursor() as cur:
+        cur.execute(
+            "select faceit_match_id, steam_id64, group_id from faceit_pendentes "
+            "where status = 'pending' order by created_at limit %s",
+            (limite,),
+        )
+        return cur.fetchall()
+
+
+def concluir_faceit_pendente(conn, faceit_match_id):
+    with conn.cursor() as cur:
+        cur.execute(
+            "update faceit_pendentes set status = 'done', erro = null "
+            "where faceit_match_id = %s",
+            (faceit_match_id,),
+        )
+    conn.commit()
+
+
+def falhar_faceit_pendente(conn, faceit_match_id, erro, max_tentativas=3):
+    """Incrementa tentativas; volta pra 'pending' (retry na próxima rodada) até o limite,
+    depois fica 'failed' pra inspeção manual — mesma semântica da fila de uploads."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "update faceit_pendentes set "
+            "status = case when tentativas + 1 >= %s then 'failed' else 'pending' end, "
+            "tentativas = tentativas + 1, erro = %s "
+            "where faceit_match_id = %s",
+            (max_tentativas, str(erro)[:500], faceit_match_id),
+        )
+    conn.commit()
+
+
+def marcar_faceit_match(conn, match_id, faceit_match_id):
+    with conn.cursor() as cur:
+        cur.execute(
+            "update matches set faceit_match_id = %s where id = %s",
+            (faceit_match_id, match_id),
+        )
+    conn.commit()
+
+
+def elo_snapshot(conn, steam_id64):
+    with conn.cursor() as cur:
+        cur.execute(
+            "select faceit_elo, faceit_elo_atualizado_em from players where steam_id64 = %s",
+            (steam_id64,),
+        )
+        row = cur.fetchone()
+        return (row[0], row[1]) if row else (None, None)
+
+
+def atualizar_elo(conn, steam_id64, elo, level):
+    with conn.cursor() as cur:
+        cur.execute(
+            "update players set faceit_elo = %s, faceit_skill_level = %s, "
+            "faceit_elo_atualizado_em = now() where steam_id64 = %s",
+            (elo, level, steam_id64),
+        )
+    conn.commit()
+
+
+def gravar_elo_partida(conn, match_id, steam_id64, before, after):
+    with conn.cursor() as cur:
+        cur.execute(
+            "update match_players set faceit_elo_before = %s, faceit_elo_after = %s "
+            "where match_id = %s and steam_id64 = %s",
+            (before, after, match_id, steam_id64),
+        )
+    conn.commit()

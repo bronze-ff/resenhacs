@@ -471,6 +471,35 @@ def test_match_fingerprint_estavel_e_sensivel_ao_conteudo():
     assert db.match_fingerprint(dois) == db.match_fingerprint(invertido)
 
 
+# ---- fila FACEIT + ELO (Fase B) ----
+
+def test_enfileirar_faceit_e_idempotente_e_alinha_placeholders():
+    conn = FakeConn()
+    db.enfileirar_faceit(conn, "fm1", "111", "g1")
+    sql, params = conn.calls[-1]
+    assert "on conflict (faceit_match_id) do nothing" in sql
+    assert sql.count("%s") == len(params) == 3
+
+
+def test_falhar_faceit_pendente_incrementa_e_marca_failed_no_limite():
+    conn = FakeConn()
+    db.falhar_faceit_pendente(conn, "fm1", "boom", max_tentativas=3)
+    sql, params = conn.calls[-1]
+    # uma query só: incrementa tentativas, guarda erro, e o status vira 'failed'
+    # quando tentativas+1 >= max — senão volta pra 'pending' (retry na próxima rodada)
+    assert "tentativas = tentativas + 1" in sql
+    assert "case when tentativas + 1 >= %s then 'failed' else 'pending' end" in sql
+    assert sql.count("%s") == len(params)
+
+
+def test_gravar_elo_partida_atualiza_match_players():
+    conn = FakeConn()
+    db.gravar_elo_partida(conn, "m1", "111", 1400, 1425)
+    sql, params = conn.calls[-1]
+    assert "update match_players set faceit_elo_before = %s, faceit_elo_after = %s" in sql
+    assert params == (1400, 1425, "m1", "111")
+
+
 def test_store_parsed_dedupe_por_fingerprint_atualiza_em_vez_de_inserir():
     existente = "11111111-1111-1111-1111-111111111111"
     conn = FakeConn(fingerprint_row=[existente])
