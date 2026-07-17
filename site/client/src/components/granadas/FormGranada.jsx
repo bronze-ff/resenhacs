@@ -77,7 +77,7 @@ export default function FormGranada({ mapa, lado, posicoes, inicial = null, onSa
         >
           Buscar vídeo no YouTube
         </a>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-1 gap-2 lg:grid-cols-3">
           <Select value={tipo} onChange={(e) => setTipo(e.target.value)} className="w-full" selectClassName="px-2 pl-2 pr-7 text-xs">
             {TIPOS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </Select>

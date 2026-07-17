@@ -32,7 +32,7 @@ export default function RankingPublico() {
       {aba === 'jogadores' && (
         jogadores === null ? <p className="font-mono text-sm text-texto-fraco">Carregando…</p> :
         jogadores.length === 0 ? <p className="font-mono text-sm text-texto-fraco">Ninguém optou por aparecer aqui ainda.</p> :
-        <DataTable head={<tr><th className="px-3 py-2">#</th><th className="px-3 py-2">Jogador</th><th className="px-2 py-2 text-right">Partidas</th><th className="px-2 py-2 text-right">Winrate</th><th className="px-2 py-2 text-right">K/D</th><th className="px-3 py-2 text-right">Rating</th></tr>}>
+        <DataTable head={<tr><th className="px-3 py-2">#</th><th className="px-3 py-2">Jogador</th><th className="px-2 py-2 text-right">Partidas</th><th className="px-2 py-2 text-right">Winrate</th><th className="hidden px-2 py-2 text-right sm:table-cell">K/D</th><th className="px-3 py-2 text-right">Rating</th></tr>}>
           {jogadores.map((j, i) => (
             <tr key={j.steamId}>
               <td className="px-3 py-2 font-mono text-texto-fraco">{i + 1}</td>
@@ -44,7 +44,7 @@ export default function RankingPublico() {
               </td>
               <td className="px-2 py-2 text-right tabular-nums">{j.partidas}</td>
               <td className="px-2 py-2 text-right tabular-nums">{j.winrate}%</td>
-              <td className="px-2 py-2 text-right tabular-nums">{j.kd}</td>
+              <td className="hidden px-2 py-2 text-right tabular-nums sm:table-cell">{j.kd}</td>
               <td className="px-3 py-2 text-right"><RatingBadge valor={j.rating} /></td>
             </tr>
           ))}
@@ -54,14 +54,14 @@ export default function RankingPublico() {
       {aba === 'times' && (
         times === null ? <p className="font-mono text-sm text-texto-fraco">Carregando…</p> :
         times.length === 0 ? <p className="font-mono text-sm text-texto-fraco">Nenhum time público ainda.</p> :
-        <DataTable head={<tr><th className="px-3 py-2">#</th><th className="px-3 py-2">Time</th><th className="px-2 py-2">Grupo</th><th className="px-2 py-2 text-right">Partidas</th><th className="px-2 py-2 text-right">Winrate</th><th className="px-3 py-2 text-right">Rating</th></tr>}>
+        <DataTable head={<tr><th className="px-3 py-2">#</th><th className="px-3 py-2">Time</th><th className="hidden px-2 py-2 sm:table-cell">Grupo</th><th className="px-2 py-2 text-right">Partidas</th><th className="px-2 py-2 text-right">Winrate</th><th className="px-3 py-2 text-right">Rating</th></tr>}>
           {times.map((t, i) => (
             <tr key={t.id}>
               <td className="px-3 py-2 font-mono text-texto-fraco">{i + 1}</td>
               <td className="px-3 py-2 font-mono text-texto">
                 <Link to={`/times/comparar?a=${t.id}`} className="hover:text-destaque">{t.nome}</Link>
               </td>
-              <td className="px-2 py-2 font-mono text-xs text-texto-fraco">{t.grupoNome}</td>
+              <td className="hidden px-2 py-2 font-mono text-xs text-texto-fraco sm:table-cell">{t.grupoNome}</td>
               <td className="px-2 py-2 text-right tabular-nums">{t.partidas}</td>
               <td className="px-2 py-2 text-right tabular-nums">{t.winrate}%</td>
               <td className="px-3 py-2 text-right"><RatingBadge valor={t.rating} /></td>

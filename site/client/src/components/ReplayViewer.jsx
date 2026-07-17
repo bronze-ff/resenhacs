@@ -392,11 +392,11 @@ export default function ReplayViewer({ replay, seek }) {
           {feed.map((k, i) => (
             <div
               key={`${k.t}-${i}`}
-              className="flex items-center gap-1.5 border border-borda/60 bg-black/75 px-2 py-1 font-mono text-xs"
+              className="flex flex-wrap items-center gap-1.5 border border-borda/60 bg-black/75 px-2 py-1 font-mono text-xs lg:flex-nowrap"
             >
               {k.killer ? (
                 <>
-                  <span className="font-semibold" style={{ color: COR_LADO[ladoNoTick(round, k.t, k.killer)] ?? '#e6edf3' }}>
+                  <span className="max-w-[8rem] truncate font-semibold" style={{ color: COR_LADO[ladoNoTick(round, k.t, k.killer)] ?? '#e6edf3' }}>
                     {replay.names?.[k.killer] ?? k.killer}
                   </span>
                   <span className="text-texto-fraco">{nomeArma(k.weapon)}</span>
@@ -406,7 +406,7 @@ export default function ReplayViewer({ replay, seek }) {
                 <span className="text-texto-fraco">queda/ambiente</span>
               )}
               <span className="text-texto-fraco">→</span>
-              <span className="font-semibold" style={{ color: COR_LADO[ladoNoTick(round, k.t, k.victim)] ?? '#e6edf3' }}>
+              <span className="max-w-[8rem] truncate font-semibold" style={{ color: COR_LADO[ladoNoTick(round, k.t, k.victim)] ?? '#e6edf3' }}>
                 {replay.names?.[k.victim] ?? k.victim}
               </span>
             </div>

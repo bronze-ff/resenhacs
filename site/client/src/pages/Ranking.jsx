@@ -46,9 +46,9 @@ function CardJogador({ r, posicao, souEu }) {
     >
       <AvatarRanking r={r} />
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="font-mono text-xs text-texto-fraco">#{posicao + 1}</span>
-          <span className="truncate font-display text-lg font-bold text-texto">{r.nick || r.steamId}</span>
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="shrink-0 font-mono text-xs text-texto-fraco">#{posicao + 1}</span>
+          <span className="min-w-0 flex-1 truncate font-display text-lg font-bold text-texto">{r.nick || r.steamId}</span>
           <TagEstilo estilo={r.estilo} />
         </div>
         <div className="mt-2 grid grid-cols-4 gap-2">

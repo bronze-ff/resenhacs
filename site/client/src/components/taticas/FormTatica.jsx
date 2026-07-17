@@ -162,7 +162,7 @@ export default function FormTatica({ mapa, lado: ladoInicial, inicial = null, on
         {/* Coluna do radar: sempre visível, mostra TODAS as granadas curadas do
             mapa+lado atual. É aqui que a tática é montada de fato. */}
         <div className="shrink-0 border-b border-borda p-4 lg:w-[58%] lg:overflow-y-auto lg:border-b-0 lg:border-r lg:p-5">
-          <div className="mb-3 flex flex-wrap items-center gap-1.5">
+          <div className="mb-3 flex flex-wrap items-center gap-1.5 pr-12 lg:pr-0">
             <p className="mr-1 font-mono text-xs uppercase text-texto-fraco">Vinculando ao papel:</p>
             {papeis.map((p, i) => (
               <button

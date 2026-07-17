@@ -73,7 +73,7 @@ export default function Perfil() {
           <button
             type="button"
             onClick={() => setPassoAPassoAberto((v) => !v)}
-            className="flex w-full items-center justify-between gap-2 text-left"
+            className="flex min-h-10 w-full items-center justify-between gap-2 text-left lg:min-h-0"
           >
             <span className="font-mono text-sm text-texto-fraco">
               Não sabe onde pegar os códigos? <span className="text-destaque">Veja o passo a passo</span>
@@ -165,7 +165,7 @@ export default function Perfil() {
           ) : (
             <a
               href="/api/faceit/login"
-              className="panel-cut-sm border border-destaque px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-destaque hover:bg-destaque/10"
+              className="panel-cut-sm inline-flex min-h-10 shrink-0 items-center border border-destaque px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-destaque hover:bg-destaque/10 lg:min-h-0"
             >
               Vincular
             </a>

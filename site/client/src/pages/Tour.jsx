@@ -40,7 +40,7 @@ export default function Tour() {
           <button
             type="button"
             onClick={concluir}
-            className="font-mono text-xs uppercase tracking-wide text-texto-fraco underline"
+            className="inline-flex min-h-10 items-center font-mono text-xs uppercase tracking-wide text-texto-fraco underline lg:min-h-0"
           >
             Pular tour
           </button>
@@ -117,7 +117,7 @@ export default function Tour() {
           ) : (
             <a
               href="/api/faceit/login"
-              className="panel-cut-sm border border-destaque px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-destaque hover:bg-destaque/10"
+              className="panel-cut-sm inline-flex min-h-10 shrink-0 items-center border border-destaque px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-destaque hover:bg-destaque/10 lg:min-h-0"
             >
               Vincular
             </a>

@@ -67,7 +67,7 @@ export default function PaginaMapaTaticas({ mapa, onTrocarMapa }) {
 
         {/* Mesmo padrão mobile de Granadas/PaginaMapa: ribbon flex-wrap no topo,
             coluna vertical no desktop (lg:). */}
-        <div className="flex flex-wrap items-end gap-2 lg:block lg:items-stretch lg:gap-0 lg:space-y-4">
+        <div className="flex flex-wrap items-start gap-2 lg:block lg:items-stretch lg:gap-0 lg:space-y-4">
           <div className="w-36 lg:w-auto">
             <p className="mb-1 font-mono text-xs uppercase text-texto-fraco">Trocar mapa</p>
             <Select value={mapa} onChange={(e) => onTrocarMapa(e.target.value)} className="w-full">
@@ -107,7 +107,7 @@ export default function PaginaMapaTaticas({ mapa, onTrocarMapa }) {
             </div>
           </div>
 
-          <div className="w-28 lg:w-auto">
+          <div className="w-auto lg:w-auto">
             <p className="mb-1 font-mono text-xs uppercase text-texto-fraco">Local</p>
             <div className="panel-cut-sm flex overflow-hidden border border-borda font-mono text-xs uppercase">
               {LOCAIS.map(([v, label]) => (

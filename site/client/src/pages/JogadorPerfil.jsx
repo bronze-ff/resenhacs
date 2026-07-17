@@ -309,7 +309,7 @@ export default function JogadorPerfil() {
                       <div>{new Date(r.playedAt ?? '').toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                         <span
                           className={`panel-cut-sm px-1.5 py-0.5 font-display text-[10px] font-bold uppercase ${
                             r.won === true ? 'bg-sucesso/15 text-sucesso' : r.won === false ? 'bg-perigo/15 text-perigo' : 'bg-superficie-alta text-texto-fraco'
@@ -319,7 +319,7 @@ export default function JogadorPerfil() {
                         </span>
                         <span className="font-display text-lg font-bold tabular-nums text-texto">{r.scoreA} : {r.scoreB}</span>
                         <MapIcon map={r.map} size={18} />
-                        <span className="truncate font-mono text-xs text-texto-fraco">{nomeMapa(r.map)}</span>
+                        <span className="min-w-0 truncate font-mono text-xs text-texto-fraco">{nomeMapa(r.map)}</span>
                         <PlataformaBadge source={r.source} className="shrink-0" />
                       </div>
                       <div className="mt-2 grid grid-cols-4 gap-2">

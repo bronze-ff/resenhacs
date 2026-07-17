@@ -81,7 +81,7 @@ function NomeJogador({ p, mostrarTagGrupo = true, className = '' }) {
         target="_blank"
         rel="noreferrer"
         title="Abrir perfil na Steam"
-        className="shrink-0 text-texto-fraco/60 transition-colors hover:text-texto"
+        className="-m-2 shrink-0 p-2 text-texto-fraco/60 transition-colors hover:text-texto lg:m-0 lg:p-0"
         onClick={(e) => e.stopPropagation()}
       >
         <SteamIcon className="h-3.5 w-3.5" />
@@ -232,23 +232,23 @@ function AbaHeadToHead({ matchId, jogadores, jogadorLogado }) {
           <div key={o.steamId} className="panel-cut-sm border border-borda bg-superficie">
             <button
               onClick={() => setExpandido(aberto ? null : o.steamId)}
-              className="flex w-full flex-wrap items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-superficie-alta"
+              className="flex w-full flex-nowrap items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-superficie-alta"
             >
               <span className="flex min-w-0 items-center gap-2 font-mono text-sm">
                 <Avatar p={referencia} />
                 <span className="w-6 shrink-0 text-right font-semibold tabular-nums text-texto">{o.kills}</span>
               </span>
-              <div className="flex h-3 min-w-[80px] flex-1 flex-row-reverse overflow-hidden rounded-sm bg-fundo">
+              <div className="flex h-3 min-w-[36px] flex-1 flex-row-reverse overflow-hidden rounded-sm bg-fundo sm:min-w-[80px]">
                 <div className={`h-full ${corReferencia}`} style={{ width: `${(o.dano / Math.max(o.dano, o.danoRecebido, 1)) * 100}%` }} />
               </div>
               <span className="shrink-0 font-mono text-[10px] uppercase tracking-wide text-texto-fraco">dano</span>
-              <div className="flex h-3 min-w-[80px] flex-1 overflow-hidden rounded-sm bg-fundo">
+              <div className="flex h-3 min-w-[36px] flex-1 overflow-hidden rounded-sm bg-fundo sm:min-w-[80px]">
                 <div className={`h-full ${corAdversario}`} style={{ width: `${(o.danoRecebido / Math.max(o.dano, o.danoRecebido, 1)) * 100}%` }} />
               </div>
               <span className="flex min-w-0 items-center gap-2 font-mono text-sm">
                 <span className="w-6 shrink-0 tabular-nums text-texto">{o.deaths}</span>
                 <Avatar p={o} />
-                <span className="truncate text-texto">{o.nick || o.steamId}</span>
+                <span className="min-w-0 truncate text-texto">{o.nick || o.steamId}</span>
               </span>
               <SetaExpandir aberto={aberto} />
             </button>
@@ -428,7 +428,7 @@ function Scoreboard({ time, jogadores, matchId, podePromover, onPromover, promov
                       <button
                         onClick={() => setExpandido(aberto ? null : p.steamId)}
                         title="Ver kills por arma nessa partida"
-                        className="text-texto-fraco transition-colors hover:text-destaque"
+                        className="-m-2 p-2 text-texto-fraco transition-colors hover:text-destaque lg:m-0 lg:p-0"
                       >
                         <SetaExpandir aberto={aberto} />
                       </button>
@@ -902,13 +902,13 @@ function FormClipe({ matchId, jogadores, onAdicionado }) {
         value={url}
         onChange={(e) => setUrl(e.target.value)}
         placeholder="Link do Allstar/Medal/YouTube"
-        className="panel-cut-sm flex-1 border border-borda bg-fundo px-3 py-2 font-mono text-sm"
+        className="panel-cut-sm min-h-10 flex-1 border border-borda bg-fundo px-3 py-2 font-mono text-sm lg:min-h-0"
       />
       <input
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         placeholder="Título (opcional)"
-        className="panel-cut-sm w-40 border border-borda bg-fundo px-3 py-2 font-mono text-sm"
+        className="panel-cut-sm min-h-10 w-full border border-borda bg-fundo px-3 py-2 font-mono text-sm sm:w-40 lg:min-h-0"
       />
       <button
         type="submit"

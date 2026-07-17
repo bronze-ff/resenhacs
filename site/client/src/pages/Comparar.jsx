@@ -103,13 +103,13 @@ export default function Comparar() {
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-        <div className="flex items-center gap-3">
-          <Select value={a} onChange={(e) => setA(e.target.value)} className="min-w-0 flex-1 sm:w-48 sm:flex-none">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <Select value={a} onChange={(e) => setA(e.target.value)} className="w-full sm:w-48 sm:flex-none">
             <option value="">Jogador A…</option>
             {jogadores.map((j) => <option key={j.steamId} value={j.steamId}>{j.nick || j.steamId}</option>)}
           </Select>
-          <span className="shrink-0 font-display text-texto-fraco">vs</span>
-          <Select value={b} onChange={(e) => setB(e.target.value)} className="min-w-0 flex-1 sm:w-48 sm:flex-none">
+          <span className="shrink-0 text-center font-display text-texto-fraco sm:text-left">vs</span>
+          <Select value={b} onChange={(e) => setB(e.target.value)} className="w-full sm:w-48 sm:flex-none">
             <option value="">Jogador B…</option>
             {jogadores.map((j) => <option key={j.steamId} value={j.steamId}>{j.nick || j.steamId}</option>)}
           </Select>

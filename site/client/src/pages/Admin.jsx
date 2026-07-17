@@ -168,8 +168,8 @@ export default function Admin() {
         <div className="space-y-2">
           {videosCurso?.map((v) => (
             <Card key={v.slug} className="flex items-center justify-between gap-3 px-3 py-2">
-              <div>
-                <p className="font-display text-sm font-semibold uppercase text-texto">{v.titulo}</p>
+              <div className="min-w-0">
+                <p className="truncate font-display text-sm font-semibold uppercase text-texto">{v.titulo}</p>
                 <p className="font-mono text-[10px] uppercase text-texto-fraco/70">{v.slug}.mp4</p>
               </div>
               <label className="panel-cut-sm flex min-h-10 shrink-0 cursor-pointer items-center border border-borda px-3 py-1 font-mono text-xs uppercase tracking-wide text-texto-fraco transition-colors hover:border-destaque/50 hover:text-destaque lg:min-h-0">

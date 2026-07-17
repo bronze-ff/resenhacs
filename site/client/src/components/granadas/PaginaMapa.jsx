@@ -109,7 +109,7 @@ export default function PaginaMapa({ mapa, onTrocarMapa }) {
             </div>
           </div>
 
-          <div className="w-28 lg:w-auto">
+          <div className="w-36 lg:w-auto">
             <p className="mb-1 font-mono text-xs uppercase text-texto-fraco">Chamadas</p>
             <div className="panel-cut-sm flex overflow-hidden border border-borda font-mono text-xs uppercase">
               {NIVEIS_CALLOUT.map(([v, label]) => (
