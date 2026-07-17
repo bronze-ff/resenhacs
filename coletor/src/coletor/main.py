@@ -657,6 +657,9 @@ def cmd_avatares(config, conn):
     return len(mapa)
 
 
+_MAX_TENTATIVAS_DEMO_FACEIT = 3
+
+
 def cmd_sincronizar_faceit(config, conn, limite=10):
     """FACEIT Fase B: descobre partidas 5v5 novas de cada membro vinculado (Fase A) e
     processa até `limite` da fila por rodada — demo no pipeline completo quando existe,
@@ -695,7 +698,7 @@ def cmd_sincronizar_faceit(config, conn, limite=10):
     vinculados_por_steam = {s: (f, g) for s, f, g in vinculados}
     ingeridas_por_membro = {}
     total = 0
-    for faceit_match_id, steam_id64, group_id in dbmod.listar_faceit_pendentes(conn, limite):
+    for faceit_match_id, steam_id64, group_id, tentativas in dbmod.listar_faceit_pendentes(conn, limite):
         try:
             detalhes = faceit.detalhes_partida(config.faceit_api_key, faceit_match_id)
             stats = faceit.stats_partida(config.faceit_api_key, faceit_match_id)
@@ -720,7 +723,19 @@ def cmd_sincronizar_faceit(config, conn, limite=10):
                         )
                 except Exception as e:  # noqa: BLE001
                     conn.rollback()
-                    print(f"  {faceit_match_id}: demo falhou ({e}) — caindo pro stats-only")
+                    if tentativas + 1 < _MAX_TENTATIVAS_DEMO_FACEIT:
+                        dbmod.falhar_faceit_pendente(
+                            conn, faceit_match_id, e, max_tentativas=_MAX_TENTATIVAS_DEMO_FACEIT,
+                        )
+                        print(
+                            f"  {faceit_match_id}: demo falhou ({e}) — tentativa "
+                            f"{tentativas + 1}/{_MAX_TENTATIVAS_DEMO_FACEIT}, retry na proxima rodada"
+                        )
+                        continue
+                    print(
+                        f"  {faceit_match_id}: demo falhou apos {_MAX_TENTATIVAS_DEMO_FACEIT} "
+                        f"tentativas ({e}) — caindo pro stats-only definitivo"
+                    )
 
             if match_id is None:
                 parsed = faceit.montar_parsed_stats_only(detalhes, stats)

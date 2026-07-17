@@ -626,7 +626,7 @@ def enfileirar_faceit(conn, faceit_match_id, steam_id64, group_id):
 def listar_faceit_pendentes(conn, limite=10):
     with conn.cursor() as cur:
         cur.execute(
-            "select faceit_match_id, steam_id64, group_id from faceit_pendentes "
+            "select faceit_match_id, steam_id64, group_id, tentativas from faceit_pendentes "
             "where status = 'pending' order by created_at limit %s",
             (limite,),
         )
