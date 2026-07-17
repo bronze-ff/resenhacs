@@ -65,8 +65,8 @@ function CardPartida({ m }) {
     <Card as={Link} interativo to={`/partida/${m.id}`} className="block p-4 hover:bg-superficie-alta">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <MapIcon map={m.map} size={44} />
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-          <span className="truncate font-display text-lg font-bold uppercase tracking-wide text-texto">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+          <span className="w-full truncate font-display text-lg font-bold uppercase tracking-wide text-texto lg:w-auto">
             {nomeMapa(m.map)}
           </span>
           {m.source === 'pro' && <Badge tom="destaque" className="shrink-0">PRO</Badge>}
@@ -287,24 +287,24 @@ export default function Feed() {
             {jogadores.map((j) => <option key={j.steamId} value={j.steamId}>{j.nick}</option>)}
           </Select>
         </div>
-        <div className="flex flex-wrap items-center gap-3 lg:ml-auto">
-          <div className="panel-cut-sm flex overflow-hidden border border-borda font-mono text-xs uppercase">
+        <div className="flex flex-col gap-2 lg:ml-auto lg:flex-row lg:flex-wrap lg:items-center lg:gap-3">
+          <div className="panel-cut-sm flex w-full overflow-hidden border border-borda font-mono text-xs uppercase lg:w-auto">
             {[['', 'Tudo'], ['vitoria', 'Vitórias'], ['derrota', 'Derrotas']].map(([v, label]) => (
               <button
                 key={v}
                 onClick={() => setResultado(v)}
-                className={`min-h-10 px-3 py-1.5 transition-colors lg:min-h-0 ${resultado === v ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'}`}
+                className={`flex-1 min-h-10 px-3 py-1.5 transition-colors lg:min-h-0 lg:flex-none ${resultado === v ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'}`}
               >
                 {label}
               </button>
             ))}
           </div>
-          <div className="panel-cut-sm flex overflow-hidden border border-borda font-mono text-xs uppercase">
+          <div className="panel-cut-sm flex w-full overflow-hidden border border-borda font-mono text-xs uppercase lg:w-auto">
             {[['', 'Todas'], ['valve_mm', 'Auto'], ['upload', 'Manual']].map(([v, label]) => (
               <button
                 key={v}
                 onClick={() => setOrigem(v)}
-                className={`min-h-10 px-3 py-1.5 transition-colors lg:min-h-0 ${origem === v ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'}`}
+                className={`flex-1 min-h-10 px-3 py-1.5 transition-colors lg:min-h-0 lg:flex-none ${origem === v ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'}`}
               >
                 {label}
               </button>

@@ -266,7 +266,7 @@ export default function Shell({ children }) {
           carrossel de Resenhas) impede o flex-item de encolher, alarga o body além do
           viewport e o iOS reduz o zoom da página INTEIRA pra caber (tudo fica miúdo). */}
       <div className="min-w-0 flex-1">
-        <header className="flex items-center justify-between gap-3 border-b border-borda bg-superficie/60 px-4 py-3 backdrop-blur lg:justify-end lg:px-6">
+        <header className="flex items-center justify-between gap-2 border-b border-borda bg-superficie/60 px-3 py-3 backdrop-blur lg:justify-end lg:gap-3 lg:px-6">
           {/* Sem hambúrguer aqui: a barra inferior mobile cobre as rotas
               principais e o botão "Mais" abre este mesmo drawer, então um
               segundo gatilho no header seria redundante. */}
@@ -275,7 +275,7 @@ export default function Shell({ children }) {
               Resenha<span className="text-destaque">.</span>
             </h1>
           </div>
-          <div className="flex min-w-0 items-center gap-3">
+          <div className="flex min-w-0 items-center gap-1.5 lg:gap-3">
             <SeletorGrupo grupoAtivoId={jogador?.grupoAtivoId} />
             <a href={`/jogador/${jogador?.steamId}`} title="Meu perfil" className="group flex min-w-0 shrink-0 items-center gap-2">
               {jogador?.avatarUrl && (
@@ -285,26 +285,26 @@ export default function Shell({ children }) {
                   className="panel-cut-sm h-8 w-8 shrink-0 border border-borda object-cover transition-colors group-hover:border-destaque/60"
                 />
               )}
-              <span className="max-w-[80px] truncate font-mono text-sm text-texto transition-colors group-hover:text-destaque sm:max-w-none">{jogador?.nick}</span>
+              <span className="max-w-[64px] truncate font-mono text-sm text-texto transition-colors group-hover:text-destaque sm:max-w-none">{jogador?.nick}</span>
             </a>
             <a
               href="/apoie"
               title="Apoie o Resenha"
-              className="panel-cut-sm flex min-h-10 shrink-0 items-center gap-1.5 border border-destaque px-2.5 py-1 text-xs uppercase tracking-wide text-destaque transition-colors hover:bg-destaque/10 lg:min-h-0"
+              className="panel-cut-sm flex min-h-10 shrink-0 items-center gap-1.5 border border-destaque px-2 py-1 text-xs uppercase tracking-wide text-destaque transition-colors hover:bg-destaque/10 lg:min-h-0 lg:px-2.5"
             >
-              <span className="shrink-0">{NAV_ICONES.apoie}</span>
+              <span className="shrink-0 [&>svg]:h-5 [&>svg]:w-5 lg:[&>svg]:h-6 lg:[&>svg]:w-6">{NAV_ICONES.apoie}</span>
               <span className="hidden lg:inline">Apoie</span>
             </a>
             <a
               href="/tour"
               title="Como usar o Resenha"
-              className="panel-cut-sm flex min-h-10 shrink-0 items-center border border-borda px-2.5 py-1 text-xs uppercase tracking-wide text-texto-fraco transition-colors hover:border-destaque/50 hover:text-destaque lg:min-h-0"
+              className="panel-cut-sm flex min-h-10 shrink-0 items-center border border-borda px-2 py-1 text-xs uppercase tracking-wide text-texto-fraco transition-colors hover:border-destaque/50 hover:text-destaque lg:min-h-0 lg:px-2.5"
             >
               Ajuda
             </a>
             <button
               onClick={sair}
-              className="panel-cut-sm min-h-10 shrink-0 border border-borda px-2.5 py-1 text-xs uppercase tracking-wide text-texto-fraco transition-colors hover:border-perigo/50 hover:text-perigo lg:min-h-0"
+              className="panel-cut-sm min-h-10 shrink-0 border border-borda px-2 py-1 text-xs uppercase tracking-wide text-texto-fraco transition-colors hover:border-perigo/50 hover:text-perigo lg:min-h-0 lg:px-2.5"
             >
               Sair
             </button>
@@ -387,7 +387,7 @@ function SeletorGrupo({ grupoAtivoId }) {
 
   if (grupos.length <= 1) return null
   return (
-    <Select value={grupoAtivoId ?? ''} onChange={trocar} selectClassName="py-1 pr-7 text-xs">
+    <Select value={grupoAtivoId ?? ''} onChange={trocar} className="max-w-[104px] lg:max-w-[180px]" selectClassName="py-1 pr-7 text-xs">
       {grupos.map((g) => (
         <option key={g.id} value={g.id}>{g.nome}</option>
       ))}

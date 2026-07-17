@@ -139,7 +139,7 @@ export default function Select({ value, onChange, children, className = '', sele
             role="listbox"
             tabIndex={-1}
             onKeyDown={aoTeclarPainel}
-            style={{ position: 'fixed', top: posicao.top, left: posicao.left, minWidth: posicao.width, zIndex: 60 }}
+            style={{ position: 'fixed', top: posicao.top, left: posicao.left, minWidth: posicao.width, maxWidth: 'calc(100vw - 1rem)', zIndex: 60 }}
             className="panel-cut-sm max-h-60 overflow-y-auto border border-borda bg-superficie py-1 font-mono text-sm shadow-[0_8px_32px_rgba(0,0,0,0.45)] focus:outline-none"
           >
             {opcoes.map((o, i) => (
@@ -149,9 +149,9 @@ export default function Select({ value, onChange, children, className = '', sele
                 aria-selected={o.value === selecionada?.value}
                 onMouseEnter={() => setAtivo(i)}
                 onClick={() => escolher(o)}
-                className={`flex cursor-pointer items-center justify-between gap-3 px-3 py-2 ${i === ativo ? 'bg-superficie-alta' : ''} ${o.value === selecionada?.value ? 'text-destaque' : 'text-texto'}`}
+                className={`flex min-h-10 cursor-pointer items-center justify-between gap-3 px-3 py-2 lg:min-h-0 ${i === ativo ? 'bg-superficie-alta' : ''} ${o.value === selecionada?.value ? 'text-destaque' : 'text-texto'}`}
               >
-                <span className="truncate">{o.label}</span>
+                <span className="min-w-0 truncate">{o.label}</span>
                 {o.value === selecionada?.value && (
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="h-3.5 w-3.5 shrink-0">
                     <path d="M5 13l4 4L19 7" />
