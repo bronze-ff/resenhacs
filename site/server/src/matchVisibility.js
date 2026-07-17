@@ -29,3 +29,15 @@ export function partidaVisivelPredicado(alias, groupId, params) {
   params.push(groupId)
   return partidaVisivelExpr(alias, `$${params.length}`)
 }
+
+// "Partida pública": tem ao menos um jogador que optou pelo ranking público (players.ranking_publico).
+// Usado SÓ pra ABRIR o detalhe de uma partida alcançada por um perfil público — o jogador liberou
+// aparecer publicamente, e o Filippe decidiu (2026-07-17) que isso torna as partidas dele abríveis
+// com o scoreboard completo. NÃO usar no feed (o feed continua escopado por participação/grupo);
+// só nos endpoints de detalhe de UMA partida. Não consome param.
+export function partidaPublicaExpr(alias) {
+  return `exists (
+    select 1 from match_players mvp
+    join players pvp on pvp.steam_id64 = mvp.steam_id64
+    where pvp.ranking_publico = true and mvp.match_id = ${alias}.id)`
+}

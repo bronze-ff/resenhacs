@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { keyFromR2Url, streamObject } from '../r2.js'
-import { partidaVisivelExpr } from '../matchVisibility.js'
+import { partidaVisivelExpr, partidaPublicaExpr } from '../matchVisibility.js'
 
 // Categoria de arma pro Head to Head (estilo Leetify: agrupa kills por família de
 // arma em vez de listar cada uma). Faca/granadas caem em "Outras".
@@ -128,7 +128,7 @@ export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Cli
   router.get('/:id', requireAuth, requireGroupMember, async (req, res) => {
     const { id } = req.params
     const matchQ = await db.query(
-      `select id, map, played_at, score_a, score_b, source, status, demo_url, replay_url from matches where id = $1 and ${partidaVisivelExpr('matches', '$2')}`,
+      `select id, map, played_at, score_a, score_b, source, status, demo_url, replay_url from matches where id = $1 and (${partidaVisivelExpr('matches', '$2')} or ${partidaPublicaExpr('matches')})`,
       [id, req.groupId],
     )
     if (matchQ.rows.length === 0) return res.status(404).json({ erro: 'Partida não encontrada' })
@@ -285,7 +285,7 @@ export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Cli
   router.get('/:id/jogador/:steamId/detalhe', requireAuth, requireGroupMember, async (req, res) => {
     const { id, steamId } = req.params
     const matchQ = await db.query(
-      `select id from matches where id = $1 and ${partidaVisivelExpr('matches', '$2')}`,
+      `select id from matches where id = $1 and (${partidaVisivelExpr('matches', '$2')} or ${partidaPublicaExpr('matches')})`,
       [id, req.groupId],
     )
     if (matchQ.rows.length === 0) return res.status(404).json({ erro: 'Partida não encontrada' })
@@ -351,7 +351,7 @@ export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Cli
     const { id, steamId } = req.params
     const jogadorQ = await db.query(
       `select mp.team from matches m join match_players mp on mp.match_id = m.id
-       where m.id = $1 and ${partidaVisivelExpr('m', '$2')} and mp.steam_id64 = $3`,
+       where m.id = $1 and (${partidaVisivelExpr('m', '$2')} or ${partidaPublicaExpr('m')}) and mp.steam_id64 = $3`,
       [id, req.groupId, steamId],
     )
     if (jogadorQ.rows.length === 0) return res.status(404).json({ erro: 'Partida ou jogador não encontrado' })
@@ -440,7 +440,7 @@ export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Cli
   router.get('/:id/replay', requireAuth, requireGroupMember, async (req, res) => {
     if (!r2Client) return res.status(503).json({ erro: 'Arquivamento (R2) não configurado' })
     const { rows } = await db.query(
-      `select replay_url from matches where id = $1 and ${partidaVisivelExpr('matches', '$2')}`,
+      `select replay_url from matches where id = $1 and (${partidaVisivelExpr('matches', '$2')} or ${partidaPublicaExpr('matches')})`,
       [req.params.id, req.groupId],
     )
     const key = keyFromR2Url(rows[0]?.replay_url, r2Bucket)

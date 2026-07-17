@@ -424,6 +424,10 @@ export function createProfileRouter({ db, requireAuth, requireGroupMember }) {
     const mapaParams = [steamId]
     const mapaPeriodo = periodoWhere(from, to, mapaParams)
     const mapaGrupo = grupoWhere(grupoPerfil, mapaParams)
+    // recentes/destaques seguem grupoPerfil: no modo público (grupoPerfil = null) listam TODAS as
+    // partidas do alvo, não só as compartilhadas — o Filippe decidiu (2026-07-17) que quem optou
+    // pelo ranking público tem o histórico visível, e o detalhe da partida abre pela regra
+    // partidaPublicaExpr. Em modo normal grupoPerfil = req.groupId (só as visíveis ao grupo).
     const recentesParams = [steamId]
     const recentesPeriodo = periodoWhere(from, to, recentesParams)
     const recentesGrupo = grupoWhere(grupoPerfil, recentesParams)
@@ -444,19 +448,18 @@ export function createProfileRouter({ db, requireAuth, requireGroupMember }) {
          where mp.steam_id64 = $1${mapaPeriodo}${mapaGrupo} group by m.map order by partidas desc`,
         mapaParams,
       ),
-      // Modo público não devolve recentes/destaques/sinergia/estilo — ver comentário no gate acima.
-      publico
-        ? Promise.resolve(vazio)
-        : db.query(
-            `select m.id, m.map, m.played_at, m.score_a, m.score_b, m.source,
-                    mp.kills, mp.deaths, mp.assists, mp.rating, mp.won,
-                    mp.damage, mp.rounds_played, mp.headshot_kills,
-                    mp.premier_rating_before, mp.premier_rating_after
-             from match_players mp join matches m on m.id = mp.match_id
-             where mp.steam_id64 = $1 and m.status = 'parsed'${recentesPeriodo}${recentesGrupo}
-             order by m.played_at desc nulls last limit 20`,
-            recentesParams,
-          ),
+      // recentes: mesmo no modo público, lista as partidas VISÍVEIS ao viewer (recentesGrupo já é
+      // escopado por req.groupId), pra ele clicar e abrir o detalhe das que jogaram juntos.
+      db.query(
+        `select m.id, m.map, m.played_at, m.score_a, m.score_b, m.source,
+                mp.kills, mp.deaths, mp.assists, mp.rating, mp.won,
+                mp.damage, mp.rounds_played, mp.headshot_kills,
+                mp.premier_rating_before, mp.premier_rating_after
+         from match_players mp join matches m on m.id = mp.match_id
+         where mp.steam_id64 = $1 and m.status = 'parsed'${recentesPeriodo}${recentesGrupo}
+         order by m.played_at desc nulls last limit 20`,
+        recentesParams,
+      ),
       // Sinergia ESCOPADA ao grupo ativo pela regra de visibilidade por participação: recomputa as
       // duplas direto de match_players (join em matches visíveis ao grupo) em vez de ler a view
       // synergy_pairs, que é GLOBAL (agrega TODOS os grupos). Sem isso, o perfil vazava o grafo
@@ -486,17 +489,16 @@ export function createProfileRouter({ db, requireAuth, requireGroupMember }) {
       // Estilo é relativo à média do grupo — sem grupo (modo público) não há recorte
       // honesto pra comparar; devolve null e o front só não renderiza a tag.
       publico ? Promise.resolve(null) : estiloDoJogador(db, steamId, from, to, grupoPerfil),
-      // "Em qual partida foi esse clutch/ace mesmo?" — lista de Highlights com link
-      // pra Partida (que já sabe pular pro momento exato do Replay 2D).
-      publico
-        ? Promise.resolve(vazio)
-        : db.query(
-            `select h.id, h.match_id, h.round_number, h.kind, h.description, m.map, m.played_at
-             from highlights h join matches m on m.id = h.match_id
-             where h.steam_id64 = $1${destaquesPeriodo}${destaquesGrupo}
-             order by m.played_at desc nulls last limit 100`,
-            destaquesParams,
-          ),
+      // "Em qual partida foi esse clutch/ace mesmo?" — lista de Highlights com link pra Partida.
+      // No modo público, destaquesGrupo (grupoPerfil = null) traz os de TODAS as partidas dele,
+      // clicáveis (o detalhe abre via partidaPublicaExpr).
+      db.query(
+        `select h.id, h.match_id, h.round_number, h.kind, h.description, m.map, m.played_at
+         from highlights h join matches m on m.id = h.match_id
+         where h.steam_id64 = $1${destaquesPeriodo}${destaquesGrupo}
+         order by m.played_at desc nulls last limit 100`,
+        destaquesParams,
+      ),
       armasDoJogador(db, steamId, from, to, grupoPerfil),
       economiaDoJogador(db, steamId, from, to, grupoPerfil),
       db.query(

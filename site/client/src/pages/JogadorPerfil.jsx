@@ -295,9 +295,9 @@ export default function JogadorPerfil() {
       )}
 
       {/* 3. Histórico de partidas — o que mais se consulta, logo depois dos tiles.
-          Escondido no perfil público: as Partidas são do grupo DELE (links quebrariam
-          com 403) e o backend já devolve a lista vazia. */}
-      {!perfilPublico && (
+          No perfil público também aparece: o alvo optou pelo ranking público, então o backend
+          devolve as partidas dele e o detalhe abre (partidaPublicaExpr). Só some se vier vazio. */}
+      {(!perfilPublico || recentes.length > 0) && (
       <section>
         <SectionHeader titulo={<>
           Partidas recentes

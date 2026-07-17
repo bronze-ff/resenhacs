@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { partidaVisivelExpr, partidaVisivelWhere, partidaVisivelPredicado } from '../src/matchVisibility.js'
+import { partidaVisivelExpr, partidaVisivelWhere, partidaVisivelPredicado, partidaPublicaExpr } from '../src/matchVisibility.js'
 
 describe('partidaVisivelExpr', () => {
   it('monta a regra: pertence ao grupo OU tem membro do grupo na partida', () => {
@@ -28,6 +28,18 @@ describe('partidaVisivelExpr', () => {
     // A troca não pode corromper os aliases internos do exists (gmv./mv. não contêm "m.").
     expect(trocado).toContain('group_members gmv')
     expect(trocado).toContain('mv.steam_id64 = gmv.steam_id64')
+  })
+})
+
+describe('partidaPublicaExpr', () => {
+  it('exige um jogador com ranking_publico na partida (pra abrir detalhe via perfil público)', () => {
+    const sql = partidaPublicaExpr('matches')
+    expect(sql).toContain('exists (')
+    expect(sql).toContain('players pvp')
+    expect(sql).toContain('pvp.ranking_publico = true')
+    expect(sql).toContain('mvp.match_id = matches.id')
+    // Não consome param (não depende de grupo).
+    expect(sql).not.toContain('$')
   })
 })
 
