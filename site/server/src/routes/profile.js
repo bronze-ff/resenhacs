@@ -23,7 +23,11 @@ function periodoWhere(from, to, params) {
 }
 
 // Escopa por grupo ativo — mesma convenção do periodoWhere (anexa aos params, devolve o SQL).
+// groupId null = modo "perfil público": agrega TODAS as Partidas do alvo, sem filtro de
+// grupo — mesmo recorte do /api/ranking-publico, senão os números do perfil não bateriam
+// com os do ranking de onde a pessoa clicou.
 function grupoWhere(groupId, params) {
+  if (!groupId) return ''
   params.push(groupId)
   return ` and m.group_id = $${params.length}`
 }
@@ -138,10 +142,12 @@ async function statsAgregados(db, steamId, from, to, groupId) {
 // Melhor sequência de vitórias consecutivas, sempre no histórico INTEIRO do grupo (badge
 // de conquista não deve sumir/reaparecer conforme o filtro de período da tela).
 async function melhorSequencia(db, steamId, groupId) {
+  const params = [steamId]
+  const grupo = grupoWhere(groupId, params)
   const { rows } = await db.query(
     `select mp.won from match_players mp join matches m on m.id = mp.match_id
-     where mp.steam_id64 = $1 and m.status = 'parsed' and m.group_id = $2 order by m.played_at asc nulls first`,
-    [steamId, groupId],
+     where mp.steam_id64 = $1 and m.status = 'parsed'${grupo} order by m.played_at asc nulls first`,
+    params,
   )
   return melhorSequenciaDeVitorias(rows.map((r) => r.won))
 }
@@ -360,7 +366,7 @@ export function createProfileRouter({ db, requireAuth, requireGroupMember }) {
     const { from, to } = req.query
     const playerQ = await db.query(
       `select p.steam_id64, p.nick, coalesce(p.avatar_url, sa.avatar_url) as avatar_url,
-              p.faceit_nick, p.faceit_elo, p.faceit_skill_level
+              p.faceit_nick, p.faceit_elo, p.faceit_skill_level, p.ranking_publico
        from players p
        left join steam_avatares sa on sa.steam_id64 = p.steam_id64
        where p.steam_id64 = $1`,
@@ -393,22 +399,31 @@ export function createProfileRouter({ db, requireAuth, requireGroupMember }) {
                        where mp.steam_id64 = $1 and m.group_id = $2)) as tem`,
       [steamId, req.groupId],
     )
-    if (!presenca.rows[0]?.tem) return res.status(404).json({ erro: 'Jogador não encontrado' })
+    const temPresenca = Boolean(presenca.rows[0]?.tem)
+    // Exceção ao gate: o alvo OPTOU por aparecer no ranking público (ranking_publico) — então
+    // o perfil abre em "modo público" pra qualquer logado: stats agregados de TODAS as
+    // Partidas dele (grupoPerfil = null, mesmo recorte do ranking público), mas SEM
+    // recentes/destaques/sinergia/estilo, que linkariam Partidas e o grafo social do grupo
+    // alheio (essas continuam fechadas — as Partidas em si seguem sob requireGroupMember).
+    const publico = !temPresenca && jogador.ranking_publico === true
+    if (!temPresenca && !publico) return res.status(404).json({ erro: 'Jogador não encontrado' })
+    const grupoPerfil = publico ? null : req.groupId
 
     const mapaParams = [steamId]
     const mapaPeriodo = periodoWhere(from, to, mapaParams)
-    const mapaGrupo = grupoWhere(req.groupId, mapaParams)
+    const mapaGrupo = grupoWhere(grupoPerfil, mapaParams)
     const recentesParams = [steamId]
     const recentesPeriodo = periodoWhere(from, to, recentesParams)
-    const recentesGrupo = grupoWhere(req.groupId, recentesParams)
+    const recentesGrupo = grupoWhere(grupoPerfil, recentesParams)
     const destaquesParams = [steamId]
     const destaquesPeriodo = periodoWhere(from, to, destaquesParams)
-    const destaquesGrupo = grupoWhere(req.groupId, destaquesParams)
+    const destaquesGrupo = grupoWhere(grupoPerfil, destaquesParams)
     const premierParams = [steamId]
-    const premierGrupo = grupoWhere(req.groupId, premierParams)
+    const premierGrupo = grupoWhere(grupoPerfil, premierParams)
+    const vazio = { rows: [] }
 
     const [stats, porMapa, recentes, sinergia, evolucao, statsGerais, sequencia, estilo, destaques, armas, economia, premierRow] = await Promise.all([
-      statsAgregados(db, steamId, from, to, req.groupId),
+      statsAgregados(db, steamId, from, to, grupoPerfil),
       db.query(
         `select m.map, count(*)::int as partidas,
                 coalesce(sum(case when mp.won then 1 else 0 end), 0)::int as vitorias,
@@ -417,51 +432,60 @@ export function createProfileRouter({ db, requireAuth, requireGroupMember }) {
          where mp.steam_id64 = $1${mapaPeriodo}${mapaGrupo} group by m.map order by partidas desc`,
         mapaParams,
       ),
-      db.query(
-        `select m.id, m.map, m.played_at, m.score_a, m.score_b, m.source,
-                mp.kills, mp.deaths, mp.assists, mp.rating, mp.won,
-                mp.damage, mp.rounds_played, mp.headshot_kills,
-                mp.premier_rating_before, mp.premier_rating_after
-         from match_players mp join matches m on m.id = mp.match_id
-         where mp.steam_id64 = $1 and m.status = 'parsed'${recentesPeriodo}${recentesGrupo}
-         order by m.played_at desc nulls last limit 20`,
-        recentesParams,
-      ),
+      // Modo público não devolve recentes/destaques/sinergia/estilo — ver comentário no gate acima.
+      publico
+        ? Promise.resolve(vazio)
+        : db.query(
+            `select m.id, m.map, m.played_at, m.score_a, m.score_b, m.source,
+                    mp.kills, mp.deaths, mp.assists, mp.rating, mp.won,
+                    mp.damage, mp.rounds_played, mp.headshot_kills,
+                    mp.premier_rating_before, mp.premier_rating_after
+             from match_players mp join matches m on m.id = mp.match_id
+             where mp.steam_id64 = $1 and m.status = 'parsed'${recentesPeriodo}${recentesGrupo}
+             order by m.played_at desc nulls last limit 20`,
+            recentesParams,
+          ),
       // Sinergia ESCOPADA ao grupo ativo: recomputa as duplas direto de match_players (join em
       // matches com group_id = $2) em vez de ler a view synergy_pairs, que é GLOBAL (agrega TODOS
       // os grupos). Sem isso, o perfil vazava o grafo social (com quem cada jogador joga) de
       // grupos alheios pra qualquer conta logada.
-      db.query(
-        `select p.steam_id64, p.nick, coalesce(p.avatar_url, sa.avatar_url) as avatar_url,
-                count(*)::int as partidas,
-                count(*) filter (where mp1.won)::int as vitorias
-         from match_players mp1
-         join matches m on m.id = mp1.match_id and m.group_id = $2
-         join match_players mp2 on mp2.match_id = mp1.match_id and mp2.team = mp1.team
-           and mp2.steam_id64 <> mp1.steam_id64
-         join players p on p.steam_id64 = mp2.steam_id64
-         left join steam_avatares sa on sa.steam_id64 = mp2.steam_id64
-         where mp1.steam_id64 = $1
-         group by p.steam_id64, p.nick, p.avatar_url, sa.avatar_url
-         order by partidas desc`,
-        [steamId, req.groupId],
-      ),
-      evolucaoRating(db, steamId, from, to, req.groupId),
+      publico
+        ? Promise.resolve(vazio)
+        : db.query(
+            `select p.steam_id64, p.nick, coalesce(p.avatar_url, sa.avatar_url) as avatar_url,
+                    count(*)::int as partidas,
+                    count(*) filter (where mp1.won)::int as vitorias
+             from match_players mp1
+             join matches m on m.id = mp1.match_id and m.group_id = $2
+             join match_players mp2 on mp2.match_id = mp1.match_id and mp2.team = mp1.team
+               and mp2.steam_id64 <> mp1.steam_id64
+             join players p on p.steam_id64 = mp2.steam_id64
+             left join steam_avatares sa on sa.steam_id64 = mp2.steam_id64
+             where mp1.steam_id64 = $1
+             group by p.steam_id64, p.nick, p.avatar_url, sa.avatar_url
+             order by partidas desc`,
+            [steamId, req.groupId],
+          ),
+      evolucaoRating(db, steamId, from, to, grupoPerfil),
       // Badges são conquista de carreira — sempre no histórico INTEIRO do grupo, não no período filtrado.
-      statsAgregados(db, steamId, undefined, undefined, req.groupId),
-      melhorSequencia(db, steamId, req.groupId),
-      estiloDoJogador(db, steamId, from, to, req.groupId),
+      statsAgregados(db, steamId, undefined, undefined, grupoPerfil),
+      melhorSequencia(db, steamId, grupoPerfil),
+      // Estilo é relativo à média do grupo — sem grupo (modo público) não há recorte
+      // honesto pra comparar; devolve null e o front só não renderiza a tag.
+      publico ? Promise.resolve(null) : estiloDoJogador(db, steamId, from, to, grupoPerfil),
       // "Em qual partida foi esse clutch/ace mesmo?" — lista de Highlights com link
       // pra Partida (que já sabe pular pro momento exato do Replay 2D).
-      db.query(
-        `select h.id, h.match_id, h.round_number, h.kind, h.description, m.map, m.played_at
-         from highlights h join matches m on m.id = h.match_id
-         where h.steam_id64 = $1${destaquesPeriodo}${destaquesGrupo}
-         order by m.played_at desc nulls last limit 100`,
-        destaquesParams,
-      ),
-      armasDoJogador(db, steamId, from, to, req.groupId),
-      economiaDoJogador(db, steamId, from, to, req.groupId),
+      publico
+        ? Promise.resolve(vazio)
+        : db.query(
+            `select h.id, h.match_id, h.round_number, h.kind, h.description, m.map, m.played_at
+             from highlights h join matches m on m.id = h.match_id
+             where h.steam_id64 = $1${destaquesPeriodo}${destaquesGrupo}
+             order by m.played_at desc nulls last limit 100`,
+            destaquesParams,
+          ),
+      armasDoJogador(db, steamId, from, to, grupoPerfil),
+      economiaDoJogador(db, steamId, from, to, grupoPerfil),
       db.query(
         `select mp.premier_rating_after
          from match_players mp join matches m on m.id = mp.match_id
@@ -487,6 +511,9 @@ export function createProfileRouter({ db, requireAuth, requireGroupMember }) {
         faceitElo: jogador.faceit_elo ?? null,
         faceitSkillLevel: jogador.faceit_skill_level ?? null,
       },
+      // Avisa o front que é uma visão pública (cross-grupo) — ele esconde as seções que
+      // viriam vazias (recentes/destaques/sinergia) em vez de mostrar "nenhuma partida".
+      perfilPublico: publico,
       premierAtual: premierRow.rows[0]?.premier_rating_after != null ? Number(premierRow.rows[0].premier_rating_after) : null,
       stats,
       evolucao,

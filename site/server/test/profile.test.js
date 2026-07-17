@@ -7,13 +7,13 @@ const config = { jwtSecret: 's', appUrl: 'http://localhost:5173', isProduction: 
 const cookie = `resenha_token=${signToken({ steamId: '76561198000000009', isSuperAdmin: false }, config.jwtSecret)}`
 const GRUPO = '11111111-1111-1111-1111-111111111111'
 
-function appWith(handlers) {
+function appWith(handlers, { temPresenca = true } = {}) {
   const db = {
     query: vi.fn().mockImplementation((sql) => {
       // Gate de presença de /:steamId (só responde perfil de jogador com presença no grupo) —
       // prepended pra casar antes dos handlers de teste, já que a query dele contém trechos que
       // colidem com o needle do fallback de match_players.
-      for (const [needle, rows] of [['group_members where group_id = $2', [{ tem: true }]], ...handlers, ['group_members where group_id = $1 and steam_id64', [{}]]]) {
+      for (const [needle, rows] of [['group_members where group_id = $2', [{ tem: temPresenca }]], ...handlers, ['group_members where group_id = $1 and steam_id64', [{}]]]) {
         if (sql.includes(needle)) return Promise.resolve({ rows })
       }
       return Promise.resolve({ rows: [] })
@@ -187,6 +187,56 @@ describe('GET /api/profile/:steamId', () => {
     expect(res.status).toBe(200)
     expect(res.body.premierAtual).toBeNull()
     expect(res.body.recentes[0]).toMatchObject({ premierBefore: null, premierAfter: null })
+  })
+})
+
+describe('GET /api/profile/:steamId — modo público (alvo de outro grupo com ranking_publico)', () => {
+  const statsRow = {
+    partidas: 59, vitorias: 26, kills: 900, deaths: 700, assists: 100, hs: 400, damage: 70000, rounds: 1500, rating: '1.29',
+    he_thrown: 0, he_damage: 0, he_team_damage: 0, molotovs_thrown: 0, molotov_damage: 0, molotov_team_damage: 0,
+    flashes_thrown: 0, enemies_flashed: 0, enemy_flash_duration: '0', flash_assists: 0,
+    enemy_flash_landed_count: 0, enemy_flash_landed_duration_sum: '0',
+  }
+
+  it('sem presença no grupo e SEM opt-in público: 404 (não vaza nem a existência do jogador)', async () => {
+    const { app } = appWith([
+      ['where p.steam_id64 = $1', [{ steam_id64: '765', nick: 'labubu', avatar_url: null, ranking_publico: false }]],
+    ], { temPresenca: false })
+    const res = await request(app).get('/api/profile/765').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    expect(res.status).toBe(404)
+  })
+
+  it('sem presença no grupo MAS com opt-in: 200 em modo público (agregado sem grupo, sem seções privadas)', async () => {
+    const { app, db } = appWith([
+      ['where p.steam_id64 = $1', [{ steam_id64: '765', nick: 'labubu', avatar_url: null, ranking_publico: true }]],
+      ['count(*)::int as partidas', [statsRow]],
+    ], { temPresenca: false })
+    const res = await request(app).get('/api/profile/765').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    expect(res.status).toBe(200)
+    expect(res.body.perfilPublico).toBe(true)
+    expect(res.body.jogador.nick).toBe('labubu')
+    expect(res.body.stats.partidas).toBe(59)
+    // Seções que linkariam Partidas / grafo social do grupo alheio ficam fechadas
+    expect(res.body.recentes).toEqual([])
+    expect(res.body.destaques).toEqual([])
+    expect(res.body.sinergia).toEqual([])
+    expect(res.body.estilo).toBeNull()
+    // Stats agregados SEM filtro de grupo — mesmo recorte do /api/ranking-publico,
+    // senão os números do perfil não bateriam com os do ranking de onde a pessoa clicou
+    const statsSql = db.query.mock.calls.find((c) => c[0].includes('count(*)::int as partidas'))[0]
+    expect(statsSql).not.toContain('m.group_id')
+  })
+
+  it('com presença no grupo: modo normal (perfilPublico false, stats COM filtro de grupo)', async () => {
+    const { app, db } = appWith([
+      ['where p.steam_id64 = $1', [{ steam_id64: '765', nick: 'fih', avatar_url: null, ranking_publico: true }]],
+      ['count(*)::int as partidas', [statsRow]],
+    ])
+    const res = await request(app).get('/api/profile/765').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    expect(res.status).toBe(200)
+    expect(res.body.perfilPublico).toBe(false)
+    const statsSql = db.query.mock.calls.find((c) => c[0].includes('count(*)::int as partidas'))[0]
+    expect(statsSql).toContain('m.group_id')
   })
 })
 
