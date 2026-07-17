@@ -96,14 +96,18 @@ export default function Curso() {
           <Card
             key={v.slug}
             as="button"
-            interativo
+            interativo={v.disponivel}
+            disabled={!v.disponivel}
             onClick={() => abrir(v)}
-            className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left"
+            className={`flex w-full items-center justify-between gap-3 px-3 py-2 text-left ${
+              v.disponivel ? '' : 'opacity-50'
+            }`}
           >
             <p className="font-display text-sm font-semibold uppercase text-texto">{v.titulo}</p>
             <span className="flex flex-col items-end gap-0.5 font-mono text-xs text-texto-fraco">
-              {v.concluido && <span>✓ concluído</span>}
-              {v.posicaoSegundos > 0 && !v.concluido && (
+              {!v.disponivel && <span>ainda não disponível</span>}
+              {v.disponivel && v.concluido && <span>✓ concluído</span>}
+              {v.disponivel && v.posicaoSegundos > 0 && !v.concluido && (
                 <span>{`continuar de ${formatarTempo(v.posicaoSegundos)}`}</span>
               )}
             </span>

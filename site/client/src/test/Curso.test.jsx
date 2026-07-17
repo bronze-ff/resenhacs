@@ -10,9 +10,10 @@ function mockFetch() {
         return Promise.resolve({
           ok: true,
           json: async () => [
-            { slug: 'introducao', titulo: 'Introdução', concluido: false, posicaoSegundos: 0 },
-            { slug: 'modulo-1-aimbotz', titulo: 'Módulo 1 — AimBotz', concluido: true, posicaoSegundos: 600 },
-            { slug: 'modulo-2-dm', titulo: 'Módulo 2 — Deathmatch', concluido: false, posicaoSegundos: 120 },
+            { slug: 'introducao', titulo: 'Introdução', concluido: false, posicaoSegundos: 0, disponivel: true },
+            { slug: 'modulo-1-aimbotz', titulo: 'Módulo 1 — AimBotz', concluido: true, posicaoSegundos: 600, disponivel: true },
+            { slug: 'modulo-2-dm', titulo: 'Módulo 2 — Deathmatch', concluido: false, posicaoSegundos: 120, disponivel: true },
+            { slug: 'modulo-3-mecanicas', titulo: 'Módulo 3 — Mecânicas', concluido: false, posicaoSegundos: 0, disponivel: false },
           ],
         })
       }
@@ -39,6 +40,18 @@ describe('Curso', () => {
     fireEvent.click(screen.getByText('Introdução'))
     await waitFor(() => {
       expect(document.querySelector('video')).toHaveAttribute('src', 'https://r2.example/introducao.mp4')
+    })
+  })
+
+  it('vídeo ainda não enviado aparece indisponível e não abre o player', async () => {
+    mockFetch()
+    render(<Curso />)
+    expect(await screen.findByText('Módulo 3 — Mecânicas')).toBeInTheDocument()
+    expect(screen.getByText('ainda não disponível')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('Módulo 3 — Mecânicas'))
+    await waitFor(() => {
+      expect(document.querySelector('video')).toBeNull()
     })
   })
 })
