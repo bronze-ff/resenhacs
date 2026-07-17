@@ -267,14 +267,16 @@ export default function Shell({ children }) {
           </div>
           <div className="flex min-w-0 items-center gap-3">
             <SeletorGrupo grupoAtivoId={jogador?.grupoAtivoId} />
-            {jogador?.avatarUrl && (
-              <img
-                src={jogador.avatarUrl}
-                alt=""
-                className="panel-cut-sm h-8 w-8 shrink-0 border border-borda object-cover"
-              />
-            )}
-            <span className="max-w-[80px] truncate font-mono text-sm text-texto sm:max-w-none">{jogador?.nick}</span>
+            <a href={`/jogador/${jogador?.steamId}`} title="Meu perfil" className="group flex min-w-0 shrink-0 items-center gap-2">
+              {jogador?.avatarUrl && (
+                <img
+                  src={jogador.avatarUrl}
+                  alt=""
+                  className="panel-cut-sm h-8 w-8 shrink-0 border border-borda object-cover transition-colors group-hover:border-destaque/60"
+                />
+              )}
+              <span className="max-w-[80px] truncate font-mono text-sm text-texto transition-colors group-hover:text-destaque sm:max-w-none">{jogador?.nick}</span>
+            </a>
             <a
               href="/apoie"
               title="Apoie o Resenha"

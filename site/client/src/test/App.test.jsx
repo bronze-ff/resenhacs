@@ -45,6 +45,7 @@ describe('App', () => {
     expect(await screen.findByText(/nenhuma partida/i)).toBeInTheDocument()
     expect(await screen.findByRole('link', { name: /ajuda/i })).toHaveAttribute('href', '/tour')
     expect(await screen.findByRole('link', { name: /apoie/i })).toHaveAttribute('href', '/apoie')
+    expect(await screen.findByRole('link', { name: 'fih' })).toHaveAttribute('href', '/jogador/765')
   })
 
   it('logado com grupo mas tour nao concluido: redireciona pro tour', async () => {
