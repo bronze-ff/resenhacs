@@ -116,6 +116,18 @@ jobs:
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
         run: python -m coletor.main processar-uploads-pendentes
+      - name: Sincronizar partidas FACEIT (membros vinculados)
+        working-directory: coletor
+        env:
+          PYTHONPATH: src
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          STEAM_API_KEY: ${{ secrets.STEAM_API_KEY }}
+          FACEIT_API_KEY: ${{ secrets.FACEIT_API_KEY }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: python -m coletor.main sincronizar-faceit
       # Só roda quando disparado manualmente com o input marcado — reprocessa TODAS as
       # Partidas com demo ainda no R2 (janela de 90 dias) com o parser ATUAL, pra corrigir
       # stats já gravadas depois de um bug de parser ser corrigido (ex.: kill de USP-S

@@ -26,6 +26,7 @@ from . import parse as parsemod
 from . import replay as replaymod
 from . import sharecode
 from . import steam_api
+from . import faceit
 from . import storage_r2
 from . import transform
 from .config import Config
@@ -656,6 +657,111 @@ def cmd_avatares(config, conn):
     return len(mapa)
 
 
+def cmd_sincronizar_faceit(config, conn, limite=10):
+    """FACEIT Fase B: descobre partidas 5v5 novas de cada membro vinculado (Fase A) e
+    processa até `limite` da fila por rodada — demo no pipeline completo quando existe,
+    stats-only da API quando não (partida nunca some). No fim, snapshot de ELO por
+    membro + carimbo before/after na partida nova mais recente (ver spec 2026-07-16)."""
+    import tempfile
+    from datetime import datetime, timezone
+    from pathlib import Path
+
+    if not config.faceit_api_key:
+        print("sincronizar-faceit: FACEIT_API_KEY ausente — pulando")
+        return 0
+    vinculados = dbmod.listar_vinculados_faceit(conn)
+    if not vinculados:
+        print("sincronizar-faceit: nenhum membro com FACEIT vinculada")
+        return 0
+
+    # 1. Descoberta — enfileira o que ainda não foi visto (histórico inteiro na 1ª vez)
+    conhecidas = dbmod.faceit_match_ids_conhecidos(conn)
+    for steam_id64, faceit_id, group_id in vinculados:
+        try:
+            primeira = not dbmod.membro_ja_sincronizou_faceit(conn, steam_id64)
+            novas = faceit.listar_historico_5v5(
+                config.faceit_api_key, faceit_id, conhecidas, andar_tudo=primeira,
+            )
+            for item in novas:
+                dbmod.enfileirar_faceit(conn, item["faceit_match_id"], steam_id64, group_id)
+                conhecidas.add(item["faceit_match_id"])
+            if novas:
+                print(f"  descoberta {steam_id64}: {len(novas)} partida(s) nova(s)")
+        except Exception as e:  # noqa: BLE001
+            conn.rollback()
+            print(f"  descoberta {steam_id64}: FALHOU ({e})")
+
+    # 2. Processamento — lote limitado; falha de um item não derruba os outros
+    vinculados_por_steam = {s: (f, g) for s, f, g in vinculados}
+    ingeridas_por_membro = {}
+    total = 0
+    for faceit_match_id, steam_id64, group_id in dbmod.listar_faceit_pendentes(conn, limite):
+        try:
+            detalhes = faceit.detalhes_partida(config.faceit_api_key, faceit_match_id)
+            stats = faceit.stats_partida(config.faceit_api_key, faceit_match_id)
+            played_at = None
+            if detalhes.get("finished_at"):
+                played_at = datetime.fromtimestamp(
+                    int(detalhes["finished_at"]), tz=timezone.utc,
+                ).isoformat()
+
+            match_id = None
+            demo_urls = detalhes.get("demo_url") or []
+            if demo_urls:
+                try:
+                    dem_bytes = faceit.baixar_demo(config.faceit_api_key, demo_urls[0])
+                    with tempfile.TemporaryDirectory() as tmp:
+                        dem_path = Path(tmp) / "faceit.dem"
+                        dem_path.write_bytes(dem_bytes)
+                        match_id = ingest_demo(
+                            config, conn, dem_path,
+                            share_code=None, source="faceit", upload=True,
+                            played_at=played_at, group_id=group_id,
+                        )
+                except Exception as e:  # noqa: BLE001
+                    conn.rollback()
+                    print(f"  {faceit_match_id}: demo falhou ({e}) — caindo pro stats-only")
+
+            if match_id is None:
+                parsed = faceit.montar_parsed_stats_only(detalhes, stats)
+                match_id = dbmod.store_parsed(
+                    conn, parsed, source="faceit",
+                    prefer_new_played_at=bool(parsed.get("played_at")),
+                    group_id=group_id,
+                )
+
+            dbmod.marcar_faceit_match(conn, match_id, faceit_match_id)
+            dbmod.concluir_faceit_pendente(conn, faceit_match_id)
+            dt = datetime.fromisoformat(played_at) if played_at else None
+            ingeridas_por_membro.setdefault(steam_id64, []).append((match_id, dt))
+            print(f"  {faceit_match_id}: ok ({match_id})")
+            total += 1
+        except Exception as e:  # noqa: BLE001
+            conn.rollback()
+            dbmod.falhar_faceit_pendente(conn, faceit_match_id, e)
+            print(f"  {faceit_match_id}: FALHOU ({e})")
+
+    # 3. ELO — snapshot por membro + carimbo na partida nova mais recente
+    for steam_id64, faceit_id, _ in vinculados:
+        try:
+            elo, level = faceit.elo_atual(config.faceit_api_key, faceit_id)
+            if elo is None:
+                continue
+            antes, snapshot_em = dbmod.elo_snapshot(conn, steam_id64)
+            alvo = faceit.escolher_partida_para_elo(
+                ingeridas_por_membro.get(steam_id64, []), snapshot_em,
+            )
+            if alvo and antes is not None:
+                dbmod.gravar_elo_partida(conn, alvo, steam_id64, antes, elo)
+            dbmod.atualizar_elo(conn, steam_id64, elo, level)
+        except Exception as e:  # noqa: BLE001
+            conn.rollback()
+            print(f"  elo {steam_id64}: FALHOU ({e})")
+
+    print(f"sincronizar-faceit: {total} partida(s) processada(s)")
+    return total
+
+
 def main(argv=None):
     argv = argv if argv is not None else sys.argv[1:]
     ap = argparse.ArgumentParser(prog="coletor")
@@ -701,6 +807,10 @@ def main(argv=None):
         "avatares",
         help="Backfill: busca o avatar Steam de todos os jogadores já vistos em alguma Partida (inclusive fora do grupo).",
     )
+    sub.add_parser(
+        "sincronizar-faceit",
+        help="FACEIT Fase B: descobre e ingere partidas 5v5 de membros vinculados + ELO.",
+    )
 
     args = ap.parse_args(argv)
     config = Config()
@@ -745,6 +855,8 @@ def main(argv=None):
             print(f"configurar-cors: regra aplicada no bucket {config.r2_bucket}")
         elif args.cmd == "avatares":
             cmd_avatares(config, conn)
+        elif args.cmd == "sincronizar-faceit":
+            cmd_sincronizar_faceit(config, conn)
     finally:
         conn.close()
 
