@@ -130,5 +130,10 @@ describe('POST /api/convites/:token/aceitar', () => {
     expect(res.body).toEqual({ ok: true, groupId: 'g1', nome: 'Time A' })
     expect(db.query.mock.calls.some((c) => c[0].includes('insert into group_members'))).toBe(true)
     expect(db.query.mock.calls.some((c) => c[0].includes('update players set grupo_ativo_id'))).toBe(true)
+    // Retroage as partidas antigas do novo membro no grupo (is_tracked = true), escopado
+    // por group_id + steam_id64 — sem isso ele só apareceria no próprio perfil.
+    const retro = db.query.mock.calls.find((c) => c[0].includes('update match_players mp set is_tracked = true'))
+    expect(retro).toBeTruthy()
+    expect(retro[1]).toEqual(['g1', '222'])
   })
 })

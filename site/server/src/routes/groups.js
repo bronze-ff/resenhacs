@@ -110,6 +110,17 @@ export function createConvitesRouter({ db }) {
       groupId,
       req.player.steamId,
     ])
+    // Retroage: as partidas do grupo em que o novo membro já aparece (o SteamID dele já está
+    // em match_players, gravado quando outro membro processou a demo) passam a contar como dele
+    // — tracked, entram no ranking e no resultado do grupo, não só no perfil. Só vira um flag;
+    // não ingere nada, então não há como duplicar partida (a dedup é no Coletor, por
+    // fingerprint/share_code, quando ele baixar as demos antigas do próprio código dele).
+    await db.query(
+      `update match_players mp set is_tracked = true
+       from matches m
+       where m.id = mp.match_id and m.group_id = $1 and mp.steam_id64 = $2`,
+      [groupId, req.player.steamId],
+    )
     res.json({ ok: true, groupId, nome: rows[0].nome })
   })
 
