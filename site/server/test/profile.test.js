@@ -71,12 +71,12 @@ describe('GET /api/profile/:steamId', () => {
     ])
     const res = await request(app).get('/api/profile/765').set('Cookie', cookie).set('X-Group-Id', GRUPO)
     expect(res.status).toBe(200)
-    expect(res.body.jogador).toEqual({ steamId: '765', nick: 'adversario', avatarUrl: 'https://cache/x.jpg', faceitNick: null })
+    expect(res.body.jogador).toEqual({ steamId: '765', nick: 'adversario', avatarUrl: 'https://cache/x.jpg', faceitNick: null, faceitElo: null, faceitSkillLevel: null })
   })
 
   it('agrega stats, winrate, ADR, HS% e sinergia', async () => {
     const { app } = appWith([
-      ['where p.steam_id64 = $1', [{ steam_id64: '765', nick: 'fih', avatar_url: null, is_admin: false, faceit_nick: 'bronzeadoo' }]],
+      ['where p.steam_id64 = $1', [{ steam_id64: '765', nick: 'fih', avatar_url: null, is_admin: false, faceit_nick: 'bronzeadoo', faceit_elo: 1425, faceit_skill_level: 7 }]],
       // Precisa vir ANTES de 'count(*)::int as partidas' — o texto dessa query também
       // contém aquele trecho, e o mock casa pelo primeiro needle que bater.
       ['group by mp.steam_id64', [
@@ -110,7 +110,7 @@ describe('GET /api/profile/:steamId', () => {
     ])
     const res = await request(app).get('/api/profile/765').set('Cookie', cookie).set('X-Group-Id', GRUPO)
     expect(res.status).toBe(200)
-    expect(res.body.jogador).toMatchObject({ nick: 'fih', faceitNick: 'bronzeadoo' })
+    expect(res.body.jogador).toMatchObject({ nick: 'fih', faceitNick: 'bronzeadoo', faceitElo: 1425, faceitSkillLevel: 7 })
     expect(res.body.stats).toMatchObject({ partidas: 10, vitorias: 6, winrate: 60, kills: 200 })
     expect(res.body.stats.kd).toBeCloseTo(1.33, 2)
     expect(res.body.stats.hsPct).toBe(50)

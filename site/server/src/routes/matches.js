@@ -141,6 +141,7 @@ export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Cli
                 mp.enemy_flash_duration, mp.teammate_flash_duration,
                 mp.he_team_damage, mp.molotov_team_damage, mp.flash_assists,
                 mp.premier_rating_before, mp.premier_rating_after,
+                mp.faceit_elo_before, mp.faceit_elo_after,
                 coalesce(p.avatar_url, sa.avatar_url) as avatar_url
          from match_players mp
          left join players p on p.steam_id64 = mp.steam_id64
@@ -220,6 +221,8 @@ export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Cli
         kastPct: p.kast_pct != null ? Number(p.kast_pct) : null,
         premierBefore: p.premier_rating_before == null ? null : Number(p.premier_rating_before),
         premierAfter: p.premier_rating_after == null ? null : Number(p.premier_rating_after),
+        faceitEloBefore: p.faceit_elo_before == null ? null : Number(p.faceit_elo_before),
+        faceitEloAfter: p.faceit_elo_after == null ? null : Number(p.faceit_elo_after),
         won: p.won,
         isTracked: p.is_tracked,
         weapons: armasPorJogador.get(p.steam_id64) ?? [],

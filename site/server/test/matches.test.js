@@ -121,7 +121,7 @@ describe('GET /api/matches/:id', () => {
   it('devolve placar, rounds, highlights, clipes e armas por jogador', async () => {
     const { app } = appWith([
       ['from matches where id', [{ id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9, source: 'valve_mm', status: 'parsed', demo_url: null }]],
-      ['from match_players mp', [{ steam_id64: '765', nick: 'fih', team: 'A', kills: 25, team_kills: 1, deaths: 10, assists: 5, headshot_kills: 12, damage: 2500, rounds_played: 22, rating: '1.35', kast_pct: '72.5', premier_rating_before: 15420, premier_rating_after: 15480, won: true, is_tracked: true, avatar_url: 'https://avatars.steamstatic.com/fih.jpg' }]],
+      ['from match_players mp', [{ steam_id64: '765', nick: 'fih', team: 'A', kills: 25, team_kills: 1, deaths: 10, assists: 5, headshot_kills: 12, damage: 2500, rounds_played: 22, rating: '1.35', kast_pct: '72.5', premier_rating_before: 15420, premier_rating_after: 15480, faceit_elo_before: 1400, faceit_elo_after: 1425, won: true, is_tracked: true, avatar_url: 'https://avatars.steamstatic.com/fih.jpg' }]],
       ['from rounds where match_id', [{ round_number: 1, winner_team: 'A', win_reason: 'elim' }]],
       ['from highlights h', [{ id: 'h1', steam_id64: '765', round_number: 5, kind: 'ace', description: 'ACE', frame: 12, nick: 'fih' }]],
       ['from clips where match_id', [{ id: 'c1', steam_id64: '765', url: 'https://allstar.gg/x', provider: 'allstar', title: 'meu ace', highlight_id: 'h1' }]],
@@ -132,7 +132,7 @@ describe('GET /api/matches/:id', () => {
     ])
     const res = await request(app).get('/api/matches/m1').set('Cookie', cookie).set('X-Group-Id', GRUPO)
     expect(res.status).toBe(200)
-    expect(res.body.players[0]).toMatchObject({ nick: 'fih', rating: 1.35, kastPct: 72.5, premierBefore: 15420, premierAfter: 15480, isTracked: true, teamKills: 1, avatarUrl: 'https://avatars.steamstatic.com/fih.jpg' })
+    expect(res.body.players[0]).toMatchObject({ nick: 'fih', rating: 1.35, kastPct: 72.5, premierBefore: 15420, premierAfter: 15480, faceitEloBefore: 1400, faceitEloAfter: 1425, isTracked: true, teamKills: 1, avatarUrl: 'https://avatars.steamstatic.com/fih.jpg' })
     expect(res.body.players[0].weapons).toEqual([
       { weapon: 'deagle', kills: 22, hsKills: 10, shotsFired: 60, shotsHit: 25, damage: 2200 },
       { weapon: 'knife', kills: 3, hsKills: 0, shotsFired: 0, shotsHit: 0, damage: 150 },
@@ -153,6 +153,8 @@ describe('GET /api/matches/:id', () => {
     // Sem Premier rating registrado (partida antiga, coletada antes da Task 2): null, não undefined.
     expect(res.body.players[0].premierBefore).toBeNull()
     expect(res.body.players[0].premierAfter).toBeNull()
+    expect(res.body.players[0].faceitEloBefore).toBeNull()
+    expect(res.body.players[0].faceitEloAfter).toBeNull()
   })
 
   it('jogador sem cadastro no grupo usa o avatar em cache da steam_avatares (fallback)', async () => {

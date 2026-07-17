@@ -359,7 +359,8 @@ export function createProfileRouter({ db, requireAuth, requireGroupMember }) {
     const { steamId } = req.params
     const { from, to } = req.query
     const playerQ = await db.query(
-      `select p.steam_id64, p.nick, coalesce(p.avatar_url, sa.avatar_url) as avatar_url, p.faceit_nick
+      `select p.steam_id64, p.nick, coalesce(p.avatar_url, sa.avatar_url) as avatar_url,
+              p.faceit_nick, p.faceit_elo, p.faceit_skill_level
        from players p
        left join steam_avatares sa on sa.steam_id64 = p.steam_id64
        where p.steam_id64 = $1`,
@@ -462,7 +463,12 @@ export function createProfileRouter({ db, requireAuth, requireGroupMember }) {
     })
 
     res.json({
-      jogador: { steamId: jogador.steam_id64, nick: jogador.nick, avatarUrl: jogador.avatar_url, faceitNick: jogador.faceit_nick ?? null },
+      jogador: {
+        steamId: jogador.steam_id64, nick: jogador.nick, avatarUrl: jogador.avatar_url,
+        faceitNick: jogador.faceit_nick ?? null,
+        faceitElo: jogador.faceit_elo ?? null,
+        faceitSkillLevel: jogador.faceit_skill_level ?? null,
+      },
       premierAtual: premierRow.rows[0]?.premier_rating_after != null ? Number(premierRow.rows[0].premier_rating_after) : null,
       stats,
       evolucao,
