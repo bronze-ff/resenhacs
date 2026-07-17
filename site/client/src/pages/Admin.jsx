@@ -1,10 +1,43 @@
 import { useEffect, useState } from 'react'
 import { Card, SectionHeader } from '../components/ui'
 
+const CURSO_VIDEOS = [
+  { slug: 'introducao', titulo: 'Introdução' },
+  { slug: 'modulo-1-aimbotz', titulo: 'Módulo 1 — AimBotz' },
+  { slug: 'modulo-2-dm', titulo: 'Módulo 2 — Deathmatch' },
+  { slug: 'modulo-3-mecanicas', titulo: 'Módulo 3 — Mecânicas' },
+  { slug: 'consideracoes-finais', titulo: 'Considerações finais' },
+]
+
 export default function Admin() {
   const [steamId, setSteamId] = useState('')
   const [mensagem, setMensagem] = useState(null)
   const [taticasPendentes, setTaticasPendentes] = useState(null)
+  const [statusUpload, setStatusUpload] = useState({})
+
+  async function enviarVideoCurso(slug, arquivo) {
+    setStatusUpload((s) => ({ ...s, [slug]: 'enviando' }))
+    try {
+      const resUrl = await fetch('/api/curso/upload-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slug }),
+      })
+      if (!resUrl.ok) {
+        setStatusUpload((s) => ({ ...s, [slug]: 'erro' }))
+        return
+      }
+      const { uploadUrl } = await resUrl.json()
+      const resPut = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'video/mp4' },
+        body: arquivo,
+      })
+      setStatusUpload((s) => ({ ...s, [slug]: resPut.ok ? 'ok' : 'erro' }))
+    } catch {
+      setStatusUpload((s) => ({ ...s, [slug]: 'erro' }))
+    }
+  }
 
   async function adicionar(e) {
     e.preventDefault()
@@ -89,6 +122,38 @@ export default function Admin() {
             </div>
           </Card>
         ))}
+      </div>
+
+      <div className="mt-8 space-y-3">
+        <SectionHeader titulo="Curso de mira — upload dos vídeos" />
+        <div className="space-y-2">
+          {CURSO_VIDEOS.map((v) => (
+            <Card key={v.slug} className="flex items-center justify-between gap-3 px-3 py-2">
+              <div>
+                <p className="font-display text-sm font-semibold uppercase text-texto">{v.titulo}</p>
+                <p className="font-mono text-[10px] uppercase text-texto-fraco/70">{v.slug}.mp4</p>
+              </div>
+              <label className="panel-cut-sm flex min-h-10 shrink-0 cursor-pointer items-center border border-borda px-3 py-1 font-mono text-xs uppercase tracking-wide text-texto-fraco transition-colors hover:border-destaque/50 hover:text-destaque lg:min-h-0">
+                {statusUpload[v.slug] === 'enviando'
+                  ? 'Enviando…'
+                  : statusUpload[v.slug] === 'ok'
+                    ? 'Enviado ✓'
+                    : statusUpload[v.slug] === 'erro'
+                      ? 'Erro, tentar de novo'
+                      : 'Escolher arquivo'}
+                <input
+                  type="file"
+                  accept="video/mp4"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0]
+                    if (f) enviarVideoCurso(v.slug, f)
+                  }}
+                />
+              </label>
+            </Card>
+          ))}
+        </div>
       </div>
     </div>
   )
