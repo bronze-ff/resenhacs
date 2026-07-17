@@ -22,18 +22,26 @@ export function detectProvider(url) {
   return achado ? achado.nome : 'other'
 }
 
-export function createClipsRouter({ db, requireAuth }) {
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+export function createClipsRouter({ db, requireAuth, requireGroupMember }) {
   const router = Router()
 
   // Anexa um Clipe (link externo) a uma Partida e, opcionalmente, a um Highlight.
-  router.post('/', requireAuth, async (req, res) => {
+  router.post('/', requireAuth, requireGroupMember, async (req, res) => {
     const { matchId, highlightId, steamId, url, title } = req.body ?? {}
     if (!matchId) return res.status(400).json({ erro: 'matchId é obrigatório' })
+    if (!UUID_RE.test(String(matchId))) return res.status(400).json({ erro: 'matchId inválido' })
     const provider = detectProvider(url ?? '')
     if (!provider) return res.status(400).json({ erro: 'URL do clipe inválida' })
     if (!/^\d{17}$/.test(String(steamId ?? ''))) {
       return res.status(400).json({ erro: 'steamId (de quem é a jogada) inválido' })
     }
+
+    // A Partida precisa existir E pertencer ao grupo ativo — sem isso, qualquer conta
+    // logada anexava clipe a partida de outro grupo (broken access control / OWASP A01).
+    const dono = await db.query('select 1 from matches where id = $1 and group_id = $2', [matchId, req.groupId])
+    if (dono.rows.length === 0) return res.status(404).json({ erro: 'Partida não encontrada' })
 
     const { rows } = await db.query(
       `insert into clips (match_id, highlight_id, steam_id64, url, provider, title, added_by)

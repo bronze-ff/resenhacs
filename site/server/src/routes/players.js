@@ -7,9 +7,16 @@ export function createPlayersRouter({ db, requireAuth, requireGroupMember, fetch
   // Alerta de ban/smurf: cruza os Jogadores do grupo com GetPlayerBans da Steam —
   // "a conta de alguém do grupo tomou VAC/Overwatch ban?" Precisa vir antes de
   // qualquer rota "/:algo" (não tem hoje em players.js, mas por hábito/segurança).
-  router.get('/bans', requireAuth, async (req, res) => {
+  router.get('/bans', requireAuth, requireGroupMember, async (req, res) => {
     if (!fetchBans) return res.status(503).json({ erro: 'Checagem de ban não configurada (falta STEAM_API_KEY)' })
-    const { rows } = await db.query('select steam_id64, nick from players order by nick')
+    // Escopado ao grupo: checa ban só dos membros do grupo ativo, não do roster global do
+    // sistema inteiro (era vazamento de SteamID+nick de todos os grupos pra qualquer logado).
+    const { rows } = await db.query(
+      `select p.steam_id64, p.nick from group_members gm
+       join players p on p.steam_id64 = gm.steam_id64
+       where gm.group_id = $1 order by p.nick`,
+      [req.groupId],
+    )
     const bans = await fetchBans(rows.map((p) => p.steam_id64))
     const porId = new Map(bans.map((b) => [b.steamId, b]))
     res.json(

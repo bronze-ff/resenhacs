@@ -42,7 +42,13 @@ export function createTaticasRouter({ db, requireAuth }) {
     if (!nome || !map || !matchId || !Number.isInteger(roundNumber)) {
       return res.status(400).json({ erro: 'nome, map, matchId e roundNumber são obrigatórios' })
     }
-    const descricao = String(req.body?.descricao ?? '').trim()
+    // Caixa de sugestões global (só super-admin lê): valida formato e limita tamanho pra não
+    // virar canal de spam/poluição na fila de revisão do admin.
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(matchId)) {
+      return res.status(400).json({ erro: 'matchId inválido' })
+    }
+    if (nome.length > 120) return res.status(400).json({ erro: 'nome muito longo' })
+    const descricao = String(req.body?.descricao ?? '').trim().slice(0, 2000)
     const { rows } = await db.query(
       `insert into taticas (nome, descricao, map, match_id, round_number, status, criado_por)
        values ($1, $2, $3, $4, $5, $6, $7)

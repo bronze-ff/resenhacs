@@ -109,14 +109,15 @@ export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Cli
 
   // Status da sincronização: quantas Partidas descobertas ainda esperam download/parse.
   // (Precisa vir antes de '/:id' — senão o Express casaria "sync-status" como um id.)
-  router.get('/sync-status', requireAuth, async (req, res) => {
+  router.get('/sync-status', requireAuth, requireGroupMember, async (req, res) => {
     const { rows } = await db.query(
       `select
          count(*) filter (where status = 'pending')::int as pending,
          count(*) filter (where status = 'failed')::int as failed,
          count(*) filter (where status = 'parsed')::int as parsed,
          max(played_at) filter (where status = 'parsed') as last_played_at
-       from matches`,
+       from matches where group_id = $1`,
+      [req.groupId],
     )
     const r = rows[0]
     res.json({ pending: r.pending, failed: r.failed, parsed: r.parsed, lastPlayedAt: r.last_played_at })

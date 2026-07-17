@@ -22,8 +22,8 @@ export function createFaceitRouter({ config, db, fetchImpl = fetch }) {
     const verifier = base64url(randomBytes(32))
     const challenge = base64url(createHash('sha256').update(verifier).digest())
 
-    res.cookie('resenha_faceit_state', state, { httpOnly: true, sameSite: 'lax', maxAge: 5 * 60 * 1000 })
-    res.cookie('resenha_faceit_verifier', verifier, { httpOnly: true, sameSite: 'lax', maxAge: 5 * 60 * 1000 })
+    res.cookie('resenha_faceit_state', state, { httpOnly: true, secure: config.isProduction, sameSite: 'lax', maxAge: 5 * 60 * 1000 })
+    res.cookie('resenha_faceit_verifier', verifier, { httpOnly: true, secure: config.isProduction, sameSite: 'lax', maxAge: 5 * 60 * 1000 })
 
     const params = new URLSearchParams({
       response_type: 'code',

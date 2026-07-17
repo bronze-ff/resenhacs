@@ -13,15 +13,18 @@ function resultadoDeUmaPartida(jogadoresDoGrupo) {
   return 'misto'
 }
 
-export function createSessionsRouter({ db, requireAuth }) {
+export function createSessionsRouter({ db, requireAuth, requireGroupMember }) {
   const router = Router()
 
   // "Resenhas": Partidas jogadas seguidas (gap < 3h) agrupadas num resumo — quem se
   // destacou, quantas venceu/perdeu, ao invés de olhar partida por partida.
-  router.get('/', requireAuth, async (req, res) => {
+  // Escopado ao grupo ativo (group_id = $1) em TODAS as queries: sem isso, qualquer conta
+  // Steam logada puxava o histórico de todos os grupos numa requisição (login é aberto).
+  router.get('/', requireAuth, requireGroupMember, async (req, res) => {
     const matchesQ = await db.query(
       `select id, map, played_at, score_a, score_b
-       from matches where status = 'parsed' order by played_at asc nulls last`,
+       from matches where status = 'parsed' and group_id = $1 order by played_at asc nulls last`,
+      [req.groupId],
     )
     const playersQ = await db.query(
       `select mp.match_id, mp.steam_id64, p.nick, mp.kills, mp.deaths, mp.assists,
@@ -30,11 +33,14 @@ export function createSessionsRouter({ db, requireAuth }) {
        from match_players mp
        join players p on p.steam_id64 = mp.steam_id64
        left join steam_avatares sa on sa.steam_id64 = mp.steam_id64
-       where mp.match_id in (select id from matches where status = 'parsed')`,
+       where mp.match_id in (select id from matches where status = 'parsed' and group_id = $1)`,
+      [req.groupId],
     )
     const acesQ = await db.query(
       `select h.match_id, h.steam_id64, count(*)::int as aces
-       from highlights h where h.kind = 'ace' group by h.match_id, h.steam_id64`,
+       from highlights h join matches m on m.id = h.match_id
+       where h.kind = 'ace' and m.group_id = $1 group by h.match_id, h.steam_id64`,
+      [req.groupId],
     )
 
     const jogadoresPorPartida = new Map()

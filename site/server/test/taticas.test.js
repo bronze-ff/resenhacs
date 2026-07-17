@@ -39,7 +39,7 @@ describe('POST /api/taticas', () => {
     ])
     const res = await request(app).post('/api/taticas').set('Cookie', cookieJogador).send({
       nome: 'Execução B', descricao: 'bronze entra seco', map: 'de_mirage',
-      matchId: 'm1', roundNumber: 5,
+      matchId: '22222222-2222-2222-2222-222222222222', roundNumber: 5,
     })
     expect(res.status).toBe(201)
     const insert = db.query.mock.calls.find((c) => c[0].includes('insert into taticas'))

@@ -9,7 +9,7 @@ export function createAuthRouter({ config, db, verifySteamLogin, fetchPersona, r
     const returnTo = String(req.query.returnTo ?? '')
     // só aceita path relativo interno — nunca um destino externo (open redirect).
     if (/^\/[a-zA-Z0-9/_-]*$/.test(returnTo)) {
-      res.cookie('resenha_post_login', returnTo, { httpOnly: true, sameSite: 'lax', maxAge: 5 * 60 * 1000 })
+      res.cookie('resenha_post_login', returnTo, { httpOnly: true, secure: config.isProduction, sameSite: 'lax', maxAge: 5 * 60 * 1000 })
     }
     res.redirect(buildSteamRedirectUrl(config.appUrl))
   })

@@ -36,9 +36,9 @@ describe('GET /api/players', () => {
 
 describe('GET /api/players/bans', () => {
   it('sem fetchBans configurado (falta STEAM_API_KEY): 503', async () => {
-    const db = { query: vi.fn().mockResolvedValue({ rows: [] }) }
+    const db = { query: vi.fn().mockImplementation((sql) => (sql.includes('group_members where group_id') ? Promise.resolve({ rows: [{}] }) : Promise.resolve({ rows: [] }))) }
     const app = createApp({ config, db })
-    const res = await request(app).get('/api/players/bans').set('Cookie', memberCookie)
+    const res = await request(app).get('/api/players/bans').set('Cookie', memberCookie).set('X-Group-Id', GRUPO)
     expect(res.status).toBe(503)
   })
 
@@ -52,7 +52,7 @@ describe('GET /api/players/bans', () => {
       { steamId: '765', vacBanned: true, numVacBans: 1, daysSinceLastBan: 10, gameBanned: false, numGameBans: 0, communityBanned: false },
     ])
     const app = createApp({ config, db, fetchBans })
-    const res = await request(app).get('/api/players/bans').set('Cookie', memberCookie)
+    const res = await request(app).get('/api/players/bans').set('Cookie', memberCookie).set('X-Group-Id', GRUPO)
     expect(res.status).toBe(200)
     expect(fetchBans).toHaveBeenCalledWith(['765', '999'])
     expect(res.body).toEqual([
