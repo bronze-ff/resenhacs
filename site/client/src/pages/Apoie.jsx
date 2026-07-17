@@ -55,7 +55,7 @@ export default function Apoie() {
           onClick={copiar}
           className="panel-cut-sm border border-borda px-4 py-2 text-xs uppercase tracking-wide text-texto-fraco transition-colors hover:border-destaque/50 hover:text-destaque"
         >
-          {copiado ? 'Copiado!' : 'Copiar chave PIX'}
+          {copiado ? 'Copiado!' : 'Copiar Pix Copia e Cola'}
         </button>
       </Card>
     </div>
