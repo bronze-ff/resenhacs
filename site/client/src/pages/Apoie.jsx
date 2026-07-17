@@ -39,7 +39,7 @@ export default function Apoie() {
       <Card className="p-6 text-center">
         <p className="mb-6 text-sm text-texto-fraco">
           O Resenha é mantido de graça pro grupo. Se ele te ajuda e você quiser contribuir com o
-          custo de manter tudo no ar, qualquer valor via PIX é bem-vindo — sem pressão nenhuma.
+          custo de manter tudo no ar, qualquer valor via PIX é bem-vindo, sem pressão nenhuma.
         </p>
         {qrCodeUrl && (
           <img

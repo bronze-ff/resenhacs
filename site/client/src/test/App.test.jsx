@@ -44,6 +44,7 @@ describe('App', () => {
     // precisa de findByText (assíncrono) aqui também, senão às vezes ainda não resolveu.
     expect(await screen.findByText(/nenhuma partida/i)).toBeInTheDocument()
     expect(await screen.findByRole('link', { name: /ajuda/i })).toHaveAttribute('href', '/tour')
+    expect(await screen.findByRole('link', { name: /apoie/i })).toHaveAttribute('href', '/apoie')
   })
 
   it('logado com grupo mas tour nao concluido: redireciona pro tour', async () => {

@@ -20,7 +20,6 @@ const ITENS = [
   { to: '/granadas', label: 'Granadas', num: '08', icone: 'granadas' },
   { to: '/taticas', label: 'Táticas', num: '09', icone: 'taticas' },
   { to: '/conta', label: 'Minha conta', num: '10', icone: 'perfil' },
-  { to: '/apoie', label: 'Apoie', num: '11', icone: 'apoie' },
 ]
 
 // Itens da barra inferior mobile (estilo app da FACEIT): 4 rotas principais
@@ -223,7 +222,7 @@ export default function Shell({ children }) {
                 aria-label={colapsada ? 'Admin' : undefined}
               >
                 <span className="shrink-0">{NAV_ICONES.admin}</span>
-                <span className={`font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque ${colapsada ? 'lg:hidden' : ''}`}>12</span>
+                <span className={`font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque ${colapsada ? 'lg:hidden' : ''}`}>11</span>
                 <span className={colapsada ? 'lg:hidden' : ''}>Admin</span>
               </NavLink>
               <NavLink
@@ -234,7 +233,7 @@ export default function Shell({ children }) {
                 aria-label={colapsada ? 'Partidas pro' : undefined}
               >
                 <span className="shrink-0">{NAV_ICONES.partidasPro}</span>
-                <span className={`font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque ${colapsada ? 'lg:hidden' : ''}`}>13</span>
+                <span className={`font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque ${colapsada ? 'lg:hidden' : ''}`}>12</span>
                 <span className={colapsada ? 'lg:hidden' : ''}>Partidas pro</span>
               </NavLink>
             </>
@@ -276,6 +275,14 @@ export default function Shell({ children }) {
               />
             )}
             <span className="max-w-[80px] truncate font-mono text-sm text-texto sm:max-w-none">{jogador?.nick}</span>
+            <a
+              href="/apoie"
+              title="Apoie o Resenha"
+              className="panel-cut-sm flex min-h-10 shrink-0 items-center gap-1.5 border border-borda px-2.5 py-1 text-xs uppercase tracking-wide text-texto-fraco/70 transition-colors hover:border-destaque/50 hover:text-destaque lg:min-h-0"
+            >
+              <span className="shrink-0">{NAV_ICONES.apoie}</span>
+              <span className="hidden lg:inline">Apoie</span>
+            </a>
             <a
               href="/tour"
               title="Como usar o Resenha"
