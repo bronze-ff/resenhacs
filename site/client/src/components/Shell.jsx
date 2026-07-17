@@ -280,7 +280,7 @@ export default function Shell({ children }) {
             <a
               href="/apoie"
               title="Apoie o Resenha"
-              className="panel-cut-sm flex min-h-10 shrink-0 items-center gap-1.5 border border-borda px-2.5 py-1 text-xs uppercase tracking-wide text-texto-fraco/70 transition-colors hover:border-destaque/50 hover:text-destaque lg:min-h-0"
+              className="panel-cut-sm flex min-h-10 shrink-0 items-center gap-1.5 border border-destaque px-2.5 py-1 text-xs uppercase tracking-wide text-destaque transition-colors hover:bg-destaque/10 lg:min-h-0"
             >
               <span className="shrink-0">{NAV_ICONES.apoie}</span>
               <span className="hidden lg:inline">Apoie</span>
