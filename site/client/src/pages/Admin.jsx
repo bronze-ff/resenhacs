@@ -1,41 +1,76 @@
 import { useEffect, useState } from 'react'
 import { Card, SectionHeader } from '../components/ui'
 
-const CURSO_VIDEOS = [
-  { slug: 'introducao', titulo: 'Introdução' },
-  { slug: 'modulo-1-aimbotz', titulo: 'Módulo 1 — AimBotz' },
-  { slug: 'modulo-2-dm', titulo: 'Módulo 2 — Deathmatch' },
-  { slug: 'modulo-3-mecanicas', titulo: 'Módulo 3 — Mecânicas' },
-  { slug: 'consideracoes-finais', titulo: 'Considerações finais' },
-]
+// Pedaços de 100 MiB: um PUT único do arquivo inteiro estoura a memória da aba (um vídeo de
+// 2 GB matava o processo do Chrome com STATUS_BREAKPOINT).
+const TAMANHO_PARTE = 100 * 1024 * 1024
+const TENTATIVAS_POR_PARTE = 3
+
+async function enviarParte(url, pedaco) {
+  for (let tentativa = 1; tentativa <= TENTATIVAS_POR_PARTE; tentativa++) {
+    try {
+      const res = await fetch(url, { method: 'PUT', body: pedaco })
+      if (res.ok) return
+    } catch {
+      // rede caiu no meio da parte — cai no retry abaixo
+    }
+    if (tentativa === TENTATIVAS_POR_PARTE) throw new Error('parte falhou após as tentativas')
+  }
+}
+
+function rotuloUpload(status, disponivel) {
+  if (status?.estado === 'enviando') {
+    const pct = status.total ? Math.round((status.atual / status.total) * 100) : 0
+    return `Parte ${status.atual}/${status.total} — ${pct}%`
+  }
+  if (status?.estado === 'ok') return 'Enviado ✓'
+  if (status?.estado === 'erro') return 'Erro, tentar de novo'
+  return disponivel ? 'Enviado ✓ — trocar' : 'Escolher arquivo'
+}
 
 export default function Admin() {
   const [steamId, setSteamId] = useState('')
   const [mensagem, setMensagem] = useState(null)
   const [taticasPendentes, setTaticasPendentes] = useState(null)
   const [statusUpload, setStatusUpload] = useState({})
+  const [videosCurso, setVideosCurso] = useState(null)
 
   async function enviarVideoCurso(slug, arquivo) {
-    setStatusUpload((s) => ({ ...s, [slug]: 'enviando' }))
+    const partes = Math.ceil(arquivo.size / TAMANHO_PARTE)
+    setStatusUpload((s) => ({ ...s, [slug]: { estado: 'enviando', atual: 0, total: partes } }))
+    let uploadId = null
     try {
-      const resUrl = await fetch('/api/curso/upload-url', {
+      const resIniciar = await fetch('/api/curso/upload/iniciar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ slug }),
+        body: JSON.stringify({ slug, partes }),
       })
-      if (!resUrl.ok) {
-        setStatusUpload((s) => ({ ...s, [slug]: 'erro' }))
-        return
+      if (!resIniciar.ok) throw new Error('iniciar falhou')
+      const { uploadId: id, urls } = await resIniciar.json()
+      uploadId = id
+
+      for (let i = 0; i < partes; i++) {
+        await enviarParte(urls[i], arquivo.slice(i * TAMANHO_PARTE, (i + 1) * TAMANHO_PARTE))
+        setStatusUpload((s) => ({ ...s, [slug]: { estado: 'enviando', atual: i + 1, total: partes } }))
       }
-      const { uploadUrl } = await resUrl.json()
-      const resPut = await fetch(uploadUrl, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'video/mp4' },
-        body: arquivo,
+
+      const resConcluir = await fetch('/api/curso/upload/concluir', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slug, uploadId }),
       })
-      setStatusUpload((s) => ({ ...s, [slug]: resPut.ok ? 'ok' : 'erro' }))
+      if (!resConcluir.ok) throw new Error('concluir falhou')
+      setStatusUpload((s) => ({ ...s, [slug]: { estado: 'ok' } }))
+      setVideosCurso((atual) => atual?.map((v) => (v.slug === slug ? { ...v, disponivel: true } : v)))
     } catch {
-      setStatusUpload((s) => ({ ...s, [slug]: 'erro' }))
+      if (uploadId) {
+        await fetch('/api/curso/upload/abortar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ slug, uploadId }),
+        }).catch(() => {})
+      }
+      setStatusUpload((s) => ({ ...s, [slug]: { estado: 'erro' } }))
     }
   }
 
@@ -60,6 +95,10 @@ export default function Admin() {
       .then((r) => r.json())
       .then(setTaticasPendentes)
       .catch(() => setTaticasPendentes([]))
+    fetch('/api/curso')
+      .then((r) => r.json())
+      .then(setVideosCurso)
+      .catch(() => setVideosCurso([]))
   }, [])
 
   async function revisar(id, status) {
@@ -127,20 +166,14 @@ export default function Admin() {
       <div className="mt-8 space-y-3">
         <SectionHeader titulo="Curso de mira — upload dos vídeos" />
         <div className="space-y-2">
-          {CURSO_VIDEOS.map((v) => (
+          {videosCurso?.map((v) => (
             <Card key={v.slug} className="flex items-center justify-between gap-3 px-3 py-2">
               <div>
                 <p className="font-display text-sm font-semibold uppercase text-texto">{v.titulo}</p>
                 <p className="font-mono text-[10px] uppercase text-texto-fraco/70">{v.slug}.mp4</p>
               </div>
               <label className="panel-cut-sm flex min-h-10 shrink-0 cursor-pointer items-center border border-borda px-3 py-1 font-mono text-xs uppercase tracking-wide text-texto-fraco transition-colors hover:border-destaque/50 hover:text-destaque lg:min-h-0">
-                {statusUpload[v.slug] === 'enviando'
-                  ? 'Enviando…'
-                  : statusUpload[v.slug] === 'ok'
-                    ? 'Enviado ✓'
-                    : statusUpload[v.slug] === 'erro'
-                      ? 'Erro, tentar de novo'
-                      : 'Escolher arquivo'}
+                {rotuloUpload(statusUpload[v.slug], v.disponivel)}
                 <input
                   type="file"
                   accept="video/mp4"
