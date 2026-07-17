@@ -25,6 +25,7 @@ export default function Curso() {
     setErro(null)
     setUrlAtivo(null)
     setSlugAtivo(video.slug)
+    ultimoEnvio.current = 0
     const res = await fetch(`/api/curso/${video.slug}/url`)
     if (!res.ok) {
       setErro('Vídeo indisponível, recarregue a página')
@@ -102,7 +103,9 @@ export default function Curso() {
             <p className="font-display text-sm font-semibold uppercase text-texto">{v.titulo}</p>
             <span className="flex flex-col items-end gap-0.5 font-mono text-xs text-texto-fraco">
               {v.concluido && <span>✓ concluído</span>}
-              {v.posicaoSegundos > 0 && <span>{`continuar de ${formatarTempo(v.posicaoSegundos)}`}</span>}
+              {v.posicaoSegundos > 0 && !v.concluido && (
+                <span>{`continuar de ${formatarTempo(v.posicaoSegundos)}`}</span>
+              )}
             </span>
           </Card>
         ))}
