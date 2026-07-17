@@ -526,11 +526,11 @@ arquivo já tem — os asserts abaixo são sobre o SQL/params gravados pelo fake
 
 ```python
 def test_enfileirar_faceit_e_idempotente_e_alinha_placeholders():
-    conn = FakeConn()
-    db.enfileirar_faceit(conn, "fm1", "111", "g1")
-    sql, params = conn.cursor_obj.queries[-1]
-    assert "on conflict (faceit_match_id) do nothing" in sql
-    assert sql.count("%s") == len(params) == 3
+    conn = FakeConn()  # nota: a implementação real (commit e88b5f4) usou conn.calls[-1],
+    db.enfileirar_faceit(conn, "fm1", "111", "g1")  # não conn.cursor_obj.queries[-1] — a
+    sql, params = conn.cursor_obj.queries[-1]  # fixture real de test_storage_db.py difere
+    assert "on conflict (faceit_match_id) do nothing" in sql  # desta ilustração; ver o
+    assert sql.count("%s") == len(params) == 3  # arquivo real pro shape exato.
 
 
 def test_falhar_faceit_pendente_incrementa_e_marca_failed_no_limite():
@@ -551,6 +551,10 @@ def test_gravar_elo_partida_atualiza_match_players():
     assert "update match_players set faceit_elo_before = %s, faceit_elo_after = %s" in sql
     assert params == (1400, 1425, "m1", "111")
 ```
+
+(Nota histórica: Task 3 já foi implementada — commit `e88b5f4` — usando `conn.calls[-1]`, a
+API real do `FakeConn` de `test_storage_db.py`. Este bloco documenta a intenção original, não
+o código final; ver o arquivo de teste real pra sintaxe exata.)
 
 - [ ] **Step 2: Rodar e confirmar que falham**
 
@@ -704,14 +708,21 @@ git commit -m "feat: helpers de fila FACEIT e ELO em db.py"
   (já existentes).
 - Produces: subcomando `python -m coletor.main sincronizar-faceit`.
 
-- [ ] **Step 1: Escrever os testes (padrão monkeypatch do test_main.py — seguir os fixtures FakeConn existentes do arquivo)**
+- [ ] **Step 1: Escrever os testes (padrão monkeypatch do test_main.py — CORRIGIDO: o arquivo
+NÃO tem `FakeConn`)**
+
+Confirmado lendo `coletor/tests/test_main.py` inteiro: ele não define nem importa nenhum
+`FakeConn`. O padrão real (ex.: `test_atualizar_avatares_pula_sem_steam_api_key`,
+`test_cmd_avatares_faz_backfill_dos_steam_ids_de_match_players`) é `conn = None` — TODA
+chamada a `dbmod.*`/`main.faceit.*`/`main.ingest_demo` é monkeypatchada, então `conn` nunca é
+de fato lido, só repassado adiante. Use `conn = None` nos testes abaixo (já corrigido).
 
 Adicionar em `coletor/tests/test_main.py`:
 
 ```python
 def test_sincronizar_faceit_sem_api_key_pula_sem_tocar_no_banco(monkeypatch, capsys):
     config = Config(env={})  # sem FACEIT_API_KEY
-    conn = FakeConn()
+    conn = None  # todo acesso a banco é via dbmod.* monkeypatchado — conn nunca é lido
     total = main.cmd_sincronizar_faceit(config, conn)
     assert total == 0
     assert "FACEIT_API_KEY" in capsys.readouterr().out
@@ -719,7 +730,7 @@ def test_sincronizar_faceit_sem_api_key_pula_sem_tocar_no_banco(monkeypatch, cap
 
 def test_sincronizar_faceit_descobre_processa_demo_e_carimba_elo(monkeypatch):
     config = Config(env={"FACEIT_API_KEY": "k"})
-    conn = FakeConn()
+    conn = None  # todo acesso a banco é via dbmod.* monkeypatchado — conn nunca é lido
     from datetime import datetime, timezone
     antes_dt = datetime(2026, 7, 16, 9, 0, tzinfo=timezone.utc)
 
@@ -759,7 +770,7 @@ def test_sincronizar_faceit_descobre_processa_demo_e_carimba_elo(monkeypatch):
 
 def test_sincronizar_faceit_cai_no_stats_only_quando_demo_falha(monkeypatch):
     config = Config(env={"FACEIT_API_KEY": "k"})
-    conn = FakeConn()
+    conn = None  # todo acesso a banco é via dbmod.* monkeypatchado — conn nunca é lido
     monkeypatch.setattr(main.dbmod, "listar_vinculados_faceit", lambda c: [("111", "f-111", "g1")])
     monkeypatch.setattr(main.dbmod, "faceit_match_ids_conhecidos", lambda c: {"fm1"})
     monkeypatch.setattr(main.dbmod, "membro_ja_sincronizou_faceit", lambda c, s: True)
@@ -787,7 +798,7 @@ def test_sincronizar_faceit_cai_no_stats_only_quando_demo_falha(monkeypatch):
 
 def test_sincronizar_faceit_falha_de_item_nao_derruba_o_lote(monkeypatch):
     config = Config(env={"FACEIT_API_KEY": "k"})
-    conn = FakeConn()
+    conn = None  # todo acesso a banco é via dbmod.* monkeypatchado — conn nunca é lido
     monkeypatch.setattr(main.dbmod, "listar_vinculados_faceit", lambda c: [("111", "f-111", "g1")])
     monkeypatch.setattr(main.dbmod, "faceit_match_ids_conhecidos", lambda c: set())
     monkeypatch.setattr(main.dbmod, "membro_ja_sincronizou_faceit", lambda c, s: True)
@@ -817,9 +828,9 @@ def test_sincronizar_faceit_falha_de_item_nao_derruba_o_lote(monkeypatch):
     assert falhas == ["fm-ruim"]
 ```
 
-Nota pro implementador: `Config`/`FakeConn` já existem em `test_main.py` — usar os do arquivo
-(se `Config` for importado de outro jeito, seguir o import existente). Se `FakeConn` do arquivo
-não aceitar construção vazia, usar o fixture/factory que os testes vizinhos usam.
+Nota pro implementador: `Config` já é importado em `test_main.py` (`from coletor.config import
+Config`, junto de `from coletor import db as dbmod` e `from coletor import main, rar_extract`)
+— seguir esse import existente, sem criar nenhum `FakeConn`.
 
 - [ ] **Step 2: Rodar e confirmar que falham**
 
