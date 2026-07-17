@@ -94,9 +94,10 @@ export default function Curso() {
         {videos?.map((v) => (
           <Card
             key={v.slug}
+            as="button"
             interativo
             onClick={() => abrir(v)}
-            className="flex items-center justify-between gap-3 px-3 py-2"
+            className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left"
           >
             <p className="font-display text-sm font-semibold uppercase text-texto">{v.titulo}</p>
             <span className="flex flex-col items-end gap-0.5 font-mono text-xs text-texto-fraco">
