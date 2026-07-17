@@ -10,7 +10,10 @@ const GRUPO = '11111111-1111-1111-1111-111111111111'
 function appWith(handlers) {
   const db = {
     query: vi.fn().mockImplementation((sql) => {
-      for (const [needle, rows] of [...handlers, ['group_members where group_id = $1 and steam_id64', [{}]]]) {
+      // Gate de presença de /:steamId (só responde perfil de jogador com presença no grupo) —
+      // prepended pra casar antes dos handlers de teste, já que a query dele contém trechos que
+      // colidem com o needle do fallback de match_players.
+      for (const [needle, rows] of [['group_members where group_id = $2', [{ tem: true }]], ...handlers, ['group_members where group_id = $1 and steam_id64', [{}]]]) {
         if (sql.includes(needle)) return Promise.resolve({ rows })
       }
       return Promise.resolve({ rows: [] })
@@ -77,6 +80,9 @@ describe('GET /api/profile/:steamId', () => {
   it('agrega stats, winrate, ADR, HS% e sinergia', async () => {
     const { app } = appWith([
       ['where p.steam_id64 = $1', [{ steam_id64: '765', nick: 'fih', avatar_url: null, is_admin: false, faceit_nick: 'bronzeadoo', faceit_elo: 1425, faceit_skill_level: 7 }]],
+      // Sinergia agora recomputada de match_players (mp1) — precisa vir ANTES de
+      // 'count(*)::int as partidas', que a query de sinergia também contém.
+      ['from match_players mp1', [{ steam_id64: '999', nick: 'parça', avatar_url: null, partidas: 8, vitorias: 6 }]],
       // Precisa vir ANTES de 'count(*)::int as partidas' — o texto dessa query também
       // contém aquele trecho, e o mock casa pelo primeiro needle que bater.
       ['group by mp.steam_id64', [
@@ -93,7 +99,6 @@ describe('GET /api/profile/:steamId', () => {
       ['group by m.map', [{ map: 'de_mirage', partidas: 5, vitorias: 3, rating: '1.2' }]],
       ['m.score_a, m.score_b', [{ id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9, kills: 20, deaths: 15, rating: '1.1', won: true, premier_rating_before: 15420, premier_rating_after: 15480, source: 'faceit' }]],
       ['mp.premier_rating_after is not null', [{ premier_rating_after: 16250 }]],
-      ['from synergy_pairs', [{ steam_id64: '999', nick: 'parça', avatar_url: null, partidas: 8, vitorias: 6 }]],
       ['mp.rating is not null', [{ id: 'm1', played_at: null, rating: '1.1' }, { id: 'm2', played_at: null, rating: '1.4' }]],
       ['mp.won from match_players', [{ won: true }, { won: true }, { won: false }, { won: true }]],
       ['from highlights h join matches m on m.id = h.match_id', [
@@ -170,7 +175,7 @@ describe('GET /api/profile/:steamId', () => {
       ['group by m.map', [{ map: 'de_mirage', partidas: 5, vitorias: 3, rating: '1.2' }]],
       // Partida antiga (coletada antes da Task 2): recentes vem sem premier_rating_before/after.
       ['m.score_a, m.score_b', [{ id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9, kills: 20, deaths: 15, rating: '1.1', won: true }]],
-      ['from synergy_pairs', []],
+      ['from match_players mp1', []],
       ['mp.rating is not null', []],
       ['mp.won from match_players', [{ won: true }]],
       ['from highlights h join matches m on m.id = h.match_id', []],

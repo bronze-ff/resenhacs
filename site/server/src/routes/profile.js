@@ -384,6 +384,17 @@ export function createProfileRouter({ db, requireAuth, requireGroupMember }) {
       jogador = { steam_id64: steamId, nick: fallbackQ.rows[0].nick, avatar_url: fallbackQ.rows[0].avatar_url }
     }
 
+    // Só responde perfil de quem tem presença no grupo ativo (é membro OU jogou em alguma
+    // partida do grupo). Sem esse gate, o bloco `jogador` (nick/avatar/FACEIT) e a existência
+    // de jogadores de OUTROS grupos vazavam pra qualquer conta logada.
+    const presenca = await db.query(
+      `select (exists (select 1 from group_members where group_id = $2 and steam_id64 = $1)
+            or exists (select 1 from match_players mp join matches m on m.id = mp.match_id
+                       where mp.steam_id64 = $1 and m.group_id = $2)) as tem`,
+      [steamId, req.groupId],
+    )
+    if (!presenca.rows[0]?.tem) return res.status(404).json({ erro: 'Jogador não encontrado' })
+
     const mapaParams = [steamId]
     const mapaPeriodo = periodoWhere(from, to, mapaParams)
     const mapaGrupo = grupoWhere(req.groupId, mapaParams)
@@ -416,17 +427,24 @@ export function createProfileRouter({ db, requireAuth, requireGroupMember }) {
          order by m.played_at desc nulls last limit 20`,
         recentesParams,
       ),
+      // Sinergia ESCOPADA ao grupo ativo: recomputa as duplas direto de match_players (join em
+      // matches com group_id = $2) em vez de ler a view synergy_pairs, que é GLOBAL (agrega TODOS
+      // os grupos). Sem isso, o perfil vazava o grafo social (com quem cada jogador joga) de
+      // grupos alheios pra qualquer conta logada.
       db.query(
-        `select p.steam_id64, p.nick, coalesce(p.avatar_url, sa.avatar_url) as avatar_url, sp.partidas, sp.vitorias
-         from (
-           select case when steam_id_1 = $1 then steam_id_2 else steam_id_1 end as parceiro,
-                  partidas, vitorias
-           from synergy_pairs where steam_id_1 = $1 or steam_id_2 = $1
-         ) sp
-         join players p on p.steam_id64 = sp.parceiro
-         left join steam_avatares sa on sa.steam_id64 = p.steam_id64
-         order by sp.partidas desc`,
-        [steamId],
+        `select p.steam_id64, p.nick, coalesce(p.avatar_url, sa.avatar_url) as avatar_url,
+                count(*)::int as partidas,
+                count(*) filter (where mp1.won)::int as vitorias
+         from match_players mp1
+         join matches m on m.id = mp1.match_id and m.group_id = $2
+         join match_players mp2 on mp2.match_id = mp1.match_id and mp2.team = mp1.team
+           and mp2.steam_id64 <> mp1.steam_id64
+         join players p on p.steam_id64 = mp2.steam_id64
+         left join steam_avatares sa on sa.steam_id64 = mp2.steam_id64
+         where mp1.steam_id64 = $1
+         group by p.steam_id64, p.nick, p.avatar_url, sa.avatar_url
+         order by partidas desc`,
+        [steamId, req.groupId],
       ),
       evolucaoRating(db, steamId, from, to, req.groupId),
       // Badges são conquista de carreira — sempre no histórico INTEIRO do grupo, não no período filtrado.
