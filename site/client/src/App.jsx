@@ -23,6 +23,7 @@ import Times from './pages/Times.jsx'
 import CompararTimes from './pages/CompararTimes.jsx'
 import RankingPublico from './pages/RankingPublico.jsx'
 import Tour from './pages/Tour.jsx'
+import Apoie from './pages/Apoie.jsx'
 
 function RotaProtegida({ children }) {
   const { carregando, jogador } = useAuth()
@@ -68,6 +69,7 @@ export default function App() {
           <Route path="/granadas" element={<RotaProtegida><Granadas /></RotaProtegida>} />
           <Route path="/taticas" element={<RotaProtegida><Taticas /></RotaProtegida>} />
           <Route path="/conta" element={<RotaProtegida><Perfil /></RotaProtegida>} />
+          <Route path="/apoie" element={<RotaProtegida><Apoie /></RotaProtegida>} />
           <Route path="/admin" element={<RotaAdmin><Admin /></RotaAdmin>} />
           <Route path="/partidas-pro" element={<RotaAdmin><PartidasPro /></RotaAdmin>} />
         </Routes>

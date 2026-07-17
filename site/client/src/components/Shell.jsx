@@ -20,6 +20,7 @@ const ITENS = [
   { to: '/granadas', label: 'Granadas', num: '08', icone: 'granadas' },
   { to: '/taticas', label: 'Táticas', num: '09', icone: 'taticas' },
   { to: '/conta', label: 'Minha conta', num: '10', icone: 'perfil' },
+  { to: '/apoie', label: 'Apoie', num: '11', icone: 'apoie' },
 ]
 
 // Itens da barra inferior mobile (estilo app da FACEIT): 4 rotas principais
@@ -88,6 +89,11 @@ const NAV_ICONES = {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
       <circle cx="12" cy="8" r="4" />
       <path d="M4 20C4 15.5817 7.58172 12 12 12C16.4183 12 20 15.5817 20 20" />
+    </svg>
+  ),
+  apoie: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
+      <path d="M12 20C12 20 4 15 4 9.5C4 6.5 6.5 4 9.5 4C11 4 12 5 12 5C12 5 13 4 14.5 4C17.5 4 20 6.5 20 9.5C20 15 12 20 12 20Z" />
     </svg>
   ),
   admin: (
@@ -217,7 +223,7 @@ export default function Shell({ children }) {
                 aria-label={colapsada ? 'Admin' : undefined}
               >
                 <span className="shrink-0">{NAV_ICONES.admin}</span>
-                <span className={`font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque ${colapsada ? 'lg:hidden' : ''}`}>11</span>
+                <span className={`font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque ${colapsada ? 'lg:hidden' : ''}`}>12</span>
                 <span className={colapsada ? 'lg:hidden' : ''}>Admin</span>
               </NavLink>
               <NavLink
@@ -228,7 +234,7 @@ export default function Shell({ children }) {
                 aria-label={colapsada ? 'Partidas pro' : undefined}
               >
                 <span className="shrink-0">{NAV_ICONES.partidasPro}</span>
-                <span className={`font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque ${colapsada ? 'lg:hidden' : ''}`}>12</span>
+                <span className={`font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque ${colapsada ? 'lg:hidden' : ''}`}>13</span>
                 <span className={colapsada ? 'lg:hidden' : ''}>Partidas pro</span>
               </NavLink>
             </>
