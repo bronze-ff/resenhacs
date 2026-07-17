@@ -15,6 +15,7 @@ import { createTaticasRouter } from './routes/taticas.js'
 import { createTaticasCuradasRouter } from './routes/taticasCuradas.js'
 import { createPartidasProRouter } from './routes/partidasPro.js'
 import { createGranadasRouter } from './routes/granadas.js'
+import { createCursoRouter } from './routes/curso.js'
 import { createGroupsRouter, createConvitesRouter } from './routes/groups.js'
 import { createTeamsRouter } from './routes/teams.js'
 import { createRankingPublicoRouter } from './routes/rankingPublico.js'
@@ -84,6 +85,7 @@ export function createApp({ config, db, verifySteamLogin, fetchPersona, fetchBan
   app.use('/api/taticas-curadas', createTaticasCuradasRouter({ db, requireAuth }))
   app.use('/api/partidas-pro-fila', createPartidasProRouter({ db, requireAuth, r2Client, r2Bucket: config.r2Bucket }))
   app.use('/api/granadas', createGranadasRouter({ db, requireAuth }))
+  app.use('/api/curso', createCursoRouter({ db, requireAuth, requireGroupMember, r2Client, r2Bucket: config.r2Bucket }))
 
   app.use('/api/upload', createUploadRouter({ db, requireAuth, requireGroupMember, r2Client, r2Bucket: config.r2Bucket }))
 

@@ -35,6 +35,15 @@ export async function presignUpload(client, bucket, key, contentType, expiresInS
   return getSignedUrl(client, cmd, { expiresIn: expiresInSeconds })
 }
 
+// URL assinada de GET direto do R2 pro navegador: usada pro player de vídeo do Curso de Mira
+// assistir sem os bytes passarem pela função serverless (arquivos de ~2GB esbarrariam no
+// limite de tempo/tamanho da Vercel) — o R2 já entende os pedidos parciais (Range) que o
+// <video> usa sozinho pra avançar/retroceder.
+export async function presignDownload(client, bucket, key, expiresInSeconds = 7200) {
+  const cmd = new GetObjectCommand({ Bucket: bucket, Key: key })
+  return getSignedUrl(client, cmd, { expiresIn: expiresInSeconds })
+}
+
 export async function streamObject(client, bucket, key, res) {
   const obj = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }))
   if (obj.ContentType) res.type(obj.ContentType)
