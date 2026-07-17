@@ -1,4 +1,8 @@
-import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
+import {
+  S3Client, GetObjectCommand, PutObjectCommand, HeadObjectCommand,
+  CreateMultipartUploadCommand, UploadPartCommand, CompleteMultipartUploadCommand,
+  AbortMultipartUploadCommand, ListPartsCommand,
+} from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { pipeline } from 'node:stream/promises'
 
@@ -51,4 +55,56 @@ export async function streamObject(client, bucket, key, res) {
   // demo de ~200MB sem listener derrubaria o processo inteiro; aqui vira rejeição
   // que o caller (matches.js) já trata com 502.
   await pipeline(obj.Body, res)
+}
+
+// --- Upload em partes (multipart) ---
+// Um PUT único do arquivo inteiro estoura a memória da aba do navegador em arquivos de vários
+// GB (um vídeo de 2 GB matava o processo do Chrome com STATUS_BREAKPOINT). O navegador manda
+// pedaços de ~100 MiB, cada um numa requisição própria, e o R2 remonta o objeto no fim.
+
+export async function iniciarMultipart(client, bucket, key, contentType) {
+  const out = await client.send(new CreateMultipartUploadCommand({
+    Bucket: bucket, Key: key, ContentType: contentType,
+  }))
+  return out.UploadId
+}
+
+export async function presignUploadPart(client, bucket, key, uploadId, partNumber, expiresInSeconds = 7200) {
+  const cmd = new UploadPartCommand({
+    Bucket: bucket, Key: key, UploadId: uploadId, PartNumber: partNumber,
+  })
+  return getSignedUrl(client, cmd, { expiresIn: expiresInSeconds })
+}
+
+// Pergunta ao R2 quais partes chegaram, em vez de exigir que o navegador leia o header ETag de
+// cada PUT — ler ETag no JS exigiria ExposeHeaders no CORS do bucket (passo manual no painel da
+// Cloudflare). ListParts pagina em 1000 por página; quem chama limita as partes a 1000, então
+// uma página basta.
+export async function concluirMultipart(client, bucket, key, uploadId) {
+  const listadas = await client.send(new ListPartsCommand({
+    Bucket: bucket, Key: key, UploadId: uploadId, MaxParts: 1000,
+  }))
+  const partes = (listadas.Parts ?? [])
+    .map((p) => ({ ETag: p.ETag, PartNumber: p.PartNumber }))
+    .sort((a, b) => a.PartNumber - b.PartNumber)
+  if (partes.length === 0) throw new Error('Nenhuma parte foi enviada')
+  await client.send(new CompleteMultipartUploadCommand({
+    Bucket: bucket, Key: key, UploadId: uploadId,
+    MultipartUpload: { Parts: partes },
+  }))
+}
+
+export async function abortarMultipart(client, bucket, key, uploadId) {
+  await client.send(new AbortMultipartUploadCommand({ Bucket: bucket, Key: key, UploadId: uploadId }))
+}
+
+// Existe no bucket? Qualquer erro (404 do R2, credencial ruim, rede) vira false: isto alimenta
+// só um rótulo de UI ("ainda não disponível"), e falhar fechado é o comportamento certo aqui.
+export async function objetoExiste(client, bucket, key) {
+  try {
+    await client.send(new HeadObjectCommand({ Bucket: bucket, Key: key }))
+    return true
+  } catch {
+    return false
+  }
 }
