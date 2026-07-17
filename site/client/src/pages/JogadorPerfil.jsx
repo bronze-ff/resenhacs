@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { nomeMapa, dataHora, corRating, nomeArma, TIPO_COMPRA } from '../lib/format.js'
-import { Card, SectionHeader, StatTile, RatingBadge, DataTable, MapIcon, Badge, Select, PremierBadge, PlataformaBadge, SteamIcon, FaceitIcon } from '../components/ui'
+import { Card, SectionHeader, StatTile, RatingBadge, DataTable, MapIcon, Badge, Select, PremierBadge, PlataformaBadge, FaceitEloBadge, SteamIcon, FaceitIcon } from '../components/ui'
 import LinhaEvolucao from '../components/LinhaEvolucao.jsx'
 import FiltroPeriodo from '../components/FiltroPeriodo.jsx'
 import TagEstilo from '../components/TagEstilo.jsx'
@@ -208,6 +208,7 @@ export default function JogadorPerfil() {
               </h2>
               <TagEstilo estilo={estilo} />
               <PremierBadge valor={premierAtual} />
+              <FaceitEloBadge elo={jogador.faceitElo} level={jogador.faceitSkillLevel} />
             </div>
             <p className="font-mono text-sm text-texto-fraco">{stats.partidas} partidas · {stats.winrate}% de vitória</p>
           </div>

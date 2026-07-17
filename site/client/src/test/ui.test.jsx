@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { render } from '@testing-library/react'
-import { Card, SectionHeader, StatTile, Badge, RatingBadge, DataTable, PremierBadge, PlataformaBadge } from '../components/ui/index.js'
+import { Card, SectionHeader, StatTile, Badge, RatingBadge, DataTable, PremierBadge, PlataformaBadge, FaceitEloBadge } from '../components/ui/index.js'
 
 // Teste de fumaça: cada primitivo renderiza sem crashar e mostra seu conteúdo essencial.
 describe('primitivos de UI', () => {
@@ -72,6 +72,14 @@ describe('primitivos de UI', () => {
     const { getByText } = render(<PremierBadge valor={5200} />)
     expect(getByText('5200')).toBeInTheDocument()
     const { container: vazio } = render(<PremierBadge valor={null} />)
+    expect(vazio.firstChild).toBeNull()
+  })
+
+  it('FaceitEloBadge mostra elo+level e não renderiza nada quando null', () => {
+    const { getByText, container } = render(<FaceitEloBadge elo={1425} level={7} />)
+    expect(getByText('1425')).toBeInTheDocument()
+    expect(container.querySelector('svg')).not.toBeNull()
+    const { container: vazio } = render(<FaceitEloBadge elo={null} level={null} />)
     expect(vazio.firstChild).toBeNull()
   })
 })
