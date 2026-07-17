@@ -64,7 +64,7 @@ describe('GET /api/profile/:steamId', () => {
   it('adversário sem onboarding: monta perfil com nick do match_players (fallback)', async () => {
     const { app } = appWith([
       ['where p.steam_id64 = $1', []],
-      ['mp.steam_id64 = $1 and m.group_id = $2', [{ nick: 'adversario', avatar_url: 'https://cache/x.jpg' }]],
+      ['mp.steam_id64 = $1 and (m.group_id = $2', [{ nick: 'adversario', avatar_url: 'https://cache/x.jpg' }]],
       ['count(*)::int as partidas', [{
         partidas: 1, vitorias: 0, kills: 10, deaths: 15, assists: 2, hs: 3, damage: 1200, rounds: 22, rating: '0.85',
         he_thrown: 0, he_damage: 0, he_team_damage: 0, molotovs_thrown: 0, molotov_damage: 0, molotov_team_damage: 0,
@@ -233,6 +233,31 @@ describe('GET /api/profile/:steamId — modo público (alvo de outro grupo com r
       ['count(*)::int as partidas', [statsRow]],
     ])
     const res = await request(app).get('/api/profile/765').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    expect(res.status).toBe(200)
+    expect(res.body.perfilPublico).toBe(false)
+    const statsSql = db.query.mock.calls.find((c) => c[0].includes('count(*)::int as partidas'))[0]
+    expect(statsSql).toContain('m.group_id')
+  })
+
+  it('?publico=1 (clique do ranking público) força modo público MESMO com presença — stats globais', async () => {
+    const { app, db } = appWith([
+      ['where p.steam_id64 = $1', [{ steam_id64: '765', nick: 'fih', avatar_url: null, ranking_publico: true }]],
+      ['count(*)::int as partidas', [statsRow]],
+    ]) // temPresenca=true (default): divide grupo com o alvo
+    const res = await request(app).get('/api/profile/765?publico=1').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    expect(res.status).toBe(200)
+    // Bate com o ranking público de onde clicou: agregado global, sem filtro de grupo.
+    expect(res.body.perfilPublico).toBe(true)
+    const statsSql = db.query.mock.calls.find((c) => c[0].includes('count(*)::int as partidas'))[0]
+    expect(statsSql).not.toContain('m.group_id')
+  })
+
+  it('?publico=1 mas SEM opt-in: ignora o flag (modo grupo, não expõe global)', async () => {
+    const { app, db } = appWith([
+      ['where p.steam_id64 = $1', [{ steam_id64: '765', nick: 'fih', avatar_url: null, ranking_publico: false }]],
+      ['count(*)::int as partidas', [statsRow]],
+    ])
+    const res = await request(app).get('/api/profile/765?publico=1').set('Cookie', cookie).set('X-Group-Id', GRUPO)
     expect(res.status).toBe(200)
     expect(res.body.perfilPublico).toBe(false)
     const statsSql = db.query.mock.calls.find((c) => c[0].includes('count(*)::int as partidas'))[0]

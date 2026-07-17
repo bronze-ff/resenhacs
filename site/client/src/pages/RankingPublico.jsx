@@ -37,7 +37,7 @@ export default function RankingPublico() {
             <tr key={j.steamId}>
               <td className="px-3 py-2 font-mono text-texto-fraco">{i + 1}</td>
               <td className="px-3 py-2">
-                <Link to={`/jogador/${j.steamId}`} className="flex items-center gap-2 font-mono text-texto hover:text-destaque">
+                <Link to={`/jogador/${j.steamId}?publico=1`} className="flex items-center gap-2 font-mono text-texto hover:text-destaque">
                   {j.avatarUrl && <img src={j.avatarUrl} alt="" className="panel-cut-sm h-6 w-6 border border-borda object-cover" />}
                   {j.nick || j.steamId}
                 </Link>

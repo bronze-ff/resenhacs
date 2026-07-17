@@ -37,12 +37,17 @@ describe('GET /api/matches', () => {
   })
 
   it('lista partidas do feed', async () => {
-    const { app } = appWith([
+    const { app, db } = appWith([
       ['from matches m', [{ id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9, status: 'parsed', source: 'valve_mm', tracked: [{ steamId: '765', nick: 'fih', won: true }], mvp: { steamId: '765', nick: 'fih', rating: '1.35' } }]],
     ])
     const res = await request(app).get('/api/matches').set('Cookie', cookie).set('X-Group-Id', GRUPO)
     expect(res.status).toBe(200)
     expect(res.body[0]).toMatchObject({ id: 'm1', map: 'de_mirage', scoreA: 13, tracked: [{ nick: 'fih' }], mvp: { steamId: '765', nick: 'fih', rating: 1.35 } })
+    // Visibilidade por participação: o feed não filtra só por group_id — inclui partidas
+    // em que um membro do grupo jogou (regra de matchVisibility.js).
+    const sql = db.query.mock.calls.find(([s]) => s.includes('from matches m'))[0]
+    expect(sql).toContain('m.group_id = $1 or exists')
+    expect(sql).toContain('group_members gmv')
   })
 
   it('partida sem mvp rastreado devolve mvp null', async () => {

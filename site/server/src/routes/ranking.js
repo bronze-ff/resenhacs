@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { calcularEstilos } from '../analise.js'
+import { partidaVisivelExpr } from '../matchVisibility.js'
 
 function pct(parte, total) {
   if (!total) return 0
@@ -33,7 +34,7 @@ export function createRankingRouter({ db, requireAuth, requireGroupMember }) {
               avg(mp.rating) as rating,
               coalesce((select count(*) from highlights h
                         join matches m on m.id = h.match_id
-                        where h.steam_id64 = p.steam_id64 and h.kind = 'ace' and m.group_id = $1${periodo}), 0)::int as aces,
+                        where h.steam_id64 = p.steam_id64 and h.kind = 'ace' and ${partidaVisivelExpr('m', '$1')}${periodo}), 0)::int as aces,
               coalesce(sum(mp.clutch_wins), 0)::int as clutch_wins,
               coalesce(sum(mp.clutch_attempts), 0)::int as clutch_attempts,
               coalesce(sum(mp.entry_kills), 0)::int as entry_kills,
@@ -48,7 +49,7 @@ export function createRankingRouter({ db, requireAuth, requireGroupMember }) {
        left join (
          select mp.* from match_players mp
          join matches m on m.id = mp.match_id
-         where m.group_id = $1${periodo}
+         where ${partidaVisivelExpr('m', '$1')}${periodo}
        ) mp on mp.steam_id64 = p.steam_id64
        group by p.steam_id64, p.nick, p.avatar_url, sa.avatar_url`,
       params,

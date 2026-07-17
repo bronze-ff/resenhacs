@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { calcularEstilos, calcularBadges, melhorSequenciaDeVitorias } from '../analise.js'
 import { worldToRadar, isMapaCalibrado } from '../mapCalibration.js'
+import { partidaVisivelExpr } from '../matchVisibility.js'
 
 function pct(parte, total) {
   if (!total) return 0
@@ -22,14 +23,17 @@ function periodoWhere(from, to, params) {
   return sql
 }
 
-// Escopa por grupo ativo — mesma convenção do periodoWhere (anexa aos params, devolve o SQL).
-// groupId null = modo "perfil público": agrega TODAS as Partidas do alvo, sem filtro de
-// grupo — mesmo recorte do /api/ranking-publico, senão os números do perfil não bateriam
-// com os do ranking de onde a pessoa clicou.
+// Escopa por grupo ativo pela regra de VISIBILIDADE POR PARTICIPAÇÃO (ver matchVisibility.js):
+// a partida entra se pertence ao grupo (group_id) OU se algum membro do grupo jogou nela.
+// Mesma convenção do periodoWhere (anexa aos params, devolve o SQL, alias 'm'). groupId null =
+// modo "perfil público": agrega TODAS as Partidas do alvo, sem filtro de grupo — mesmo recorte
+// do /api/ranking-publico, senão os números do perfil não bateriam com os do ranking de onde a
+// pessoa clicou. Call sites que usam outro alias (ex.: aces com 'mh') aplicam
+// .replaceAll('m.', 'mh.') no retorno — o fragmento só usa o alias 'm.' e 'm.id', que a troca cobre.
 function grupoWhere(groupId, params) {
   if (!groupId) return ''
   params.push(groupId)
-  return ` and m.group_id = $${params.length}`
+  return ` and ${partidaVisivelExpr('m', `$${params.length}`)}`
 }
 
 async function statsAgregados(db, steamId, from, to, groupId) {
@@ -337,7 +341,7 @@ export function createProfileRouter({ db, requireAuth, requireGroupMember }) {
     const mapasQ = await db.query(
       `select m.map, count(*)::int as n
        from kill_positions kp join matches m on m.id = kp.match_id
-       where (kp.victim = $1 or kp.killer = $1) and m.group_id = $2
+       where (kp.victim = $1 or kp.killer = $1) and ${partidaVisivelExpr('m', '$2')}
        group by m.map order by n desc`,
       [steamId, req.groupId],
     )
@@ -349,7 +353,7 @@ export function createProfileRouter({ db, requireAuth, requireGroupMember }) {
     const { rows } = await db.query(
       `select kp.${coluna}_x as x, kp.${coluna}_y as y
        from kill_positions kp join matches m on m.id = kp.match_id
-       where kp.${coluna} = $1 and m.map = $2 and kp.${coluna}_x is not null and m.group_id = $3`,
+       where kp.${coluna} = $1 and m.map = $2 and kp.${coluna}_x is not null and ${partidaVisivelExpr('m', '$3')}`,
       [steamId, mapa, req.groupId],
     )
     const calibrated = isMapaCalibrado(mapa)
@@ -382,7 +386,7 @@ export function createProfileRouter({ db, requireAuth, requireGroupMember }) {
          from match_players mp
          join matches m on m.id = mp.match_id
          left join steam_avatares sa on sa.steam_id64 = mp.steam_id64
-         where mp.steam_id64 = $1 and m.group_id = $2
+         where mp.steam_id64 = $1 and ${partidaVisivelExpr('m', '$2')}
          order by m.played_at desc nulls last limit 1`,
         [steamId, req.groupId],
       )
@@ -391,12 +395,14 @@ export function createProfileRouter({ db, requireAuth, requireGroupMember }) {
     }
 
     // Só responde perfil de quem tem presença no grupo ativo (é membro OU jogou em alguma
-    // partida do grupo). Sem esse gate, o bloco `jogador` (nick/avatar/FACEIT) e a existência
-    // de jogadores de OUTROS grupos vazavam pra qualquer conta logada.
+    // partida VISÍVEL ao grupo). Usa a mesma regra de visibilidade das telas de partida —
+    // senão um jogador que aparece numa partida compartilhada daria 404 ao abrir o perfil.
+    // Sem esse gate, o bloco `jogador` (nick/avatar/FACEIT) e a existência de jogadores de
+    // OUTROS grupos vazavam pra qualquer conta logada.
     const presenca = await db.query(
       `select (exists (select 1 from group_members where group_id = $2 and steam_id64 = $1)
             or exists (select 1 from match_players mp join matches m on m.id = mp.match_id
-                       where mp.steam_id64 = $1 and m.group_id = $2)) as tem`,
+                       where mp.steam_id64 = $1 and ${partidaVisivelExpr('m', '$2')})) as tem`,
       [steamId, req.groupId],
     )
     const temPresenca = Boolean(presenca.rows[0]?.tem)
@@ -405,7 +411,13 @@ export function createProfileRouter({ db, requireAuth, requireGroupMember }) {
     // Partidas dele (grupoPerfil = null, mesmo recorte do ranking público), mas SEM
     // recentes/destaques/sinergia/estilo, que linkariam Partidas e o grafo social do grupo
     // alheio (essas continuam fechadas — as Partidas em si seguem sob requireGroupMember).
-    const publico = !temPresenca && jogador.ranking_publico === true
+    //
+    // ?publico=1 (clique vindo do ranking público) FORÇA o modo público mesmo quando o viewer
+    // divide grupo com o alvo — senão o número do perfil (só as partidas em comum) não bateria
+    // com o total global mostrado na linha do ranking que foi clicada. Só vale se o alvo optou
+    // pelo ranking público (ranking_publico), então não expõe nada além do que ele já publicou.
+    const querPublico = req.query.publico === '1'
+    const publico = jogador.ranking_publico === true && (querPublico || !temPresenca)
     if (!temPresenca && !publico) return res.status(404).json({ erro: 'Jogador não encontrado' })
     const grupoPerfil = publico ? null : req.groupId
 
@@ -445,9 +457,10 @@ export function createProfileRouter({ db, requireAuth, requireGroupMember }) {
              order by m.played_at desc nulls last limit 20`,
             recentesParams,
           ),
-      // Sinergia ESCOPADA ao grupo ativo: recomputa as duplas direto de match_players (join em
-      // matches com group_id = $2) em vez de ler a view synergy_pairs, que é GLOBAL (agrega TODOS
-      // os grupos). Sem isso, o perfil vazava o grafo social (com quem cada jogador joga) de
+      // Sinergia ESCOPADA ao grupo ativo pela regra de visibilidade por participação: recomputa as
+      // duplas direto de match_players (join em matches visíveis ao grupo) em vez de ler a view
+      // synergy_pairs, que é GLOBAL (agrega TODOS os grupos). Sem isso, o perfil vazava o grafo
+      // social (com quem cada jogador joga) de
       // grupos alheios pra qualquer conta logada.
       publico
         ? Promise.resolve(vazio)
@@ -456,7 +469,7 @@ export function createProfileRouter({ db, requireAuth, requireGroupMember }) {
                     count(*)::int as partidas,
                     count(*) filter (where mp1.won)::int as vitorias
              from match_players mp1
-             join matches m on m.id = mp1.match_id and m.group_id = $2
+             join matches m on m.id = mp1.match_id and ${partidaVisivelExpr('m', '$2')}
              join match_players mp2 on mp2.match_id = mp1.match_id and mp2.team = mp1.team
                and mp2.steam_id64 <> mp1.steam_id64
              join players p on p.steam_id64 = mp2.steam_id64

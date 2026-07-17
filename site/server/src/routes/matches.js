@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { keyFromR2Url, streamObject } from '../r2.js'
+import { partidaVisivelExpr } from '../matchVisibility.js'
 
 // Categoria de arma pro Head to Head (estilo Leetify: agrupa kills por família de
 // arma em vez de listar cada uma). Faca/granadas caem em "Outras".
@@ -25,7 +26,7 @@ export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Cli
   router.get('/', requireAuth, requireGroupMember, async (req, res) => {
     const cond = ["m.status = 'parsed'"]
     const params = [req.groupId]
-    cond.push(`m.group_id = $${params.length}`)
+    cond.push(partidaVisivelExpr('m', `$${params.length}`))
     const { from, to, map, source, mvp } = req.query
     // Paginação: limit 1..100 (default 20), offset >=0 (default 0). O shape da
     // resposta continua um array puro — o client sabe que acabou quando uma
@@ -127,7 +128,7 @@ export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Cli
   router.get('/:id', requireAuth, requireGroupMember, async (req, res) => {
     const { id } = req.params
     const matchQ = await db.query(
-      'select id, map, played_at, score_a, score_b, source, status, demo_url, replay_url from matches where id = $1 and group_id = $2',
+      `select id, map, played_at, score_a, score_b, source, status, demo_url, replay_url from matches where id = $1 and ${partidaVisivelExpr('matches', '$2')}`,
       [id, req.groupId],
     )
     if (matchQ.rows.length === 0) return res.status(404).json({ erro: 'Partida não encontrada' })
@@ -283,7 +284,10 @@ export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Cli
   // Jogador (recolhido por padrão na UI) — não bloa o payload do /:id pros outros 9.
   router.get('/:id/jogador/:steamId/detalhe', requireAuth, requireGroupMember, async (req, res) => {
     const { id, steamId } = req.params
-    const matchQ = await db.query('select id from matches where id = $1 and group_id = $2', [id, req.groupId])
+    const matchQ = await db.query(
+      `select id from matches where id = $1 and ${partidaVisivelExpr('matches', '$2')}`,
+      [id, req.groupId],
+    )
     if (matchQ.rows.length === 0) return res.status(404).json({ erro: 'Partida não encontrada' })
 
     const [kills, econ, compras] = await Promise.all([
@@ -347,7 +351,7 @@ export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Cli
     const { id, steamId } = req.params
     const jogadorQ = await db.query(
       `select mp.team from matches m join match_players mp on mp.match_id = m.id
-       where m.id = $1 and m.group_id = $2 and mp.steam_id64 = $3`,
+       where m.id = $1 and ${partidaVisivelExpr('m', '$2')} and mp.steam_id64 = $3`,
       [id, req.groupId, steamId],
     )
     if (jogadorQ.rows.length === 0) return res.status(404).json({ erro: 'Partida ou jogador não encontrado' })
@@ -435,10 +439,10 @@ export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Cli
   // Proxy autenticado pro replay 2D — nunca expõe a URL/credenciais do R2 ao client.
   router.get('/:id/replay', requireAuth, requireGroupMember, async (req, res) => {
     if (!r2Client) return res.status(503).json({ erro: 'Arquivamento (R2) não configurado' })
-    const { rows } = await db.query('select replay_url from matches where id = $1 and group_id = $2', [
-      req.params.id,
-      req.groupId,
-    ])
+    const { rows } = await db.query(
+      `select replay_url from matches where id = $1 and ${partidaVisivelExpr('matches', '$2')}`,
+      [req.params.id, req.groupId],
+    )
     const key = keyFromR2Url(rows[0]?.replay_url, r2Bucket)
     if (!key) return res.status(404).json({ erro: 'Replay não disponível' })
     try {
@@ -451,10 +455,10 @@ export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Cli
   // Idem para o .dem bruto (arquivado por completude — ADR-0002 — não usado pela UI ainda).
   router.get('/:id/demo', requireAuth, requireGroupMember, async (req, res) => {
     if (!r2Client) return res.status(503).json({ erro: 'Arquivamento (R2) não configurado' })
-    const { rows } = await db.query('select demo_url from matches where id = $1 and group_id = $2', [
-      req.params.id,
-      req.groupId,
-    ])
+    const { rows } = await db.query(
+      `select demo_url from matches where id = $1 and ${partidaVisivelExpr('matches', '$2')}`,
+      [req.params.id, req.groupId],
+    )
     const key = keyFromR2Url(rows[0]?.demo_url, r2Bucket)
     if (!key) return res.status(404).json({ erro: 'Demo não disponível' })
     try {

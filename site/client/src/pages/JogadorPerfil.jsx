@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { nomeMapa, dataHora, corRating, nomeArma, TIPO_COMPRA } from '../lib/format.js'
 import { Card, SectionHeader, StatTile, RatingBadge, DataTable, MapIcon, Badge, Select, PremierBadge, PlataformaBadge, FaceitEloBadge, SteamIcon, FaceitIcon } from '../components/ui'
 import LinhaEvolucao from '../components/LinhaEvolucao.jsx'
@@ -168,6 +168,10 @@ function SecaoHighlights({ destaques }) {
 export default function JogadorPerfil() {
   const { steamId } = useParams()
   const navegar = useNavigate()
+  // Veio do ranking público? Então o perfil abre no modo público (stats globais do jogador),
+  // pra o número bater com a linha clicada — mesmo que o viewer divida grupo com ele.
+  const [searchParams] = useSearchParams()
+  const viePublico = searchParams.get('publico') === '1'
   const [data, setData] = useState(null)
   const [erro, setErro] = useState(false)
   const [de, setDe] = useState('')
@@ -179,6 +183,7 @@ export default function JogadorPerfil() {
     const qs = new URLSearchParams()
     if (de) qs.set('from', de)
     if (ate) qs.set('to', ate)
+    if (viePublico) qs.set('publico', '1')
     fetch(`/api/profile/${steamId}${qs.size ? `?${qs}` : ''}`)
       .then((res) => {
         if (!res.ok) throw new Error()
@@ -186,7 +191,7 @@ export default function JogadorPerfil() {
       })
       .then(setData)
       .catch(() => setErro(true))
-  }, [steamId, de, ate])
+  }, [steamId, de, ate, viePublico])
 
   if (erro) return <p className="font-mono text-sm text-texto-fraco">Jogador não encontrado.</p>
   if (!data) return <p className="font-mono text-sm text-texto-fraco">Carregando…</p>
