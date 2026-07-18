@@ -425,12 +425,14 @@ def list_pending_share_codes(conn, limit=None):
     `limit` (opcional) processa só as N mais antigas por vez — o fetch baixa+parseia em série
     e cada run tem janela de 45 min no Actions; com a fila grande, resolver/baixar tudo de uma
     vez estoura o timeout e o run é cancelado sem commitar. Em lotes, cada run termina e commita,
-    e os runs de 30 em 30 min drenam o backlog (FIFO por played_at)."""
+    e os runs de 30 em 30 min drenam o backlog. Ordem: MAIS RECENTES primeiro — é o que os
+    jogadores querem ver logo depois de jogar, e as partidas velhas (muitas com demo já expirada
+    na Valve) não devem bloquear as de hoje."""
     with conn.cursor() as cur:
         cur.execute(
             "select share_code from matches "
             "where status = 'pending' and share_code is not null "
-            "order by played_at nulls last"
+            "order by played_at desc nulls last"
             + (" limit %s" if limit else ""),
             (limit,) if limit else None,
         )
