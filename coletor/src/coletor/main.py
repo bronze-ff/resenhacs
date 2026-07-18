@@ -117,10 +117,18 @@ def cmd_fetch(config, conn, since=None, bot_dir=None, node_bin="node"):
     import tempfile
     from pathlib import Path
 
-    codes = dbmod.list_pending_share_codes(conn)
+    # Lote por run: baixar+parsear é serial (~1-2 min/demo) e o job do Actions tem 45 min.
+    # Com a fila grande (noite de jogatina), resolver/baixar tudo de uma vez estoura o timeout
+    # e o run é cancelado SEM commitar o lote inteiro. Limitando por run, cada execução termina
+    # e commita cada partida; os runs de 30 em 30 min drenam o resto (FIFO por played_at).
+    LIMITE_POR_RUN = 15
+    codes = dbmod.list_pending_share_codes(conn, limit=LIMITE_POR_RUN)
     if not codes:
         print("fetch: nenhuma Partida pendente")
         return 0
+    restantes = dbmod.contar_pendentes(conn)
+    if restantes > len(codes):
+        print(f"fetch: {restantes} pendentes na fila — processando as {len(codes)} mais antigas neste run")
 
     bot_dir = bot_dir or (Path(__file__).resolve().parents[3] / "bot")
     print(f"fetch: resolvendo {len(codes)} share code(s) via Game Coordinator…")

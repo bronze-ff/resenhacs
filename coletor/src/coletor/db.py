@@ -419,15 +419,31 @@ def record_pending_match(conn, share_code, group_id, source="valve_mm"):
     return row[0] if row else None
 
 
-def list_pending_share_codes(conn):
-    """Share codes de Partidas descobertas (discover) mas ainda sem demo — status pending."""
+def list_pending_share_codes(conn, limit=None):
+    """Share codes de Partidas descobertas (discover) mas ainda sem demo — status pending.
+
+    `limit` (opcional) processa só as N mais antigas por vez — o fetch baixa+parseia em série
+    e cada run tem janela de 45 min no Actions; com a fila grande, resolver/baixar tudo de uma
+    vez estoura o timeout e o run é cancelado sem commitar. Em lotes, cada run termina e commita,
+    e os runs de 30 em 30 min drenam o backlog (FIFO por played_at)."""
     with conn.cursor() as cur:
         cur.execute(
             "select share_code from matches "
             "where status = 'pending' and share_code is not null "
             "order by played_at nulls last"
+            + (" limit %s" if limit else ""),
+            (limit,) if limit else None,
         )
         return [r[0] for r in cur.fetchall()]
+
+
+def contar_pendentes(conn):
+    """Quantas Partidas estão em status pending (com share_code) — pra logar o backlog."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "select count(*) from matches where status = 'pending' and share_code is not null"
+        )
+        return cur.fetchone()[0]
 
 
 def mark_skipped(conn, share_code):
