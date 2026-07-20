@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext.jsx'
 import FiltroPeriodo from '../components/FiltroPeriodo.jsx'
 import TagEstilo from '../components/TagEstilo.jsx'
+import { nomeMapa, dataHora } from '../lib/format.js'
 import { Card, SectionHeader, RatingBadge, DataTable } from '../components/ui'
 
 function Medalha({ posicao }) {
@@ -21,6 +22,23 @@ function AvatarRanking({ r }) {
   return (
     <span className="panel-cut-sm flex h-14 w-14 shrink-0 items-center justify-center border border-borda bg-superficie-alta font-display text-xl font-bold text-texto-fraco">
       {titulo.charAt(0).toUpperCase()}
+    </span>
+  )
+}
+
+// Seta de forma recente: rating médio das últimas 5 partidas vs a média geral de
+// carreira do Jogador (o server só manda `forma` quando há amostra suficiente — ver
+// ranking.js). Mesmo estilo visual do ▲/▼ do Premier em Partida.jsx, mas comparando
+// janela recente x histórico em vez de antes/depois de uma partida só.
+function SetaForma({ forma }) {
+  if (!forma || forma.tendencia === 'estavel') return null
+  const subindo = forma.tendencia === 'subindo'
+  return (
+    <span
+      className={`ml-1 font-mono text-xs ${subindo ? 'text-sucesso' : 'text-perigo'}`}
+      title={`Últimas 5: ${forma.recente.toFixed(2)} · Geral: ${forma.geral.toFixed(2)}`}
+    >
+      {subindo ? '▲' : '▼'}
     </span>
   )
 }
@@ -54,7 +72,10 @@ function CardJogador({ r, posicao, souEu }) {
         <div className="mt-2 grid grid-cols-4 gap-2">
           <div className="min-w-0">
             <div className="font-mono text-[10px] uppercase tracking-wide text-texto-fraco">Rating</div>
-            <RatingBadge valor={r.rating} className="text-base" />
+            <span className="inline-flex items-center">
+              <RatingBadge valor={r.rating} className="text-base" />
+              <SetaForma forma={r.forma} />
+            </span>
           </div>
           <Stat rotulo="K/D" valor={r.kd} />
           <Stat rotulo="Partidas" valor={r.partidas} />
@@ -73,6 +94,62 @@ function CardDestaque({ rotulo, nick, valor }) {
       <div className="mt-1 font-display text-lg font-bold text-destaque">{nick}</div>
       <div className="font-mono text-sm text-texto-fraco">{valor}</div>
     </div>
+  )
+}
+
+// Recordes do grupo (hall da fama): marcas históricas, sempre de TODAS as Partidas —
+// não respeita o filtro de período do Ranking (um recorde não deixa de ter acontecido
+// só porque saiu do período selecionado na tela).
+function Recordes() {
+  const [recordes, setRecordes] = useState(null)
+
+  useEffect(() => {
+    fetch('/api/recordes')
+      .then((res) => (res.ok ? res.json() : null))
+      .then(setRecordes)
+      .catch(() => setRecordes(null))
+  }, [])
+
+  if (!recordes) return null
+  const { maisKills, melhorAdr, maiorSequencia, maisClutchesNaNoite } = recordes
+  if (!maisKills && !melhorAdr && !maiorSequencia && !maisClutchesNaNoite) return null
+
+  return (
+    <section>
+      <h3 className="mb-2 font-display text-sm font-semibold uppercase tracking-wide text-texto-fraco">
+        Recordes do grupo
+      </h3>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {maisKills && (
+          <CardDestaque
+            rotulo="Mais kills numa partida"
+            nick={maisKills.nick}
+            valor={`${maisKills.kills} kills · ${nomeMapa(maisKills.map)} · ${dataHora(maisKills.playedAt)}`}
+          />
+        )}
+        {melhorAdr && (
+          <CardDestaque
+            rotulo="Melhor ADR numa partida"
+            nick={melhorAdr.nick}
+            valor={`${melhorAdr.adr} ADR · ${nomeMapa(melhorAdr.map)} · ${dataHora(melhorAdr.playedAt)}`}
+          />
+        )}
+        {maiorSequencia && (
+          <CardDestaque
+            rotulo="Maior sequência de vitórias"
+            nick={`${maiorSequencia.vitorias} seguida${maiorSequencia.vitorias === 1 ? '' : 's'}`}
+            valor={`${dataHora(maiorSequencia.inicio)} até ${dataHora(maiorSequencia.fim)}`}
+          />
+        )}
+        {maisClutchesNaNoite && (
+          <CardDestaque
+            rotulo="Mais clutches numa Resenha"
+            nick={maisClutchesNaNoite.nick}
+            valor={`${maisClutchesNaNoite.clutches} clutch${maisClutchesNaNoite.clutches === 1 ? '' : 'es'} · ${dataHora(maisClutchesNaNoite.sessaoInicio)}`}
+          />
+        )}
+      </div>
+    </section>
   )
 }
 
@@ -111,6 +188,8 @@ export default function Ranking() {
         className="mb-0 flex-wrap"
         acao={<FiltroPeriodo de={de} ate={ate} onDe={setDe} onAte={setAte} />}
       />
+
+      <Recordes />
 
       {comPartida.length === 0 && (
         <p className="font-mono text-sm text-texto-fraco">Ninguém do grupo tem Partidas registradas {de || ate ? 'nesse período' : 'ainda'}.</p>
@@ -196,7 +275,10 @@ export default function Ranking() {
                     <span className={`ml-1.5 text-xs ${r.clutchPct >= 50 ? 'text-sucesso' : 'text-texto-fraco'}`}>{r.clutchPct}%</span>
                   )}
                 </td>
-                <td className="px-3 py-2 text-right"><RatingBadge valor={r.rating} /></td>
+                <td className="px-3 py-2 text-right">
+                  <RatingBadge valor={r.rating} />
+                  <SetaForma forma={r.forma} />
+                </td>
               </tr>
             ))}
           </DataTable>

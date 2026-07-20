@@ -24,6 +24,38 @@ export function createRankingRouter({ db, requireAuth, requireGroupMember }) {
       params.push(to)
       periodo += ` and m.played_at < ($${params.length}::date + interval '1 day')`
     }
+    // Forma recente: rating médio das últimas 5 Partidas de CARREIRA (não do período
+    // filtrado acima — "recente" perde o sentido se o filtro já corta pra uma janela
+    // velha) vs a média geral de carreira. row_number() por Jogador ordenado por
+    // played_at desc marca as 5 mais novas; o resto entra só na média geral.
+    const formaQ = await db.query(
+      `select steam_id64,
+              avg(rating) filter (where rn <= 5) as recente,
+              avg(rating) as geral,
+              count(*)::int as total
+       from (
+         select mp.steam_id64, mp.rating,
+                row_number() over (partition by mp.steam_id64 order by m.played_at desc nulls last) as rn
+         from match_players mp
+         join matches m on m.id = mp.match_id
+         where mp.is_tracked and ${partidaVisivelExpr('m', '$1')} and mp.rating is not null
+       ) t
+       group by steam_id64`,
+      [req.groupId],
+    )
+    // Diferença mínima pra não piscar seta por ruído estatístico; abaixo disso é "estável".
+    const LIMIAR_FORMA = 0.05
+    const formaPorJogador = new Map()
+    for (const f of formaQ.rows) {
+      if (f.total < 5 || f.recente === null || f.geral === null) continue
+      const delta = Number(f.recente) - Number(f.geral)
+      formaPorJogador.set(f.steam_id64, {
+        tendencia: delta > LIMIAR_FORMA ? 'subindo' : delta < -LIMIAR_FORMA ? 'caindo' : 'estavel',
+        recente: Math.round(Number(f.recente) * 100) / 100,
+        geral: Math.round(Number(f.geral) * 100) / 100,
+      })
+    }
+
     const { rows } = await db.query(
       `select p.steam_id64, p.nick, coalesce(p.avatar_url, sa.avatar_url) as avatar_url,
               count(mp.match_id)::int as partidas,
@@ -87,6 +119,7 @@ export function createRankingRouter({ db, requireAuth, requireGroupMember }) {
         entryDeaths: r.entry_deaths,
         entryWinPct: pct(r.entry_kills, r.entry_kills + r.entry_deaths),
         estilo: estilos[r.steam_id64],
+        forma: formaPorJogador.get(r.steam_id64) ?? null,
       }))
       .sort((a, b) => (b.rating ?? -1) - (a.rating ?? -1))
 

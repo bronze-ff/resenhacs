@@ -34,6 +34,31 @@ describe('GET /api/ranking', () => {
     expect(res.body[1].nick).toBe('baixo')
   })
 
+  it('forma recente: sobe, cai, estável e amostra insuficiente', async () => {
+    const db = { query: vi.fn() }
+    db.query
+      .mockResolvedValueOnce({ rows: [{ '?column?': 1 }] }) // requireGroupMember: é membro
+      .mockResolvedValueOnce({ rows: [
+        { steam_id64: '1', recente: '1.40', geral: '1.10', total: 8 }, // subindo
+        { steam_id64: '2', recente: '0.80', geral: '1.10', total: 8 }, // caindo
+        { steam_id64: '3', recente: '1.11', geral: '1.10', total: 8 }, // estável (dentro do limiar)
+        { steam_id64: '4', recente: '1.40', geral: '1.10', total: 3 }, // amostra insuficiente (<5)
+      ] })
+      .mockResolvedValueOnce({ rows: [
+        { steam_id64: '1', nick: 'sobe', avatar_url: null, partidas: 8, vitorias: 4, kills: 80, deaths: 80, hs: 20, rating: '1.10', aces: 0, clutch_wins: 0, clutch_attempts: 0 },
+        { steam_id64: '2', nick: 'desce', avatar_url: null, partidas: 8, vitorias: 4, kills: 80, deaths: 80, hs: 20, rating: '1.10', aces: 0, clutch_wins: 0, clutch_attempts: 0 },
+        { steam_id64: '3', nick: 'estavel', avatar_url: null, partidas: 8, vitorias: 4, kills: 80, deaths: 80, hs: 20, rating: '1.10', aces: 0, clutch_wins: 0, clutch_attempts: 0 },
+        { steam_id64: '4', nick: 'poucas', avatar_url: null, partidas: 3, vitorias: 1, kills: 30, deaths: 30, hs: 5, rating: '1.10', aces: 0, clutch_wins: 0, clutch_attempts: 0 },
+      ] })
+    const app = createApp({ config, db })
+    const res = await request(app).get('/api/ranking').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    const porNick = Object.fromEntries(res.body.map((r) => [r.nick, r.forma]))
+    expect(porNick.sobe).toMatchObject({ tendencia: 'subindo', recente: 1.4, geral: 1.1 })
+    expect(porNick.desce).toMatchObject({ tendencia: 'caindo', recente: 0.8, geral: 1.1 })
+    expect(porNick.estavel).toMatchObject({ tendencia: 'estavel' })
+    expect(porNick.poucas).toBeNull()
+  })
+
   it('jogador sem partidas ainda: rating null vai pro fim', async () => {
     const { app } = appWith([
       { steam_id64: '1', nick: 'novato', avatar_url: null, partidas: 0, vitorias: 0, kills: 0, deaths: 0, hs: 0, rating: null, aces: 0, clutch_wins: 0, clutch_attempts: 0 },
