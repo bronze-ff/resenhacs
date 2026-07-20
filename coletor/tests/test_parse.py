@@ -77,6 +77,55 @@ def test_eh_arma_de_fogo_exclui_faca_e_granada():
     assert parse._eh_arma_de_fogo(None) is False
 
 
+# ---- _construir_rounds (dívida técnica: round decisivo sumia da tabela `rounds`) ----
+
+def test_construir_rounds_caso_normal_sem_round_faltando():
+    end_ticks = [100, 200, 300]
+    by_tick = {
+        100: {"A": 1, "B": 0},
+        200: {"A": 1, "B": 1},
+        300: {"A": 2, "B": 1},
+    }
+    score = {"A": 2, "B": 1}  # bate exatamente com o que os round_officially_ended já contam
+    rounds = parse._construir_rounds(end_ticks, by_tick, score)
+    assert len(rounds) == 3
+    assert [r["winner_team"] for r in rounds] == ["A", "B", "A"]
+    assert [r["round_number"] for r in rounds] == [1, 2, 3]
+
+
+def test_construir_rounds_completa_o_round_decisivo_faltando():
+    # round_officially_ended só disparou pros 2 primeiros rounds — o 3º (que fecha o
+    # mapa, 13x9 por exemplo) nunca chegou. score final diz que o time A tem mais 1
+    # round do que o contabilizado pelos ticks -> completa como vitória de A.
+    end_ticks = [100, 200]
+    by_tick = {100: {"A": 1, "B": 0}, 200: {"A": 1, "B": 1}}
+    score = {"A": 2, "B": 1}
+    rounds = parse._construir_rounds(end_ticks, by_tick, score)
+    assert len(rounds) == 3
+    assert rounds[2] == {"round_number": 3, "winner_team": "A", "win_reason": ""}
+
+
+def test_construir_rounds_round_decisivo_faltando_vitoria_do_time_b():
+    end_ticks = [100]
+    by_tick = {100: {"A": 1, "B": 0}}
+    score = {"A": 1, "B": 1}  # B fechou o placar no round que falta
+    rounds = parse._construir_rounds(end_ticks, by_tick, score)
+    assert len(rounds) == 2
+    assert rounds[1] == {"round_number": 2, "winner_team": "B", "win_reason": ""}
+
+
+def test_construir_rounds_sem_nenhum_round_officially_ended_mas_com_placar():
+    # Caso extremo: nenhum evento de fim de round chegou a disparar (demo muito curta/
+    # truncada), mas o placar final existe — ainda completa 1 round sintético.
+    rounds = parse._construir_rounds([], {}, {"A": 1, "B": 0})
+    assert rounds == [{"round_number": 1, "winner_team": "A", "win_reason": ""}]
+
+
+def test_construir_rounds_sem_placar_nenhum_nao_adiciona_nada():
+    rounds = parse._construir_rounds([], {}, {"A": 0, "B": 0})
+    assert rounds == []
+
+
 def test_nomes_de_time_extrai_dos_dois_lados():
     fixed = {"1": "A", "2": "A", "3": "B", "4": "B"}
     registros = [

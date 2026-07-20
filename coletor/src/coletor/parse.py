@@ -35,6 +35,47 @@ def _lado_de_team_num(team_number):
     return None
 
 
+def _construir_rounds(end_ticks, by_tick, score):
+    """Monta a lista de `rounds` (vencedor por round) a partir dos ticks de fim de round
+    oficial + placar final. Completa o round DECISIVO quando ele falta — o
+    round_officially_ended do round que fecha a partida tipicamente não dispara (o mapa
+    termina antes, no cs_win_panel_match); sem isso, o clutch/entry desse round (quase
+    sempre o mais memorável) nunca aparecia em `rounds`. O time que tem mais rounds no
+    placar final (`score`) do que o já contabilizado pelos ticks de fim de round venceu
+    o round que falta — winner sintético; `win_reason` fica vazio (não há evento de
+    razão de vitória disponível tão perto do fim da partida).
+
+    `end_ticks`: lista ordenada de ticks de round_officially_ended.
+    `by_tick`: {tick: {"A": total_rounds, "B": total_rounds}} — snapshot em cada end_tick.
+    `score`: {"A": int, "B": int} — placar final da partida (team_rounds_total no fim).
+    """
+    rounds = []
+    prev = {"A": 0, "B": 0}
+    for i, t in enumerate(end_ticks):
+        cur = by_tick.get(t, prev)
+        if cur.get("A", 0) > prev["A"]:
+            winner = "A"
+        elif cur.get("B", 0) > prev["B"]:
+            winner = "B"
+        else:
+            winner = None
+        rounds.append({"round_number": i + 1, "winner_team": winner, "win_reason": ""})
+        prev = {"A": cur.get("A", prev["A"]), "B": cur.get("B", prev["B"])}
+
+    total_rounds_esperado = score.get("A", 0) + score.get("B", 0)
+    if total_rounds_esperado > len(rounds):
+        if score.get("A", 0) > prev.get("A", 0):
+            vencedor_decisivo = "A"
+        elif score.get("B", 0) > prev.get("B", 0):
+            vencedor_decisivo = "B"
+        else:
+            vencedor_decisivo = None
+        rounds.append({
+            "round_number": len(rounds) + 1, "winner_team": vencedor_decisivo, "win_reason": "",
+        })
+    return rounds
+
+
 def _nomes_de_time(registros, fixed):
     """(nome_time_a, nome_time_b) a partir de um snapshot de tick com team_clan_name —
     None quando a demo não traz nome de clã (comum em partida de matchmaking do grupo,
@@ -956,29 +997,19 @@ def parse_demo(path):
         if sid
     ]
 
-    # Rounds: vencedor por delta de team_rounds_total nos ticks de fim de round.
-    rounds = []
+    # Rounds: vencedor por delta de team_rounds_total nos ticks de fim de round, com o
+    # round decisivo completado a partir do placar final (ver _construir_rounds).
     ended = parser.parse_event("round_officially_ended", other=["total_rounds_played"])
     end_ticks = sorted({int(t) for t in ended["tick"].tolist()})
+    by_tick = {}
     if end_ticks:
         snaps = parser.parse_ticks(["team_rounds_total"], ticks=end_ticks)
-        by_tick = {}
         for r in snaps.to_dict("records"):
             ft = fixed.get(_sid(r.get("steamid")))
             total = _num(r.get("team_rounds_total"))
             if ft and total is not None:
                 by_tick.setdefault(int(r["tick"]), {})[ft] = total
-        prev = {"A": 0, "B": 0}
-        for i, t in enumerate(end_ticks):
-            cur = by_tick.get(t, prev)
-            if cur.get("A", 0) > prev["A"]:
-                winner = "A"
-            elif cur.get("B", 0) > prev["B"]:
-                winner = "B"
-            else:
-                winner = None
-            rounds.append({"round_number": i + 1, "winner_team": winner, "win_reason": ""})
-            prev = {"A": cur.get("A", prev["A"]), "B": cur.get("B", prev["B"])}
+    rounds = _construir_rounds(end_ticks, by_tick, score)
 
     played_at = datetime.datetime.fromtimestamp(
         os.path.getmtime(path), tz=datetime.timezone.utc
