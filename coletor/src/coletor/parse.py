@@ -788,13 +788,16 @@ def parse_demo(path):
 
     # Dano por atacante, separando bala de utilitária (granada/molotov — "inferno" no
     # weapon é o dano de queimadura do molotov/incendiary, descoberto empiricamente).
-    # he_damage/molotov_damage: SÓ dano em INIMIGO (comparação com o Leetify, 2026-07-11,
-    # mostrou que eles separam "Avg HE damage" de "Avg HE team damage" — dano em time
-    # (fogo amigo) vai pros campos _team_damage à parte; sem essa separação um jogador
-    # que só acerta granada no próprio time parecia "bom com HE" igual quem acerta
-    # inimigo). utility_damage continua sendo a soma de TUDO (inimigo + time), pro
-    # stat tile antigo "Dano utilitária" não mudar de significado.
-    damage, utility_damage, shots_hit = {}, {}, {}
+    # `damage` (o que vira ADR em toda a UI) é SÓ dano em INIMIGO — mesma comparação
+    # com o Leetify de 2026-07-11 que motivou separar he_damage/molotov_damage de
+    # he_team_damage/molotov_team_damage também vale pro dano de bala: sem esse filtro,
+    # fogo amigo (bala ou granada não-HE/molotov acertando aliado) inflava o ADR de
+    # quem tomava/dava dano em aliado (achado real: ADR 140.1 no nosso site vs 107 no
+    # Leetify pro mesmo jogador na mesma partida). `team_damage` guarda esse fogo amigo
+    # à parte, pro caso de algum dia querer expor/investigar. utility_damage continua
+    # sendo a soma de TUDO (inimigo + time), pro stat tile antigo "Dano utilitária" não
+    # mudar de significado.
+    damage, team_damage, utility_damage, shots_hit = {}, {}, {}, {}
     he_damage, molotov_damage = {}, {}
     he_team_damage, molotov_team_damage = {}, {}
     # Dano por PAR (quem bateu em quem, com quê) — base do "Head to Head": o player_hurt
@@ -806,12 +809,15 @@ def parse_demo(path):
         if not atk:
             continue
         dmg = int(r["dmg_health"])
-        damage[atk] = damage.get(atk, 0) + dmg
         vic = _sid(r.get("user_steamid"))
         arma = r.get("weapon")
+        time_kill = bool(vic and fixed.get(atk) == fixed.get(vic))
+        if time_kill:
+            team_damage[atk] = team_damage.get(atk, 0) + dmg
+        else:
+            damage[atk] = damage.get(atk, 0) + dmg
         if arma in _ARMAS_UTILITARIAS:
             utility_damage[atk] = utility_damage.get(atk, 0) + dmg
-            time_kill = bool(vic and fixed.get(atk) == fixed.get(vic))
             if arma == "hegrenade":
                 if time_kill:
                     he_team_damage[atk] = he_team_damage.get(atk, 0) + dmg
@@ -829,7 +835,8 @@ def parse_demo(path):
             arma_resolvida = _resolver_arma_hurt(mapa_variante, atk, round_no, _arma_limpa(arma))
             slot = weapon_slot(atk, arma_resolvida)
             slot["shots_hit"] += 1
-            slot["damage"] += dmg
+            if not time_kill:
+                slot["damage"] += dmg
             arma_par = arma_resolvida
         else:
             arma_par = _arma_limpa(arma) or str(arma)
