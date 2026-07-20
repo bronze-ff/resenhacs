@@ -755,8 +755,18 @@ def test_notificar_discord_nao_derruba_em_erro_de_envio(monkeypatch, capsys):
     monkeypatch.setattr(main.discord_notify, "enviar_webhook", _explode)
     marcados = []
     monkeypatch.setattr(main.dbmod, "marcar_notificado_discord", lambda conn, mid, gid: marcados.append(1))
-    main._notificar_discord_grupos(config, conn=object(), match_id="m1")  # não deve lançar
+
+    class FakeConn:
+        def __init__(self):
+            self.rollbacks = 0
+
+        def rollback(self):
+            self.rollbacks += 1
+
+    conn = FakeConn()
+    main._notificar_discord_grupos(config, conn=conn, match_id="m1")  # não deve lançar
     assert marcados == []
+    assert conn.rollbacks == 1
     assert "timeout" in capsys.readouterr().out
 
 

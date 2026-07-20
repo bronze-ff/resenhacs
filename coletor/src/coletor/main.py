@@ -112,21 +112,26 @@ def _notificar_discord_grupos(config, conn, match_id):
     NUNCA derruba o fetch (a Partida já foi ingerida com sucesso, isso é só um aviso)."""
     if not config.app_url:
         return
-    for group_id in dbmod.grupos_da_partida(conn, match_id):
-        if dbmod.ja_notificado_discord(conn, match_id, group_id):
-            continue
-        webhook_url = dbmod.webhook_do_grupo(conn, group_id)
-        if not webhook_url:
-            continue
-        try:
-            resumo = dbmod.resumo_da_partida_para_grupo(conn, match_id, group_id)
-            if resumo is None:
+    try:
+        for group_id in dbmod.grupos_da_partida(conn, match_id):
+            if dbmod.ja_notificado_discord(conn, match_id, group_id):
                 continue
-            payload = discord_notify.montar_embed(resumo, match_id, config.app_url)
-            discord_notify.enviar_webhook(webhook_url, payload)
-            dbmod.marcar_notificado_discord(conn, match_id, group_id)
-        except Exception as e:  # noqa: BLE001
-            print(f"  discord: falha ao notificar grupo {group_id} da partida {match_id}: {e}")
+            webhook_url = dbmod.webhook_do_grupo(conn, group_id)
+            if not webhook_url:
+                continue
+            try:
+                resumo = dbmod.resumo_da_partida_para_grupo(conn, match_id, group_id)
+                if resumo is None:
+                    continue
+                payload = discord_notify.montar_embed(resumo, match_id, config.app_url)
+                discord_notify.enviar_webhook(webhook_url, payload)
+                dbmod.marcar_notificado_discord(conn, match_id, group_id)
+            except Exception as e:  # noqa: BLE001
+                conn.rollback()
+                print(f"  discord: falha ao notificar grupo {group_id} da partida {match_id}: {e}")
+    except Exception as e:  # noqa: BLE001
+        conn.rollback()
+        print(f"  discord: falha ao notificar grupos da partida {match_id}: {e}")
 
 
 def cmd_fetch(config, conn, since=None, bot_dir=None, node_bin="node"):
