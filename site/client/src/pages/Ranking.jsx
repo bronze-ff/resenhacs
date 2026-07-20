@@ -153,6 +153,67 @@ function Recordes() {
   )
 }
 
+// "A gente é muito pior de T na Mirage?" (FIL-51) — winrate do grupo por lado (CT/T)
+// em cada mapa. Só aparece mapa a mapa quando há dado (partidas reprocessadas depois
+// do FIL-51, side_a); grupo sem nenhum dado ainda esconde a seção toda.
+function LadoPorMapa() {
+  const [linhas, setLinhas] = useState(null)
+
+  useEffect(() => {
+    fetch('/api/lado-mapa')
+      .then((res) => (res.ok ? res.json() : []))
+      .then(setLinhas)
+      .catch(() => setLinhas([]))
+  }, [])
+
+  if (!linhas || linhas.length === 0) return null
+
+  const porMapa = new Map()
+  for (const l of linhas) {
+    if (!porMapa.has(l.map)) porMapa.set(l.map, {})
+    porMapa.get(l.map)[l.lado] = l
+  }
+
+  return (
+    <section>
+      <h3 className="mb-2 font-display text-sm font-semibold uppercase tracking-wide text-texto-fraco">
+        Winrate por lado
+      </h3>
+      <div className="panel-cut border border-borda">
+        <DataTable
+          head={
+            <tr>
+              <th className="px-3 py-2">Mapa</th>
+              <th className="px-2 py-2 text-right">CT</th>
+              <th className="px-2 py-2 text-right">T</th>
+            </tr>
+          }
+        >
+          {[...porMapa.entries()].map(([mapa, lados]) => (
+            <tr key={mapa}>
+              <td className="px-3 py-2">{nomeMapa(mapa)}</td>
+              <td className="px-2 py-2 text-right tabular-nums">
+                {lados.CT ? (
+                  <span className={lados.CT.winrate >= 50 ? 'text-sucesso' : 'text-perigo'}>
+                    {lados.CT.winrate}% <span className="text-texto-fraco">({lados.CT.vitorias}/{lados.CT.rounds})</span>
+                  </span>
+                ) : <span className="text-texto-fraco">—</span>}
+              </td>
+              <td className="px-2 py-2 text-right tabular-nums">
+                {lados.T ? (
+                  <span className={lados.T.winrate >= 50 ? 'text-sucesso' : 'text-perigo'}>
+                    {lados.T.winrate}% <span className="text-texto-fraco">({lados.T.vitorias}/{lados.T.rounds})</span>
+                  </span>
+                ) : <span className="text-texto-fraco">—</span>}
+              </td>
+            </tr>
+          ))}
+        </DataTable>
+      </div>
+    </section>
+  )
+}
+
 export default function Ranking() {
   const { jogador } = useAuth()
   const [ranking, setRanking] = useState(null)
@@ -190,6 +251,7 @@ export default function Ranking() {
       />
 
       <Recordes />
+      <LadoPorMapa />
 
       {comPartida.length === 0 && (
         <p className="font-mono text-sm text-texto-fraco">Ninguém do grupo tem Partidas registradas {de || ate ? 'nesse período' : 'ainda'}.</p>

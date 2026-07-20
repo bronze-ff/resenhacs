@@ -228,12 +228,13 @@ def _write_rounds(cur, match_id, rounds):
     for r in rounds:
         cur.execute(
             """
-            insert into rounds (match_id, round_number, winner_team, win_reason)
-            values (%s, %s, %s, %s)
+            insert into rounds (match_id, round_number, winner_team, win_reason, side_a)
+            values (%s, %s, %s, %s, %s)
             on conflict (match_id, round_number) do update set
-              winner_team = excluded.winner_team, win_reason = excluded.win_reason
+              winner_team = excluded.winner_team, win_reason = excluded.win_reason,
+              side_a = excluded.side_a
             """,
-            (match_id, r["round_number"], r.get("winner_team"), r.get("win_reason")),
+            (match_id, r["round_number"], r.get("winner_team"), r.get("win_reason"), r.get("side_a")),
         )
 
 

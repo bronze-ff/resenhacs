@@ -35,7 +35,7 @@ def _lado_de_team_num(team_number):
     return None
 
 
-def _construir_rounds(end_ticks, by_tick, score):
+def _construir_rounds(end_ticks, by_tick, score, lado_por_round=None):
     """Monta a lista de `rounds` (vencedor por round) a partir dos ticks de fim de round
     oficial + placar final. Completa o round DECISIVO quando ele falta — o
     round_officially_ended do round que fecha a partida tipicamente não dispara (o mapa
@@ -48,7 +48,11 @@ def _construir_rounds(end_ticks, by_tick, score):
     `end_ticks`: lista ordenada de ticks de round_officially_ended.
     `by_tick`: {tick: {"A": total_rounds, "B": total_rounds}} — snapshot em cada end_tick.
     `score`: {"A": int, "B": int} — placar final da partida (team_rounds_total no fim).
+    `lado_por_round` (opcional, FIL-51): {round_number: "CT"|"T"} lado que o time A
+    ocupava naquele round — vira `side_a` em cada round. Sem dado pro round decisivo
+    sintético (mesma limitação do win_reason vazio: perto demais do fim da partida).
     """
+    lado_por_round = lado_por_round or {}
     rounds = []
     prev = {"A": 0, "B": 0}
     for i, t in enumerate(end_ticks):
@@ -59,7 +63,10 @@ def _construir_rounds(end_ticks, by_tick, score):
             winner = "B"
         else:
             winner = None
-        rounds.append({"round_number": i + 1, "winner_team": winner, "win_reason": ""})
+        rounds.append({
+            "round_number": i + 1, "winner_team": winner, "win_reason": "",
+            "side_a": lado_por_round.get(i + 1),
+        })
         prev = {"A": cur.get("A", prev["A"]), "B": cur.get("B", prev["B"])}
 
     total_rounds_esperado = score.get("A", 0) + score.get("B", 0)
@@ -72,6 +79,7 @@ def _construir_rounds(end_ticks, by_tick, score):
             vencedor_decisivo = None
         rounds.append({
             "round_number": len(rounds) + 1, "winner_team": vencedor_decisivo, "win_reason": "",
+            "side_a": lado_por_round.get(len(rounds) + 1),
         })
     return rounds
 
@@ -644,9 +652,12 @@ def parse_demo(path):
     # classificação HLTV do time (_tipo_de_compra), só que sobre o gasto individual dele.
     round_econ = []
     player_round_econ = []
+    lado_por_round = {}  # round_number -> "CT"/"T" que o time FIXO A ocupava (FIL-51)
     try:
         tick_to_round = {int(t): int(rn) + 1 for t, rn in zip(freeze["tick"], freeze["total_rounds_played"])}
-        econ_df = parser.parse_ticks(["current_equip_value"], ticks=sorted(tick_to_round.keys()))
+        # team_num no mesmo snapshot da econ (já é um parse_ticks nesses ticks mesmo) —
+        # dá o lado FÍSICO (CT/T) de cada jogador naquele round, sem custo extra de parse.
+        econ_df = parser.parse_ticks(["current_equip_value", "team_num"], ticks=sorted(tick_to_round.keys()))
         soma = {}  # (round_number, team) -> equip_value somado
         for r in econ_df.to_dict("records"):
             sid = _sid(r.get("steamid"))
@@ -661,6 +672,10 @@ def parse_demo(path):
                     "round_number": rn, "steam_id64": sid, "team": time,
                     "equip_value": equip, "buy_type": _tipo_de_compra(equip),
                 })
+            if time == "A" and rn not in lado_por_round:
+                lado = _lado_de_team_num(_num(r.get("team_num")))
+                if lado:
+                    lado_por_round[rn] = lado
         round_econ = [
             {"round_number": rn, "team": time, "equip_value": equip, "buy_type": _tipo_de_compra(equip)}
             for (rn, time), equip in soma.items()
@@ -1016,7 +1031,7 @@ def parse_demo(path):
             total = _num(r.get("team_rounds_total"))
             if ft and total is not None:
                 by_tick.setdefault(int(r["tick"]), {})[ft] = total
-    rounds = _construir_rounds(end_ticks, by_tick, score)
+    rounds = _construir_rounds(end_ticks, by_tick, score, lado_por_round=lado_por_round)
 
     played_at = datetime.datetime.fromtimestamp(
         os.path.getmtime(path), tz=datetime.timezone.utc

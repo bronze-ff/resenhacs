@@ -102,7 +102,7 @@ def test_construir_rounds_completa_o_round_decisivo_faltando():
     score = {"A": 2, "B": 1}
     rounds = parse._construir_rounds(end_ticks, by_tick, score)
     assert len(rounds) == 3
-    assert rounds[2] == {"round_number": 3, "winner_team": "A", "win_reason": ""}
+    assert rounds[2] == {"round_number": 3, "winner_team": "A", "win_reason": "", "side_a": None}
 
 
 def test_construir_rounds_round_decisivo_faltando_vitoria_do_time_b():
@@ -111,19 +111,35 @@ def test_construir_rounds_round_decisivo_faltando_vitoria_do_time_b():
     score = {"A": 1, "B": 1}  # B fechou o placar no round que falta
     rounds = parse._construir_rounds(end_ticks, by_tick, score)
     assert len(rounds) == 2
-    assert rounds[1] == {"round_number": 2, "winner_team": "B", "win_reason": ""}
+    assert rounds[1] == {"round_number": 2, "winner_team": "B", "win_reason": "", "side_a": None}
 
 
 def test_construir_rounds_sem_nenhum_round_officially_ended_mas_com_placar():
     # Caso extremo: nenhum evento de fim de round chegou a disparar (demo muito curta/
     # truncada), mas o placar final existe — ainda completa 1 round sintético.
     rounds = parse._construir_rounds([], {}, {"A": 1, "B": 0})
-    assert rounds == [{"round_number": 1, "winner_team": "A", "win_reason": ""}]
+    assert rounds == [{"round_number": 1, "winner_team": "A", "win_reason": "", "side_a": None}]
 
 
 def test_construir_rounds_sem_placar_nenhum_nao_adiciona_nada():
     rounds = parse._construir_rounds([], {}, {"A": 0, "B": 0})
     assert rounds == []
+
+
+# ---- side_a: lado (CT/T) do time fixo A por round (FIL-51) ----
+
+def test_construir_rounds_anexa_side_a_de_lado_por_round():
+    end_ticks = [100, 200]
+    by_tick = {100: {"A": 1, "B": 0}, 200: {"A": 1, "B": 1}}
+    score = {"A": 1, "B": 1}
+    lado_por_round = {1: "CT", 2: "T"}
+    rounds = parse._construir_rounds(end_ticks, by_tick, score, lado_por_round=lado_por_round)
+    assert [r["side_a"] for r in rounds] == ["CT", "T"]
+
+
+def test_construir_rounds_sem_lado_conhecido_devolve_side_a_none():
+    rounds = parse._construir_rounds([100], {100: {"A": 1, "B": 0}}, {"A": 1, "B": 0})
+    assert rounds[0]["side_a"] is None
 
 
 def test_nomes_de_time_extrai_dos_dois_lados():
