@@ -7,19 +7,58 @@ import ReplayViewer from '../components/ReplayViewer.jsx'
 import MapaCalor from '../components/MapaCalor.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
 
-function SecaoReplay({ replayUrl, seek, onSelecionarPonto }) {
+// Placeholder de um round ainda não baixado (streaming por round — FIL-54b): mesmo
+// shape de um round completo, só que sem frames/eventos. O ReplayViewer já trata os
+// campos ausentes com fallback (`round.fires || []` etc.), então isso renderiza como
+// "round vazio" até o fetch chegar, sem precisar de um estado de loading dedicado ali.
+function roundVazio(meta) {
+  return { ...meta, frames: [], kills: [], hits: [] }
+}
+
+export function SecaoReplay({ replayUrl, seek, onSelecionarPonto }) {
   const [replay, setReplay] = useState(null)
   const [erro, setErro] = useState(false)
   const [aba, setAba] = useState('replay') // replay | calor
 
   useEffect(() => {
     if (!replayUrl) return
+    let vivo = true
     setReplay(null)
     setErro(false)
+
     fetch(replayUrl)
       .then((res) => (res.ok ? res.json() : Promise.reject()))
-      .then(setReplay)
-      .catch(() => setErro(true))
+      .then((indice) => {
+        if (!vivo) return
+        // Formato antigo (replay arquivado antes do streaming por round): cada round já
+        // vem com `frames` — nada a buscar, mostra direto (comportamento inalterado).
+        const streaming = indice.rounds.length > 0 && indice.rounds[0].frames === undefined
+        if (!streaming) { setReplay(indice); return }
+
+        // Formato novo: `indice` só tem metadados por round. Monta o replay com
+        // placeholders e preenche assim que cada round chega — round 1 primeiro (é o
+        // que a tela abre tocando), o resto em paralelo logo em seguida.
+        setReplay({ ...indice, rounds: indice.rounds.map(roundVazio) })
+        const buscarRound = (numero) =>
+          fetch(`${replayUrl}/round/${numero}`)
+            .then((res) => (res.ok ? res.json() : null))
+            .then((dadosDoRound) => {
+              if (!vivo || !dadosDoRound) return
+              setReplay((atual) => atual && ({
+                ...atual,
+                rounds: atual.rounds.map((r) => (r.round === numero ? dadosDoRound : r)),
+              }))
+            })
+            .catch(() => {})
+        const numeros = indice.rounds.map((r) => r.round)
+        buscarRound(numeros[0]).then(() => {
+          if (!vivo) return
+          numeros.slice(1).forEach(buscarRound)
+        })
+      })
+      .catch(() => { if (vivo) setErro(true) })
+
+    return () => { vivo = false }
   }, [replayUrl])
 
   // Deep link de um Highlight sempre volta pra aba do replay animado.

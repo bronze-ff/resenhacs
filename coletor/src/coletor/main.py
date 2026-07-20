@@ -534,10 +534,7 @@ def cmd_reprocess(config, conn, match_id=None):
                 # não recalcula um novo, senão o antigo fica órfão e o link salvo quebra.
                 replay_key = storage_r2.key_from_url(replay_url, config.r2_bucket) if replay_url else None
                 if replay_key:
-                    storage_r2.upload_bytes(
-                        client, config.r2_bucket, replay_key,
-                        json.dumps(replay_json).encode("utf-8"), content_type="application/json",
-                    )
+                    _upload_replay(client, config.r2_bucket, replay_key, replay_json)
 
                 dbmod.store_parsed(
                     conn, parsed, share_code=share_code, source=source or "valve_mm",
@@ -564,6 +561,22 @@ def _descomprimir_dem_arquivado(dados):
         return dados
 
 
+def _upload_replay(client, bucket, rkey, replay_json):
+    """Sobe o replay quebrado em índice (pequeno, sem frames) + um objeto por round —
+    streaming por round no client (FIL-54b): a Partida toca o round 1 sem esperar o
+    replay inteiro baixar; os demais rounds são buscados sob demanda. `rkey` é a
+    chave do índice (a mesma que `replay_url` sempre apontou — nenhuma mudança de
+    schema); os rounds vão pro mesmo prefixo, trocando ".json" por "/round-{n}.json"."""
+    index, rounds = replaymod.split_for_storage(replay_json)
+    storage_r2.upload_bytes(client, bucket, rkey, json.dumps(index).encode("utf-8"), content_type="application/json")
+    base = rkey[: -len(".json")] if rkey.endswith(".json") else rkey
+    for round_number, round_data in rounds.items():
+        storage_r2.upload_bytes(
+            client, bucket, f"{base}/round-{round_number}.json",
+            json.dumps(round_data).encode("utf-8"), content_type="application/json",
+        )
+
+
 def _finalizar_ingest(config, conn, parsed, replay_json, dem_path_upload, share_code, source, upload, played_at, group_id=None):
     """Cauda comum de ingest_demo/ingest_demo_multiparte: arquiva demo+replay no R2 (se
     configurado) e grava no banco. Devolve match_id. `dem_path_upload` é o .dem cujos
@@ -588,10 +601,7 @@ def _finalizar_ingest(config, conn, parsed, replay_json, dem_path_upload, share_
 
         if replay_json is not None:
             rkey = storage_r2.replay_key(ids["match_id"])
-            storage_r2.upload_bytes(
-                client, config.r2_bucket, rkey,
-                json.dumps(replay_json).encode("utf-8"), content_type="application/json",
-            )
+            _upload_replay(client, config.r2_bucket, rkey, replay_json)
             replay_url = f"{config.r2_endpoint}/{config.r2_bucket}/{rkey}"
 
     if group_id is None:

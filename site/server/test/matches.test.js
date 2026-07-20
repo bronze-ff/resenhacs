@@ -228,6 +228,42 @@ describe('GET /api/matches/:id/replay', () => {
   })
 })
 
+describe('GET /api/matches/:id/replay/round/:n', () => {
+  it('sem login: 401', async () => {
+    const { app } = appWith([])
+    expect((await request(app).get('/api/matches/m1/replay/round/1')).status).toBe(401)
+  })
+
+  it('n não numérico: 400', async () => {
+    const { app } = appWith([])
+    const res = await request(app).get('/api/matches/m1/replay/round/abc').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    expect(res.status).toBe(400)
+  })
+
+  it('busca a chave do round trocando .json pelo prefixo /round-N.json do índice', async () => {
+    const fakeR2 = {
+      send: vi.fn().mockResolvedValue({ ContentType: 'application/json', Body: Readable.from([Buffer.from('{"round":2}')]) }),
+    }
+    const { app } = appWith(
+      [['select replay_url', [{ replay_url: 'https://acc.r2.cloudflarestorage.com/resenha-demos/replays/701c.json' }]]],
+      { r2Client: fakeR2 },
+    )
+    const res = await request(app).get('/api/matches/701c/replay/round/2').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    expect(res.status).toBe(200)
+    expect(res.text).toBe('{"round":2}')
+    const cmd = fakeR2.send.mock.calls[0][0]
+    expect(cmd.input).toMatchObject({ Bucket: 'resenha-demos', Key: 'replays/701c/round-2.json' })
+  })
+
+  it('partida sem replay: 404', async () => {
+    const fakeR2 = { send: vi.fn() }
+    const { app } = appWith([['select replay_url', [{ replay_url: null }]]], { r2Client: fakeR2 })
+    const res = await request(app).get('/api/matches/m1/replay/round/1').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    expect(res.status).toBe(404)
+    expect(fakeR2.send).not.toHaveBeenCalled()
+  })
+})
+
 describe('GET /api/matches/:id/jogador/:steamId/detalhe', () => {
   it('sem login: 401', async () => {
     const { app } = appWith([])

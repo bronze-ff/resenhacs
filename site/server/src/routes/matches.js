@@ -23,37 +23,46 @@ export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Cli
 
   // Feed: Partidas parseadas, com os Jogadores do grupo que jogaram cada uma.
   // Filtros opcionais: ?from=YYYY-MM-DD&to=YYYY-MM-DD&map=de_mirage&source=valve_mm|upload
+  // ?ids=uuid,uuid,... — Partidas específicas (ex.: todas de uma "Resenha" clicada no
+  // Feed); ignora os demais filtros e a paginação, já que o conjunto já vem delimitado.
   router.get('/', requireAuth, requireGroupMember, async (req, res) => {
     const cond = ["m.status = 'parsed'"]
     const params = [req.groupId]
     cond.push(partidaVisivelExpr('m', `$${params.length}`))
-    const { from, to, map, source, mvp } = req.query
+    const { from, to, map, source, mvp, ids } = req.query
+    if (ids) {
+      const lista = String(ids).split(',').filter((s) => /^[0-9a-f-]{36}$/i.test(s))
+      if (lista.length === 0) return res.json([])
+      params.push(lista)
+      cond.push(`m.id = any($${params.length})`)
+    }
     // Paginação: limit 1..100 (default 20), offset >=0 (default 0). O shape da
     // resposta continua um array puro — o client sabe que acabou quando uma
     // página volta com menos itens que `limit` (não precisamos de um flag extra).
     let limit = parseInt(req.query.limit, 10)
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) limit = 20
+    if (ids) limit = 100
     let offset = parseInt(req.query.offset, 10)
     if (!Number.isInteger(offset) || offset < 0) offset = 0
-    if (from && /^\d{4}-\d{2}-\d{2}$/.test(from)) {
+    if (!ids && from && /^\d{4}-\d{2}-\d{2}$/.test(from)) {
       params.push(from)
       cond.push(`m.played_at >= $${params.length}`)
     }
-    if (to && /^\d{4}-\d{2}-\d{2}$/.test(to)) {
+    if (!ids && to && /^\d{4}-\d{2}-\d{2}$/.test(to)) {
       params.push(to)
       // inclusivo: até o fim do dia informado
       cond.push(`m.played_at < ($${params.length}::date + interval '1 day')`)
     }
-    if (map && /^[a-z0-9_]+$/.test(map)) {
+    if (!ids && map && /^[a-z0-9_]+$/.test(map)) {
       params.push(map)
       cond.push(`m.map = $${params.length}`)
     }
-    if (source === 'valve_mm' || source === 'upload') {
+    if (!ids && (source === 'valve_mm' || source === 'upload')) {
       params.push(source)
       cond.push(`m.source = $${params.length}`)
     }
     let mvpJoin = ''
-    if (mvp && /^\d{17}$/.test(mvp)) {
+    if (!ids && mvp && /^\d{17}$/.test(mvp)) {
       params.push(mvp)
       mvpJoin = `join lateral (
          select mp2.steam_id64
@@ -437,6 +446,10 @@ export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Cli
   })
 
   // Proxy autenticado pro replay 2D — nunca expõe a URL/credenciais do R2 ao client.
+  // Partidas novas: esse objeto é só o ÍNDICE (streaming por round, ver FIL-54b) — sem
+  // `frames` por round, só a contagem; o client busca cada round em /replay/round/:n.
+  // Partidas antigas (arquivadas antes dessa mudança): o objeto já é o replay INTEIRO
+  // (com `frames`), e o client detecta isso pela ausência de `frameCount` no round.
   router.get('/:id/replay', requireAuth, requireGroupMember, async (req, res) => {
     if (!r2Client) return res.status(503).json({ erro: 'Arquivamento (R2) não configurado' })
     const { rows } = await db.query(
@@ -449,6 +462,27 @@ export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Cli
       await streamObject(r2Client, r2Bucket, key, res)
     } catch {
       res.status(502).json({ erro: 'Falha ao buscar o replay no R2' })
+    }
+  })
+
+  // Um round do replay sob demanda (streaming por round) — só existe pro formato novo
+  // (índice); a chave é o mesmo prefixo do índice, trocando ".json" por "/round-{n}.json"
+  // (mesma convenção do coletor em `_upload_replay`, main.py).
+  router.get('/:id/replay/round/:n', requireAuth, requireGroupMember, async (req, res) => {
+    if (!/^\d+$/.test(req.params.n)) return res.status(400).json({ erro: 'Round inválido' })
+    if (!r2Client) return res.status(503).json({ erro: 'Arquivamento (R2) não configurado' })
+    const { rows } = await db.query(
+      `select replay_url from matches where id = $1 and (${partidaVisivelExpr('matches', '$2')} or ${partidaPublicaExpr('matches')})`,
+      [req.params.id, req.groupId],
+    )
+    const indexKey = keyFromR2Url(rows[0]?.replay_url, r2Bucket)
+    if (!indexKey) return res.status(404).json({ erro: 'Replay não disponível' })
+    const base = indexKey.endsWith('.json') ? indexKey.slice(0, -'.json'.length) : indexKey
+    const key = `${base}/round-${req.params.n}.json`
+    try {
+      await streamObject(r2Client, r2Bucket, key, res)
+    } catch {
+      res.status(404).json({ erro: 'Round não disponível' })
     }
   })
 

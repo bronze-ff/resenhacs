@@ -1,4 +1,5 @@
 import bz2
+import json
 import sys
 import types
 from pathlib import Path
@@ -186,6 +187,35 @@ def test_finalizar_ingest_comprime_o_dem_antes_de_subir_pro_r2(monkeypatch, tmp_
     # De verdade comprimido — não é mais o payload cru (a extensão .bz2 agora é honesta).
     assert bytes_enviados != conteudo_original
     assert bz2.decompress(bytes_enviados) == conteudo_original
+
+
+# ---- streaming por round do Replay 2D (FIL-54b) ----
+
+def test_upload_replay_sobe_indice_sem_frames_e_um_objeto_por_round(monkeypatch):
+    uploads = {}
+    fake_client = object()
+
+    def fake_upload_bytes(client, bucket, key, data, **kw):
+        assert client is fake_client and bucket == "bucket"
+        uploads[key] = json.loads(data.decode("utf-8"))
+
+    monkeypatch.setattr(main.storage_r2, "upload_bytes", fake_upload_bytes)
+    replay_json = {
+        "map": "de_mirage", "calibrated": True, "tickRate": 8,
+        "names": {}, "teams": {},
+        "rounds": [
+            {"round": 1, "frames": [{"t": 0, "players": []}], "kills": [], "clutch": None},
+            {"round": 2, "frames": [{"t": 0, "players": []}, {"t": 1, "players": []}], "kills": [], "clutch": None},
+        ],
+    }
+    main._upload_replay(fake_client, "bucket", "replays/abc.json", replay_json)
+
+    assert set(uploads.keys()) == {"replays/abc.json", "replays/abc/round-1.json", "replays/abc/round-2.json"}
+    indice = uploads["replays/abc.json"]
+    assert "frames" not in indice["rounds"][0]
+    assert indice["rounds"][0]["frameCount"] == 1
+    assert indice["rounds"][1]["frameCount"] == 2
+    assert uploads["replays/abc/round-1.json"]["frames"] == [{"t": 0, "players": []}]
 
 
 # ---- reprocessamento: descomprime o .dem lido do R2 ----

@@ -126,9 +126,15 @@ function SincStatus() {
 
 // Um card de sessão — layout único (sem duplicar mobile/desktop): largura fixa que
 // funciona bem tanto no carrossel touch do celular quanto na fileira do desktop.
-function CardResenha({ s }) {
+// Clicável: filtra a lista de Partidas abaixo pra só as dessa Resenha (ver Feed()).
+function CardResenha({ s, ativo, onClick }) {
   return (
-    <Card className="w-60 shrink-0 snap-start p-3">
+    <Card
+      as="button"
+      interativo
+      onClick={onClick}
+      className={`w-60 shrink-0 snap-start p-3 text-left ${ativo ? 'border-destaque' : ''}`}
+    >
       <div className="flex items-center justify-between font-mono text-xs text-texto-fraco">
         <span>{dataHora(s.inicio)}</span>
         <span>{s.partidas} partida{s.partidas === 1 ? '' : 's'}</span>
@@ -156,8 +162,9 @@ function CardResenha({ s }) {
 }
 
 // "Resenhas": partidas jogadas seguidas (gap < 3h) resumidas — quem se destacou,
-// quantas venceu/perdeu, sem precisar abrir partida por partida.
-function Resenhas() {
+// quantas venceu/perdeu, sem precisar abrir partida por partida. Clicar num card
+// filtra a lista de Partidas abaixo pra só as dessa Resenha (clicar de novo limpa).
+function Resenhas({ sessaoAtiva, onEscolher }) {
   const [sessoes, setSessoes] = useState(null)
 
   useEffect(() => {
@@ -175,7 +182,14 @@ function Resenhas() {
         Resenhas recentes
       </h3>
       <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-1">
-        {sessoes.map((s) => <CardResenha key={s.matchIds[0]} s={s} />)}
+        {sessoes.map((s) => (
+          <CardResenha
+            key={s.matchIds[0]}
+            s={s}
+            ativo={sessaoAtiva?.matchIds[0] === s.matchIds[0]}
+            onClick={() => onEscolher(sessaoAtiva?.matchIds[0] === s.matchIds[0] ? null : s)}
+          />
+        ))}
       </div>
     </section>
   )
@@ -194,6 +208,7 @@ export default function Feed() {
   const [jogadores, setJogadores] = useState([])
   const [temMais, setTemMais] = useState(false)
   const [carregandoMais, setCarregandoMais] = useState(false)
+  const [sessaoAtiva, setSessaoAtiva] = useState(null)
 
   // Guard de corrida: cada busca (troca de filtro ou "carregar mais") incrementa
   // este contador; só a resposta da requisição mais recente pode aplicar estado.
@@ -221,17 +236,20 @@ export default function Feed() {
   }
 
   // Ao montar ou trocar qualquer filtro: reseta a lista e busca a 1ª página.
+  // Com uma Resenha selecionada, ignora os filtros normais e busca só as Partidas
+  // dela (ids fixos, sem paginação — uma Resenha nunca tem tantas partidas assim).
   useEffect(() => {
     const minhaRequisicao = ++requisicaoAtual.current
     setPartidas(null)
     setTemMais(false)
-    fetch(`/api/matches?${montarQs(0)}`)
+    const qs = sessaoAtiva ? new URLSearchParams({ ids: sessaoAtiva.matchIds.join(',') }) : montarQs(0)
+    fetch(`/api/matches?${qs}`)
       .then((res) => (res.ok ? res.json() : []))
       .then((data) => {
         if (requisicaoAtual.current !== minhaRequisicao) return
         const lista = Array.isArray(data) ? data : []
         setPartidas(lista)
-        setTemMais(lista.length === TAMANHO_PAGINA)
+        setTemMais(!sessaoAtiva && lista.length === TAMANHO_PAGINA)
       })
       .catch(() => {
         if (requisicaoAtual.current !== minhaRequisicao) return
@@ -239,10 +257,10 @@ export default function Feed() {
         setTemMais(false)
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [de, ate, mapa, origem, mvp])
+  }, [de, ate, mapa, origem, mvp, sessaoAtiva])
 
   function carregarMais() {
-    if (carregandoMais || !partidas) return
+    if (carregandoMais || !partidas || sessaoAtiva) return
     const minhaRequisicao = ++requisicaoAtual.current
     setCarregandoMais(true)
     fetch(`/api/matches?${montarQs(partidas.length)}`)
@@ -273,9 +291,20 @@ export default function Feed() {
     <div>
       <SectionHeader titulo="Partidas" className="mb-4" />
       <SincStatus />
-      <Resenhas />
+      <Resenhas sessaoAtiva={sessaoAtiva} onEscolher={setSessaoAtiva} />
 
-      <div className="panel-cut-sm mb-4 flex flex-col gap-3 border border-borda bg-superficie p-3 lg:flex-row lg:flex-wrap lg:items-center lg:gap-x-5 lg:gap-y-3">
+      {sessaoAtiva && (
+        <div className="panel-cut-sm mb-4 flex items-center gap-3 border border-destaque/60 bg-superficie px-3 py-2 font-mono text-xs">
+          <span className="text-texto-fraco">
+            Mostrando a Resenha de <span className="text-texto">{dataHora(sessaoAtiva.inicio)}</span> ({sessaoAtiva.partidas} partida{sessaoAtiva.partidas === 1 ? '' : 's'})
+          </span>
+          <button onClick={() => setSessaoAtiva(null)} className="ml-auto uppercase text-destaque hover:underline">
+            Limpar
+          </button>
+        </div>
+      )}
+
+      <div className={`panel-cut-sm mb-4 flex flex-col gap-3 border border-borda bg-superficie p-3 lg:flex-row lg:flex-wrap lg:items-center lg:gap-x-5 lg:gap-y-3 ${sessaoAtiva ? 'hidden' : ''}`}>
         <div className="flex flex-wrap items-center gap-3">
           <FiltroPeriodo de={de} ate={ate} onDe={setDe} onAte={setAte} />
           <Select value={mapa} onChange={(e) => setMapa(e.target.value)} className="w-auto" selectClassName="py-1.5 text-xs">

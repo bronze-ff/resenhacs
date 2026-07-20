@@ -105,3 +105,27 @@ def test_build_replay_com_winner_by_round_divergente_esconde_o_anel():
         winner_by_round={1: "B"},
     )
     assert r["rounds"][0]["clutch"] is None
+
+
+# ---- split_for_storage: streaming por round (FIL-54b) ----
+
+def test_split_for_storage_index_nao_leva_frames_mas_rounds_leva():
+    r = replay.build_replay("de_mirage", _ticks(), target_hz=8)
+    index, rounds = replay.split_for_storage(r)
+
+    assert index["map"] == "de_mirage"
+    assert index["calibrated"] is True
+    assert len(index["rounds"]) == 1
+    assert "frames" not in index["rounds"][0]
+    assert index["rounds"][0]["frameCount"] == len(rounds[1]["frames"])
+
+    assert set(rounds.keys()) == {1}
+    assert rounds[1]["frames"] == r["rounds"][0]["frames"]
+
+
+def test_split_for_storage_carrega_clutch_no_index():
+    r = replay.build_replay(
+        "de_mapa_desconhecido", _ticks_clutch_a1_zera_time_b(), kills=_kills_a1_elimina_b1_e_b2(),
+    )
+    index, _rounds = replay.split_for_storage(r)
+    assert index["rounds"][0]["clutch"]["steamid"] == "A1"

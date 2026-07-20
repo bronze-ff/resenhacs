@@ -220,3 +220,20 @@ def build_replay(map_name, ticks, kills=None, extras=None, target_hz=8, winner_b
         "map": map_name, "calibrated": cal is not None, "tickRate": target_hz,
         "names": names, "teams": teams, "rounds": rounds_out,
     }
+
+
+def split_for_storage(replay):
+    """Quebra o replay em (index, rounds) pro streaming por round no client (evita
+    baixar a partida inteira só pra tocar o round 1 — dívida técnica do ROADMAP).
+
+    `index` é o mesmo dict, mas cada round vira só metadados (contagem de frames +
+    clutch, sem os `frames`/`kills`/etc pesados) — pequeno o bastante pra ser o
+    primeiro fetch do client. `rounds` é {round_number: round completo (com frames)},
+    cada um subido como objeto separado no R2 e buscado sob demanda."""
+    rounds_meta = []
+    rounds_full = {}
+    for r in replay["rounds"]:
+        rounds_meta.append({"round": r["round"], "frameCount": len(r["frames"]), "clutch": r["clutch"]})
+        rounds_full[r["round"]] = r
+    index = {**replay, "rounds": rounds_meta}
+    return index, rounds_full
