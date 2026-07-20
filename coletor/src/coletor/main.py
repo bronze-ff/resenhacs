@@ -30,7 +30,6 @@ from . import sharecode
 from . import steam_api
 from . import faceit
 from . import discord_notify
-from . import allstar_notify
 from . import storage_r2
 from . import transform
 from .config import Config
@@ -151,42 +150,6 @@ def _notificar_discord_grupos(config, conn, match_id):
         print(f"  discord: falha ao notificar grupos da partida {match_id}: {e}")
 
 
-def _gerar_clipes_allstar(config, conn, match_id):
-    """Pede clipe de vídeo real no Allstar (ADR-0004) pra cada Highlight dos Jogadores
-    na allowlist de teste (config.allstar_steam_ids) — restrito até o preço por clipe
-    ser confirmado com o suporte deles. Best-effort: erro de rede/API nunca derruba
-    o fetch, mesmo padrão de _notificar_discord_grupos."""
-    if not config.allstar_api_key or not config.allstar_steam_ids or not config.app_url:
-        return
-    try:
-        pendentes = dbmod.listar_highlights_sem_clipe_allstar(conn, match_id, config.allstar_steam_ids)
-        if not pendentes:
-            return
-        client = storage_r2.make_client(config)
-        for h in pendentes:
-            try:
-                demo_key = storage_r2.key_from_url(h["demo_url"], config.r2_bucket)
-                if not demo_key:
-                    continue
-                # URL assinada temporária — o bucket é privado, o Allstar busca o
-                # .dem sozinho do lado deles, não tem como autenticar como um Jogador
-                # nosso logado.
-                demo_url_assinada = storage_r2.presign_download(client, config.r2_bucket, demo_key)
-                request_id = allstar_notify.pedir_clipe(
-                    config.allstar_api_key, h["kind"], h["steam_id64"], h.get("nick"),
-                    demo_url_assinada, h["round_number"], f"{config.app_url}/api/allstar/webhook",
-                    metadata=[{"key": "highlightId", "value": h["id"]}],
-                )
-                dbmod.criar_allstar_clip(conn, h["id"], request_id)
-                print(f"  allstar: clipe pedido pro highlight {h['id']} ({h['kind']}, round {h['round_number']})")
-            except Exception as e:  # noqa: BLE001
-                conn.rollback()
-                print(f"  allstar: falha ao pedir clipe do highlight {h['id']}: {e}")
-    except Exception as e:  # noqa: BLE001
-        conn.rollback()
-        print(f"  allstar: falha ao processar highlights da partida {match_id}: {e}")
-
-
 def cmd_fetch(config, conn, since=None, bot_dir=None, node_bin="node"):
     """Baixa e ingere as Partidas pendentes (descobertas pelo discover, ainda sem demo).
 
@@ -245,7 +208,6 @@ def cmd_fetch(config, conn, since=None, bot_dir=None, node_bin="node"):
                 print(f"  {code}: ingerida {mid} (played_at={played_at})")
                 total += 1
                 _notificar_discord_grupos(config, conn, mid)
-                _gerar_clipes_allstar(config, conn, mid)
         except Exception as e:  # noqa: BLE001
             # Uma partida com demo problemático não derruba o lote; marca failed pra
             # não ficar re-baixando 200MB toda hora (dá pra re-tentar voltando pra
@@ -587,10 +549,6 @@ def cmd_reprocess(config, conn, match_id=None, since=None):
                     conn, parsed, share_code=share_code, source=source or "valve_mm",
                     demo_url=demo_url, replay_url=replay_url, prefer_new_played_at=False,
                 )
-                # _write_highlights recria os highlights com id novo a cada reprocess —
-                # qualquer allstar_clips antigo já foi cascade-deletado junto com o
-                # highlight antigo, então isso pede de novo (idempotente por natureza).
-                _gerar_clipes_allstar(config, conn, mid)
                 print(f"  {mid}: reprocessada")
                 total += 1
         except Exception as e:  # noqa: BLE001

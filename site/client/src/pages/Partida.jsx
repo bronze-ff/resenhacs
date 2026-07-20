@@ -1031,6 +1031,31 @@ export default function Partida() {
   const [statsLado, setStatsLado] = useState(null)
   // Clipe de vídeo real do Allstar (ADR-0004, teste restrito) aberto na aba Highlights.
   const [clipeAllstarAberto, setClipeAllstarAberto] = useState(null)
+  const [pedindoClipe, setPedindoClipe] = useState(null) // id do highlight com pedido em voo
+  const [erroClipe, setErroClipe] = useState(null)
+
+  // SOB DEMANDA: só chama o Allstar quando o jogador clica — nada automático. Restrito
+  // a uma allowlist do lado do servidor; 403 pra quem não tá nela vira mensagem de erro.
+  async function pedirClipeAllstar(highlightId) {
+    setPedindoClipe(highlightId)
+    setErroClipe(null)
+    try {
+      const res = await fetch(`/api/matches/${id}/highlight/${highlightId}/allstar-clip`, { method: 'POST' })
+      const corpo = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setErroClipe(corpo.erro || 'Falha ao pedir o clipe')
+        return
+      }
+      setM((atual) => atual && ({
+        ...atual,
+        highlights: atual.highlights.map((h) => (h.id === highlightId ? { ...h, allstarStatus: corpo.status } : h)),
+      }))
+    } catch {
+      setErroClipe('Falha ao pedir o clipe')
+    } finally {
+      setPedindoClipe(null)
+    }
+  }
   const replayRef = useRef(null)
   const autoJumpFeito = useRef(false)
 
@@ -1221,6 +1246,7 @@ export default function Partida() {
           {m.highlights.length > 0 && (
             <section>
               <SectionHeader titulo="Highlights" />
+              {erroClipe && <p className="mb-2 font-mono text-xs text-perigo">{erroClipe}</p>}
               <div className="flex flex-wrap gap-2">
                 {m.highlights.map((h) => {
                   const podeAssistir = h.frame != null && m.replayUrl
@@ -1247,9 +1273,9 @@ export default function Partida() {
                           {conteudo}
                         </div>
                       )}
-                      {/* Clipe de vídeo real do Allstar (ADR-0004) — teste restrito, a
-                          maioria dos highlights não vai ter isso ainda. */}
-                      {h.allstarClipUrl && (
+                      {/* Clipe de vídeo real do Allstar (ADR-0004) — SOB DEMANDA (teste
+                          restrito): só pede quando o jogador clica, nada automático. */}
+                      {h.allstarClipUrl ? (
                         <button
                           onClick={() => setClipeAllstarAberto(clipeAllstarAberto === h.id ? null : h.id)}
                           className="panel-cut-sm border border-destaque/60 bg-destaque/10 px-2 py-2 font-mono text-xs uppercase text-destaque transition-colors hover:bg-destaque/20"
@@ -1257,11 +1283,19 @@ export default function Partida() {
                         >
                           🎬 clipe
                         </button>
-                      )}
-                      {h.allstarStatus === 'Submitted' && (
+                      ) : h.allstarStatus === 'Submitted' ? (
                         <span className="font-mono text-xs text-texto-fraco" title="Pedido feito ao Allstar, ainda processando">
                           gerando clipe…
                         </span>
+                      ) : (
+                        <button
+                          onClick={() => pedirClipeAllstar(h.id)}
+                          disabled={pedindoClipe === h.id}
+                          className="panel-cut-sm border border-borda bg-superficie px-2 py-2 font-mono text-xs uppercase text-texto-fraco transition-colors hover:border-destaque/60 hover:text-destaque disabled:opacity-50"
+                          title="Pedir clipe de vídeo real ao Allstar"
+                        >
+                          {pedindoClipe === h.id ? '…' : '🎬 gerar clipe'}
+                        </button>
                       )}
                     </span>
                   )

@@ -27,8 +27,13 @@ export function loadConfig(env = process.env) {
     // Basic Auth (client_id:client_secret) no POST do token endpoint, mesmo com PKCE —
     // opcional aqui: se não vier, a troca de token segue só com code_verifier.
     faceitClientSecret: env.FACEIT_CLIENT_SECRET ?? null,
-    // Valida o webhook de clipes do Allstar (ADR-0004) — o mesmo valor cadastrado no
-    // dashboard deles ("Webhook Auth"). Sem isso, /api/allstar/webhook rejeita tudo.
+    // Clipes de vídeo real do Allstar (ADR-0004) — pedido SOB DEMANDA (o jogador clica
+    // "gerar clipe" na tela da Partida, não é automático) e restrito a uma allowlist de
+    // steamId64 até o preço por clipe ser confirmado com o suporte deles.
+    allstarApiKey: env.ALLSTAR_API_KEY ?? null,
+    allstarSteamIds: new Set((env.ALLSTAR_STEAM_IDS ?? '').split(',').map((s) => s.trim()).filter(Boolean)),
+    // Valida o webhook de retorno — o mesmo valor cadastrado no dashboard deles
+    // ("Webhook Auth"). Sem isso, /api/allstar/webhook rejeita tudo.
     allstarWebhookAuth: env.ALLSTAR_WEBHOOK_AUTH ?? null,
   }
 }

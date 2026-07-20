@@ -1,11 +1,20 @@
 import { describe, it, expect, vi } from 'vitest'
 import { Readable } from 'node:stream'
 import request from 'supertest'
+
+vi.mock('../src/r2.js', async (importOriginal) => {
+  const original = await importOriginal()
+  return { ...original, presignDownload: vi.fn().mockResolvedValue('https://r2.example/presigned-get') }
+})
+import { presignDownload } from '../src/r2.js'
 import { createApp } from '../src/app.js'
 import { signToken } from '../src/auth/jwt.js'
 import { detectProvider } from '../src/routes/clips.js'
 
-const config = { jwtSecret: 's', appUrl: 'http://localhost:5173', isProduction: false, r2Bucket: 'resenha-demos' }
+const config = {
+  jwtSecret: 's', appUrl: 'http://localhost:5173', isProduction: false, r2Bucket: 'resenha-demos',
+  allstarApiKey: null, allstarSteamIds: new Set(),
+}
 const cookie = `resenha_token=${signToken({ steamId: '76561198000000009', isSuperAdmin: false }, config.jwtSecret)}`
 const GRUPO = '11111111-1111-1111-1111-111111111111'
 
@@ -231,6 +240,84 @@ describe('GET /api/matches/:id/lado/:filtro', () => {
     expect(res.status).toBe(200)
     const fih = res.body.find((p) => p.steamId === 'A1')
     expect(fih).toMatchObject({ nick: 'fih', team: 'A', kills: 1, deaths: 0, roundsPlayed: 2, damage: 100, adr: 50 })
+  })
+})
+
+describe('POST /api/matches/:id/highlight/:highlightId/allstar-clip', () => {
+  const configComAllstar = { ...config, allstarApiKey: 'api-key', allstarSteamIds: new Set(['765']) }
+
+  it('sem login: 401', async () => {
+    const { app } = appWith([])
+    expect((await request(app).post('/api/matches/m1/highlight/h1/allstar-clip')).status).toBe(401)
+  })
+
+  it('sem allstarApiKey configurado: 503', async () => {
+    const { app } = appWith([], { config: { ...config, allstarApiKey: null }, r2Client: {} })
+    const res = await request(app).post('/api/matches/m1/highlight/h1/allstar-clip').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    expect(res.status).toBe(503)
+  })
+
+  it('sem r2Client: 503', async () => {
+    const { app } = appWith([], { config: configComAllstar, r2Client: null })
+    const res = await request(app).post('/api/matches/m1/highlight/h1/allstar-clip').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    expect(res.status).toBe(503)
+  })
+
+  it('highlight nao encontrado: 404', async () => {
+    const { app } = appWith([['from highlights h', []]], { config: configComAllstar, r2Client: {} })
+    const res = await request(app).post('/api/matches/m1/highlight/h1/allstar-clip').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    expect(res.status).toBe(404)
+  })
+
+  it('jogador fora da allowlist: 403', async () => {
+    const { app } = appWith(
+      [['from highlights h', [{ id: 'h1', kind: 'ace', steam_id64: '999', round_number: 1, nick: 'outro', demo_url: 'https://r2/demos/x.dem.bz2' }]]],
+      { config: configComAllstar, r2Client: {} },
+    )
+    const res = await request(app).post('/api/matches/m1/highlight/h1/allstar-clip').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    expect(res.status).toBe(403)
+  })
+
+  it('ja tem clipe pedido: devolve o status existente sem pedir de novo', async () => {
+    const { app } = appWith(
+      [
+        ['from highlights h', [{ id: 'h1', kind: 'ace', steam_id64: '765', round_number: 1, nick: 'bronze', demo_url: 'https://r2/demos/x.dem.bz2' }]],
+        ['from allstar_clips where highlight_id', [{ status: 'Processed', clip_url: 'https://allstar.gg/iframe?clip=x' }]],
+      ],
+      { config: configComAllstar, r2Client: {} },
+    )
+    const res = await request(app).post('/api/matches/m1/highlight/h1/allstar-clip').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    expect(res.status).toBe(200)
+    expect(res.body).toEqual({ status: 'Processed' })
+  })
+
+  it('pede o clipe, salva o request_id e devolve Submitted', async () => {
+    const gravados = []
+    const db = {
+      query: vi.fn().mockImplementation((sql, params) => {
+        if (sql.includes('group_members where group_id')) return Promise.resolve({ rows: [{}] })
+        if (sql.includes('from highlights h')) {
+          return Promise.resolve({ rows: [{ id: 'h1', kind: 'ace', steam_id64: '765', round_number: 14, nick: 'bronze', demo_url: 'https://acc.r2.cloudflarestorage.com/resenha-demos/demos/x.dem.bz2' }] })
+        }
+        if (sql.includes('from allstar_clips where highlight_id')) return Promise.resolve({ rows: [] })
+        if (sql.includes('insert into allstar_clips')) { gravados.push(params); return Promise.resolve({ rows: [] }) }
+        return Promise.resolve({ rows: [] })
+      }),
+    }
+    const app = createApp({ config: configComAllstar, db, r2Client: {} })
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ requestId: 'req-1' }) })
+    try {
+      const res = await request(app).post('/api/matches/m1/highlight/h1/allstar-clip').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+      expect(res.status).toBe(200)
+      expect(res.body).toEqual({ status: 'Submitted' })
+      expect(gravados).toEqual([['h1', 'req-1']])
+      expect(presignDownload).toHaveBeenCalledWith({}, 'resenha-demos', 'demos/x.dem.bz2')
+      const [, opts] = globalThis.fetch.mock.calls[0]
+      expect(JSON.parse(opts.body).rounds).toEqual([14])
+    } finally {
+      globalThis.fetch = originalFetch
+    }
   })
 })
 

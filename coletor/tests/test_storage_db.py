@@ -38,9 +38,6 @@ class FakeS3:
     def put_bucket_cors(self, **kw):
         self.cors.append(kw)
 
-    def generate_presigned_url(self, operation, Params, ExpiresIn):
-        return f"https://fake-presigned/{Params['Bucket']}/{Params['Key']}?expires={ExpiresIn}"
-
 
 def test_keys():
     assert storage_r2.demo_key(123) == "demos/123.dem.bz2"
@@ -76,12 +73,6 @@ def test_configurar_cors_manda_regra_pro_bucket():
     assert regra["AllowedMethods"] == ["PUT", "GET"]
     assert regra["AllowedHeaders"] == ["content-type"]
     assert regra["MaxAgeSeconds"] == 3600
-
-
-def test_presign_download_devolve_url_assinada():
-    s3 = FakeS3()
-    url = storage_r2.presign_download(s3, "bucket", "demos/1.dem.bz2", expires_in=1800)
-    assert url == "https://fake-presigned/bucket/demos/1.dem.bz2?expires=1800"
 
 
 def test_key_from_url_extrai_a_key_do_bucket_configurado():

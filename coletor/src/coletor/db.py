@@ -839,36 +839,3 @@ def resumo_da_partida_para_grupo(conn, match_id, group_id):
         "mvp_nick": mvp_nick,
         "mvp_rating": mvp_rating,
     }
-
-
-def listar_highlights_sem_clipe_allstar(conn, match_id, steam_ids):
-    """Highlights de uma Partida, de Jogadores na allowlist de teste (ADR-0004), que
-    ainda não têm pedido de clipe Allstar — evita duplicar pedido em reprocessamento.
-    Devolve dict com o que allstar_notify.pedir_clipe precisa: id/kind/steam_id64/
-    nick/round_number, mais demo_url da Partida (mesmo pra todos os highlights dela)."""
-    if not steam_ids:
-        return []
-    with conn.cursor() as cur:
-        cur.execute(
-            "select h.id, h.kind, h.steam_id64, h.round_number, mp.nick, m.demo_url "
-            "from highlights h "
-            "join matches m on m.id = h.match_id "
-            "left join match_players mp on mp.match_id = h.match_id and mp.steam_id64 = h.steam_id64 "
-            "where h.match_id = %s and h.steam_id64 = any(%s) and m.demo_url is not null "
-            "and h.id not in (select highlight_id from allstar_clips)",
-            (match_id, list(steam_ids)),
-        )
-        return [
-            {"id": row[0], "kind": row[1], "steam_id64": row[2], "round_number": row[3],
-             "nick": row[4], "demo_url": row[5]}
-            for row in cur.fetchall()
-        ]
-
-
-def criar_allstar_clip(conn, highlight_id, request_id):
-    with conn.cursor() as cur:
-        cur.execute(
-            "insert into allstar_clips (highlight_id, request_id) values (%s, %s)",
-            (highlight_id, request_id),
-        )
-    conn.commit()

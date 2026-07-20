@@ -78,7 +78,7 @@ export function createApp({ config, db, verifySteamLogin, fetchPersona, fetchBan
   app.use('/api/faceit', requireAuth, createFaceitRouter({ config, db, ...(faceitFetchImpl ? { fetchImpl: faceitFetchImpl } : {}) }))
   app.use('/api/teams', createTeamsRouter({ db, requireAuth, requireGroupMember }))
   app.use('/api/ranking-publico', requireAuth, createRankingPublicoRouter({ db }))
-  app.use('/api/matches', createMatchesRouter({ db, requireAuth, requireGroupMember, r2Client, r2Bucket: config.r2Bucket }))
+  app.use('/api/matches', createMatchesRouter({ db, requireAuth, requireGroupMember, r2Client, r2Bucket: config.r2Bucket, config }))
   app.use('/api/profile', createProfileRouter({ db, requireAuth, requireGroupMember }))
   app.use('/api/clips', createClipsRouter({ db, requireAuth, requireGroupMember }))
   app.use('/api/ranking', createRankingRouter({ db, requireAuth, requireGroupMember }))

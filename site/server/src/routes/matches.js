@@ -1,7 +1,8 @@
 import { Router } from 'express'
-import { keyFromR2Url, streamObject } from '../r2.js'
+import { keyFromR2Url, streamObject, presignDownload } from '../r2.js'
 import { partidaVisivelExpr, partidaPublicaExpr } from '../matchVisibility.js'
 import { calcularStatsPorLado } from '../statsLado.js'
+import { pedirClipe } from '../allstarClip.js'
 
 // Categoria de arma pro Head to Head (estilo Leetify: agrupa kills por família de
 // arma em vez de listar cada uma). Faca/granadas caem em "Outras".
@@ -19,7 +20,7 @@ function categoriaArma(weapon) {
   return CATEGORIA_ARMA[weapon] ?? 'Outras'
 }
 
-export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Client, r2Bucket }) {
+export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Client, r2Bucket, config }) {
   const router = Router()
 
   // Feed: Partidas parseadas, com os Jogadores do grupo que jogaram cada uma.
@@ -506,6 +507,58 @@ export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Cli
         ...stats[p.steam_id64],
       })),
     )
+  })
+
+  // Pedido SOB DEMANDA de clipe de vídeo real ao Allstar (ADR-0004) — o jogador clica
+  // "gerar clipe" na tela da Partida, nada é automático. Restrito a uma allowlist de
+  // steamId64 (config.allstarSteamIds) até o preço por clipe ser confirmado com o
+  // suporte deles.
+  router.post('/:id/highlight/:highlightId/allstar-clip', requireAuth, requireGroupMember, async (req, res) => {
+    if (!config.allstarApiKey || !r2Client) {
+      return res.status(503).json({ erro: 'Integração com o Allstar não configurada' })
+    }
+    const { id, highlightId } = req.params
+    const { rows } = await db.query(
+      `select h.id, h.kind, h.steam_id64, h.round_number, mp.nick, m.demo_url
+       from highlights h
+       join matches m on m.id = h.match_id
+       left join match_players mp on mp.match_id = h.match_id and mp.steam_id64 = h.steam_id64
+       where h.id = $1 and h.match_id = $2
+         and (${partidaVisivelExpr('m', '$3')} or ${partidaPublicaExpr('m')})`,
+      [highlightId, id, req.groupId],
+    )
+    const h = rows[0]
+    if (!h) return res.status(404).json({ erro: 'Highlight não encontrado' })
+    if (!config.allstarSteamIds.has(h.steam_id64)) {
+      return res.status(403).json({ erro: 'Clipe Allstar ainda restrito a um grupo de teste' })
+    }
+    if (!h.demo_url) return res.status(404).json({ erro: 'Demo não arquivada pra essa partida' })
+
+    const existente = await db.query('select status, clip_url from allstar_clips where highlight_id = $1', [highlightId])
+    if (existente.rows.length > 0) {
+      // Já pedido antes (ex.: clique duplo) — devolve o que já existe em vez de pedir
+      // outro clipe do mesmo momento.
+      return res.json({ status: existente.rows[0].status })
+    }
+
+    const demoKey = keyFromR2Url(h.demo_url, r2Bucket)
+    if (!demoKey) return res.status(404).json({ erro: 'Demo fora do bucket configurado' })
+    try {
+      // URL assinada temporária — o bucket é privado, o Allstar busca o .dem sozinho
+      // do lado deles, não tem como autenticar como um Jogador nosso logado.
+      const demoUrlAssinada = await presignDownload(r2Client, r2Bucket, demoKey)
+      const requestId = await pedirClipe({
+        apiKey: config.allstarApiKey, kind: h.kind, steamId: h.steam_id64, nick: h.nick,
+        demoUrl: demoUrlAssinada, roundNumber: h.round_number,
+        webhookUrl: `${config.appUrl}/api/allstar/webhook`,
+        metadata: [{ key: 'highlightId', value: highlightId }],
+      })
+      await db.query('insert into allstar_clips (highlight_id, request_id) values ($1, $2)', [highlightId, requestId])
+      res.json({ status: 'Submitted' })
+    } catch (e) {
+      console.error(`allstar: falha ao pedir clipe do highlight ${highlightId}:`, e)
+      res.status(502).json({ erro: 'Falha ao pedir o clipe ao Allstar' })
+    }
   })
 
   // Proxy autenticado pro replay 2D — nunca expõe a URL/credenciais do R2 ao client.
