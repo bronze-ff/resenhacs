@@ -175,11 +175,11 @@ Depois de ler os 12 PDFs de documentação salvos (`docs/allstar/`), **a única 
 >
 > Hi Allstar team,
 >
-> We're building Resenha, a stats/replay platform for a small closed group of CS2 players (~10 users, a few dozen matches/week). We already created a partner account (Partner ID: **RESENHACS**) and read through the Getting Started guide and API Reference.
+> We're building Resenha, a stats/replay platform for competitive CS2 players. We're currently rolling it out to a closed group (~10 users, a few dozen matches/week), with plans to grow. We already created a partner account (Partner ID: **RESENHACS**) and read through the Getting Started guide and API Reference.
 >
-> We've read through the Getting Started, Authentication, Clip Types/Statuses, Custom Clip Metadata, Clip Retention, Video Player, and Webhook Events docs already, and confirmed a working `demoUrl`-based flow using our own hosted `.dem` files. A few things we couldn't find answers to in the docs:
+> We've also read through the Authentication, Clip Types/Statuses, Custom Clip Metadata, Clip Retention, Video Player, and Webhook Events docs, and confirmed a working `demoUrl`-based flow using our own hosted `.dem` files. A few things we couldn't find answers to in the docs:
 >
-> 1. **Pricing** — what does per-clip pricing look like for a small/hobby-scale partner like us (a closed group of ~10 players, a few dozen matches/week)? Is there a self-serve pay-as-you-go option, or does it require a minimum monthly commitment / custom contract?
+> 1. **Pricing** — what does per-clip pricing look like, and how does it scale with volume? We're starting small but this could grow significantly over time — we'd like to understand pricing across different volume tiers (e.g. hobby-scale vs. a few hundred/thousand clips per month) so we can plan accordingly.
 > 2. **On Demand mode** — the Clip Types/Statuses doc mentions On Demand clips (staged but not rendered until the user triggers it via the iframe), but says "we don't currently support an explicit way to request a clip be created as On Demand." Could our account be configured to default to On Demand for all CS2 requests? That would let us avoid rendering cost for highlights nobody ends up watching.
 > 3. **Rate limits** — what's the request rate limit for our API key?
 > 4. **Use case meanings** — could you clarify what BP, PMH, PB, and SH stand for in the CS2 use cases, so we map them correctly to our own highlight types (we already plan to use POTG for best-play and MH for multi-kills/aces)?
