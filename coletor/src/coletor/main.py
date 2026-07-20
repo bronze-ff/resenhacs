@@ -587,6 +587,10 @@ def cmd_reprocess(config, conn, match_id=None, since=None):
                     conn, parsed, share_code=share_code, source=source or "valve_mm",
                     demo_url=demo_url, replay_url=replay_url, prefer_new_played_at=False,
                 )
+                # _write_highlights recria os highlights com id novo a cada reprocess —
+                # qualquer allstar_clips antigo já foi cascade-deletado junto com o
+                # highlight antigo, então isso pede de novo (idempotente por natureza).
+                _gerar_clipes_allstar(config, conn, mid)
                 print(f"  {mid}: reprocessada")
                 total += 1
         except Exception as e:  # noqa: BLE001
