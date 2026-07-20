@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { keyFromR2Url, streamObject } from '../r2.js'
 import { partidaVisivelExpr, partidaPublicaExpr } from '../matchVisibility.js'
+import { calcularStatsPorLado } from '../statsLado.js'
 
 // Categoria de arma pro Head to Head (estilo Leetify: agrupa kills por família de
 // arma em vez de listar cada uma). Faca/granadas caem em "Outras".
@@ -443,6 +444,61 @@ export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Cli
         ...porOponente.get(o.steam_id64),
       })),
     })
+  })
+
+  // Scoreboard recalculado por lado (T/CT/all) dentro da Partida — pedido do usuário
+  // (estilo scope.gg/Leetify). Só funciona pra partidas com side_a gravado (processadas
+  // ou reprocessadas depois do FIL-51b); sem isso os filtros T/CT devolvem roundsPlayed=0
+  // pra todo mundo (calcularStatsPorLado já trata isso, não quebra).
+  router.get('/:id/lado/:filtro', requireAuth, requireGroupMember, async (req, res) => {
+    const { id, filtro } = req.params
+    if (!['all', 'CT', 'T'].includes(filtro)) return res.status(400).json({ erro: 'Filtro inválido' })
+    const matchQ = await db.query(
+      `select id from matches where id = $1 and (${partidaVisivelExpr('matches', '$2')} or ${partidaPublicaExpr('matches')})`,
+      [id, req.groupId],
+    )
+    if (matchQ.rows.length === 0) return res.status(404).json({ erro: 'Partida não encontrada' })
+
+    const [playersQ, roundsQ, killsQ, damageQ] = await Promise.all([
+      db.query(
+        `select mp.steam_id64, mp.nick, mp.team, coalesce(p.avatar_url, sa.avatar_url) as avatar_url
+         from match_players mp
+         left join players p on p.steam_id64 = mp.steam_id64
+         left join steam_avatares sa on sa.steam_id64 = mp.steam_id64
+         where mp.match_id = $1`,
+        [id],
+      ),
+      db.query('select round_number, side_a from rounds where match_id = $1', [id]),
+      db.query(
+        'select round_number, tick, killer, victim, assister, headshot from kill_positions where match_id = $1',
+        [id],
+      ),
+      db.query(
+        'select round_number, steam_id64, damage from match_player_round_damage where match_id = $1',
+        [id],
+      ),
+    ])
+
+    const stats = calcularStatsPorLado({
+      players: playersQ.rows.map((p) => ({ steamId: p.steam_id64, team: p.team })),
+      rounds: roundsQ.rows.map((r) => ({ roundNumber: r.round_number, sideA: r.side_a })),
+      kills: killsQ.rows.map((k) => ({
+        roundNumber: k.round_number, tick: k.tick, killer: k.killer, victim: k.victim,
+        assister: k.assister, headshot: k.headshot,
+      })),
+      roundDamage: damageQ.rows.map((d) => ({ roundNumber: d.round_number, steamId: d.steam_id64, damage: d.damage })),
+      filtro,
+    })
+
+    res.json(
+      playersQ.rows.map((p) => ({
+        steamId: p.steam_id64,
+        nick: p.nick,
+        avatarUrl: p.avatar_url,
+        team: p.team,
+        ...stats[p.steam_id64],
+      })),
+    )
   })
 
   // Proxy autenticado pro replay 2D — nunca expõe a URL/credenciais do R2 ao client.

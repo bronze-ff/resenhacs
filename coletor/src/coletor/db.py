@@ -348,14 +348,28 @@ def _write_kill_positions(cur, match_id, kill_positions):
             """
             insert into kill_positions
               (match_id, round_number, tick, killer, victim, weapon, victim_weapon, headshot,
-               killer_x, killer_y, victim_x, victim_y)
-            values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+               killer_x, killer_y, victim_x, victim_y, assister)
+            values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 match_id, k["round_number"], k["tick"], k.get("killer"), k["victim"],
                 k.get("weapon", ""), k.get("victim_weapon"), k.get("headshot", False),
-                k.get("killer_x"), k.get("killer_y"), k["victim_x"], k["victim_y"],
+                k.get("killer_x"), k.get("killer_y"), k["victim_x"], k["victim_y"], k.get("assister"),
             ),
+        )
+
+
+def _write_player_round_damage(cur, match_id, player_round_damage):
+    # Base do filtro T/CT dentro da Partida (FIL-51b): dano em inimigo por round, pra
+    # recalcular ADR/rating filtrado sem precisar reparsear o .dem.
+    cur.execute("delete from match_player_round_damage where match_id = %s", (match_id,))
+    for d in player_round_damage:
+        cur.execute(
+            """
+            insert into match_player_round_damage (match_id, round_number, steam_id64, damage)
+            values (%s, %s, %s, %s)
+            """,
+            (match_id, d["round_number"], d["steam_id64"], d["damage"]),
         )
 
 
@@ -402,6 +416,7 @@ def store_parsed(conn, parsed, share_code=None, source="valve_mm", demo_url=None
         _write_player_damage(cur, match_id, parsed.get("player_damage", []))
         _write_player_flashes(cur, match_id, parsed.get("player_flashes", []))
         _write_kill_positions(cur, match_id, parsed.get("kill_positions", []))
+        _write_player_round_damage(cur, match_id, parsed.get("player_round_damage", []))
         _write_lineups(cur, match_id, parsed.get("lineups", []))
     conn.commit()
     return match_id

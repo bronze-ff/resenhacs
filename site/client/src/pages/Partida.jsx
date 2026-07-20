@@ -425,7 +425,18 @@ function ModalDetalhePartida({ matchId, jogador, onFechar }) {
   )
 }
 
-function Scoreboard({ time, jogadores, matchId, podePromover, onPromover, promovendo }) {
+// Estrelinha ao lado do valor quando ele é o melhor da Partida INTEIRA (os 2 times) —
+// estilo Leetify/scope.gg. `valor === melhor` (não >=) porque melhor já É o máximo.
+function ComEstrela({ valor, melhor, children }) {
+  return (
+    <>
+      {children}
+      {melhor > 0 && valor === melhor && <span className="ml-1 text-amber-400" title="Melhor da partida">★</span>}
+    </>
+  )
+}
+
+export function Scoreboard({ time, jogadores, matchId, podePromover, onPromover, promovendo, melhores, carregando }) {
   const [expandido, setExpandido] = useState(null)
   const [detalheAberto, setDetalheAberto] = useState(null)
   // Coluna de pontos por partida: Premier (valve_mm) OU ELO FACEIT (faceit) — o dado
@@ -436,7 +447,7 @@ function Scoreboard({ time, jogadores, matchId, podePromover, onPromover, promov
     // cria um containing block novo pra descendentes fixed (igual transform/filter) —
     // por dentro do card, o modal ficava preso e minúsculo em vez de cobrir a tela.
     <>
-    <div className="panel-cut overflow-x-auto border border-borda">
+    <div className={`panel-cut overflow-x-auto border border-borda transition-opacity ${carregando ? 'opacity-50' : ''}`}>
       <table className="w-full text-sm">
         <thead>
           <tr className="bg-superficie text-left font-mono text-[10px] uppercase tracking-wider text-texto-fraco">
@@ -483,15 +494,27 @@ function Scoreboard({ time, jogadores, matchId, podePromover, onPromover, promov
                       )}
                     </span>
                   </td>
-                  <td className="px-2 py-2 text-right tabular-nums">{p.kills}</td>
+                  <td className="px-2 py-2 text-right tabular-nums">
+                    <ComEstrela valor={p.kills} melhor={melhores?.kills ?? 0}>{p.kills}</ComEstrela>
+                  </td>
                   <td className={`hidden px-2 py-2 text-right tabular-nums sm:table-cell ${p.teamKills > 0 ? 'text-perigo' : 'text-texto-fraco'}`}>
                     {p.teamKills || 0}
                   </td>
                   <td className="px-2 py-2 text-right tabular-nums">{p.deaths}</td>
-                  <td className="hidden px-2 py-2 text-right tabular-nums sm:table-cell">{p.assists}</td>
-                  <td className="hidden px-2 py-2 text-right tabular-nums sm:table-cell">{adr}</td>
-                  <td className="hidden px-2 py-2 text-right tabular-nums sm:table-cell">{hs}%</td>
-                  <td className="hidden px-2 py-2 text-right tabular-nums sm:table-cell">{p.kastPct != null ? `${p.kastPct}%` : '–'}</td>
+                  <td className="hidden px-2 py-2 text-right tabular-nums sm:table-cell">
+                    <ComEstrela valor={p.assists} melhor={melhores?.assists ?? 0}>{p.assists}</ComEstrela>
+                  </td>
+                  <td className="hidden px-2 py-2 text-right tabular-nums sm:table-cell">
+                    <ComEstrela valor={adr} melhor={melhores?.adr ?? 0}>{adr}</ComEstrela>
+                  </td>
+                  <td className="hidden px-2 py-2 text-right tabular-nums sm:table-cell">
+                    <ComEstrela valor={hs} melhor={melhores?.hsPct ?? 0}>{hs}%</ComEstrela>
+                  </td>
+                  <td className="hidden px-2 py-2 text-right tabular-nums sm:table-cell">
+                    {p.kastPct != null ? (
+                      <ComEstrela valor={p.kastPct} melhor={melhores?.kastPct ?? 0}>{p.kastPct}%</ComEstrela>
+                    ) : '–'}
+                  </td>
                   {temPontos && (
                     <td className="hidden px-2 py-2 text-right sm:table-cell">
                       {(() => {
@@ -512,7 +535,9 @@ function Scoreboard({ time, jogadores, matchId, podePromover, onPromover, promov
                     </td>
                   )}
                   <td className={`px-3 py-2 text-right font-semibold tabular-nums ${corRating(p.rating)}`}>
-                    {p.rating?.toFixed(2) ?? '–'}
+                    {p.rating != null ? (
+                      <ComEstrela valor={p.rating} melhor={melhores?.rating ?? 0}>{p.rating.toFixed(2)}</ComEstrela>
+                    ) : '–'}
                   </td>
                 </tr>
                 {aberto && (
@@ -999,6 +1024,11 @@ export default function Partida() {
   const [promovendo, setPromovendo] = useState(null)
   const [seek, setSeek] = useState(null)
   const [abaAtiva, setAbaAtiva] = useState('geral')
+  // Filtro T/CT dentro da Partida (estilo scope.gg/Leetify): recalcula K/D/A/ADR/
+  // Rating/KAST só nos rounds daquele lado. 'all' usa o que já vem em m.players
+  // (nenhum fetch extra); T/CT busca /lado/:filtro e sobrescreve por steamId.
+  const [ladoFiltro, setLadoFiltro] = useState('all')
+  const [statsLado, setStatsLado] = useState(null)
   const replayRef = useRef(null)
   const autoJumpFeito = useRef(false)
 
@@ -1044,9 +1074,22 @@ export default function Partida() {
   useEffect(() => {
     setM(null) // troca de :id via navegação client-side não deve mostrar a partida antiga
     autoJumpFeito.current = false
+    setLadoFiltro('all')
+    setStatsLado(null)
     carregar()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
+
+  useEffect(() => {
+    if (ladoFiltro === 'all') { setStatsLado(null); return }
+    let vivo = true
+    setStatsLado(null)
+    fetch(`/api/matches/${id}/lado/${ladoFiltro}`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((lista) => { if (vivo) setStatsLado(new Map(lista.map((p) => [p.steamId, p]))) })
+      .catch(() => { if (vivo) setStatsLado(new Map()) })
+    return () => { vivo = false }
+  }, [id, ladoFiltro])
 
   // Veio de "?highlight=<id>" (link do Perfil do Jogador: "em qual partida foi esse
   // clutch mesmo?") — assim que a partida carregar, pula sozinho pro momento certo.
@@ -1075,8 +1118,31 @@ export default function Partida() {
   if (erro && !m) return <p className="font-mono text-sm text-texto-fraco">Partida não encontrada.</p>
   if (!m) return <p className="font-mono text-sm text-texto-fraco">Carregando…</p>
 
-  const timeA = m.players.filter((p) => p.team === 'A')
-  const timeB = m.players.filter((p) => p.team === 'B')
+  // Aplica o filtro de lado (se ativo e já carregado) por cima dos dados base da
+  // Partida — mantém nick/avatar/weapons/isTracked/premier (só o /lado/:filtro não
+  // tem) e sobrescreve K/D/A/ADR/HS%/KAST/rating/roundsPlayed com o recalculado.
+  const jogadoresExibidos =
+    ladoFiltro === 'all' || !statsLado
+      ? m.players
+      : m.players.map((p) => (statsLado.has(p.steamId) ? { ...p, ...statsLado.get(p.steamId) } : p))
+  const carregandoLado = ladoFiltro !== 'all' && !statsLado
+  // Partida ainda não reprocessada depois do FIL-51b não tem side_a — o filtro T/CT
+  // devolve roundsPlayed=0 pra todo mundo (não é bug, é dado que não existe ainda).
+  const semDadoDeLado =
+    ladoFiltro !== 'all' && statsLado && jogadoresExibidos.length > 0 && jogadoresExibidos.every((p) => !p.roundsPlayed)
+
+  const timeA = jogadoresExibidos.filter((p) => p.team === 'A')
+  const timeB = jogadoresExibidos.filter((p) => p.team === 'B')
+  // Melhor valor de cada coluna na partida INTEIRA (os dois times) — vira a estrela
+  // ao lado do valor, estilo Leetify/scope.gg. 0 nunca ganha estrela (evita destacar
+  // "melhor" quando todo mundo empata em zero, ex.: assists numa partida sem trade).
+  const melhorDe = (campo) => Math.max(0, ...jogadoresExibidos.map((p) => p[campo] ?? 0))
+  const melhores = {
+    kills: melhorDe('kills'), assists: melhorDe('assists'),
+    hsPct: jogadoresExibidos.length ? Math.max(0, ...jogadoresExibidos.map((p) => (p.kills ? Math.round((p.headshotKills / p.kills) * 100) : 0))) : 0,
+    adr: jogadoresExibidos.length ? Math.max(0, ...jogadoresExibidos.map((p) => (p.roundsPlayed ? Math.round((p.damage / p.roundsPlayed) * 10) / 10 : 0))) : 0,
+    kastPct: melhorDe('kastPct'), rating: melhorDe('rating'),
+  }
 
   // Resultado do ponto de vista do grupo (Jogadores whitelistados na partida). won é
   // nullable (empate — placar igual — não tem vencedor); `!p.won` sozinho trataria
@@ -1124,9 +1190,29 @@ export default function Partida() {
 
       {abaAtiva === 'geral' && (
         <>
+          <div className="flex items-center gap-2">
+            <div className="panel-cut-sm flex overflow-hidden border border-borda font-mono text-xs uppercase">
+              {[['all', 'All'], ['T', 'T'], ['CT', 'CT']].map(([v, label]) => (
+                <button
+                  key={v}
+                  onClick={() => setLadoFiltro(v)}
+                  className={`min-h-10 px-3 py-1.5 transition-colors lg:min-h-0 ${ladoFiltro === v ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {carregandoLado && <span className="font-mono text-xs text-texto-fraco">recalculando…</span>}
+            {semDadoDeLado && (
+              <span className="font-mono text-xs text-texto-fraco">
+                Essa partida ainda não tem o dado de lado (processada antes do fix) — precisa reprocessar.
+              </span>
+            )}
+          </div>
+
           <div className="grid gap-4 lg:grid-cols-2">
-            <Scoreboard time="A" jogadores={timeA} matchId={m.id} podePromover={jogador?.isSuperAdmin} onPromover={promover} promovendo={promovendo} />
-            <Scoreboard time="B" jogadores={timeB} matchId={m.id} podePromover={jogador?.isSuperAdmin} onPromover={promover} promovendo={promovendo} />
+            <Scoreboard time="A" jogadores={timeA} matchId={m.id} podePromover={jogador?.isSuperAdmin} onPromover={promover} promovendo={promovendo} melhores={melhores} carregando={carregandoLado} />
+            <Scoreboard time="B" jogadores={timeB} matchId={m.id} podePromover={jogador?.isSuperAdmin} onPromover={promover} promovendo={promovendo} melhores={melhores} carregando={carregandoLado} />
           </div>
 
           {m.highlights.length > 0 && (

@@ -553,7 +553,7 @@ def fundir_partes_mesmo_mapa(partes, rdatas=None):
         rounds_ja_contados += len(parte.get("rounds", []))
 
     rounds_fundidos, kills_fundidos, econ_fundido, kill_pos_fundidas = [], [], [], []
-    player_econ_fundido, purchases_por_parte = [], []
+    player_econ_fundido, purchases_por_parte, round_damage_fundido = [], [], []
     for parte, offset in zip(partes_corrigidas, offsets):
         rounds_fundidos += _offset_campo(parte.get("rounds", []), offset, "round_number")
         kills_fundidos += _offset_campo(parte.get("kills", []), offset, "round_number")
@@ -561,6 +561,7 @@ def fundir_partes_mesmo_mapa(partes, rdatas=None):
         kill_pos_fundidas += _offset_campo(parte.get("kill_positions", []), offset, "round_number")
         player_econ_fundido += _offset_campo(parte.get("player_round_econ", []), offset, "round_number")
         purchases_por_parte.append(_offset_campo(parte.get("purchases", []), offset, "round_number"))
+        round_damage_fundido += _offset_campo(parte.get("player_round_damage", []), offset, "round_number")
     purchases_fundidas = _dedupe_purchases_por_reinicio(purchases_por_parte)
 
     score_a = sum(1 for r in rounds_fundidos if r.get("winner_team") == "A")
@@ -586,6 +587,7 @@ def fundir_partes_mesmo_mapa(partes, rdatas=None):
         "round_econ": econ_fundido, "kill_positions": kill_pos_fundidas,
         "player_round_econ": player_econ_fundido, "purchases": purchases_fundidas,
         "player_damage": player_damage_fundido, "player_flashes": player_flashes_fundido,
+        "player_round_damage": round_damage_fundido,
         "players": _merge_players([p.get("players", []) for p in partes_corrigidas]),
     }
 
@@ -789,6 +791,7 @@ def parse_demo(path):
                         "tick": k["tick"],
                         "killer": k["attacker"],
                         "victim": k["victim"],
+                        "assister": k["assister"],
                         "weapon": k["weapon"],
                         "victim_weapon": vic_pos[2],
                         "headshot": k["headshot"],
@@ -815,6 +818,10 @@ def parse_demo(path):
     damage, team_damage, utility_damage, shots_hit = {}, {}, {}, {}
     he_damage, molotov_damage = {}, {}
     he_team_damage, molotov_team_damage = {}, {}
+    # Dano em inimigo por (round, atacante) — base do filtro T/CT dentro da Partida
+    # (FIL-51b): sem isso, ADR/rating filtrado por lado não tem como ser recalculado,
+    # só o total da partida inteira estava disponível antes.
+    round_damage = {}
     # Dano por PAR (quem bateu em quem, com quê) — base do "Head to Head": o player_hurt
     # já carrega atacante+vítima+arma+dano, só nunca guardávamos o par, só o total do
     # atacante. Chave (atacante, vítima, arma) pra já vir separado por arma na consulta.
@@ -826,11 +833,13 @@ def parse_demo(path):
         dmg = int(r["dmg_health"])
         vic = _sid(r.get("user_steamid"))
         arma = r.get("weapon")
+        rn = int(r["total_rounds_played"]) + 1
         time_kill = bool(vic and fixed.get(atk) == fixed.get(vic))
         if time_kill:
             team_damage[atk] = team_damage.get(atk, 0) + dmg
         else:
             damage[atk] = damage.get(atk, 0) + dmg
+            round_damage[(rn, atk)] = round_damage.get((rn, atk), 0) + dmg
         if arma in _ARMAS_UTILITARIAS:
             utility_damage[atk] = utility_damage.get(atk, 0) + dmg
             if arma == "hegrenade":
@@ -1045,6 +1054,10 @@ def parse_demo(path):
         {"attacker": atk, "victim": vic, "count": v["count"], "duration_sum": round(v["duracao"], 2)}
         for (atk, vic), v in flash_pares.items()
     ]
+    player_round_damage = [
+        {"round_number": rn, "steam_id64": atk, "damage": dmg}
+        for (rn, atk), dmg in round_damage.items()
+    ]
 
     return {
         "map": mapa,
@@ -1062,6 +1075,7 @@ def parse_demo(path):
         "player_damage": player_damage,
         "player_flashes": player_flashes,
         "kill_positions": kill_positions,
+        "player_round_damage": player_round_damage,
     }
 
 

@@ -191,6 +191,49 @@ describe('GET /api/matches/:id', () => {
   })
 })
 
+describe('GET /api/matches/:id/lado/:filtro', () => {
+  it('sem login: 401', async () => {
+    const { app } = appWith([])
+    expect((await request(app).get('/api/matches/m1/lado/all')).status).toBe(401)
+  })
+
+  it('filtro invalido: 400', async () => {
+    const { app } = appWith([])
+    const res = await request(app).get('/api/matches/m1/lado/xyz').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    expect(res.status).toBe(400)
+  })
+
+  it('partida nao encontrada no grupo: 404', async () => {
+    const { app } = appWith([['from matches where id', []]])
+    const res = await request(app).get('/api/matches/m1/lado/all').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    expect(res.status).toBe(404)
+  })
+
+  it('recalcula kills/mortes/rating por jogador a partir dos rounds e devolve nick/avatar', async () => {
+    const { app } = appWith([
+      ['from matches where id', [{ id: 'm1' }]],
+      ['from match_players mp', [
+        { steam_id64: 'A1', nick: 'fih', team: 'A', avatar_url: null },
+        { steam_id64: 'B1', nick: 'adversario', team: 'B', avatar_url: null },
+      ]],
+      ['from rounds where match_id', [
+        { round_number: 1, side_a: 'CT' },
+        { round_number: 2, side_a: 'CT' },
+      ]],
+      ['from kill_positions where match_id', [
+        { round_number: 1, tick: 100, killer: 'A1', victim: 'B1', assister: null, headshot: true },
+      ]],
+      ['from match_player_round_damage', [
+        { round_number: 1, steam_id64: 'A1', damage: 100 },
+      ]],
+    ])
+    const res = await request(app).get('/api/matches/m1/lado/all').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    expect(res.status).toBe(200)
+    const fih = res.body.find((p) => p.steamId === 'A1')
+    expect(fih).toMatchObject({ nick: 'fih', team: 'A', kills: 1, deaths: 0, roundsPlayed: 2, damage: 100, adr: 50 })
+  })
+})
+
 describe('GET /api/matches/:id/replay', () => {
   it('sem login: 401', async () => {
     const { app } = appWith([])
