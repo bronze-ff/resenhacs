@@ -689,3 +689,84 @@ def test_sincronizar_faceit_falha_de_item_nao_derruba_o_lote(monkeypatch):
     total = main.cmd_sincronizar_faceit(config, conn)
     assert total == 1
     assert falhas == ["fm-ruim"]
+
+
+# ---- _notificar_discord_grupos ----
+
+
+def test_notificar_discord_sem_app_url_nao_faz_nada(monkeypatch):
+    config = main.Config(env={})
+    chamado = []
+    monkeypatch.setattr(main.dbmod, "grupos_da_partida", lambda *a, **k: chamado.append(1))
+    main._notificar_discord_grupos(config, conn=None, match_id="m1")
+    assert chamado == []
+
+
+def test_notificar_discord_pula_grupo_sem_webhook(monkeypatch):
+    config = main.Config(env={"APP_URL": "https://x.com"})
+    monkeypatch.setattr(main.dbmod, "grupos_da_partida", lambda conn, mid: ["g1"])
+    monkeypatch.setattr(main.dbmod, "ja_notificado_discord", lambda conn, mid, gid: False)
+    monkeypatch.setattr(main.dbmod, "webhook_do_grupo", lambda conn, gid: None)
+    enviados = []
+    monkeypatch.setattr(main.discord_notify, "enviar_webhook", lambda *a, **k: enviados.append(1))
+    main._notificar_discord_grupos(config, conn=object(), match_id="m1")
+    assert enviados == []
+
+
+def test_notificar_discord_pula_grupo_ja_notificado(monkeypatch):
+    config = main.Config(env={"APP_URL": "https://x.com"})
+    monkeypatch.setattr(main.dbmod, "grupos_da_partida", lambda conn, mid: ["g1"])
+    monkeypatch.setattr(main.dbmod, "ja_notificado_discord", lambda conn, mid, gid: True)
+    enviados = []
+    monkeypatch.setattr(main.discord_notify, "enviar_webhook", lambda *a, **k: enviados.append(1))
+    main._notificar_discord_grupos(config, conn=object(), match_id="m1")
+    assert enviados == []
+
+
+def test_notificar_discord_envia_e_marca_notificado(monkeypatch):
+    config = main.Config(env={"APP_URL": "https://x.com"})
+    monkeypatch.setattr(main.dbmod, "grupos_da_partida", lambda conn, mid: ["g1"])
+    monkeypatch.setattr(main.dbmod, "ja_notificado_discord", lambda conn, mid, gid: False)
+    monkeypatch.setattr(main.dbmod, "webhook_do_grupo", lambda conn, gid: "https://discord.com/wh")
+    resumo = {"map": "de_mirage", "score_grupo": 13, "score_rival": 9, "mvp_nick": "f", "mvp_rating": 1.0}
+    monkeypatch.setattr(main.dbmod, "resumo_da_partida_para_grupo", lambda conn, mid, gid: resumo)
+    enviados = []
+    monkeypatch.setattr(main.discord_notify, "montar_embed", lambda r, mid, url: {"payload": True})
+    monkeypatch.setattr(main.discord_notify, "enviar_webhook", lambda url, payload: enviados.append((url, payload)))
+    marcados = []
+    monkeypatch.setattr(main.dbmod, "marcar_notificado_discord", lambda conn, mid, gid: marcados.append((mid, gid)))
+    main._notificar_discord_grupos(config, conn=object(), match_id="m1")
+    assert enviados == [("https://discord.com/wh", {"payload": True})]
+    assert marcados == [("m1", "g1")]
+
+
+def test_notificar_discord_nao_derruba_em_erro_de_envio(monkeypatch, capsys):
+    config = main.Config(env={"APP_URL": "https://x.com"})
+    monkeypatch.setattr(main.dbmod, "grupos_da_partida", lambda conn, mid: ["g1"])
+    monkeypatch.setattr(main.dbmod, "ja_notificado_discord", lambda conn, mid, gid: False)
+    monkeypatch.setattr(main.dbmod, "webhook_do_grupo", lambda conn, gid: "https://discord.com/wh")
+    resumo = {"map": "de_mirage", "score_grupo": 13, "score_rival": 9, "mvp_nick": None, "mvp_rating": None}
+    monkeypatch.setattr(main.dbmod, "resumo_da_partida_para_grupo", lambda conn, mid, gid: resumo)
+    monkeypatch.setattr(main.discord_notify, "montar_embed", lambda r, mid, url: {})
+
+    def _explode(url, payload):
+        raise RuntimeError("timeout")
+
+    monkeypatch.setattr(main.discord_notify, "enviar_webhook", _explode)
+    marcados = []
+    monkeypatch.setattr(main.dbmod, "marcar_notificado_discord", lambda conn, mid, gid: marcados.append(1))
+    main._notificar_discord_grupos(config, conn=object(), match_id="m1")  # não deve lançar
+    assert marcados == []
+    assert "timeout" in capsys.readouterr().out
+
+
+def test_notificar_discord_pula_grupo_sem_resumo(monkeypatch):
+    config = main.Config(env={"APP_URL": "https://x.com"})
+    monkeypatch.setattr(main.dbmod, "grupos_da_partida", lambda conn, mid: ["g1"])
+    monkeypatch.setattr(main.dbmod, "ja_notificado_discord", lambda conn, mid, gid: False)
+    monkeypatch.setattr(main.dbmod, "webhook_do_grupo", lambda conn, gid: "https://discord.com/wh")
+    monkeypatch.setattr(main.dbmod, "resumo_da_partida_para_grupo", lambda conn, mid, gid: None)
+    enviados = []
+    monkeypatch.setattr(main.discord_notify, "enviar_webhook", lambda *a, **k: enviados.append(1))
+    main._notificar_discord_grupos(config, conn=object(), match_id="m1")
+    assert enviados == []

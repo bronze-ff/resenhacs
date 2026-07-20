@@ -27,6 +27,7 @@ from . import replay as replaymod
 from . import sharecode
 from . import steam_api
 from . import faceit
+from . import discord_notify
 from . import storage_r2
 from . import transform
 from .config import Config
@@ -105,6 +106,29 @@ def _baixar_e_descomprimir(url, destino_dem):
             out.write(dec.decompress(chunk))
 
 
+def _notificar_discord_grupos(config, conn, match_id):
+    """Avisa no Discord cada grupo com membro na Partida recém-ingerida. Best-effort:
+    grupo sem webhook configurado é pulado em silêncio; falha ao enviar é logada e
+    NUNCA derruba o fetch (a Partida já foi ingerida com sucesso, isso é só um aviso)."""
+    if not config.app_url:
+        return
+    for group_id in dbmod.grupos_da_partida(conn, match_id):
+        if dbmod.ja_notificado_discord(conn, match_id, group_id):
+            continue
+        webhook_url = dbmod.webhook_do_grupo(conn, group_id)
+        if not webhook_url:
+            continue
+        try:
+            resumo = dbmod.resumo_da_partida_para_grupo(conn, match_id, group_id)
+            if resumo is None:
+                continue
+            payload = discord_notify.montar_embed(resumo, match_id, config.app_url)
+            discord_notify.enviar_webhook(webhook_url, payload)
+            dbmod.marcar_notificado_discord(conn, match_id, group_id)
+        except Exception as e:  # noqa: BLE001
+            print(f"  discord: falha ao notificar grupo {group_id} da partida {match_id}: {e}")
+
+
 def cmd_fetch(config, conn, since=None, bot_dir=None, node_bin="node"):
     """Baixa e ingere as Partidas pendentes (descobertas pelo discover, ainda sem demo).
 
@@ -162,6 +186,7 @@ def cmd_fetch(config, conn, since=None, bot_dir=None, node_bin="node"):
                 )
                 print(f"  {code}: ingerida {mid} (played_at={played_at})")
                 total += 1
+                _notificar_discord_grupos(config, conn, mid)
         except Exception as e:  # noqa: BLE001
             # Uma partida com demo problemático não derruba o lote; marca failed pra
             # não ficar re-baixando 200MB toda hora (dá pra re-tentar voltando pra

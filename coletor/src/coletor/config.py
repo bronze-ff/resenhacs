@@ -7,6 +7,7 @@ class Config:
         self.database_url = env.get("DATABASE_URL")
         self.steam_api_key = env.get("STEAM_API_KEY")
         self.faceit_api_key = env.get("FACEIT_API_KEY")
+        self.app_url = env.get("APP_URL")
         # Cloudflare R2 (compatível com S3)
         self.r2_account_id = env.get("R2_ACCOUNT_ID")
         self.r2_access_key_id = env.get("R2_ACCESS_KEY_ID")
