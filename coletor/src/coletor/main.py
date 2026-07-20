@@ -522,8 +522,10 @@ def cmd_reprocess(config, conn, match_id=None):
                 parsed["played_at"] = played_at.isoformat() if played_at else parsed.get("played_at")
 
                 rdata = parsemod.extract_replay(dem)
+                winner_by_round = {r["round_number"]: r.get("winner_team") for r in parsed.get("rounds", [])}
                 replay_json = replaymod.build_replay(
-                    parsed["map"], rdata["ticks"], kills=rdata["kills"], extras=rdata
+                    parsed["map"], rdata["ticks"], kills=rdata["kills"], extras=rdata,
+                    winner_by_round=winner_by_round,
                 )
                 parsed["highlights"] = transform.attach_replay_frames(parsed["highlights"], replay_json["rounds"])
                 parsed["lineups"] = _montar_lineups(rdata, replay_json, parsed["map"], source or "valve_mm")
@@ -641,8 +643,10 @@ def ingest_demo(config, conn, path, share_code=None, source="upload", upload=Tru
     replay_json = None
     try:
         rdata = parsemod.extract_replay(path)
+        winner_by_round = {r["round_number"]: r.get("winner_team") for r in parsed.get("rounds", [])}
         replay_json = replaymod.build_replay(
-            parsed["map"], rdata["ticks"], kills=rdata["kills"], extras=rdata
+            parsed["map"], rdata["ticks"], kills=rdata["kills"], extras=rdata,
+            winner_by_round=winner_by_round,
         )
         # Frame do Replay 2D pra cada highlight (deep link — Partida.jsx abre o replay
         # já no momento exato ao clicar), casando pela última kill do jogador no round.
@@ -693,8 +697,10 @@ def ingest_demo_multiparte(config, conn, dem_paths, share_code=None, source="pro
     replay_json = None
     if rdata is not None:
         try:
+            winner_by_round = {r["round_number"]: r.get("winner_team") for r in parsed.get("rounds", [])}
             replay_json = replaymod.build_replay(
-                parsed["map"], rdata["ticks"], kills=rdata["kills"], extras=rdata
+                parsed["map"], rdata["ticks"], kills=rdata["kills"], extras=rdata,
+                winner_by_round=winner_by_round,
             )
             parsed["highlights"] = transform.attach_replay_frames(parsed["highlights"], replay_json["rounds"])
             parsed["lineups"] = _montar_lineups(rdata, replay_json, parsed["map"], source)

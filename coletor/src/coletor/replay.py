@@ -39,10 +39,17 @@ def detect_clutch(round_kills, teams):
     """Detecta um clutch VENCIDO no round (pro anel dourado no Replay 2D): último vivo
     de um time que zera os inimigos sobrevivendo.
 
-    round_kills em ordem cronológica. Devolve {steamid, vs, tick} ou None. Checa o
-    clutcher de CADA time (num 1v1 os dois clutcham) e devolve o que efetivamente
+    round_kills em ordem cronológica. Devolve {steamid, vs, tick, team} ou None. Checa
+    o clutcher de CADA time (num 1v1 os dois clutcham) e devolve o que efetivamente
     limpou os inimigos — o bug antigo travava no 1º a chegar a 1 vivo (o perdedor num
-    1v1), fazendo o anel sumir em clutch 1v1 vencido. Ver transform.clutch_outcomes."""
+    1v1), fazendo o anel sumir em clutch 1v1 vencido.
+
+    Critério "cinematográfico" (eliminou todo mundo), não o critério oficial de vitória
+    do round (esse é `transform.clutch_outcomes`, usado no Ranking/Highlights) — os dois
+    às vezes divergem (ex.: a bomba explode depois do clutcher já ter zerado os
+    inimigos, mas ele morre em seguida: aqui conta, no resultado oficial não). Por isso
+    `build_replay` recebe `winner_by_round` e usa como gate final antes de expor o anel
+    — ver ali."""
     alive = set(teams.keys())
     inicio_por_time = {}
     for k in round_kills:
@@ -54,7 +61,7 @@ def detect_clutch(round_kills, teams):
                 vivos[t].append(s)
         for lado, outro in (("A", "B"), ("B", "A")):
             if len(vivos[lado]) == 1 and len(vivos[outro]) >= 1 and lado not in inicio_por_time:
-                inicio_por_time[lado] = {"steamid": vivos[lado][0], "vs": len(vivos[outro]), "tick": k["tick"]}
+                inicio_por_time[lado] = {"steamid": vivos[lado][0], "vs": len(vivos[outro]), "tick": k["tick"], "team": lado}
     for time_surv, inicio in inicio_por_time.items():
         surv, faltam = inicio["steamid"], inicio["vs"]
         morreu = False
@@ -71,10 +78,19 @@ def detect_clutch(round_kills, teams):
     return None
 
 
-def build_replay(map_name, ticks, kills=None, extras=None, target_hz=8):
+def build_replay(map_name, ticks, kills=None, extras=None, target_hz=8, winner_by_round=None):
     """Monta o replay JSON a partir das posições (`ticks`), kills e `extras`
     (smokes/fires/flashes/hes/blinds/bomb* de extract_replay). Normaliza mundo→radar,
     reindexa frames por round, casa cada evento ao frame certo, e detecta clutch.
+
+    `winner_by_round` (opcional, {round_number: "A"|"B"}): quando informado, o anel de
+    clutch só aparece se o time do clutcher (critério "cinematográfico" de
+    `detect_clutch`) coincide com quem OFICIALMENTE venceu o round — consolida com
+    `transform.clutch_outcomes` (Ranking/Highlights), eliminando o caso em que o anel
+    aparecia num round que o time tecnicamente perdeu (ex.: bomba explode depois do
+    clutcher já ter zerado os inimigos, mas ele morre em seguida). Sem esse parâmetro
+    (None), mantém o comportamento antigo só com o critério cinematográfico — usado por
+    quem ainda não tem `winner_by_round` disponível no momento da chamada.
     """
     import bisect
 
@@ -190,6 +206,8 @@ def build_replay(map_name, ticks, kills=None, extras=None, target_hz=8):
                 plant = {"t": ti, "x": pos["x"], "y": pos["y"]}
 
         clutch = detect_clutch(rk, teams)
+        if clutch is not None and winner_by_round is not None and winner_by_round.get(r) != clutch["team"]:
+            clutch = None  # o time "clutchou" (zerou os inimigos) mas não venceu o round oficialmente
         clutch_out = {"steamid": clutch["steamid"], "vs": clutch["vs"], "t": idx(r, clutch["tick"])} if clutch else None
 
         rounds_out.append({
