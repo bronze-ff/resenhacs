@@ -471,7 +471,7 @@ def _montar_lineups(rdata, replay_json, mapa, source):
     return lineups
 
 
-def cmd_reprocess(config, conn, match_id=None):
+def cmd_reprocess(config, conn, match_id=None, since=None):
     """Reprocessa Partida(s) já gravadas cujo .dem ainda está no R2 (janela de 90 dias
     do cleanup) — baixa de novo, roda o parser ATUAL (com fixes já aplicados) e regrava
     stats + replay.json no MESMO match_id (store_parsed é idempotente por fingerprint,
@@ -482,6 +482,9 @@ def cmd_reprocess(config, conn, match_id=None):
 
     `match_id` (opcional, uuid): reprocessa só essa Partida; sem isso, todas que ainda
     têm demo_url (pending/failed não têm o que reprocessar).
+    `since` (opcional, "YYYY-MM-DD"): só Partidas jogadas nessa data em diante — reprocess
+    completo pode levar horas (cada Partida baixa+reparseia o .dem inteiro); útil pra
+    aplicar um fix novo só nas Partidas recentes sem esperar o histórico inteiro.
     """
     import tempfile
     from pathlib import Path
@@ -492,6 +495,12 @@ def cmd_reprocess(config, conn, match_id=None):
                 "select id, share_code, source, demo_url, replay_url, played_at from matches "
                 "where id = %s and demo_url is not null",
                 (match_id,),
+            )
+        elif since:
+            cur.execute(
+                "select id, share_code, source, demo_url, replay_url, played_at from matches "
+                "where status = 'parsed' and demo_url is not null and played_at >= %s",
+                (since,),
             )
         else:
             cur.execute(
@@ -892,6 +901,7 @@ def main(argv=None):
         help="Re-roda o parser atual em cima do .dem já arquivado no R2 (bug corrigido depois do ingest original) e regrava stats/replay.json.",
     )
     p_reproc.add_argument("--match-id", default=None, help="Reprocessa só essa Partida (uuid); sem isso, todas com demo ainda no R2.")
+    p_reproc.add_argument("--since", default=None, help="Só Partidas jogadas nessa data em diante (YYYY-MM-DD) — evita reprocessar o histórico inteiro.")
     sub.add_parser(
         "processar-fila-pro",
         help="Processa a fila de partidas profissionais: baixa .rar do HLTV, extrai o .dem e ingere (source='pro').",
@@ -937,7 +947,7 @@ def main(argv=None):
         elif args.cmd == "cleanup":
             cmd_cleanup(config, conn, days=args.days)
         elif args.cmd == "reprocess":
-            cmd_reprocess(config, conn, match_id=args.match_id)
+            cmd_reprocess(config, conn, match_id=args.match_id, since=args.since)
         elif args.cmd == "processar-fila-pro":
             cmd_processar_fila_pro(config, conn)
         elif args.cmd == "processar-uploads-pendentes":

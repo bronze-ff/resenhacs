@@ -15,6 +15,10 @@ on:
         description: 'Reprocessar todas as Partidas com demo ainda no R2 (bug de parser corrigido)'
         type: boolean
         default: false
+      reprocessar_desde:
+        description: 'Reprocessar só Partidas jogadas a partir dessa data (YYYY-MM-DD) — mais rápido que reprocessar tudo'
+        type: string
+        default: ''
       configurar_cors:
         description: 'Configurar CORS no bucket R2 (upload de demo pro via navegador) - rodar uma vez'
         type: boolean
@@ -138,8 +142,8 @@ jobs:
       # stats já gravadas depois de um bug de parser ser corrigido (ex.: kill de USP-S
       # virando P2000 nas stats — corrigido no commit 497e3bd, precisa reprocessar as
       # Partidas já ingeridas antes do fix pra atualizar o que já está gravado).
-      - name: Reprocessar todas as Partidas (sob demanda)
-        if: github.event_name == 'workflow_dispatch' && inputs.reprocessar_tudo == true
+      - name: Reprocessar Partidas (sob demanda, tudo ou --since)
+        if: github.event_name == 'workflow_dispatch' && (inputs.reprocessar_tudo == true || inputs.reprocessar_desde != '')
         working-directory: coletor
         env:
           PYTHONPATH: src
@@ -148,7 +152,12 @@ jobs:
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
-        run: python -m coletor.main reprocess
+        run: |
+          if [ -n "${{ inputs.reprocessar_desde }}" ]; then
+            python -m coletor.main reprocess --since "${{ inputs.reprocessar_desde }}"
+          else
+            python -m coletor.main reprocess
+          fi
       - name: Configurar CORS no bucket R2 (sob demanda)
         if: github.event_name == 'workflow_dispatch' && inputs.configurar_cors == true
         working-directory: coletor

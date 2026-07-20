@@ -189,6 +189,56 @@ def test_finalizar_ingest_comprime_o_dem_antes_de_subir_pro_r2(monkeypatch, tmp_
     assert bz2.decompress(bytes_enviados) == conteudo_original
 
 
+# ---- cmd_reprocess: --since evita reprocessar o histórico inteiro ----
+
+class _FakeCursorReprocess:
+    def __init__(self, conn):
+        self.conn = conn
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def execute(self, sql, params=None):
+        self.conn.ultima_query = " ".join(sql.split())
+        self.conn.ultimos_params = params
+
+    def fetchall(self):
+        return []  # sem partidas: cmd_reprocess retorna cedo, não precisa mockar parser/R2
+
+
+class _FakeConnReprocess:
+    def __init__(self):
+        self.ultima_query = ""
+        self.ultimos_params = None
+
+    def cursor(self):
+        return _FakeCursorReprocess(self)
+
+
+def test_cmd_reprocess_sem_since_reprocessa_tudo():
+    conn = _FakeConnReprocess()
+    main.cmd_reprocess(_config_com_r2(), conn)
+    assert "played_at >=" not in conn.ultima_query
+    assert conn.ultimos_params is None
+
+
+def test_cmd_reprocess_com_since_filtra_por_played_at():
+    conn = _FakeConnReprocess()
+    main.cmd_reprocess(_config_com_r2(), conn, since="2026-07-16")
+    assert "played_at >=" in conn.ultima_query
+    assert conn.ultimos_params == ("2026-07-16",)
+
+
+def test_cmd_reprocess_match_id_ignora_since():
+    conn = _FakeConnReprocess()
+    main.cmd_reprocess(_config_com_r2(), conn, match_id="m1", since="2026-07-16")
+    assert "id = %s" in conn.ultima_query
+    assert conn.ultimos_params == ("m1",)
+
+
 # ---- streaming por round do Replay 2D (FIL-54b) ----
 
 def test_upload_replay_sobe_indice_sem_frames_e_um_objeto_por_round(monkeypatch):
