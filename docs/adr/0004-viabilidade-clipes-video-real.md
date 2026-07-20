@@ -90,7 +90,38 @@ Content-Type: application/json
 - **Não precisamos armazenar o vídeo.** Exibição é via **iframe do próprio Allstar**: `https://allstar.gg/iframe?clip=CLIP_ID&known=true&platform=RESENHACS&useCase=...&UID=...`. Isso elimina toda a preocupação de storage/R2/streaming pra clipe — só guardamos o `clip_id` recebido no webhook (provavelmente numa coluna nova em `clips`, ou reaproveitando `provider = 'allstar'`) e embutimos o iframe na tela da Partida.
 - **`useCase`** deve mapear pros tipos de highlight já existentes (o Dashboard mostrou toggles `POTG`, `BP` — falta descobrir o significado exato e se cobre `ace`/`clutch`/multi-kill como categorias separadas, ou se é só "melhor jogada" genérico).
 
-**Ainda falta descobrir antes de decidir:** o preço por clipe/uso (não achamos na doc de Getting Started — checar a aba **Terms** do dashboard, que provavelmente tem os termos comerciais) e exatamente o formato aceito de `demoUrl`.
+### Mapa completo da API Reference (Swagger, conta de parceiro RESENHACS)
+
+Não é um endpoint genérico como o exemplo do Getting Started sugeria — cada "use case" de CS2 tem seu **próprio endpoint POST**:
+
+| Endpoint | Use case | Provável mapeamento pro Resenha |
+|---|---|---|
+| `POST /cs/clip/potg` | POTG (Play of the Game) | A melhor jogada da partida — pode virar o highlight de maior `rating`/impacto |
+| `POST /cs/clip/mh` | MH (Multi-kill Highlight) | Casa com `highlights.kind` = `triple`/`quad`/`ace` |
+| `POST /cs/clip/bp` | BP (Best Play?) | A confirmar |
+| `POST /cs/clip/pmh` | PMH (Personal Match Highlight?) | A confirmar |
+| `POST /cs/clip/pb` | PB (Personal Best?) | A confirmar |
+| `POST /cs/clip/sh` | SH (Sharpshooter?) | A confirmar |
+
+Suporte, gestão e consulta:
+- `GET /cs/clip`, `GET /cs/clip/status` — buscar um clipe específico e checar status de processamento (dá pra fazer polling em vez de depender só de webhook, se quiser).
+- `POST /cs/clip/reprocess` — reprocessar um clipe que falhou.
+- `GET /cs/clips`, `GET /cs/clips/search` — listar/filtrar clipes.
+- `GET /cs/clips/playlist`, **`GET /cs/clips/matchPlaylist`** — monta uma playlist de vários clipes de uma partida só (relevante: dá pra oferecer "assista todos os highlights dessa partida" numa tacada só, em vez de embed clipe por clipe).
+
+**Webhooks (3 eventos distintos, não um genérico):**
+- `clipSubmitted` — confirmação de que o pedido foi recebido.
+- `clipProcessed` — clipe pronto (é aqui que pegamos o `clip_id` final pra guardar e montar o iframe).
+- `clipErrored` — falhou (precisa tratar: marcar como falho, talvez re-tentar com `reprocess`).
+
+**Sigla dos parâmetros de cada request** (`csPOTGRequestBody`, `csBPRequestBody`, etc.) apareceu no índice mas sem os campos expandidos — não sabemos ainda se `demoUrl` é igual em todos os use cases ou se cada endpoint pede algo diferente.
+
+**Ainda falta descobrir antes de decidir — e a doc self-serve não vai responder isso:**
+1. **Preço por clipe/uso.** Não existe em nenhuma página encontrada até agora (Getting Started, Terms — que é só o jurídico padrão, sem valores). Pra uma API de parceria feita por contrato (não self-serve com cartão de crédito), isso normalmente só vem **perguntando direto pro time comercial**.
+2. **Formato exato de `demoUrl`** (URL da Valve, que expira, vs. URL do nosso R2) — precisa dos campos expandidos do schema, ou perguntar direto também.
+3. **Significado exato de BP/PMH/PB/SH** e se há um plano gratuito/teste (o anúncio de produto mencionava "primeiros 1.000 clipes grátis", mas não vimos isso confirmado dentro da própria conta).
+
+**Próximo passo recomendado:** um e-mail direto pra `partners@allstar.gg` (o contato oficial nos Termos) cobre as três lacunas de uma vez, citando o Partner ID `RESENHACS` já criado. Deixo um rascunho pronto pra você mandar (ou eu mando, se você preferir e confirmar) no fim deste documento.
 
 ### Lacunas que ficaram sem resposta pública
 
@@ -111,6 +142,24 @@ Content-Type: application/json
 **Caminho alternativo, sem depender de terceiro nenhum — Replay 3D:** já que todas as posições, ângulos e animações da demo já são extraídos (é o que alimenta o Replay 2D hoje), dá pra reconstruir a cena do highlight em **3D estilizado com three.js** — mapa em 3D, câmera cinematográfica seguindo o jogador no momento do ace/clutch — e gravar esse canvas como vídeo/GIF. Não é a textura real do jogo, mas fica com cara de replay profissional, 100% sob nosso controle, sem depender de API externa nem de custo por clipe. Fica pra uma sessão de brainstorming própria, já que também responde a pergunta sobre three.js. Boa opção se o preço do Allstar/Rankacy não fechar as contas com o grupo.
 
 **Ação imediata de baixo custo, em paralelo:** o roadmap já tem um "share card" (imagem estática com placar + destaque, pra colar no grupo) — dá pra fazer rápido e barato, sem nenhum dos riscos acima, e não compete com as opções de vídeo.
+
+## Rascunho de e-mail para partners@allstar.gg
+
+> **Assunto:** Pricing & integration questions — Partner ID RESENHACS (CS2)
+>
+> Hi Allstar team,
+>
+> We're building Resenha, a stats/replay platform for a small closed group of CS2 players (~10 users, a few dozen matches/week). We already created a partner account (Partner ID: **RESENHACS**) and read through the Getting Started guide and API Reference.
+>
+> Before we integrate, we'd appreciate clarity on a few points:
+>
+> 1. **Pricing** — what does per-clip pricing look like for a small/hobby-scale partner like us? Is there a self-serve pay-as-you-go option, or does it require a minimum monthly commitment / custom contract?
+> 2. **`demoUrl` format** — for the CS2 clip request endpoints (`/cs/clip/potg`, `/cs/clip/mh`, etc.), does `demoUrl` need to be Valve's original GOTV download URL (which expires ~30 days after the match), or can it be any HTTPS URL we host ourselves (we already archive the raw `.dem` file in our own storage)?
+> 3. **Use case meanings** — could you clarify what BP, PMH, PB, and SH stand for in the CS2 use cases, so we map them correctly to our own highlight types (ace, clutch, multi-kill)?
+>
+> Thanks for your time!
+
+**Quem manda:** por padrão, deixo pra você mandar esse e-mail (é conversa comercial da tua conta de parceiro). Se preferir, eu posso mandar por você — só faço isso com tua confirmação explícita, já que é uma comunicação externa em teu nome.
 
 ## Fontes
 
