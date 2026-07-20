@@ -189,6 +189,25 @@ def test_store_parsed_grava_tudo_e_commita():
     assert any(s.startswith("delete from match_player_weapons") for s in sqls)
     assert any(s.startswith("delete from match_round_econ") for s in sqls)
     assert any(s.startswith("delete from kill_positions") for s in sqls)
+    assert any(s.startswith("delete from match_players") for s in sqls)
+    assert any(s.startswith("delete from rounds") for s in sqls)
+
+
+def test_store_parsed_limpa_jogador_e_round_orfao_no_reprocess():
+    # Reprocessar (parser corrigido reduz o nº de jogadores/rounds) não pode deixar
+    # a linha antiga pra trás — mesma garantia que highlights/weapons/econ já têm.
+    conn = FakeConn()
+    parsed = _parsed()
+    parsed["players"].append({"steam_id64": "B", "nick": "outro", "team": "B", "kills": 5,
+                               "deaths": 12, "assists": 1, "headshot_kills": 1, "damage": 900,
+                               "rounds_played": 22, "rating": 0.8, "kast_pct": 0.5, "won": False})
+    parsed["rounds"].append({"round_number": 2, "winner_team": "B", "win_reason": "elim"})
+    db.store_parsed(conn, parsed, share_code="CSGO-x", source="upload")
+
+    del_players = next(c for c in conn.calls if c[0].startswith("delete from match_players"))
+    assert del_players[1][1] == ["A", "B"]
+    del_rounds = next(c for c in conn.calls if c[0].startswith("delete from rounds"))
+    assert del_rounds[1][1] == [1, 2]
 
 
 def test_store_parsed_grava_kast_pct_em_match_players():

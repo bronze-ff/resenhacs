@@ -110,6 +110,13 @@ def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status,
 
 
 def _write_players(cur, match_id, players):
+    # Limpa órfão: se um reprocess (parser corrigido) produzir menos jogadores que a
+    # gravação anterior, a linha antiga não pode ficar pra trás — mesmo padrão que
+    # highlights/weapons/econ/damage/flashes/kill_positions/lineups já usam abaixo.
+    cur.execute(
+        "delete from match_players where match_id = %s and steam_id64 != all(%s)",
+        (match_id, [p["steam_id64"] for p in players]),
+    )
     for p in players:
         cur.execute(
             """
@@ -213,6 +220,11 @@ def _write_players(cur, match_id, players):
 
 
 def _write_rounds(cur, match_id, rounds):
+    # Mesma limpeza de órfão que _write_players — ver comentário lá.
+    cur.execute(
+        "delete from rounds where match_id = %s and round_number != all(%s)",
+        (match_id, [r["round_number"] for r in rounds]),
+    )
     for r in rounds:
         cur.execute(
             """
