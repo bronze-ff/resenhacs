@@ -28,7 +28,7 @@ describe('pedirClipe', () => {
     })
     expect(requestId).toBe('req-1')
     const [url, opts] = fetchMock.mock.calls[0]
-    expect(url).toBe('https://prt.allstar.gg/cs/clip/mh')
+    expect(url).toBe('https://prt.allstar.gg/api/cs/clip/mh')
     expect(opts.headers['X-Api-Key']).toBe('k')
     expect(JSON.parse(opts.body)).toEqual({
       steamId: '765', demoUrl: 'https://r2/demo', webhookUrl: 'https://site/api/allstar/webhook',

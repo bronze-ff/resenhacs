@@ -2,7 +2,7 @@
 // (disparado por clique de um jogador na tela da Partida), restrito a uma allowlist
 // de steamId64 até o preço por clipe ser confirmado com o suporte deles.
 
-const BASE = 'https://prt.allstar.gg/cs'
+const BASE = 'https://prt.allstar.gg/api/cs'
 
 // kind de highlight (coletor/src/coletor/transform.py: MULTIKILL_KIND / f"clutch_1v{vs}")
 // -> endpoint do Allstar (Swagger da conta de parceiro RESENHACS, ver ADR-0004). Multi-

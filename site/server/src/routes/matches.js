@@ -557,7 +557,7 @@ export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Cli
       res.json({ status: 'Submitted' })
     } catch (e) {
       console.error(`allstar: falha ao pedir clipe do highlight ${highlightId}:`, e)
-      res.status(502).json({ erro: 'Falha ao pedir o clipe ao Allstar' })
+      res.status(502).json({ erro: `Falha ao pedir o clipe ao Allstar: ${e.message}` })
     }
   })
 
