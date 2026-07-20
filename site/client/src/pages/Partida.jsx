@@ -1274,18 +1274,11 @@ export default function Partida() {
                         </div>
                       )}
                       {/* Clipe de vídeo real do Allstar (ADR-0004) — SOB DEMANDA (teste
-                          restrito): só pede quando o jogador clica, nada automático. */}
-                      {h.allstarClipUrl ? (
-                        <button
-                          onClick={() => setClipeAllstarAberto(clipeAllstarAberto === h.id ? null : h.id)}
-                          className="panel-cut-sm border border-destaque/60 bg-destaque/10 px-2 py-2 font-mono text-xs uppercase text-destaque transition-colors hover:bg-destaque/20"
-                          title="Ver clipe real (Allstar)"
-                        >
-                          🎬 clipe
-                        </button>
-                      ) : h.allstarStatus === 'Submitted' ? (
-                        <span className="font-mono text-xs text-texto-fraco" title="Pedido feito ao Allstar, ainda processando">
-                          gerando clipe…
+                          restrito): só pede quando o jogador clica, nada automático.
+                          O clipe em si (quando pronto) aparece na aba Clipes, não aqui. */}
+                      {h.allstarClipUrl || h.allstarStatus === 'Submitted' ? (
+                        <span className="font-mono text-xs text-texto-fraco" title="Ver na aba Clipes">
+                          {h.allstarClipUrl ? '🎬 clipe na aba Clipes' : 'gerando clipe…'}
                         </span>
                       ) : (
                         <button
@@ -1301,21 +1294,6 @@ export default function Partida() {
                   )
                 })}
               </div>
-              {clipeAllstarAberto && (() => {
-                const h = m.highlights.find((x) => x.id === clipeAllstarAberto)
-                if (!h?.allstarClipUrl) return null
-                const src = `${h.allstarClipUrl}&UID=${jogador?.steamId ?? ''}&location=matchResults`
-                return (
-                  <div className="mt-3 aspect-video w-full max-w-2xl">
-                    <iframe
-                      src={src}
-                      allow="clipboard-write; autoplay"
-                      className="h-full w-full border border-borda"
-                      title="Clipe Allstar"
-                    />
-                  </div>
-                )
-              })()}
             </section>
           )}
         </>
@@ -1368,23 +1346,68 @@ export default function Partida() {
       )}
 
       {abaAtiva === 'clipes' && (
-        <section>
-          <div className="mb-3 space-y-2">
-            {m.clips.length === 0 && <p className="font-mono text-sm text-texto-fraco">Nenhum clipe anexado ainda.</p>}
-            {m.clips.map((c) => (
-              <a
-                key={c.id}
-                href={c.url}
-                target="_blank"
-                rel="noreferrer"
-                className="panel-cut-sm flex items-center gap-3 border border-borda bg-superficie p-3 font-mono text-sm transition-colors hover:border-destaque/60"
-              >
-                <span className="panel-cut-sm flex-shrink-0 bg-fundo px-2 py-1 text-xs uppercase tracking-wide text-destaque">{c.provider}</span>
-                <span className="min-w-0 flex-1 truncate text-texto">{c.title || c.url}</span>
-              </a>
-            ))}
+        <section className="space-y-6">
+          {(() => {
+            const comAllstar = m.highlights.filter((h) => h.allstarClipUrl || h.allstarStatus)
+            if (comAllstar.length === 0) return null
+            return (
+              <div>
+                <SectionHeader titulo="Clipes reais (Allstar)" className="mb-2" />
+                <div className="space-y-2">
+                  {comAllstar.map((h) => (
+                    <div key={h.id} className="panel-cut-sm border border-borda bg-superficie p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="font-mono text-sm">
+                          <span className="font-display font-semibold uppercase text-destaque">{h.kind}</span>{' '}
+                          <span className="text-texto">{h.nick || h.steamId}</span>{' '}
+                          <span className="text-texto-fraco">round {h.roundNumber}</span>
+                        </span>
+                        {h.allstarClipUrl ? (
+                          <button
+                            onClick={() => setClipeAllstarAberto(clipeAllstarAberto === h.id ? null : h.id)}
+                            className="panel-cut-sm border border-destaque/60 bg-destaque/10 px-2 py-1 font-mono text-xs uppercase text-destaque transition-colors hover:bg-destaque/20"
+                          >
+                            {clipeAllstarAberto === h.id ? 'fechar' : '▶ assistir'}
+                          </button>
+                        ) : (
+                          <span className="font-mono text-xs text-texto-fraco">gerando…</span>
+                        )}
+                      </div>
+                      {clipeAllstarAberto === h.id && h.allstarClipUrl && (
+                        <div className="mt-3 aspect-video w-full max-w-2xl">
+                          <iframe
+                            src={`${h.allstarClipUrl}&UID=${jogador?.steamId ?? ''}&location=matchResults`}
+                            allow="clipboard-write; autoplay"
+                            className="h-full w-full border border-borda"
+                            title="Clipe Allstar"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })()}
+
+          <div>
+            <div className="mb-3 space-y-2">
+              {m.clips.length === 0 && <p className="font-mono text-sm text-texto-fraco">Nenhum clipe anexado ainda.</p>}
+              {m.clips.map((c) => (
+                <a
+                  key={c.id}
+                  href={c.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="panel-cut-sm flex items-center gap-3 border border-borda bg-superficie p-3 font-mono text-sm transition-colors hover:border-destaque/60"
+                >
+                  <span className="panel-cut-sm flex-shrink-0 bg-fundo px-2 py-1 text-xs uppercase tracking-wide text-destaque">{c.provider}</span>
+                  <span className="min-w-0 flex-1 truncate text-texto">{c.title || c.url}</span>
+                </a>
+              ))}
+            </div>
+            <FormClipe matchId={m.id} jogadores={m.players} onAdicionado={carregar} />
           </div>
-          <FormClipe matchId={m.id} jogadores={m.players} onAdicionado={carregar} />
         </section>
       )}
     </div>
