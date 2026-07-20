@@ -535,9 +535,10 @@ export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Cli
     if (!h.demo_url) return res.status(404).json({ erro: 'Demo não arquivada pra essa partida' })
 
     const existente = await db.query('select status, clip_url from allstar_clips where highlight_id = $1', [highlightId])
-    if (existente.rows.length > 0) {
+    if (existente.rows.length > 0 && existente.rows[0].status !== 'Error') {
       // Já pedido antes (ex.: clique duplo) — devolve o que já existe em vez de pedir
-      // outro clipe do mesmo momento.
+      // outro clipe do mesmo momento. Status 'Error' passa direto: o jogador pode
+      // tentar de novo (a linha antiga é substituída pelo pedido novo logo abaixo).
       return res.json({ status: existente.rows[0].status })
     }
 
@@ -545,14 +546,19 @@ export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Cli
     if (!demoKey) return res.status(404).json({ erro: 'Demo fora do bucket configurado' })
     try {
       // URL assinada temporária — o bucket é privado, o Allstar busca o .dem sozinho
-      // do lado deles, não tem como autenticar como um Jogador nosso logado.
-      const demoUrlAssinada = await presignDownload(r2Client, r2Bucket, demoKey)
+      // do lado deles, não tem como autenticar como um Jogador nosso logado. 24h de
+      // validade (não o default de 2h): a fila de render deles pode demorar horas pra
+      // pegar o job, e uma URL expirada no meio da fila viraria erro de download.
+      const demoUrlAssinada = await presignDownload(r2Client, r2Bucket, demoKey, 86400)
       const requestId = await pedirClipe({
         apiKey: config.allstarApiKey, steamId: h.steam_id64, nick: h.nick,
         demoUrl: demoUrlAssinada, roundNumber: h.round_number,
         webhookUrl: `${config.appUrl}/api/allstar/webhook`,
         metadata: [{ key: 'highlightId', value: highlightId }],
       })
+      // Retry depois de Error: remove a tentativa falhada antes de gravar a nova —
+      // sem isso o join do GET /:id devolveria duas linhas pro mesmo highlight.
+      await db.query("delete from allstar_clips where highlight_id = $1 and status = 'Error'", [highlightId])
       await db.query('insert into allstar_clips (highlight_id, request_id) values ($1, $2)', [highlightId, requestId])
       res.json({ status: 'Submitted' })
     } catch (e) {

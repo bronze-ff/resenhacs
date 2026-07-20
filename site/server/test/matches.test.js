@@ -291,6 +291,36 @@ describe('POST /api/matches/:id/highlight/:highlightId/allstar-clip', () => {
     expect(res.body).toEqual({ status: 'Processed' })
   })
 
+  it('pedido anterior com Error: permite tentar de novo (substitui a linha falhada)', async () => {
+    const deletados = []
+    const gravados = []
+    const db = {
+      query: vi.fn().mockImplementation((sql, params) => {
+        if (sql.includes('group_members where group_id')) return Promise.resolve({ rows: [{}] })
+        if (sql.includes('from highlights h')) {
+          return Promise.resolve({ rows: [{ id: 'h1', kind: 'ace', steam_id64: '765', round_number: 3, nick: 'bronze', demo_url: 'https://acc.r2.cloudflarestorage.com/resenha-demos/demos/x.dem.bz2' }] })
+        }
+        // O delete também contém "from allstar_clips where highlight_id" — checar antes do select.
+        if (sql.includes('delete from allstar_clips')) { deletados.push(params); return Promise.resolve({ rows: [] }) }
+        if (sql.includes('from allstar_clips where highlight_id')) return Promise.resolve({ rows: [{ status: 'Error', clip_url: null }] })
+        if (sql.includes('insert into allstar_clips')) { gravados.push(params); return Promise.resolve({ rows: [] }) }
+        return Promise.resolve({ rows: [] })
+      }),
+    }
+    const app = createApp({ config: configComAllstar, db, r2Client: {} })
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, status: 201, json: async () => ({ requestId: 'req-2' }) })
+    try {
+      const res = await request(app).post('/api/matches/m1/highlight/h1/allstar-clip').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+      expect(res.status).toBe(200)
+      expect(res.body).toEqual({ status: 'Submitted' })
+      expect(deletados).toEqual([['h1']])
+      expect(gravados).toEqual([['h1', 'req-2']])
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
   it('pede o clipe, salva o request_id e devolve Submitted', async () => {
     const gravados = []
     const db = {
@@ -312,7 +342,7 @@ describe('POST /api/matches/:id/highlight/:highlightId/allstar-clip', () => {
       expect(res.status).toBe(200)
       expect(res.body).toEqual({ status: 'Submitted' })
       expect(gravados).toEqual([['h1', 'req-1']])
-      expect(presignDownload).toHaveBeenCalledWith({}, 'resenha-demos', 'demos/x.dem.bz2')
+      expect(presignDownload).toHaveBeenCalledWith({}, 'resenha-demos', 'demos/x.dem.bz2', 86400)
       const [, opts] = globalThis.fetch.mock.calls[0]
       expect(JSON.parse(opts.body).rounds).toEqual([14])
     } finally {
