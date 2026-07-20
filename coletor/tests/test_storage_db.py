@@ -108,6 +108,12 @@ class FakeCursor:
             return self.conn.grupo_ativo_row
         if self._last.startswith("select id from groups"):
             return self.conn.grupo_mais_antigo_row
+        if self._last.startswith("select discord_webhook_url from groups"):
+            return self.conn.webhook_do_grupo_row
+        if self._last.startswith("select 1 from discord_notifications"):
+            return self.conn.ja_notificado_discord_row
+        if self._last.startswith("select map, score_a, score_b from matches"):
+            return self.conn.resumo_match_row
         return ["00000000-0000-0000-0000-000000000001"]
 
     def fetchall(self):
@@ -119,6 +125,10 @@ class FakeCursor:
             return [(s,) for s in self.conn.avatares_frescos]
         if "distinct mp.steam_id64" in self._last:
             return [(s,) for s in self.conn.match_players_sem_avatar]
+        if self._last.startswith("select mp.steam_id64, mp.nick, mp.team, mp.rating"):
+            return self.conn.resumo_membros_rows
+        if "group_members gm" in self._last and "match_players mp" in self._last:
+            return self.conn.grupos_da_partida_rows
         return []
 
 
@@ -133,6 +143,11 @@ class FakeConn:
         self.match_players_sem_avatar = []
         self.grupo_ativo_row = None
         self.grupo_mais_antigo_row = None
+        self.grupos_da_partida_rows = []
+        self.webhook_do_grupo_row = None
+        self.ja_notificado_discord_row = None
+        self.resumo_membros_rows = []
+        self.resumo_match_row = (None, None, None)
 
     def cursor(self):
         return FakeCursor(self)
@@ -510,3 +525,98 @@ def test_store_parsed_dedupe_por_fingerprint_atualiza_em_vez_de_inserir():
     assert any(s.startswith("update matches set share_code = coalesce") for s in sqls)
     # absorve o placeholder pending que segurava o share code
     assert any("status = 'pending'" in s and s.startswith("delete from matches") for s in sqls)
+
+
+# ---- discord ----
+
+def test_grupos_da_partida():
+    conn = FakeConn()
+    conn.grupos_da_partida_rows = [("g1",), ("g2",)]
+    resultado = db.grupos_da_partida(conn, "m1")
+    assert resultado == ["g1", "g2"]
+    assert any("group_members gm" in c[0] and "match_players mp" in c[0] for c in conn.calls)
+
+
+def test_webhook_do_grupo_configurado():
+    conn = FakeConn()
+    conn.webhook_do_grupo_row = ("https://discord.com/api/webhooks/x/y",)
+    resultado = db.webhook_do_grupo(conn, "g1")
+    assert resultado == "https://discord.com/api/webhooks/x/y"
+
+
+def test_webhook_do_grupo_nao_configurado():
+    conn = FakeConn()
+    conn.webhook_do_grupo_row = None
+    resultado = db.webhook_do_grupo(conn, "g1")
+    assert resultado is None
+
+
+def test_ja_notificado_discord_true():
+    conn = FakeConn()
+    conn.ja_notificado_discord_row = (1,)
+    assert db.ja_notificado_discord(conn, "m1", "g1") is True
+
+
+def test_ja_notificado_discord_false():
+    conn = FakeConn()
+    conn.ja_notificado_discord_row = None
+    assert db.ja_notificado_discord(conn, "m1", "g1") is False
+
+
+def test_marcar_notificado_discord():
+    conn = FakeConn()
+    db.marcar_notificado_discord(conn, "m1", "g1")
+    insert = next(c for c in conn.calls if c[0].startswith("insert into discord_notifications"))
+    assert insert[1] == ("m1", "g1")
+    assert conn.commits == 1
+
+
+def test_resumo_da_partida_para_grupo_sem_membros_devolve_none():
+    conn = FakeConn()
+    conn.resumo_membros_rows = []
+    resultado = db.resumo_da_partida_para_grupo(conn, "m1", "g1")
+    assert resultado is None
+
+
+def test_resumo_da_partida_para_grupo_vitoria_time_a():
+    conn = FakeConn()
+    conn.resumo_membros_rows = [
+        ("111", "fulano", "A", 1.45),
+        ("222", "ciclano", "A", 0.90),
+    ]
+    conn.resumo_match_row = ("de_mirage", 13, 9)
+    resultado = db.resumo_da_partida_para_grupo(conn, "m1", "g1")
+    assert resultado == {
+        "map": "de_mirage",
+        "score_grupo": 13,
+        "score_rival": 9,
+        "mvp_nick": "fulano",
+        "mvp_rating": 1.45,
+    }
+
+
+def test_resumo_da_partida_para_grupo_derrota_time_b():
+    conn = FakeConn()
+    conn.resumo_membros_rows = [("111", "fulano", "B", 0.80)]
+    conn.resumo_match_row = ("de_dust2", 13, 4)
+    resultado = db.resumo_da_partida_para_grupo(conn, "m1", "g1")
+    assert resultado["score_grupo"] == 4
+    assert resultado["score_rival"] == 13
+
+
+def test_resumo_da_partida_para_grupo_empate_de_time_usa_menor_steam_id():
+    conn = FakeConn()
+    # "222" tá no time B mas tem o menor steam_id64 entre os dois — desempate escolhe o time dele (B).
+    conn.resumo_membros_rows = [("333", "fulano", "A", 1.0), ("222", "ciclano", "B", 1.0)]
+    conn.resumo_match_row = ("de_inferno", 10, 16)
+    resultado = db.resumo_da_partida_para_grupo(conn, "m1", "g1")
+    assert resultado["score_grupo"] == 16  # time B
+
+
+def test_resumo_da_partida_para_grupo_sem_rating_mvp_none():
+    conn = FakeConn()
+    conn.resumo_membros_rows = [("111", "fulano", "A", None)]
+    conn.resumo_match_row = ("de_mirage", 13, 9)
+    resultado = db.resumo_da_partida_para_grupo(conn, "m1", "g1")
+    assert resultado["mvp_nick"] is None
+    assert resultado["mvp_rating"] is None

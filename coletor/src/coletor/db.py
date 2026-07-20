@@ -712,3 +712,102 @@ def gravar_elo_partida(conn, match_id, steam_id64, before, after):
             (before, after, match_id, steam_id64),
         )
     conn.commit()
+
+
+# ---- discord ----
+
+def grupos_da_partida(conn, match_id):
+    """Grupos com pelo menos 1 membro presente numa Partida — mesma regra de
+    visibilidade por participação usada no servidor (site/server/src/matchVisibility.js):
+    group_id = G é visível se algum steam_id64 de group_members(G) está em
+    match_players da partida."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "select distinct gm.group_id from group_members gm "
+            "join match_players mp on mp.steam_id64 = gm.steam_id64 "
+            "where mp.match_id = %s",
+            (match_id,),
+        )
+        return [row[0] for row in cur.fetchall()]
+
+
+def webhook_do_grupo(conn, group_id):
+    """URL do webhook do Discord configurada pelo admin do grupo, ou None se o grupo
+    nunca configurou (caso normal — não é erro)."""
+    with conn.cursor() as cur:
+        cur.execute("select discord_webhook_url from groups where id = %s", (group_id,))
+        row = cur.fetchone()
+        return row[0] if row else None
+
+
+def ja_notificado_discord(conn, match_id, group_id):
+    """True se esse par (partida, grupo) já recebeu aviso no Discord — evita duplicar
+    em reprocessamento."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "select 1 from discord_notifications where match_id = %s and group_id = %s",
+            (match_id, group_id),
+        )
+        return cur.fetchone() is not None
+
+
+def marcar_notificado_discord(conn, match_id, group_id):
+    with conn.cursor() as cur:
+        cur.execute(
+            "insert into discord_notifications (match_id, group_id) values (%s, %s)",
+            (match_id, group_id),
+        )
+    conn.commit()
+
+
+def resumo_da_partida_para_grupo(conn, match_id, group_id):
+    """Placar e MVP de uma Partida do ponto de vista de UM grupo específico.
+
+    Time do grupo = time majoritário entre os membros do grupo presentes na partida;
+    empate na contagem é resolvido pelo time do membro de MENOR steam_id64 (critério
+    determinístico, documentado no design). MVP = maior `rating` entre os membros do
+    grupo nessa partida; None se nenhum tiver rating (ex.: fonte stats-only sem parse
+    completo). Devolve None se nenhum membro do grupo está na partida (não deveria
+    acontecer — quem chama já filtrou por grupos_da_partida — mas fica seguro).
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            "select mp.steam_id64, mp.nick, mp.team, mp.rating "
+            "from match_players mp "
+            "join group_members gm on gm.steam_id64 = mp.steam_id64 and gm.group_id = %s "
+            "where mp.match_id = %s",
+            (group_id, match_id),
+        )
+        membros = cur.fetchall()
+        if not membros:
+            return None
+        cur.execute(
+            "select map, score_a, score_b from matches where id = %s", (match_id,)
+        )
+        mapa, score_a, score_b = cur.fetchone()
+
+    contagem = {}
+    for _, _, team, _ in membros:
+        contagem[team] = contagem.get(team, 0) + 1
+    maior = max(contagem.values())
+    empatados = [t for t, n in contagem.items() if n == maior]
+    if len(empatados) == 1:
+        time_grupo = empatados[0]
+    else:
+        time_grupo = sorted(membros, key=lambda m: m[0])[0][2]
+
+    score_grupo = score_a if time_grupo == "A" else score_b
+    score_rival = score_b if time_grupo == "A" else score_a
+
+    candidatos_mvp = [(nick, rating) for _, nick, _, rating in membros if rating is not None]
+    mvp_nick, mvp_rating = (
+        max(candidatos_mvp, key=lambda p: p[1]) if candidatos_mvp else (None, None)
+    )
+
+    return {
+        "map": mapa,
+        "score_grupo": score_grupo,
+        "score_rival": score_rival,
+        "mvp_nick": mvp_nick,
+        "mvp_rating": mvp_rating,
+    }
