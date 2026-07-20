@@ -158,6 +158,50 @@ def test_ingest_demo_com_group_id_explicito_nao_chama_grupo_para_ingest(monkeypa
     assert store_calls[-1]["group_id"] == "g-explicito"
 
 
+# ---- upload do .dem arquivado no R2 (dívida técnica: subia sem comprimir) ----
+
+def test_finalizar_ingest_comprime_o_dem_antes_de_subir_pro_r2(monkeypatch, tmp_path):
+    monkeypatch.setattr(main.dbmod, "grupo_para_ingest", lambda conn, steam_ids: "g1")
+    monkeypatch.setattr(main.dbmod, "store_parsed", lambda conn, parsed, **kw: "m1")
+    monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
+    monkeypatch.setattr(main.storage_r2, "demo_key", lambda match_id: "demos/m1.dem.bz2")
+    uploads = []
+    monkeypatch.setattr(
+        main.storage_r2, "upload_bytes",
+        lambda client, bucket, key, data, **kw: uploads.append((key, data)),
+    )
+
+    conteudo_original = b"conteudo cru do .dem, bem repetitivo pra comprimir bem" * 100
+    dem_path = tmp_path / "match.dem"
+    dem_path.write_bytes(conteudo_original)
+
+    main._finalizar_ingest(
+        _config_com_r2(), conn=None, parsed={"players": []}, replay_json=None,
+        dem_path_upload=dem_path, share_code=None, source="upload", upload=True, played_at=None,
+    )
+
+    assert len(uploads) == 1
+    key, bytes_enviados = uploads[0]
+    assert key == "demos/m1.dem.bz2"
+    # De verdade comprimido — não é mais o payload cru (a extensão .bz2 agora é honesta).
+    assert bytes_enviados != conteudo_original
+    assert bz2.decompress(bytes_enviados) == conteudo_original
+
+
+# ---- reprocessamento: descomprime o .dem lido do R2 ----
+
+def test_descomprimir_dem_arquivado_stream_bz2_valido():
+    conteudo = b"conteudo original" * 50
+    comprimido = bz2.compress(conteudo)
+    assert main._descomprimir_dem_arquivado(comprimido) == conteudo
+
+
+def test_descomprimir_dem_arquivado_compat_com_arquivo_antigo_nao_comprimido():
+    # Partidas arquivadas ANTES do fix: a chave diz .dem.bz2 mas o conteúdo é cru.
+    conteudo_cru = b"DEMO_CS2\x00isto nao e um stream bz2 valido"
+    assert main._descomprimir_dem_arquivado(conteudo_cru) == conteudo_cru
+
+
 # ---- cmd_processar_fila_pro ----
 
 

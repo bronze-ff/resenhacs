@@ -513,7 +513,8 @@ def cmd_reprocess(config, conn, match_id=None):
         try:
             with tempfile.TemporaryDirectory() as tmp:
                 dem = Path(tmp) / "match.dem"
-                dem.write_bytes(storage_r2.download_bytes(client, config.r2_bucket, demo_key))
+                dados = storage_r2.download_bytes(client, config.r2_bucket, demo_key)
+                dem.write_bytes(_descomprimir_dem_arquivado(dados))
 
                 parsed = parsemod.parse_demo(dem)
                 parsed["players"] = transform.fill_kd_from_kills(parsed["players"], parsed["kills"])
@@ -549,6 +550,18 @@ def cmd_reprocess(config, conn, match_id=None):
     return total
 
 
+def _descomprimir_dem_arquivado(dados):
+    """Descomprime bytes de .dem lidos do R2 (chave demos/{id}.dem.bz2). Compatível com
+    arquivos arquivados ANTES do fix de compressão do upload — esses estão gravados como
+    .dem cru apesar da chave dizer .bz2 (bug: a extensão sempre mentiu, nenhum caminho do
+    código realmente comprimia). Se não for um stream bz2 válido, assume que já é o .dem
+    descomprimido e devolve como está."""
+    try:
+        return bz2.decompress(dados)
+    except OSError:
+        return dados
+
+
 def _finalizar_ingest(config, conn, parsed, replay_json, dem_path_upload, share_code, source, upload, played_at, group_id=None):
     """Cauda comum de ingest_demo/ingest_demo_multiparte: arquiva demo+replay no R2 (se
     configurado) e grava no banco. Devolve match_id. `dem_path_upload` é o .dem cujos
@@ -565,7 +578,10 @@ def _finalizar_ingest(config, conn, parsed, replay_json, dem_path_upload, share_
 
         key = storage_r2.demo_key(ids["match_id"])
         with open(dem_path_upload, "rb") as fh:
-            storage_r2.upload_bytes(client, config.r2_bucket, key, fh.read())
+            # A chave sempre foi demos/{id}.dem.bz2 — comprime de verdade agora, antes o
+            # arquivo subia cru (dívida técnica: extensão mentia, custo de storage 3-5x
+            # maior que o necessário). Ler de volta: ver _descomprimir_dem_arquivado.
+            storage_r2.upload_bytes(client, config.r2_bucket, key, bz2.compress(fh.read()))
         demo_url = f"{config.r2_endpoint}/{config.r2_bucket}/{key}"
 
         if replay_json is not None:
