@@ -11,6 +11,7 @@ import { createRankingRouter } from './routes/ranking.js'
 import { createSessionsRouter } from './routes/sessions.js'
 import { createRecordesRouter } from './routes/recordes.js'
 import { createLadoPorMapaRouter } from './routes/ladoPorMapa.js'
+import { createAllstarRouter } from './routes/allstar.js'
 import { createUploadRouter } from './routes/upload.js'
 import { createLineupsRouter } from './routes/lineups.js'
 import { createTaticasRouter } from './routes/taticas.js'
@@ -84,6 +85,7 @@ export function createApp({ config, db, verifySteamLogin, fetchPersona, fetchBan
   app.use('/api/sessions', createSessionsRouter({ db, requireAuth, requireGroupMember }))
   app.use('/api/recordes', createRecordesRouter({ db, requireAuth, requireGroupMember }))
   app.use('/api/lado-mapa', createLadoPorMapaRouter({ db, requireAuth, requireGroupMember }))
+  app.use('/api/allstar', createAllstarRouter({ db, config }))
   app.use('/api/lineups', createLineupsRouter({ db, requireAuth, requireGroupMember }))
   app.use('/api/taticas', createTaticasRouter({ db, requireAuth }))
   app.use('/api/taticas-curadas', createTaticasCuradasRouter({ db, requireAuth }))

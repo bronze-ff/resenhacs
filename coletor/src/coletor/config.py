@@ -13,6 +13,10 @@ class Config:
         self.r2_access_key_id = env.get("R2_ACCESS_KEY_ID")
         self.r2_secret_access_key = env.get("R2_SECRET_ACCESS_KEY")
         self.r2_bucket = env.get("R2_BUCKET", "resenha-demos")
+        self.allstar_api_key = env.get("ALLSTAR_API_KEY")
+        # steamId64 separados por vírgula — teste restrito (ADR-0004): só gera clipe
+        # Allstar pra esses jogadores até o preço por clipe ser confirmado com eles.
+        self.allstar_steam_ids = {s.strip() for s in (env.get("ALLSTAR_STEAM_IDS") or "").split(",") if s.strip()}
 
     @property
     def r2_endpoint(self):

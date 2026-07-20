@@ -20,6 +20,15 @@ def upload_bytes(client, bucket, key, data, content_type="application/octet-stre
     return key
 
 
+def presign_download(client, bucket, key, expires_in=3600):
+    """URL assinada temporária pra baixar um objeto privado do R2 — usada quando um
+    serviço de TERCEIROS (ex.: Allstar, ADR-0004) precisa buscar o .dem sozinho, sem
+    ter as credenciais do nosso bucket (que é privado de propósito)."""
+    return client.generate_presigned_url(
+        "get_object", Params={"Bucket": bucket, "Key": key}, ExpiresIn=expires_in,
+    )
+
+
 def download_bytes(client, bucket, key):
     """Baixa um objeto de volta (reprocessamento: pega o .dem já arquivado sem
     precisar re-baixar da Valve, que expira o link em poucos minutos)."""

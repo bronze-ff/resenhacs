@@ -1029,6 +1029,8 @@ export default function Partida() {
   // (nenhum fetch extra); T/CT busca /lado/:filtro e sobrescreve por steamId.
   const [ladoFiltro, setLadoFiltro] = useState('all')
   const [statsLado, setStatsLado] = useState(null)
+  // Clipe de vídeo real do Allstar (ADR-0004, teste restrito) aberto na aba Highlights.
+  const [clipeAllstarAberto, setClipeAllstarAberto] = useState(null)
   const replayRef = useRef(null)
   const autoJumpFeito = useRef(false)
 
@@ -1076,6 +1078,7 @@ export default function Partida() {
     autoJumpFeito.current = false
     setLadoFiltro('all')
     setStatsLado(null)
+    setClipeAllstarAberto(null)
     carregar()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
@@ -1229,22 +1232,56 @@ export default function Partida() {
                       {podeAssistir && <span className="ml-1.5 text-texto-fraco">▶</span>}
                     </>
                   )
-                  return podeAssistir ? (
-                    <button
-                      key={h.id}
-                      onClick={() => irParaHighlight(h)}
-                      className="panel-cut-sm border border-borda bg-superficie px-3 py-2 font-mono text-sm transition-colors hover:border-destaque/60 hover:bg-superficie-alta"
-                      title="Assistir no Replay 2D"
-                    >
-                      {conteudo}
-                    </button>
-                  ) : (
-                    <div key={h.id} className="panel-cut-sm border border-borda bg-superficie px-3 py-2 font-mono text-sm">
-                      {conteudo}
-                    </div>
+                  return (
+                    <span key={h.id} className="inline-flex items-center gap-1.5">
+                      {podeAssistir ? (
+                        <button
+                          onClick={() => irParaHighlight(h)}
+                          className="panel-cut-sm border border-borda bg-superficie px-3 py-2 font-mono text-sm transition-colors hover:border-destaque/60 hover:bg-superficie-alta"
+                          title="Assistir no Replay 2D"
+                        >
+                          {conteudo}
+                        </button>
+                      ) : (
+                        <div className="panel-cut-sm border border-borda bg-superficie px-3 py-2 font-mono text-sm">
+                          {conteudo}
+                        </div>
+                      )}
+                      {/* Clipe de vídeo real do Allstar (ADR-0004) — teste restrito, a
+                          maioria dos highlights não vai ter isso ainda. */}
+                      {h.allstarClipUrl && (
+                        <button
+                          onClick={() => setClipeAllstarAberto(clipeAllstarAberto === h.id ? null : h.id)}
+                          className="panel-cut-sm border border-destaque/60 bg-destaque/10 px-2 py-2 font-mono text-xs uppercase text-destaque transition-colors hover:bg-destaque/20"
+                          title="Ver clipe real (Allstar)"
+                        >
+                          🎬 clipe
+                        </button>
+                      )}
+                      {h.allstarStatus === 'Submitted' && (
+                        <span className="font-mono text-xs text-texto-fraco" title="Pedido feito ao Allstar, ainda processando">
+                          gerando clipe…
+                        </span>
+                      )}
+                    </span>
                   )
                 })}
               </div>
+              {clipeAllstarAberto && (() => {
+                const h = m.highlights.find((x) => x.id === clipeAllstarAberto)
+                if (!h?.allstarClipUrl) return null
+                const src = `${h.allstarClipUrl}&UID=${jogador?.steamId ?? ''}&location=matchResults`
+                return (
+                  <div className="mt-3 aspect-video w-full max-w-2xl">
+                    <iframe
+                      src={src}
+                      allow="clipboard-write; autoplay"
+                      className="h-full w-full border border-borda"
+                      title="Clipe Allstar"
+                    />
+                  </div>
+                )
+              })()}
             </section>
           )}
         </>

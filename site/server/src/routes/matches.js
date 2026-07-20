@@ -167,9 +167,11 @@ export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Cli
         [id],
       ),
       db.query(
-        `select h.id, h.steam_id64, h.round_number, h.kind, h.description, h.frame, mp.nick
+        `select h.id, h.steam_id64, h.round_number, h.kind, h.description, h.frame, mp.nick,
+                ac.status as allstar_status, ac.clip_url as allstar_clip_url
          from highlights h
          left join match_players mp on mp.match_id = h.match_id and mp.steam_id64 = h.steam_id64
+         left join allstar_clips ac on ac.highlight_id = h.id
          where h.match_id = $1 order by h.round_number`,
         [id],
       ),
@@ -271,6 +273,11 @@ export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Cli
         kind: h.kind,
         description: h.description,
         frame: h.frame,
+        // Clipe de vídeo real do Allstar (ADR-0004) — teste restrito, a maioria dos
+        // highlights não vai ter isso ainda. allstarClipUrl só vem quando o webhook já
+        // confirmou "Processed"; "Submitted" mostra "gerando" na UI, sem link ainda.
+        allstarStatus: h.allstar_status,
+        allstarClipUrl: h.allstar_status === 'Processed' ? h.allstar_clip_url : null,
       })),
       clips: clips.rows.map((c) => ({
         id: c.id,

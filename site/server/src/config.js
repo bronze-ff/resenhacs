@@ -27,5 +27,8 @@ export function loadConfig(env = process.env) {
     // Basic Auth (client_id:client_secret) no POST do token endpoint, mesmo com PKCE —
     // opcional aqui: se não vier, a troca de token segue só com code_verifier.
     faceitClientSecret: env.FACEIT_CLIENT_SECRET ?? null,
+    // Valida o webhook de clipes do Allstar (ADR-0004) — o mesmo valor cadastrado no
+    // dashboard deles ("Webhook Auth"). Sem isso, /api/allstar/webhook rejeita tudo.
+    allstarWebhookAuth: env.ALLSTAR_WEBHOOK_AUTH ?? null,
   }
 }
