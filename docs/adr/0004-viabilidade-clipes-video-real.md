@@ -1,7 +1,7 @@
 # ADR-0004: Viabilidade de clipes em vídeo real (estilo Allstar.gg)
 
-**Data:** 2026-07-19 (atualizado no mesmo dia com pesquisa sobre APIs de terceiros)
-**Status:** Estudo de viabilidade — decisão pendente (aguardando o grupo). Recomendação mudou de "não fazer" para "integrar com API de terceiro (Allstar/Rankacy) em vez de construir renderização própria" após achar que o Allstar tem um programa de desenvolvedor oficial usado por concorrentes diretos.
+**Data:** 2026-07-19 (atualizado no mesmo dia: pesquisa sobre APIs de terceiros + leitura completa dos 12 PDFs de documentação do Allstar em `docs/allstar/`)
+**Status:** Arquitetura de integração mapeada por completo. Falta só a resposta comercial de preço do Allstar (`partners@allstar.gg`) pra decidir com o grupo — nenhuma outra pesquisa técnica resolve isso. Recomendação: integrar com a API do Allstar (conta de parceiro `RESENHACS` já criada) em vez de construir renderização própria.
 
 ## Contexto
 
@@ -109,19 +109,45 @@ Suporte, gestão e consulta:
 - `GET /cs/clips`, `GET /cs/clips/search` — listar/filtrar clipes.
 - `GET /cs/clips/playlist`, **`GET /cs/clips/matchPlaylist`** — monta uma playlist de vários clipes de uma partida só (relevante: dá pra oferecer "assista todos os highlights dessa partida" numa tacada só, em vez de embed clipe por clipe).
 
-**Webhooks (3 eventos distintos, não um genérico):**
-- `clipSubmitted` — confirmação de que o pedido foi recebido.
-- `clipProcessed` — clipe pronto (é aqui que pegamos o `clip_id` final pra guardar e montar o iframe).
-- `clipErrored` — falhou (precisa tratar: marcar como falho, talvez re-tentar com `reprocess`).
+**Webhooks (4 eventos, não 3 como pensei antes):**
+- `clipSubmitted` — pedido recebido, processamento começou.
+- `clipProcessed` — clipe pronto (payload completo abaixo).
+- `clipOnDemand` — clipe "encenado" mas não renderizado ainda (ver achado importante logo abaixo).
+- `clipErrored` — falhou. Vem só com `{event, status:"Error", requestId, message}` — a correlação com o pedido original é pelo `requestId` (que a Allstar devolve na resposta síncrona do POST inicial, então já dá pra gravar nossa linha no banco antes mesmo do primeiro webhook chegar).
 
-**Sigla dos parâmetros de cada request** (`csPOTGRequestBody`, `csBPRequestBody`, etc.) apareceu no índice mas sem os campos expandidos — não sabemos ainda se `demoUrl` é igual em todos os use cases ou se cada endpoint pede algo diferente.
+Retry policy do lado deles: reenviam o webhook a cada 15min até receber um `2xx` nosso, até 8 tentativas — nosso endpoint de webhook precisa ser **idempotente** (pode receber o mesmo evento mais de uma vez).
 
-**Ainda falta descobrir antes de decidir — e a doc self-serve não vai responder isso:**
-1. **Preço por clipe/uso.** Não existe em nenhuma página encontrada até agora (Getting Started, Terms — que é só o jurídico padrão, sem valores). Pra uma API de parceria feita por contrato (não self-serve com cartão de crédito), isso normalmente só vem **perguntando direto pro time comercial**.
-2. **Formato exato de `demoUrl`** (URL da Valve, que expira, vs. URL do nosso R2) — precisa dos campos expandidos do schema, ou perguntar direto também.
-3. **Significado exato de BP/PMH/PB/SH** e se há um plano gratuito/teste (o anúncio de produto mencionava "primeiros 1.000 clipes grátis", mas não vimos isso confirmado dentro da própria conta).
+**Payload completo de `clipProcessed`** (exemplo real da doc):
+```json
+{
+  "event": "clip", "_id": "...", "clipUrl": "https://allstar.gg/iframe?clip=...",
+  "username": "...", "demoUrl": "...", "roundNumber": 14, "steamid": "...",
+  "clipLength": 14.56, "status": "Processed", "clipTitle": "AWP 5K on Overpass",
+  "clipSnapshotURL": "...", "clipImageThumbURL": "...", "requestId": "...",
+  "additionalData": [{"key": "CS_Map", "value": "Overpass"}, {"key": "CS_Kill Count", "value": "5"}, ...]
+}
+```
+Já vem com **título humano pronto** (`clipTitle`), **thumbnail** (`clipSnapshotURL`/`clipImageThumbURL`) e metadados da jogada (mapa, kills, armas, headshots) — cobre praticamente tudo que a UI da tela da Partida precisaria mostrar numa lista, sem trabalho nosso de gerar preview.
 
-**Próximo passo recomendado:** um e-mail direto pra `partners@allstar.gg` (o contato oficial nos Termos) cobre as três lacunas de uma vez, citando o Partner ID `RESENHACS` já criado. Deixo um rascunho pronto pra você mandar (ou eu mando, se você preferir e confirmar) no fim deste documento.
+### Achado que muda a estratégia de custo: clipes "On Demand"
+
+A doc de **Clip Types/Statuses** revela algo importante: o Allstar tem um modo **On Demand**, onde eles **processam os dados e decidem onde cortar o clipe, mas só renderizam o vídeo de fato quando o usuário clica no iframe pra assistir**. Ou seja, existe (pelo menos nos bastidores deles) separação entre "decidir que um momento é destacável" e "gastar recurso renderizando vídeo dele".
+
+**Não temos controle explícito via API pra forçar esse modo** (a doc diz literalmente "we don't currently support an explicit way to request a clip be created as On Demand" — acontece por config/threshold do lado deles). Mas é um ponto forte a levantar por e-mail: se o preço por render for alto, perguntar se dá pra configurar a conta pra **sempre criar On Demand por padrão**, e só cobrar quando um jogador do nosso grupo realmente clicar pra assistir. Isso evitaria pagar por clipe de highlight que ninguém nunca abriu — relevante pro nosso volume (grupo pequeno, boa parte dos highlights talvez nunca sejam clicados).
+
+### Outros detalhes técnicos confirmados
+
+- **Autenticação:** duas chaves — `apiKey` (secreta, só server-side, operações POST) e `publicApiKey` (pode ir no client, cobre `GET /user/clips` e `GET /{game}/clips`). Header `X-Api-Key`. Rate limit por chave (429 se estourar), valor exato não veio na doc pública — outra pergunta pro e-mail.
+- **Metadados customizados:** dá pra anexar `metadata: [{key, value}]` no pedido (ex.: nosso `matchId`/`highlightId` interno) e depois filtrar buscas com `?pmd_<key>=<value>`. Bom pra não precisar de tabela de mapeamento própria.
+- **Retenção:** clipe não visto em 60 dias é "podado" (some o vídeo, mas o registro fica — pode regenerar se ainda tiverem a demo). Demos que eles armazenam por conta própria só duram 90 dias. **Como o Resenha já arquiva o `.dem` no R2 por muito mais tempo (ADR-0002), somos MAIS duráveis que o armazenamento interno deles** — vale sempre mandar nossa própria URL do R2 como `demoUrl`, não uma URL efêmera da Valve, pra poder re-gerar clipe de partida antiga mesmo depois de 90 dias.
+- **Player/iframe:** `UID` (Steam64 de quem está *assistindo*, não de quem fez a jogada) é **obrigatório** — muda por usuário logado, não é fixo por clipe. `location` (enum: `homePage`/`userProfile`/`matchResults`/`matchHistory`/`watchFeed`) é fortemente recomendado — dá pra usar `matchResults` na tela da Partida e `userProfile` no Perfil do Jogador. Precisa do atributo `allow="clipboard-write"` no iframe pra copiar link funcionar. Eles já têm telas prontas de "Clipe a caminho"/"Erro" dentro do iframe — não precisamos construir esses estados.
+- **Transit time:** dá pra consultar `GET /cs/clip/transit?clip_identifier=<requestId>` a cada ~30s pra mostrar "pronto em Xmin" enquanto o usuário espera, em vez de só esperar o webhook — opcional, boa UX.
+
+### O que ainda falta — e só o suporte comercial responde
+
+Depois de ler os 12 PDFs de documentação salvos (`docs/allstar/`), **a única pergunta real que sobrou é preço**. Formato de `demoUrl` está indiretamente confirmado (aceitam URL comum, não é formato específico da Valve — o próprio exemplo oficial usa `media.allstar.gg/static/sampledemo/...`). O significado exato de BP/PMH/PB/SH continua sem confirmação, mas não bloqueia a integração inicial (dá pra começar só com POTG + MH, que cobrem exatamente o que já detectamos: melhor jogada e multi-kill/ace).
+
+**Próximo passo recomendado:** um e-mail pra `partners@allstar.gg`, citando o Partner ID `RESENHACS`, perguntando: (1) preço por clipe pro nosso volume (poucas dezenas/semana), (2) se dá pra configurar a conta pra usar o modo On Demand por padrão (só renderiza quando alguém assiste), (3) limite de rate limit da nossa chave, (4) o que BP/PMH/PB/SH significam exatamente. Rascunho atualizado no fim deste documento.
 
 ### Lacunas que ficaram sem resposta pública
 
@@ -133,10 +159,10 @@ Suporte, gestão e consulta:
 
 **Não construir a renderização por conta própria.** Rodar o CS2 automatizado numa VM continua sendo uma aposta ruim: risco de banimento permanente de conta Steam, sem ganho proporcional — ainda mais agora que existe caminho melhor.
 
-**Recomendado — integrar com uma API de highlights pronta (Allstar Developer Portal em primeiro lugar):**
-1. Aplicar acesso ao `developer.allstar.gg` (self-serve) e pedir a tabela de preço real por clipe (não publicada — só descoberta na conversa comercial). É o caminho validado em produção por concorrentes diretos (Leetify, FACEIT, U.gg), então o risco de execução é baixo.
-2. Integração seria: no momento em que o Coletor detecta um Highlight (ace/clutch), enviar o `.dem` (já arquivado no R2) pra API, guardar o `matchId`/job id, e quando o vídeo terminar de renderizar (webhook ou polling), salvar a URL do `.mp4` na tabela `clips` (ou uma tabela nova) e mostrar na tela.
-3. **Decisão de custo pro grupo:** como o preço por clipe do Allstar não é público, o próximo passo prático é abrir uma conta no Developer Portal, testar com os "primeiros clipes grátis" mencionados no anúncio deles, e trazer o preço real pra decisão financeira com o grupo — em vez de decidir às cegas com a estimativa de infra própria (que fica obsoleta com essa alternativa).
+**Recomendado — integrar com uma API de highlights pronta (Allstar Developer Portal, conta `RESENHACS` já criada):**
+1. Conta de parceiro já existe. Falta só a resposta comercial de preço (e-mail no fim deste documento) antes de decidir com o grupo.
+2. Arquitetura já mapeada com a doc lida (ver seções acima): quando o Coletor grava um Highlight (`highlights.kind` = ace/clutch/multi-kill), o servidor chama `POST /cs/clip/potg` (melhor jogada) ou `/cs/clip/mh` (multi-kill) com `demoUrl` apontando pro `.dem` já arquivado no nosso R2, `rounds: [highlights.round_number]`, `webhookUrl` do nosso servidor e `metadata` levando nosso `highlightId`. Guarda o `requestId` retornado na hora. Um novo endpoint `POST /api/allstar/webhook` recebe os 4 eventos (valida o header `Authorization` contra o Webhook Auth configurado), e ao `clipProcessed` salva `clipUrl`/`clipTitle`/`clipSnapshotURL` (provavelmente numa tabela nova `allstar_clips`, ligada a `highlights`). A tela da Partida troca a seção de Highlights por um iframe usando o `clipUrl`, com `UID` = Steam64 de quem está logado vendo a tela.
+3. **Antes de gerar clipe pra todo highlight automaticamente**, perguntar no e-mail sobre o modo On Demand (só renderiza quando o usuário clica) — pode reduzir MUITO o custo real pro nosso volume pequeno.
 4. **Rankacy** como plano B/comparação — API mais simples, com endpoint de estimativa de custo antes de renderizar, útil pra comparar preço real lado a lado com o Allstar.
 
 **Caminho alternativo, sem depender de terceiro nenhum — Replay 3D:** já que todas as posições, ângulos e animações da demo já são extraídos (é o que alimenta o Replay 2D hoje), dá pra reconstruir a cena do highlight em **3D estilizado com three.js** — mapa em 3D, câmera cinematográfica seguindo o jogador no momento do ace/clutch — e gravar esse canvas como vídeo/GIF. Não é a textura real do jogo, mas fica com cara de replay profissional, 100% sob nosso controle, sem depender de API externa nem de custo por clipe. Fica pra uma sessão de brainstorming própria, já que também responde a pergunta sobre three.js. Boa opção se o preço do Allstar/Rankacy não fechar as contas com o grupo.
@@ -151,11 +177,12 @@ Suporte, gestão e consulta:
 >
 > We're building Resenha, a stats/replay platform for a small closed group of CS2 players (~10 users, a few dozen matches/week). We already created a partner account (Partner ID: **RESENHACS**) and read through the Getting Started guide and API Reference.
 >
-> Before we integrate, we'd appreciate clarity on a few points:
+> We've read through the Getting Started, Authentication, Clip Types/Statuses, Custom Clip Metadata, Clip Retention, Video Player, and Webhook Events docs already, and confirmed a working `demoUrl`-based flow using our own hosted `.dem` files. A few things we couldn't find answers to in the docs:
 >
-> 1. **Pricing** — what does per-clip pricing look like for a small/hobby-scale partner like us? Is there a self-serve pay-as-you-go option, or does it require a minimum monthly commitment / custom contract?
-> 2. **`demoUrl` format** — for the CS2 clip request endpoints (`/cs/clip/potg`, `/cs/clip/mh`, etc.), does `demoUrl` need to be Valve's original GOTV download URL (which expires ~30 days after the match), or can it be any HTTPS URL we host ourselves (we already archive the raw `.dem` file in our own storage)?
-> 3. **Use case meanings** — could you clarify what BP, PMH, PB, and SH stand for in the CS2 use cases, so we map them correctly to our own highlight types (ace, clutch, multi-kill)?
+> 1. **Pricing** — what does per-clip pricing look like for a small/hobby-scale partner like us (a closed group of ~10 players, a few dozen matches/week)? Is there a self-serve pay-as-you-go option, or does it require a minimum monthly commitment / custom contract?
+> 2. **On Demand mode** — the Clip Types/Statuses doc mentions On Demand clips (staged but not rendered until the user triggers it via the iframe), but says "we don't currently support an explicit way to request a clip be created as On Demand." Could our account be configured to default to On Demand for all CS2 requests? That would let us avoid rendering cost for highlights nobody ends up watching.
+> 3. **Rate limits** — what's the request rate limit for our API key?
+> 4. **Use case meanings** — could you clarify what BP, PMH, PB, and SH stand for in the CS2 use cases, so we map them correctly to our own highlight types (we already plan to use POTG for best-play and MH for multi-kills/aces)?
 >
 > Thanks for your time!
 
