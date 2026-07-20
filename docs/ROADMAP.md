@@ -98,15 +98,24 @@ produção. O que ficou pra depois, por ordem de risco:
   o `.dem` parcial é parseado "com sucesso" e grava stats errados. `main.py`.
 - **Upload manual sobe o `.dem` sem comprimir** sob a chave `demos/{id}.dem.bz2`
   (extensão mente sobre o conteúdo) — custo de storage 3-5x maior que o necessário.
-- **Lote do `fetch` sem limite** — pode estourar o timeout de 45min do job num backfill
-  grande (o de hoje passou de 44min). Falta um `LIMIT N` + continuar na próxima rodada.
+- ~~**Lote do `fetch` sem limite**~~ — **resolvido 2026-07-18**: processa em lotes de 15
+  por run (mais recentes primeiro), commitando cada partida. Runs de 30/60min drenam
+  o resto sem estourar o timeout.
 - **Revogação de acesso/admin demora até 7 dias** — o JWT não é revalidado contra a
   whitelist a cada request. Baixo risco aqui (grupo fechado de amigos), mas documentado.
 - **Re-ingest não limpa jogador/round órfão** — se um fix no parser reduzir rounds ou
   remover um sid espúrio, a linha antiga fica pra trás em vez de ser removida.
+- **Replay 2D sem streaming por round** (achado em `docs/adr/0005-libs-animacao-e-performance.md`)
+  — o client baixa o JSON da partida inteira (vários MB) antes do primeiro round tocar;
+  em mobile com conexão ruim pode significar espera perceptível. Baixa prioridade — só
+  agir se virar reclamação real.
 
 ## Fora de escopo (decidido)
 
-- Renderização de vídeo estilo Allstar (BRIEF; deep-link no Replay 2D cobre).
+- ~~Renderização de vídeo estilo Allstar~~ — **reaberto 2026-07-19**: construir a
+  renderização por conta própria continua fora de escopo (risco de ban de conta Steam,
+  ver `docs/adr/0004-viabilidade-clipes-video-real.md`), mas **integrar com a API de
+  clipes do Allstar** (conta de parceiro já criada) está em avaliação — só falta o
+  preço deles pra decidir com o grupo.
 - Análise de economia ($ por round) — demoparser2 expõe, mas custo/benefício baixo agora.
 - Win rate forecast estilo Leetify — exige modelo/dados que não temos.
