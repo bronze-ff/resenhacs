@@ -1,6 +1,9 @@
+import bz2
 import sys
 import types
 from pathlib import Path
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -780,3 +783,63 @@ def test_notificar_discord_pula_grupo_sem_resumo(monkeypatch):
     monkeypatch.setattr(main.discord_notify, "enviar_webhook", lambda *a, **k: enviados.append(1))
     main._notificar_discord_grupos(config, conn=object(), match_id="m1")
     assert enviados == []
+
+
+# ---- _baixar_e_descomprimir (dívida técnica: download truncado passava em silêncio) ----
+
+class _FakeResp:
+    """Simula http.client.HTTPResponse: leitura em chunks + headers.get('Content-Length')."""
+
+    def __init__(self, data, content_length=None):
+        self._data = data
+        self._pos = 0
+        self.headers = {} if content_length is None else {"Content-Length": str(content_length)}
+
+    def read(self, n=-1):
+        if self._pos >= len(self._data):
+            return b""
+        fim = len(self._data) if n == -1 else self._pos + n
+        chunk = self._data[self._pos:fim]
+        self._pos = fim
+        return chunk
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+
+def _patch_urlopen(monkeypatch, fake_resp):
+    monkeypatch.setattr(main.urllib.request, "urlopen", lambda *a, **k: fake_resp)
+
+
+def test_baixar_e_descomprimir_completo_ok(tmp_path, monkeypatch):
+    conteudo = b"conteudo da demo, repetido pra dar corpo" * 500
+    comprimido = bz2.compress(conteudo)
+    _patch_urlopen(monkeypatch, _FakeResp(comprimido, content_length=len(comprimido)))
+    destino = tmp_path / "match.dem"
+    main._baixar_e_descomprimir("http://x", destino)
+    assert destino.read_bytes() == conteudo
+
+
+def test_baixar_e_descomprimir_truncado_content_length_diverge(tmp_path, monkeypatch):
+    conteudo = bz2.compress(b"conteudo da demo, repetido pra dar corpo" * 500)
+    truncado = conteudo[: len(conteudo) // 2]
+    # Declara o Content-Length do arquivo INTEIRO — a CDN cortou a conexão no meio,
+    # então o header original (que veio antes do corte) ainda prometia o tamanho certo.
+    _patch_urlopen(monkeypatch, _FakeResp(truncado, content_length=len(conteudo)))
+    destino = tmp_path / "match.dem"
+    with pytest.raises(RuntimeError, match="truncado"):
+        main._baixar_e_descomprimir("http://x", destino)
+
+
+def test_baixar_e_descomprimir_stream_bz2_incompleto_nunca_sucede_silenciosamente(tmp_path, monkeypatch):
+    conteudo = bz2.compress(b"conteudo da demo, repetido pra dar corpo" * 500)
+    truncado = conteudo[: len(conteudo) // 2]
+    _patch_urlopen(monkeypatch, _FakeResp(truncado, content_length=None))
+    destino = tmp_path / "match.dem"
+    # Sem Content-Length pra comparar, a garantia é a checagem de EOF do bz2 (ou uma
+    # exceção do próprio decompressor) — nunca deve terminar "com sucesso" em silêncio.
+    with pytest.raises(Exception):
+        main._baixar_e_descomprimir("http://x", destino)

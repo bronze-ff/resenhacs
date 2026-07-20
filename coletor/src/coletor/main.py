@@ -19,7 +19,9 @@ quando souber a data certa.
 import argparse
 import sys
 
+import bz2
 import json
+import urllib.request
 
 from . import db as dbmod
 from . import parse as parsemod
@@ -93,17 +95,31 @@ def _resolver_demo_urls(codes, bot_dir, node_bin):
 
 
 def _baixar_e_descomprimir(url, destino_dem):
-    """Baixa um .dem.bz2 da Valve e descomprime em streaming pro caminho .dem indicado."""
-    import bz2
-    import urllib.request
+    """Baixa um .dem.bz2 da Valve e descomprime em streaming pro caminho .dem indicado.
 
+    Valida integridade em duas frentes — sem isso, um corte de conexão no meio do
+    download (comum na CDN da Valve) resultava num .dem parcial sendo parseado "com
+    sucesso" e gravando stats errados, em silêncio: (1) bytes recebidos batem com o
+    Content-Length declarado pela resposta HTTP, quando o header existe; (2) o
+    decompressor bz2 terminou o stream de verdade (dec.eof), não só parou de receber
+    bytes — cobre o caso de a CDN não mandar Content-Length.
+    """
     dec = bz2.BZ2Decompressor()
     with urllib.request.urlopen(url, timeout=120) as resp, open(destino_dem, "wb") as out:
+        content_length = resp.headers.get("Content-Length")
+        esperado = int(content_length) if content_length is not None else None
+        recebido = 0
         while True:
             chunk = resp.read(1 << 20)
             if not chunk:
                 break
+            recebido += len(chunk)
             out.write(dec.decompress(chunk))
+
+    if esperado is not None and recebido != esperado:
+        raise RuntimeError(f"download truncado: recebido {recebido} bytes, esperado {esperado}")
+    if not dec.eof:
+        raise RuntimeError("download truncado: stream bz2 incompleto (sem EOF)")
 
 
 def _notificar_discord_grupos(config, conn, match_id):

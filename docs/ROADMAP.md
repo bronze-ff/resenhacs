@@ -101,8 +101,16 @@ produção. O que ficou pra depois, por ordem de risco:
 - ~~**Lote do `fetch` sem limite**~~ — **resolvido 2026-07-18**: processa em lotes de 15
   por run (mais recentes primeiro), commitando cada partida. Runs de 30/60min drenam
   o resto sem estourar o timeout.
-- **Revogação de acesso/admin demora até 7 dias** — o JWT não é revalidado contra a
-  whitelist a cada request. Baixo risco aqui (grupo fechado de amigos), mas documentado.
+- ~~**Revogação de acesso/admin demora até 7 dias**~~ — **já resolvido antes desta entrada
+  ser escrita** (código desatualizou o roadmap): `createRequireSuperAdmin`
+  (`site/server/src/auth/middleware.js`) já reconsulta `players.is_super_admin` no banco
+  a cada request quando o claim do JWT diz `true` — rebaixar um admin tem efeito
+  imediato. O claim `isSuperAdmin` do cookie do usuário rebaixado continua "mentindo"
+  por até 7 dias, mas é inofensivo (não concede privilégio nenhum, só serve de
+  pré-filtro pra evitar tocar o banco quando já é `false`). Não há hoje nenhum
+  mecanismo geral de "revogar acesso" de usuário comum no schema — só admin (coberto)
+  e convite de grupo (`revogado_em`, já revalidado a cada request via
+  `createRequireGroupMember`).
 - **Re-ingest não limpa jogador/round órfão** — se um fix no parser reduzir rounds ou
   remover um sid espúrio, a linha antiga fica pra trás em vez de ser removida.
 - **Replay 2D sem streaming por round** (achado em `docs/adr/0005-libs-animacao-e-performance.md`)
