@@ -87,6 +87,59 @@ describe('POST /api/groups/:id/convites', () => {
   })
 })
 
+describe('PUT /api/groups/:id/discord-webhook', () => {
+  it('não-admin: 403', async () => {
+    const { app } = appWith([
+      ['select role from group_members', [{ role: 'membro' }]],
+    ])
+    const res = await request(app)
+      .put('/api/groups/g1/discord-webhook')
+      .set('Cookie', cookieA)
+      .send({ url: 'https://discord.com/api/webhooks/1/abc' })
+    expect(res.status).toBe(403)
+  })
+
+  it('URL inválida: 400', async () => {
+    const { app } = appWith([
+      ['select role from group_members', [{ role: 'admin' }]],
+    ])
+    const res = await request(app)
+      .put('/api/groups/g1/discord-webhook')
+      .set('Cookie', cookieA)
+      .send({ url: 'https://evil.com/not-discord' })
+    expect(res.status).toBe(400)
+  })
+
+  it('admin com URL válida: salva e devolve ok', async () => {
+    const { app, db } = appWith([
+      ['select role from group_members', [{ role: 'admin' }]],
+      ['update groups set discord_webhook_url', []],
+    ])
+    const res = await request(app)
+      .put('/api/groups/g1/discord-webhook')
+      .set('Cookie', cookieA)
+      .send({ url: 'https://discord.com/api/webhooks/123/abcDEF' })
+    expect(res.status).toBe(200)
+    expect(res.body).toEqual({ ok: true })
+    const update = db.query.mock.calls.find((c) => c[0].includes('update groups set discord_webhook_url'))
+    expect(update[1]).toEqual(['https://discord.com/api/webhooks/123/abcDEF', 'g1'])
+  })
+
+  it('admin com url null: remove o webhook', async () => {
+    const { app, db } = appWith([
+      ['select role from group_members', [{ role: 'admin' }]],
+      ['update groups set discord_webhook_url', []],
+    ])
+    const res = await request(app)
+      .put('/api/groups/g1/discord-webhook')
+      .set('Cookie', cookieA)
+      .send({ url: null })
+    expect(res.status).toBe(200)
+    const update = db.query.mock.calls.find((c) => c[0].includes('update groups set discord_webhook_url'))
+    expect(update[1]).toEqual([null, 'g1'])
+  })
+})
+
 describe('GET /api/convites/:token', () => {
   it('convite inexistente: 404', async () => {
     const { app } = appWith([])

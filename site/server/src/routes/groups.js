@@ -73,6 +73,27 @@ export function createGroupsRouter({ db }) {
     res.status(201).json({ token: rows[0].token })
   })
 
+  router.put('/:id/discord-webhook', async (req, res) => {
+    const { rows: membro } = await db.query(
+      'select role from group_members where group_id = $1 and steam_id64 = $2',
+      [req.params.id, req.player.steamId],
+    )
+    if (membro.length === 0 || membro[0].role !== 'admin') {
+      return res.status(403).json({ erro: 'Só o admin do grupo pode configurar o webhook' })
+    }
+    const url = req.body?.url
+    if (url !== null && url !== undefined) {
+      if (typeof url !== 'string' || !/^https:\/\/discord\.com\/api\/webhooks\//.test(url)) {
+        return res.status(400).json({ erro: 'URL de webhook do Discord inválida' })
+      }
+    }
+    await db.query('update groups set discord_webhook_url = $1 where id = $2', [
+      url ?? null,
+      req.params.id,
+    ])
+    res.json({ ok: true })
+  })
+
   return router
 }
 
