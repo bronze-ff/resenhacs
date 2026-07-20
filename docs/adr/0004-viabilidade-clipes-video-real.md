@@ -65,6 +65,33 @@ Se isso for preciso, sugere que o Allstar tem algum tipo de **integração autor
 
 **O que isso muda:** dá pra ter clipe em vídeo real **sem construir nem manter nenhuma infraestrutura de renderização, sem tocar no CS2, e sem risco de ban** — o Resenha só precisaria: enviar a demo (ou o `.dem` já arquivado no R2) pra API do Allstar (ou Rankacy) no momento de um highlight detectado, guardar a URL do vídeo devolvido, e mostrar isso na tela da partida. É trabalho de integração (chamar uma API, tratar webhook de "renderização pronta", guardar o link) — ordens de grandeza mais simples e barato que rodar GPU/CS2 por conta própria, e sem o risco jurídico levantado nas seções acima (a Valve, o VAC ban e a automação passam a ser problema do Allstar, que aparentemente já resolveu isso de forma autorizada).
 
+### Fluxo técnico real (confirmado — conta de parceiro criada em 2026-07-19, Partner ID `RESENHACS`)
+
+Com acesso à doc autenticada do Allstar Developer Portal, o fluxo é mais simples do que qualquer hipótese anterior neste documento:
+
+```http
+POST https://prt.allstar.gg/api/clip_request
+X-API-Key: (Server API Key do dashboard)
+Content-Type: application/json
+
+{
+  "steamId": "STEAMID64",
+  "demoUrl": "VALID_MATCH_REPLAY_URL",
+  "webhookUrl": "https://.../api/allstar/webhook",
+  "rounds": [1],
+  "username": "USERNAME",
+  "useCase": "POTG"
+}
+```
+
+- **Não é upload de arquivo** — é uma URL que aponta pro replay/demo, que o Allstar busca do próprio lado. Falta confirmar se aceitam a URL de download original da Valve (`replay*.valve.net/...`, a mesma que o Coletor já usa em `_baixar_e_descomprimir` — mas essa expira ~30 dias depois da partida) ou se aceitam uma URL pra um `.dem` nosso, hospedado no R2 (o Resenha já arquiva o `.dem` bruto lá — ADR-0002). Precisa confirmar com o suporte (`partners@allstar.gg`) ou testar direto.
+- **`rounds`** casa 1:1 com `highlights.round_number` — dá pra pedir o clipe exatamente do round do ace/clutch detectado, sem trabalho extra de mapeamento.
+- **Resposta é assíncrona via webhook** — não fica esperando a renderização. Precisa de um endpoint público novo no server (`POST /api/allstar/webhook`) que valida o `Webhook Auth` (visto no dashboard) antes de aceitar o evento, pra não deixar qualquer um forjar "clipe pronto" com um link malicioso.
+- **Não precisamos armazenar o vídeo.** Exibição é via **iframe do próprio Allstar**: `https://allstar.gg/iframe?clip=CLIP_ID&known=true&platform=RESENHACS&useCase=...&UID=...`. Isso elimina toda a preocupação de storage/R2/streaming pra clipe — só guardamos o `clip_id` recebido no webhook (provavelmente numa coluna nova em `clips`, ou reaproveitando `provider = 'allstar'`) e embutimos o iframe na tela da Partida.
+- **`useCase`** deve mapear pros tipos de highlight já existentes (o Dashboard mostrou toggles `POTG`, `BP` — falta descobrir o significado exato e se cobre `ace`/`clutch`/multi-kill como categorias separadas, ou se é só "melhor jogada" genérico).
+
+**Ainda falta descobrir antes de decidir:** o preço por clipe/uso (não achamos na doc de Getting Started — checar a aba **Terms** do dashboard, que provavelmente tem os termos comerciais) e exatamente o formato aceito de `demoUrl`.
+
 ### Lacunas que ficaram sem resposta pública
 
 - Se existe um modo "dedicated server" do CS2 que reproduz uma demo GOTV sem interface gráfica (headless de verdade) — não achamos confirmação nem negação sólida.
