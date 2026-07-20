@@ -548,7 +548,7 @@ export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Cli
       // do lado deles, não tem como autenticar como um Jogador nosso logado.
       const demoUrlAssinada = await presignDownload(r2Client, r2Bucket, demoKey)
       const requestId = await pedirClipe({
-        apiKey: config.allstarApiKey, kind: h.kind, steamId: h.steam_id64, nick: h.nick,
+        apiKey: config.allstarApiKey, steamId: h.steam_id64, nick: h.nick,
         demoUrl: demoUrlAssinada, roundNumber: h.round_number,
         webhookUrl: `${config.appUrl}/api/allstar/webhook`,
         metadata: [{ key: 'highlightId', value: highlightId }],
