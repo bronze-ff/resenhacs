@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Card, SectionHeader, DataTable, Badge } from '../components/ui'
+import { useAuth } from '../auth/AuthContext.jsx'
 
 const PERIODOS = [
   { valor: 'semana', label: 'Semana' },
@@ -17,13 +18,28 @@ function nomeDoKind(kind) {
   return NOME_KIND[kind] ?? kind
 }
 
+// Ícone genérico pro card sem snapshot ainda (Allstar às vezes demora a gerar a
+// miniatura) — mantém a mesma proporção aspect-video do snapshot real, sem "buraco".
+function SnapshotPlaceholder() {
+  return (
+    <div className="mt-3 flex aspect-video w-full items-center justify-center border border-borda bg-superficie-alta text-texto-fraco">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-8 w-8">
+        <rect x="3" y="5" width="18" height="14" rx="1" />
+        <path d="M9 9L15 12L9 15V9Z" fill="currentColor" stroke="none" />
+      </svg>
+    </div>
+  )
+}
+
 // Player embutido do Allstar — mesmo padrão usado na aba Clipes de Partida.jsx
 // (site/client/src/pages/Partida.jsx), reaproveitado aqui pro modo "assistir" do card.
-function PlayerClipe({ clipUrl }) {
+// `viewerSteamId` vai no ?UID= igual lá — é o parâmetro que a Allstar usa pra saber
+// quem tá assistindo, não quem fez a jogada.
+function PlayerClipe({ clipUrl, viewerSteamId }) {
   return (
     <div className="mt-3 aspect-video w-full">
       <iframe
-        src={`${clipUrl}&location=melhoresClipes`}
+        src={`${clipUrl}&UID=${viewerSteamId ?? ''}&location=melhoresClipes`}
         allow="clipboard-write; autoplay"
         className="h-full w-full border border-borda"
         title="Clipe Allstar"
@@ -32,19 +48,24 @@ function PlayerClipe({ clipUrl }) {
   )
 }
 
-function CardClipe({ clipe, aberto, onAbrir }) {
+function CardClipe({ clipe, aberto, onAbrir, viewerSteamId }) {
   const { pontuacao } = clipe
   return (
     <Card className="p-4">
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <Badge tom="destaque">{nomeDoKind(clipe.kind)}</Badge>
-            {pontuacao.bonusHeadshot > 0 && <Badge tom="sucesso">ALL HEADSHOTS</Badge>}
+        <div className="flex min-w-0 items-center gap-2">
+          {clipe.avatarUrl && (
+            <img src={clipe.avatarUrl} alt="" className="panel-cut-sm h-8 w-8 shrink-0 border border-borda object-cover" />
+          )}
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <Badge tom="destaque">{nomeDoKind(clipe.kind)}</Badge>
+              {pontuacao.bonusHeadshot > 0 && <Badge tom="sucesso">ALL HEADSHOTS</Badge>}
+            </div>
+            <p className="mt-1 truncate font-mono text-sm text-texto">
+              {clipe.nick} · round {clipe.roundNumber} · {clipe.map}
+            </p>
           </div>
-          <p className="mt-1 truncate font-mono text-sm text-texto">
-            {clipe.nick} · round {clipe.roundNumber} · {clipe.map}
-          </p>
         </div>
         <div className="shrink-0 text-right">
           <div
@@ -55,9 +76,9 @@ function CardClipe({ clipe, aberto, onAbrir }) {
           </div>
         </div>
       </div>
-      {clipe.clipSnapshotUrl && !aberto && (
-        <img src={clipe.clipSnapshotUrl} alt="" className="mt-3 aspect-video w-full border border-borda object-cover" />
-      )}
+      {!aberto && (clipe.clipSnapshotUrl
+        ? <img src={clipe.clipSnapshotUrl} alt="" className="mt-3 aspect-video w-full border border-borda object-cover" />
+        : <SnapshotPlaceholder />)}
       <button
         type="button"
         onClick={() => onAbrir(aberto ? null : clipe.id)}
@@ -65,12 +86,13 @@ function CardClipe({ clipe, aberto, onAbrir }) {
       >
         {aberto ? 'Fechar' : '▶ Assistir'}
       </button>
-      {aberto && <PlayerClipe clipUrl={clipe.clipUrl} />}
+      {aberto && <PlayerClipe clipUrl={clipe.clipUrl} viewerSteamId={viewerSteamId} />}
     </Card>
   )
 }
 
 export default function Clipes() {
+  const { jogador } = useAuth()
   const [periodo, setPeriodo] = useState('sempre')
   const [dados, setDados] = useState(null)
   const [clipeAberto, setClipeAberto] = useState(null)
@@ -126,7 +148,12 @@ export default function Clipes() {
                   {dados.leaderboard.map((l, i) => (
                     <tr key={l.steamId}>
                       <td className="px-3 py-2 font-mono text-texto-fraco">{i + 1}º</td>
-                      <td className="px-3 py-2 font-mono text-texto">{l.nick}</td>
+                      <td className="px-3 py-2">
+                        <span className="flex items-center gap-2 font-mono text-texto">
+                          {l.avatarUrl && <img src={l.avatarUrl} alt="" className="panel-cut-sm h-6 w-6 border border-borda object-cover" />}
+                          {l.nick}
+                        </span>
+                      </td>
                       <td className="px-2 py-2 text-right tabular-nums">{l.clipes}</td>
                       <td className="px-3 py-2 text-right font-display font-bold text-destaque tabular-nums">{l.melhorPontuacao}</td>
                     </tr>
@@ -138,7 +165,7 @@ export default function Clipes() {
 
           <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {dados.clipes.map((c) => (
-              <CardClipe key={c.id} clipe={c} aberto={clipeAberto === c.id} onAbrir={setClipeAberto} />
+              <CardClipe key={c.id} clipe={c} aberto={clipeAberto === c.id} onAbrir={setClipeAberto} viewerSteamId={jogador?.steamId} />
             ))}
           </section>
         </>

@@ -36,11 +36,12 @@ export function createClipesRouter({ db, requireAuth }) {
       `select ac.id, ac.clip_url, ac.clip_snapshot_url,
               h.round_number, h.kind, h.match_id, h.steam_id64,
               m.map, m.played_at,
-              p.nick, coalesce(p.avatar_url, sa.avatar_url) as avatar_url
+              coalesce(p.nick, mp.nick) as nick, coalesce(p.avatar_url, sa.avatar_url) as avatar_url
        from allstar_clips ac
        join highlights h on h.id = ac.highlight_id
        join matches m on m.id = h.match_id
-       join players p on p.steam_id64 = h.steam_id64
+       left join players p on p.steam_id64 = h.steam_id64
+       left join match_players mp on mp.match_id = h.match_id and mp.steam_id64 = h.steam_id64
        left join steam_avatares sa on sa.steam_id64 = h.steam_id64
        where ac.status = 'Processed' and ${partidaVisivelExpr('m', '$1')} ${PERIODOS[periodo]}
        order by m.played_at desc`,
