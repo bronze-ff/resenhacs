@@ -1,0 +1,17 @@
+name = "resenha-coletor-trigger"
+main = "src/index.js"
+compatibility_date = "2026-07-21"
+
+# Dispara o workflow "Coletor" (.github/workflows/coletor.yml) via workflow_dispatch a
+# cada 5 min — o gatilho `schedule` nativo do GitHub Actions é "melhor esforço" e, na
+# prática (medido em 2026-07-21), estava disparando a cada 92-137 min mesmo configurado
+# pra 30 min. workflow_dispatch via API não sofre esse throttling.
+[triggers]
+crons = ["*/5 * * * *"]
+
+[vars]
+GITHUB_REPO = "bronze-ff/resenhacs"
+
+# GITHUB_TOKEN é secret, não var — configurar com:
+#   npx wrangler secret put GITHUB_TOKEN
+# (ver README.md nesta pasta pra como gerar o token)
