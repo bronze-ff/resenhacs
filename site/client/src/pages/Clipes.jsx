@@ -26,6 +26,7 @@ function PlayerClipe({ clipUrl }) {
         src={`${clipUrl}&location=melhoresClipes`}
         allow="clipboard-write; autoplay"
         className="h-full w-full border border-borda"
+        title="Clipe Allstar"
       />
     </div>
   )
