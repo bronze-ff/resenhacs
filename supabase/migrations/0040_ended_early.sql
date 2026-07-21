@@ -13,8 +13,12 @@
 -- _detectar_abandono) — só preenchido quando dá pra atribuir a EXATAMENTE 1 jogador
 -- (o último a desconectar sem retomar atividade, antes do fim real da partida).
 -- Nullable mesmo quando ended_early=true: ambíguo (2+ candidatos) fica sem atribuição.
+-- SEM FK pra players: quem abandona pode ser um adversário sem conta no Resenha (não
+-- está em `players`, só em `match_players` — que também não tem FK nesse campo pelo
+-- mesmo motivo. Descoberto na prática: o abandonador da partida-teste 44a32a9e não
+-- tinha conta cadastrada).
 alter table matches add column ended_early boolean not null default false;
-alter table matches add column abandoned_by_steam_id64 text references players(steam_id64);
+alter table matches add column abandoned_by_steam_id64 text;
 
 -- Backfill retroativo: só pro placar (não precisa reprocessar nenhum demo). Escopado
 -- a valve_mm — outras fontes (FACEIT, Partidas Pro, upload manual) têm formatos de
