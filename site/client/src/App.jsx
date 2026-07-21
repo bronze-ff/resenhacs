@@ -13,6 +13,7 @@ import Granadas from './pages/Granadas.jsx'
 import Taticas from './pages/Taticas.jsx'
 import Ranking from './pages/Ranking.jsx'
 import EnviarDemo from './pages/EnviarDemo.jsx'
+import Clipes from './pages/Clipes.jsx'
 import Perfil from './pages/Perfil.jsx'
 import Admin from './pages/Admin.jsx'
 import PartidasPro from './pages/PartidasPro.jsx'
@@ -52,6 +53,7 @@ export default function App() {
           <Route path="/partida/:id" element={<RotaProtegida><Partida /></RotaProtegida>} />
           <Route path="/ranking" element={<RotaProtegida><Ranking /></RotaProtegida>} />
           <Route path="/enviar-demo" element={<RotaProtegida><EnviarDemo /></RotaProtegida>} />
+          <Route path="/clipes" element={<RotaProtegida><Clipes /></RotaProtegida>} />
           <Route path="/jogadores" element={<RotaProtegida><Amigos /></RotaProtegida>} />
           <Route path="/jogador/:steamId" element={<RotaProtegida><JogadorPerfil /></RotaProtegida>} />
           <Route path="/comparar" element={<RotaProtegida><Comparar /></RotaProtegida>} />

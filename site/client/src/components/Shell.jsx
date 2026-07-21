@@ -8,15 +8,16 @@ const ITENS = [
   { to: '/', end: true, label: 'Partidas', num: '01', icone: 'partidas' },
   { to: '/ranking', label: 'Ranking', num: '02', icone: 'ranking' },
   { to: '/enviar-demo', label: 'Enviar demo', num: '03', icone: 'enviarDemo' },
-  { to: '/jogadores', label: 'Amigos', num: '04', icone: 'jogadores' },
-  { to: '/comparar', label: 'Comparar', num: '05', icone: 'comparar' },
+  { to: '/clipes', label: 'Clipes', num: '04', icone: 'clipes' },
+  { to: '/jogadores', label: 'Amigos', num: '05', icone: 'jogadores' },
+  { to: '/comparar', label: 'Comparar', num: '06', icone: 'comparar' },
   // Granadas/Táticas são públicos pra visualização (só criar/editar é admin — cada
   // página já esconde os controles de edição sozinha via isSuperAdmin) — por isso
   // ficam aqui, fora do bloco condicional a isSuperAdmin logo abaixo.
-  { to: '/granadas', label: 'Granadas', num: '06', icone: 'granadas' },
-  { to: '/taticas', label: 'Táticas', num: '07', icone: 'taticas' },
-  { to: '/conta', label: 'Minha conta', num: '08', icone: 'perfil' },
-  { to: '/curso', label: 'Curso de mira', num: '09', icone: 'curso' },
+  { to: '/granadas', label: 'Granadas', num: '07', icone: 'granadas' },
+  { to: '/taticas', label: 'Táticas', num: '08', icone: 'taticas' },
+  { to: '/conta', label: 'Minha conta', num: '09', icone: 'perfil' },
+  { to: '/curso', label: 'Curso de mira', num: '10', icone: 'curso' },
 ]
 
 // Itens da barra inferior mobile (estilo app da FACEIT): 4 rotas principais
@@ -63,6 +64,12 @@ const NAV_ICONES = {
       <path d="M12 3v12" />
       <path d="M7 8L12 3L17 8" />
       <path d="M4 15V19C4 20.1046 4.89543 21 6 21H18C19.1046 21 20 20.1046 20 19V15" />
+    </svg>
+  ),
+  clipes: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
+      <rect x="3" y="5" width="18" height="14" rx="1" />
+      <path d="M9 9L15 12L9 15V9Z" fill="currentColor" stroke="none" />
     </svg>
   ),
   jogadores: (
@@ -228,7 +235,7 @@ export default function Shell({ children }) {
                 aria-label={colapsada ? 'Admin' : undefined}
               >
                 <span className="shrink-0">{NAV_ICONES.admin}</span>
-                <span className={`font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque ${colapsada ? 'lg:hidden' : ''}`}>10</span>
+                <span className={`font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque ${colapsada ? 'lg:hidden' : ''}`}>11</span>
                 <span className={colapsada ? 'lg:hidden' : ''}>Admin</span>
               </NavLink>
               <NavLink
@@ -239,7 +246,7 @@ export default function Shell({ children }) {
                 aria-label={colapsada ? 'Partidas pro' : undefined}
               >
                 <span className="shrink-0">{NAV_ICONES.partidasPro}</span>
-                <span className={`font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque ${colapsada ? 'lg:hidden' : ''}`}>11</span>
+                <span className={`font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque ${colapsada ? 'lg:hidden' : ''}`}>12</span>
                 <span className={colapsada ? 'lg:hidden' : ''}>Partidas pro</span>
               </NavLink>
             </>
