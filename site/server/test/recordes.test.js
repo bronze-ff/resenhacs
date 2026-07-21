@@ -5,7 +5,6 @@ import { signToken } from '../src/auth/jwt.js'
 
 const config = { jwtSecret: 's', appUrl: 'http://localhost:5173', isProduction: false }
 const cookie = `resenha_token=${signToken({ steamId: '76561198000000009', isSuperAdmin: false }, config.jwtSecret)}`
-const GRUPO = '11111111-1111-1111-1111-111111111111'
 
 function appWith(handlers) {
   const db = {
@@ -16,7 +15,7 @@ function appWith(handlers) {
       return Promise.resolve({ rows: [] })
     }),
   }
-  return { app: createApp({ config, db }) }
+  return { app: createApp({ config, db }), db }
 }
 
 describe('GET /api/recordes', () => {
@@ -26,8 +25,7 @@ describe('GET /api/recordes', () => {
   })
 
   it('acha mais kills, melhor ADR, maior sequência e mais clutches numa noite', async () => {
-    const { app } = appWith([
-      ['group_members where group_id', [{}]],
+    const { app, db } = appWith([
       ['select id, map, played_at', [
         { id: 'm1', map: 'de_mirage', played_at: '2026-07-10T21:00:00Z' },
         { id: 'm2', map: 'de_dust2', played_at: '2026-07-10T22:00:00Z' },
@@ -43,7 +41,7 @@ describe('GET /api/recordes', () => {
         { match_id: 'm4', steam_id64: 's1', nick: 'fih', kills: 12, damage: 1200, rounds_played: 20, won: true, clutch_wins: 0, avatar_url: null },
       ]],
     ])
-    const res = await request(app).get('/api/recordes').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    const res = await request(app).get('/api/recordes').set('Cookie', cookie)
     expect(res.status).toBe(200)
 
     expect(res.body.maisKills).toMatchObject({ steamId: 's2', nick: 'bronze', kills: 30, matchId: 'm1' })
@@ -54,14 +52,24 @@ describe('GET /api/recordes', () => {
 
     // Sessão 1 (m1+m2): fih tem 1+2=3 clutches, bronze tem 0. Sessão 2 (m3+m4): 0.
     expect(res.body.maisClutchesNaNoite).toMatchObject({ steamId: 's1', nick: 'fih', clutches: 3 })
+
+    // Visibilidade por amizade (friendships.js), não mais group_id: as duas queries
+    // (matches e o subselect de match_players) escopam pelo viewer via partidaVisivelExpr.
+    const [matchesSql, matchesParams] = db.query.mock.calls.find(([s]) => s.includes('select id, map, played_at'))
+    expect(matchesSql).toContain('from friendships f')
+    expect(matchesSql).not.toContain('group_id')
+    expect(matchesParams).toEqual(['76561198000000009'])
+    const [playersSql, playersParams] = db.query.mock.calls.find(([s]) => s.includes('join players p on p.steam_id64 = mp.steam_id64'))
+    expect(playersSql).toContain('from friendships f')
+    expect(playersSql).not.toContain('group_id')
+    expect(playersParams).toEqual(['76561198000000009'])
   })
 
   it('grupo sem partidas: tudo null, sem quebrar', async () => {
     const { app } = appWith([
-      ['group_members where group_id', [{}]],
       ['select id, map, played_at', []],
     ])
-    const res = await request(app).get('/api/recordes').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    const res = await request(app).get('/api/recordes').set('Cookie', cookie)
     expect(res.status).toBe(200)
     expect(res.body).toEqual({ maisKills: null, melhorAdr: null, maiorSequencia: null, maisClutchesNaNoite: null })
   })

@@ -14,35 +14,40 @@ const JOGADOR = {
   nick: 'fih',
   avatar_url: 'https://avatars.steamstatic.com/x.jpg',
   is_super_admin: true,
-  grupo_ativo_id: 'g1',
-  ranking_publico: false,
   faceit_nick: null,
   tour_concluido: false,
 }
 
 // Fake que roteia por SQL: players devolve `rows`; o insert de nonce devolve
-// rowCount 1 (nonce novo) ou 0 (replay); a checagem de papel no grupo ativo devolve
-// `role`; qualquer outra query devolve vazio.
-function fakeDb({ rows = [], nonceReplay = false, role = 'admin' } = {}) {
+// rowCount 1 (nonce novo) ou 0 (replay); a checagem de amigos Steam com conta
+// devolve `amigosComConta`; qualquer outra query devolve vazio.
+function fakeDb({ rows = [], nonceReplay = false, amigosComConta = [] } = {}) {
   return {
     query: vi.fn().mockImplementation((sql) => {
       if (sql.includes('used_openid_nonces')) {
         return Promise.resolve({ rows: nonceReplay ? [] : [{ nonce: 'n' }], rowCount: nonceReplay ? 0 : 1 })
       }
-      if (sql.includes('role from group_members')) return Promise.resolve({ rows: [{ role }] })
+      if (sql.includes('conta_criada_em is not null')) return Promise.resolve({ rows: amigosComConta })
       if (sql.includes('from players')) return Promise.resolve({ rows })
       return Promise.resolve({ rows: [] })
     }),
   }
 }
 
-function appWith({ rows = [], nonceReplay = false, role = 'admin', login = { steamId: JOGADOR.steam_id64, nonce: 'n1' } } = {}) {
-  const db = fakeDb({ rows, nonceReplay, role })
+function appWith({
+  rows = [],
+  nonceReplay = false,
+  amigosComConta = [],
+  login = { steamId: JOGADOR.steam_id64, nonce: 'n1' },
+  fetchFriendList = vi.fn().mockResolvedValue([]),
+} = {}) {
+  const db = fakeDb({ rows, nonceReplay, amigosComConta })
   const app = createApp({
     config,
     db,
     verifySteamLogin: vi.fn().mockResolvedValue(login),
     fetchPersona: vi.fn().mockResolvedValue({ nick: 'fih', avatarUrl: 'https://a/x.jpg' }),
+    fetchFriendList,
   })
   return { app, db }
 }
@@ -84,7 +89,7 @@ describe('GET /api/auth/steam/return', () => {
   })
 
   it('primeiro login (fora da whitelist antiga): cria o jogador e loga mesmo assim', async () => {
-    const { app } = appWith({ rows: [{ ...JOGADOR, is_super_admin: false, grupo_ativo_id: null }] })
+    const { app } = appWith({ rows: [{ ...JOGADOR, is_super_admin: false }] })
     const res = await request(app).get('/api/auth/steam/return?openid.mode=id_res')
     expect(res.status).toBe(302)
     expect(res.headers.location).toBe(config.appUrl)
@@ -114,6 +119,46 @@ describe('GET /api/auth/steam/return', () => {
     expect(res.headers.location).toBe(`${config.appUrl}/?erro=login-invalido`)
     expect(res.headers['set-cookie']).toBeUndefined()
   })
+
+  it('marca conta_criada_em no upsert de players (mantendo valor existente via coalesce)', async () => {
+    const { app, db } = appWith({ rows: [JOGADOR] })
+    await request(app).get('/api/auth/steam/return?openid.mode=id_res')
+    const queries = db.query.mock.calls
+    expect(queries.some(([sql]) => sql.includes('conta_criada_em = coalesce'))).toBe(true)
+  })
+
+  it('auto-friend: cria accepted só com amigos Steam que têm conta', async () => {
+    const fetchFriendList = vi.fn().mockResolvedValue(['222', '333'])
+    const { app, db } = appWith({
+      rows: [JOGADOR],
+      fetchFriendList,
+      amigosComConta: [{ steam_id64: '222' }], // só 222 tem conta; 333 é ignorado
+    })
+    const res = await request(app).get('/api/auth/steam/return?openid.mode=id_res')
+    expect(res.status).toBe(302)
+    expect(fetchFriendList).toHaveBeenCalledWith(JOGADOR.steam_id64)
+    const queries = db.query.mock.calls
+    const ins = queries.find(([sql]) => sql.includes('insert into friendships'))
+    expect(ins).toBeTruthy()
+    // par canônico (string menor primeiro) + quem pediu = quem logou
+    expect(ins[1]).toEqual(['222', JOGADOR.steam_id64, JOGADOR.steam_id64])
+  })
+
+  it('auto-friend: perfil Steam privado (fetchFriendList vazio) não cria amizade nenhuma', async () => {
+    const { app, db } = appWith({ rows: [JOGADOR], fetchFriendList: vi.fn().mockResolvedValue([]) })
+    await request(app).get('/api/auth/steam/return?openid.mode=id_res')
+    const queries = db.query.mock.calls
+    expect(queries.some(([sql]) => sql.includes('insert into friendships'))).toBe(false)
+  })
+
+  it('auto-friend: falha no fetchFriendList não quebra o login (best-effort)', async () => {
+    const fetchFriendList = vi.fn().mockRejectedValue(new Error('steam fora do ar'))
+    const { app } = appWith({ rows: [JOGADOR], fetchFriendList })
+    const res = await request(app).get('/api/auth/steam/return?openid.mode=id_res')
+    expect(res.status).toBe(302)
+    expect(res.headers.location).toBe(config.appUrl)
+    expect(res.headers['set-cookie'][0]).toContain('resenha_token=')
+  })
 })
 
 describe('GET /api/auth/me', () => {
@@ -131,25 +176,9 @@ describe('GET /api/auth/me', () => {
       nick: 'fih',
       avatarUrl: JOGADOR.avatar_url,
       isSuperAdmin: true,
-      grupoAtivoId: 'g1',
-      rankingPublico: false,
       faceitNick: null,
       tourConcluido: false,
-      souAdminDoGrupo: true,
     })
-  })
-
-  it('membro comum do grupo ativo: souAdminDoGrupo false', async () => {
-    const { app } = appWith({ rows: [JOGADOR], role: 'membro' })
-    const res = await request(app).get('/api/auth/me').set('Cookie', cookieFor())
-    expect(res.body.souAdminDoGrupo).toBe(false)
-  })
-
-  it('sem grupo ativo: souAdminDoGrupo nao aparece', async () => {
-    const { app } = appWith({ rows: [{ ...JOGADOR, grupo_ativo_id: null }] })
-    const res = await request(app).get('/api/auth/me').set('Cookie', cookieFor())
-    expect(res.body.grupoAtivoId).toBeNull()
-    expect(res.body.souAdminDoGrupo).toBeUndefined()
   })
 })
 

@@ -130,11 +130,11 @@ export default function Tour() {
           <h3 className="font-display text-sm font-semibold uppercase tracking-wide text-texto">
             Onde achar cada coisa
           </h3>
-          <p><span className="text-texto">Partidas / Ranking / Ranking público</span> — acompanhar desempenho seu e do grupo.</p>
+          <p><span className="text-texto">Partidas / Ranking</span> — acompanhar seu desempenho e o dos seus amigos.</p>
           <p><span className="text-texto">Enviar demo</span> — subir uma partida que não veio do matchmaking automático (ex.: scrim, campeonato).</p>
-          <p><span className="text-texto">Jogadores / Comparar / Times</span> — perfis individuais e comparações entre jogadores ou times.</p>
-          <p><span className="text-texto">Granadas / Táticas</span> — biblioteca de lineups e jogadas do grupo.</p>
-          <p><span className="text-texto">Minha conta</span> — onde reconfigurar tudo isso (Steam, FACEIT, ranking público) depois.</p>
+          <p><span className="text-texto">Amigos / Comparar</span> — gerenciar amizades e comparações entre jogadores.</p>
+          <p><span className="text-texto">Granadas / Táticas</span> — biblioteca de lineups e jogadas.</p>
+          <p><span className="text-texto">Minha conta</span> — onde reconfigurar tudo isso (Steam, FACEIT) depois.</p>
         </Card>
       )}
 

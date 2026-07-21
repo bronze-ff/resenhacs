@@ -3,14 +3,13 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import { AuthProvider } from '../auth/AuthContext.jsx'
 import Tour from '../pages/Tour.jsx'
 
-// jogador autenticado, com grupo (a rota /tour exige grupoAtivoId), tour ainda não
-// concluído — é o estado em que a página Tour normalmente é montada.
+// jogador autenticado, tour ainda não concluído — é o estado em que a página
+// Tour normalmente é montada.
 const JOGADOR = {
   steamId: '765',
   nick: 'fih',
   avatarUrl: null,
   isSuperAdmin: false,
-  grupoAtivoId: 'g1',
   tourConcluido: false,
   faceitNick: null,
 }

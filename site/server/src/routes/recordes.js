@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import { partidaVisivelExpr } from '../friendships.js'
 
 // Mesmo gap de "Resenha" que sessions.js usa pra agrupar Partidas da mesma noite —
 // duplicado aqui (não importado) porque é só uma linha de lógica e criar um módulo
@@ -12,17 +13,19 @@ function resultadoDeUmaPartida(jogadoresDoGrupo) {
   return 'outro' // empate ou misto — quebra a sequência, mas não é "derrota" pra fins de exibição
 }
 
-export function createRecordesRouter({ db, requireAuth, requireGroupMember }) {
+export function createRecordesRouter({ db, requireAuth }) {
   const router = Router()
 
-  // "Recordes do grupo" (hall da fama): maiores marcas já registradas pelo grupo —
-  // mais kills numa Partida, melhor ADR, maior sequência de vitórias, mais clutches
-  // numa Resenha (noite). Escopado ao grupo ativo em todas as queries.
-  router.get('/', requireAuth, requireGroupMember, async (req, res) => {
+  // "Recordes" (hall da fama): maiores marcas já registradas nas Partidas visíveis ao
+  // viewer (eu + amigos accepted) — mais kills numa Partida, melhor ADR, maior sequência
+  // de vitórias, mais clutches numa Resenha (noite).
+  router.get('/', requireAuth, async (req, res) => {
+    const eu = req.player.steamId
     const matchesQ = await db.query(
-      `select id, map, played_at from matches where status = 'parsed' and group_id = $1
+      `select id, map, played_at from matches m where status = 'parsed'
+         and ${partidaVisivelExpr('m', '$1')}
        order by played_at asc nulls last`,
-      [req.groupId],
+      [eu],
     )
     const playersQ = await db.query(
       `select mp.match_id, mp.steam_id64, p.nick, mp.kills, mp.damage, mp.rounds_played,
@@ -30,8 +33,8 @@ export function createRecordesRouter({ db, requireAuth, requireGroupMember }) {
        from match_players mp
        join players p on p.steam_id64 = mp.steam_id64
        left join steam_avatares sa on sa.steam_id64 = mp.steam_id64
-       where mp.match_id in (select id from matches where status = 'parsed' and group_id = $1)`,
-      [req.groupId],
+       where mp.match_id in (select id from matches m where status = 'parsed' and ${partidaVisivelExpr('m', '$1')})`,
+      [eu],
     )
 
     const matchesPorId = new Map(matchesQ.rows.map((m) => [m.id, m]))

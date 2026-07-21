@@ -4,16 +4,17 @@ import { createApp } from '../src/app.js'
 import { signToken } from '../src/auth/jwt.js'
 
 const config = { jwtSecret: 's', appUrl: 'http://localhost:5173', isProduction: false }
-const cookie = `resenha_token=${signToken({ steamId: '76561198000000009', isSuperAdmin: false }, config.jwtSecret)}`
-const GRUPO = '11111111-1111-1111-1111-111111111111'
+const STEAM_ID = '76561198000000009'
+const cookie = `resenha_token=${signToken({ steamId: STEAM_ID, isSuperAdmin: false }, config.jwtSecret)}`
 
 function appWith(handlers, { temPresenca = true } = {}) {
   const db = {
     query: vi.fn().mockImplementation((sql) => {
-      // Gate de presença de /:steamId (só responde perfil de jogador com presença no grupo) —
-      // prepended pra casar antes dos handlers de teste, já que a query dele contém trechos que
-      // colidem com o needle do fallback de match_players.
-      for (const [needle, rows] of [['group_members where group_id = $2', [{ tem: temPresenca }]], ...handlers, ['group_members where group_id = $1 and steam_id64', [{}]]]) {
+      // Gate de presença de /:steamId (só responde perfil de jogador visível ao viewer: ele
+      // mesmo, um amigo accepted, ou alguém que jogou partida visível ao viewer) — prepended
+      // pra casar antes dos handlers de teste, já que a query dele contém trechos que colidem
+      // com o needle do fallback de match_players.
+      for (const [needle, rows] of [['as tem', [{ tem: temPresenca }]], ...handlers]) {
         if (sql.includes(needle)) return Promise.resolve({ rows })
       }
       return Promise.resolve({ rows: [] })
@@ -28,7 +29,7 @@ describe('GET /api/profile/:steamId/posicoes', () => {
       ['group by m.map order by n desc', [{ map: 'de_mirage', n: 42 }]],
       ['kp.victim_x as x', [{ x: -3230, y: 1713 }]], // == pos_x/pos_y do mapa -> projeta pro (0,0)
     ])
-    const res = await request(app).get('/api/profile/765/posicoes').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    const res = await request(app).get('/api/profile/765/posicoes').set('Cookie', cookie)
     expect(res.status).toBe(200)
     expect(res.body).toEqual({
       map: 'de_mirage', calibrated: true,
@@ -39,7 +40,7 @@ describe('GET /api/profile/:steamId/posicoes', () => {
 
   it('sem dados: devolve mapa null e listas vazias', async () => {
     const { app } = appWith([['group by m.map order by n desc', []]])
-    const res = await request(app).get('/api/profile/765/posicoes').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    const res = await request(app).get('/api/profile/765/posicoes').set('Cookie', cookie)
     expect(res.status).toBe(200)
     expect(res.body).toEqual({ map: null, calibrated: false, mapas: [], pontos: [] })
   })
@@ -49,22 +50,35 @@ describe('GET /api/profile/:steamId/posicoes', () => {
       ['group by m.map order by n desc', [{ map: 'de_dust2', n: 5 }]],
       ['kp.killer_x as x', [{ x: -2476, y: 3239 }]],
     ])
-    const res = await request(app).get('/api/profile/765/posicoes?modo=kills').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    const res = await request(app).get('/api/profile/765/posicoes?modo=kills').set('Cookie', cookie)
     expect(res.body.pontos).toEqual([{ x: 0, y: 0 }])
+  })
+
+  it('visibilidade por amizade: usa o steamId do viewer logado, não X-Group-Id/group_id', async () => {
+    const { app, db } = appWith([
+      ['group by m.map order by n desc', [{ map: 'de_mirage', n: 1 }]],
+      ['kp.victim_x as x', []],
+    ])
+    await request(app).get('/api/profile/765/posicoes').set('Cookie', cookie)
+    const sql = db.query.mock.calls.find((c) => c[0].includes('group by m.map order by n desc'))[0]
+    expect(sql).toContain('from friendships f')
+    expect(sql).not.toContain('group_id')
+    const params = db.query.mock.calls.find((c) => c[0].includes('group by m.map order by n desc'))[1]
+    expect(params).toEqual(['765', STEAM_ID])
   })
 })
 
 describe('GET /api/profile/:steamId', () => {
-  it('404 quando jogador não existe nem em players nem em match_players do grupo', async () => {
+  it('404 quando jogador não existe nem em players nem em match_players visíveis ao viewer', async () => {
     const { app } = appWith([['where p.steam_id64 = $1', []]])
-    const res = await request(app).get('/api/profile/765').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    const res = await request(app).get('/api/profile/765').set('Cookie', cookie)
     expect(res.status).toBe(404)
   })
 
   it('adversário sem onboarding: monta perfil com nick do match_players (fallback)', async () => {
     const { app } = appWith([
       ['where p.steam_id64 = $1', []],
-      ['mp.steam_id64 = $1 and (m.group_id = $2', [{ nick: 'adversario', avatar_url: 'https://cache/x.jpg' }]],
+      ['mp.nick, sa.avatar_url', [{ nick: 'adversario', avatar_url: 'https://cache/x.jpg' }]],
       ['count(*)::int as partidas', [{
         partidas: 1, vitorias: 0, kills: 10, deaths: 15, assists: 2, hs: 3, damage: 1200, rounds: 22, rating: '0.85',
         he_thrown: 0, he_damage: 0, he_team_damage: 0, molotovs_thrown: 0, molotov_damage: 0, molotov_team_damage: 0,
@@ -72,9 +86,48 @@ describe('GET /api/profile/:steamId', () => {
         enemy_flash_landed_count: 0, enemy_flash_landed_duration_sum: '0',
       }]],
     ])
-    const res = await request(app).get('/api/profile/765').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    const res = await request(app).get('/api/profile/765').set('Cookie', cookie)
     expect(res.status).toBe(200)
     expect(res.body.jogador).toEqual({ steamId: '765', nick: 'adversario', avatarUrl: 'https://cache/x.jpg', faceitNick: null, faceitElo: null, faceitSkillLevel: null })
+  })
+
+  it('amigo accepted com ZERO partidas registradas ainda vê o perfil (gate não é só participação)', async () => {
+    // Caso novo (Task 7): o gate de presença tem 3 cláusulas — é o próprio viewer, OU tem
+    // amizade accepted com o alvo (mesmo sem NENHUMA partida em comum registrada ainda), OU
+    // jogou em alguma partida visível ao viewer. Sem a segunda cláusula, adicionar um amigo
+    // recém-conhecido (sem partida coletada ainda) daria 404 ao abrir o perfil dele.
+    const { app, db } = appWith([
+      ['where p.steam_id64 = $1', [{ steam_id64: '765', nick: 'novato', avatar_url: null, faceit_nick: null, faceit_elo: null, faceit_skill_level: null }]],
+      ['group by mp.steam_id64', []],
+      ['group by m.map', []],
+      ['from match_players mp1', []],
+      ['mp.rating is not null', []],
+      ['mp.won from match_players', []],
+      ['from highlights h join matches m on m.id = h.match_id', []],
+      ['from match_player_weapons w join matches m', []],
+      ['join match_round_econ e on e.match_id', []],
+      ['count(*)::int as partidas', [{
+        partidas: 0, vitorias: 0, kills: 0, deaths: 0, assists: 0, hs: 0, damage: 0, rounds: 0, rating: null,
+        he_thrown: 0, he_damage: 0, he_team_damage: 0, molotovs_thrown: 0, molotov_damage: 0, molotov_team_damage: 0,
+        flashes_thrown: 0, enemies_flashed: 0, enemy_flash_duration: '0', flash_assists: 0,
+        enemy_flash_landed_count: 0, enemy_flash_landed_duration_sum: '0',
+      }]],
+    ])
+    const res = await request(app).get('/api/profile/765').set('Cookie', cookie)
+    expect(res.status).toBe(200)
+    expect(res.body.jogador.nick).toBe('novato')
+    expect(res.body.stats.partidas).toBe(0)
+    expect(res.body.recentes).toEqual([])
+    expect(res.body.sinergia).toEqual([])
+    expect(res.body.destaques).toEqual([])
+    // Confirma que a query do gate tem as 3 cláusulas: self, amizade accepted, e participação.
+    const presencaSql = db.query.mock.calls.find((c) => c[0].includes('as tem'))[0]
+    expect(presencaSql).toContain('$1 = $2')
+    expect(presencaSql).toContain('from friendships f')
+    expect(presencaSql).toContain("f.status = 'accepted'")
+    expect(presencaSql).toContain('from match_players mp join matches m')
+    expect(presencaSql).not.toContain('group_members')
+    expect(presencaSql).not.toContain('group_id')
   })
 
   it('agrega stats, winrate, ADR, HS% e sinergia', async () => {
@@ -113,7 +166,7 @@ describe('GET /api/profile/:steamId', () => {
         { buy_type: 'eco', rounds: 3, won: 1 },
       ]],
     ])
-    const res = await request(app).get('/api/profile/765').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    const res = await request(app).get('/api/profile/765').set('Cookie', cookie)
     expect(res.status).toBe(200)
     expect(res.body.jogador).toMatchObject({ nick: 'fih', faceitNick: 'bronzeadoo', faceitElo: 1425, faceitSkillLevel: 7 })
     expect(res.body.stats).toMatchObject({ partidas: 10, vitorias: 6, winrate: 60, kills: 200 })
@@ -157,6 +210,9 @@ describe('GET /api/profile/:steamId', () => {
     // convenção dos badges), separado do premierBefore/After por partida em recentes[].
     expect(res.body.premierAtual).toBe(16250)
     expect(res.body.recentes[0]).toMatchObject({ premierBefore: 15420, premierAfter: 15480, source: 'faceit' })
+    // Sem seção "perfilPublico" — o modo ?publico=1 foi removido (Task 7); toda visão de
+    // perfil é escopada pela rede de amizade do viewer, sem exceção.
+    expect(res.body.perfilPublico).toBeUndefined()
   })
 
   it('sem Premier rating registrado: premierAtual e recentes[].premierBefore/After vêm null', async () => {
@@ -183,93 +239,18 @@ describe('GET /api/profile/:steamId', () => {
       ['join match_round_econ e on e.match_id', []],
       // Sem handler pra 'mp.premier_rating_after is not null' -> cai no default (rows: []).
     ])
-    const res = await request(app).get('/api/profile/765').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    const res = await request(app).get('/api/profile/765').set('Cookie', cookie)
     expect(res.status).toBe(200)
     expect(res.body.premierAtual).toBeNull()
     expect(res.body.recentes[0]).toMatchObject({ premierBefore: null, premierAfter: null })
   })
 })
 
-describe('GET /api/profile/:steamId — modo público (alvo de outro grupo com ranking_publico)', () => {
-  const statsRow = {
-    partidas: 59, vitorias: 26, kills: 900, deaths: 700, assists: 100, hs: 400, damage: 70000, rounds: 1500, rating: '1.29',
-    he_thrown: 0, he_damage: 0, he_team_damage: 0, molotovs_thrown: 0, molotov_damage: 0, molotov_team_damage: 0,
-    flashes_thrown: 0, enemies_flashed: 0, enemy_flash_duration: '0', flash_assists: 0,
-    enemy_flash_landed_count: 0, enemy_flash_landed_duration_sum: '0',
-  }
-
-  it('sem presença no grupo e SEM opt-in público: 404 (não vaza nem a existência do jogador)', async () => {
-    const { app } = appWith([
-      ['where p.steam_id64 = $1', [{ steam_id64: '765', nick: 'labubu', avatar_url: null, ranking_publico: false }]],
-    ], { temPresenca: false })
-    const res = await request(app).get('/api/profile/765').set('Cookie', cookie).set('X-Group-Id', GRUPO)
-    expect(res.status).toBe(404)
-  })
-
-  it('sem presença no grupo MAS com opt-in: 200 em modo público (agregado sem grupo, sem seções privadas)', async () => {
-    const { app, db } = appWith([
-      ['where p.steam_id64 = $1', [{ steam_id64: '765', nick: 'labubu', avatar_url: null, ranking_publico: true }]],
-      ['count(*)::int as partidas', [statsRow]],
-    ], { temPresenca: false })
-    const res = await request(app).get('/api/profile/765').set('Cookie', cookie).set('X-Group-Id', GRUPO)
-    expect(res.status).toBe(200)
-    expect(res.body.perfilPublico).toBe(true)
-    expect(res.body.jogador.nick).toBe('labubu')
-    expect(res.body.stats.partidas).toBe(59)
-    // Seções que linkariam Partidas / grafo social do grupo alheio ficam fechadas
-    expect(res.body.recentes).toEqual([])
-    expect(res.body.destaques).toEqual([])
-    expect(res.body.sinergia).toEqual([])
-    expect(res.body.estilo).toBeNull()
-    // Stats agregados SEM filtro de grupo — mesmo recorte do /api/ranking-publico,
-    // senão os números do perfil não bateriam com os do ranking de onde a pessoa clicou
-    const statsSql = db.query.mock.calls.find((c) => c[0].includes('count(*)::int as partidas'))[0]
-    expect(statsSql).not.toContain('m.group_id')
-  })
-
-  it('com presença no grupo: modo normal (perfilPublico false, stats COM filtro de grupo)', async () => {
-    const { app, db } = appWith([
-      ['where p.steam_id64 = $1', [{ steam_id64: '765', nick: 'fih', avatar_url: null, ranking_publico: true }]],
-      ['count(*)::int as partidas', [statsRow]],
-    ])
-    const res = await request(app).get('/api/profile/765').set('Cookie', cookie).set('X-Group-Id', GRUPO)
-    expect(res.status).toBe(200)
-    expect(res.body.perfilPublico).toBe(false)
-    const statsSql = db.query.mock.calls.find((c) => c[0].includes('count(*)::int as partidas'))[0]
-    expect(statsSql).toContain('m.group_id')
-  })
-
-  it('?publico=1 (clique do ranking público) força modo público MESMO com presença — stats globais', async () => {
-    const { app, db } = appWith([
-      ['where p.steam_id64 = $1', [{ steam_id64: '765', nick: 'fih', avatar_url: null, ranking_publico: true }]],
-      ['count(*)::int as partidas', [statsRow]],
-    ]) // temPresenca=true (default): divide grupo com o alvo
-    const res = await request(app).get('/api/profile/765?publico=1').set('Cookie', cookie).set('X-Group-Id', GRUPO)
-    expect(res.status).toBe(200)
-    // Bate com o ranking público de onde clicou: agregado global, sem filtro de grupo.
-    expect(res.body.perfilPublico).toBe(true)
-    const statsSql = db.query.mock.calls.find((c) => c[0].includes('count(*)::int as partidas'))[0]
-    expect(statsSql).not.toContain('m.group_id')
-  })
-
-  it('?publico=1 mas SEM opt-in: ignora o flag (modo grupo, não expõe global)', async () => {
-    const { app, db } = appWith([
-      ['where p.steam_id64 = $1', [{ steam_id64: '765', nick: 'fih', avatar_url: null, ranking_publico: false }]],
-      ['count(*)::int as partidas', [statsRow]],
-    ])
-    const res = await request(app).get('/api/profile/765?publico=1').set('Cookie', cookie).set('X-Group-Id', GRUPO)
-    expect(res.status).toBe(200)
-    expect(res.body.perfilPublico).toBe(false)
-    const statsSql = db.query.mock.calls.find((c) => c[0].includes('count(*)::int as partidas'))[0]
-    expect(statsSql).toContain('m.group_id')
-  })
-})
-
 describe('GET /api/profile/compare', () => {
   it('400 quando os dois steamId não são válidos ou são iguais', async () => {
     const { app } = appWith([])
-    expect((await request(app).get('/api/profile/compare?a=1&b=2').set('Cookie', cookie).set('X-Group-Id', GRUPO)).status).toBe(400)
-    expect((await request(app).get('/api/profile/compare?a=76561198000000001&b=76561198000000001').set('Cookie', cookie).set('X-Group-Id', GRUPO)).status).toBe(400)
+    expect((await request(app).get('/api/profile/compare?a=1&b=2').set('Cookie', cookie)).status).toBe(400)
+    expect((await request(app).get('/api/profile/compare?a=76561198000000001&b=76561198000000001').set('Cookie', cookie)).status).toBe(400)
   })
 
   it('404 quando algum dos dois não é Jogador', async () => {
@@ -278,14 +259,30 @@ describe('GET /api/profile/compare', () => {
     ])
     const res = await request(app)
       .get('/api/profile/compare?a=76561198000000001&b=76561198000000002')
-      .set('Cookie', cookie).set('X-Group-Id', GRUPO)
+      .set('Cookie', cookie)
     expect(res.status).toBe(404)
+  })
+
+  it('404 quando um dos dois existe em players mas não é visível ao viewer (não é amigo accepted nem participa de partida visível)', async () => {
+    const a = STEAM_ID // o próprio viewer
+    const b = '76561198000000099' // linha válida em players, mas fora da rede de amizade
+    const { app } = appWith([
+      ['where p.steam_id64 in', [
+        { steam_id64: a, nick: 'fih', avatar_url: null },
+        { steam_id64: b, nick: 'estranho', avatar_url: null },
+      ]],
+    ], { temPresenca: false })
+    const res = await request(app)
+      .get(`/api/profile/compare?a=${a}&b=${b}`)
+      .set('Cookie', cookie)
+    expect(res.status).toBe(404)
+    expect(res.body).toEqual({ erro: 'Jogador não encontrado' })
   })
 
   it('compara stats e monta o confronto direto (mesmo time / times opostos)', async () => {
     const a = '76561198000000001'
     const b = '76561198000000002'
-    const { app } = appWith([
+    const { app, db } = appWith([
       ['where p.steam_id64 in', [
         { steam_id64: a, nick: 'fih', avatar_url: null },
         { steam_id64: b, nick: 'bronze', avatar_url: null },
@@ -298,12 +295,16 @@ describe('GET /api/profile/compare', () => {
         { team_a: 'B', team_b: 'A', a_venceu: false }, // times opostos, b venceu
       ]],
     ])
-    const res = await request(app).get(`/api/profile/compare?a=${a}&b=${b}`).set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    const res = await request(app).get(`/api/profile/compare?a=${a}&b=${b}`).set('Cookie', cookie)
     expect(res.status).toBe(200)
     expect(res.body.a).toMatchObject({ nick: 'fih', stats: { partidas: 10 } })
     expect(res.body.b).toMatchObject({ nick: 'bronze', stats: { partidas: 10 } })
     expect(res.body.confronto).toEqual({
       partidasJuntos: 3, mesmoTime: 1, mesmoTimeVitorias: 1, timesOpostos: 2, aVenceu: 1, bVenceu: 1,
     })
+    // Confronto escopado por amizade (visivelWhere -> friendships.js), não group_id.
+    const confrontoSql = db.query.mock.calls.find((c) => c[0].includes('join match_players mp_b'))[0]
+    expect(confrontoSql).toContain('from friendships f')
+    expect(confrontoSql).not.toContain('group_id')
   })
 })

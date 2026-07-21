@@ -1,16 +1,17 @@
 import { Router } from 'express'
+import { partidaVisivelExpr } from '../friendships.js'
 
-export function createLadoPorMapaRouter({ db, requireAuth, requireGroupMember }) {
+export function createLadoPorMapaRouter({ db, requireAuth }) {
   const router = Router()
 
-  // "A gente é muito pior de T na Mirage?" (FIL-51) — winrate do GRUPO por lado (CT/T)
-  // em cada mapa. Só conta rounds de partidas onde todos os Jogadores rastreados
-  // estavam no MESMO time fixo (A ou B) naquela partida — grupo dividido em times
-  // opostos não tem "o lado do grupo" bem definido, fica de fora (mesmo critério de
-  // "misto" usado em Feed.jsx/sessions.js). side_a só existe em partidas reprocessadas
-  // depois do FIL-51 (coletor/src/coletor/parse.py) — partidas antigas não aparecem
-  // até serem reprocessadas.
-  router.get('/', requireAuth, requireGroupMember, async (req, res) => {
+  // "A gente é muito pior de T na Mirage?" (FIL-51) — winrate por lado (CT/T) em cada
+  // mapa, nas Partidas visíveis ao viewer (eu + amigos accepted). Só conta rounds de
+  // partidas onde todos os Jogadores rastreados estavam no MESMO time fixo (A ou B)
+  // naquela partida — time dividido em lados opostos não tem "o lado" bem definido,
+  // fica de fora (mesmo critério de "misto" usado em Feed.jsx/sessions.js). side_a só
+  // existe em partidas reprocessadas depois do FIL-51 (coletor/src/coletor/parse.py) —
+  // partidas antigas não aparecem até serem reprocessadas.
+  router.get('/', requireAuth, async (req, res) => {
     const { rows } = await db.query(
       `select m.map,
               case grp.time_do_grupo
@@ -28,10 +29,10 @@ export function createLadoPorMapaRouter({ db, requireAuth, requireGroupMember })
          group by match_id
          having count(distinct team) = 1
        ) grp on grp.match_id = m.id
-       where m.status = 'parsed' and m.group_id = $1 and r.side_a is not null
+       where m.status = 'parsed' and ${partidaVisivelExpr('m', '$1')} and r.side_a is not null
        group by m.map, lado
        order by m.map, lado`,
-      [req.groupId],
+      [req.player.steamId],
     )
     res.json(
       rows.map((r) => ({

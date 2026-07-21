@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { calcularEstilos, calcularBadges, melhorSequenciaDeVitorias } from '../analise.js'
 import { worldToRadar, isMapaCalibrado } from '../mapCalibration.js'
-import { partidaVisivelExpr } from '../matchVisibility.js'
+import { partidaVisivelExpr } from '../friendships.js'
 
 function pct(parte, total) {
   if (!total) return 0
@@ -23,23 +23,21 @@ function periodoWhere(from, to, params) {
   return sql
 }
 
-// Escopa por grupo ativo pela regra de VISIBILIDADE POR PARTICIPAÇÃO (ver matchVisibility.js):
-// a partida entra se pertence ao grupo (group_id) OU se algum membro do grupo jogou nela.
-// Mesma convenção do periodoWhere (anexa aos params, devolve o SQL, alias 'm'). groupId null =
-// modo "perfil público": agrega TODAS as Partidas do alvo, sem filtro de grupo — mesmo recorte
-// do /api/ranking-publico, senão os números do perfil não bateriam com os do ranking de onde a
-// pessoa clicou. Call sites que usam outro alias (ex.: aces com 'mh') aplicam
-// .replaceAll('m.', 'mh.') no retorno — o fragmento só usa o alias 'm.' e 'm.id', que a troca cobre.
-function grupoWhere(groupId, params) {
-  if (!groupId) return ''
-  params.push(groupId)
+// Escopa por AMIZADE a regra de visibilidade por participação (ver friendships.js): a
+// partida entra se o próprio viewer jogou nela, OU se um amigo `accepted` do viewer jogou.
+// Mesma convenção do periodoWhere (anexa aos params, devolve o SQL, alias 'm'). Call sites
+// que usam outro alias (ex.: aces com 'mh') aplicam .replaceAll('m.', 'mh.') no retorno — o
+// fragmento só usa o alias 'm.' e 'm.id', que a troca cobre.
+function visivelWhere(viewerSteamId, params) {
+  if (!viewerSteamId) return ''
+  params.push(viewerSteamId)
   return ` and ${partidaVisivelExpr('m', `$${params.length}`)}`
 }
 
-async function statsAgregados(db, steamId, from, to, groupId) {
+async function statsAgregados(db, steamId, from, to, viewerSteamId) {
   const params = [steamId]
   const periodo = periodoWhere(from, to, params)
-  const grupo = grupoWhere(groupId, params)
+  const visivel = visivelWhere(viewerSteamId, params)
   const { rows } = await db.query(
     `select count(*)::int as partidas,
             coalesce(sum(case when mp.won then 1 else 0 end), 0)::int as vitorias,
@@ -77,9 +75,9 @@ async function statsAgregados(db, steamId, from, to, groupId) {
             coalesce(sum(mp.enemy_flash_landed_count), 0)::int as enemy_flash_landed_count,
             coalesce(sum(mp.enemy_flash_landed_duration_sum), 0)::numeric as enemy_flash_landed_duration_sum,
             coalesce((select count(*) from highlights h join matches mh on mh.id = h.match_id
-                      where h.steam_id64 = $1 and h.kind = 'ace'${periodo.replaceAll('m.', 'mh.')}${grupo.replaceAll('m.', 'mh.')}), 0)::int as aces
+                      where h.steam_id64 = $1 and h.kind = 'ace'${periodo.replaceAll('m.', 'mh.')}${visivel.replaceAll('m.', 'mh.')}), 0)::int as aces
      from match_players mp join matches m on m.id = mp.match_id
-     where mp.steam_id64 = $1${periodo}${grupo}`,
+     where mp.steam_id64 = $1${periodo}${visivel}`,
     params,
   )
   const a = rows[0]
@@ -143,24 +141,24 @@ async function statsAgregados(db, steamId, from, to, groupId) {
   }
 }
 
-// Melhor sequência de vitórias consecutivas, sempre no histórico INTEIRO do grupo (badge
-// de conquista não deve sumir/reaparecer conforme o filtro de período da tela).
-async function melhorSequencia(db, steamId, groupId) {
+// Melhor sequência de vitórias consecutivas, sempre no histórico INTEIRO visível ao viewer
+// (badge de conquista não deve sumir/reaparecer conforme o filtro de período da tela).
+async function melhorSequencia(db, steamId, viewerSteamId) {
   const params = [steamId]
-  const grupo = grupoWhere(groupId, params)
+  const visivel = visivelWhere(viewerSteamId, params)
   const { rows } = await db.query(
     `select mp.won from match_players mp join matches m on m.id = mp.match_id
-     where mp.steam_id64 = $1 and m.status = 'parsed'${grupo} order by m.played_at asc nulls first`,
+     where mp.steam_id64 = $1 and m.status = 'parsed'${visivel} order by m.played_at asc nulls first`,
     params,
   )
   return melhorSequenciaDeVitorias(rows.map((r) => r.won))
 }
 
-// Estilo de jogo do steamId, relativo à média do GRUPO ATIVO (mesmo período da tela).
-async function estiloDoJogador(db, steamId, from, to, groupId) {
+// Estilo de jogo do steamId, relativo à média da REDE DE AMIZADE do viewer (mesmo período da tela).
+async function estiloDoJogador(db, steamId, from, to, viewerSteamId) {
   const params = []
   const periodo = periodoWhere(from, to, params)
-  const grupo = grupoWhere(groupId, params)
+  const visivel = visivelWhere(viewerSteamId, params)
   const { rows } = await db.query(
     `select mp.steam_id64,
             count(*)::int as partidas,
@@ -173,7 +171,7 @@ async function estiloDoJogador(db, steamId, from, to, groupId) {
             coalesce(sum(mp.shots_fired), 0)::int as shots_fired,
             coalesce(sum(mp.shots_hit), 0)::int as shots_hit
      from match_players mp join matches m on m.id = mp.match_id
-     where true${periodo}${grupo}
+     where true${periodo}${visivel}
      group by mp.steam_id64`,
     params,
   )
@@ -189,15 +187,15 @@ async function estiloDoJogador(db, steamId, from, to, groupId) {
   return calcularEstilos(entrada)[steamId] ?? null
 }
 
-async function evolucaoRating(db, steamId, from, to, groupId, limite = 20) {
+async function evolucaoRating(db, steamId, from, to, viewerSteamId, limite = 20) {
   const params = [steamId]
   const periodo = periodoWhere(from, to, params)
-  const grupo = grupoWhere(groupId, params)
+  const visivel = visivelWhere(viewerSteamId, params)
   params.push(limite)
   const { rows } = await db.query(
     `select m.id, m.played_at, mp.rating
      from match_players mp join matches m on m.id = mp.match_id
-     where mp.steam_id64 = $1 and m.status = 'parsed' and mp.rating is not null${periodo}${grupo}
+     where mp.steam_id64 = $1 and m.status = 'parsed' and mp.rating is not null${periodo}${visivel}
      order by m.played_at desc nulls last limit $${params.length}`,
     params,
   )
@@ -211,10 +209,10 @@ async function evolucaoRating(db, steamId, from, to, groupId, limite = 20) {
 // passaria de 100% se contado ingenuamente) — mesma convenção do Leetify (ver pesquisa).
 const ARMAS_SEM_ACCURACY_CONFIAVEL = new Set(['awp', 'nova', 'xm1014', 'mag7', 'sawedoff'])
 
-async function armasDoJogador(db, steamId, from, to, groupId) {
+async function armasDoJogador(db, steamId, from, to, viewerSteamId) {
   const params = [steamId]
   const periodo = periodoWhere(from, to, params)
-  const grupo = grupoWhere(groupId, params)
+  const visivel = visivelWhere(viewerSteamId, params)
   const { rows } = await db.query(
     `select w.weapon,
             sum(w.kills)::int as kills,
@@ -223,7 +221,7 @@ async function armasDoJogador(db, steamId, from, to, groupId) {
             sum(w.shots_hit)::int as shots_hit,
             sum(w.damage)::int as damage
      from match_player_weapons w join matches m on m.id = w.match_id
-     where w.steam_id64 = $1${periodo}${grupo}
+     where w.steam_id64 = $1${periodo}${visivel}
      group by w.weapon
      order by kills desc`,
     params,
@@ -241,12 +239,29 @@ async function armasDoJogador(db, steamId, from, to, groupId) {
   }))
 }
 
+// Mesmo gate de presença usado por GET /:steamId (ver comentário lá): o alvo só é visível
+// se for o próprio viewer, um amigo `accepted`, ou alguém que jogou numa partida visível
+// ao viewer. Extraído aqui porque agora é usado em 2 lugares neste arquivo (/compare
+// precisa checar os DOIS lados, a e b).
+async function temPresenca(db, steamId, viewerSteamId) {
+  const presenca = await db.query(
+    `select ($1 = $2
+          or exists (select 1 from friendships f
+                     where ((f.player_a = $2 and f.player_b = $1) or (f.player_b = $2 and f.player_a = $1))
+                       and f.status = 'accepted')
+          or exists (select 1 from match_players mp join matches m on m.id = mp.match_id
+                     where mp.steam_id64 = $1 and ${partidaVisivelExpr('m', '$2')})) as tem`,
+    [steamId, viewerSteamId],
+  )
+  return Boolean(presenca.rows[0]?.tem)
+}
+
 const BUY_TYPES = ['eco', 'forcado', 'semi', 'full']
 
-async function economiaDoJogador(db, steamId, from, to, groupId) {
+async function economiaDoJogador(db, steamId, from, to, viewerSteamId) {
   const params = [steamId]
   const periodo = periodoWhere(from, to, params)
-  const grupo = grupoWhere(groupId, params)
+  const visivel = visivelWhere(viewerSteamId, params)
   const { rows } = await db.query(
     `select e.buy_type,
             count(*)::int as rounds,
@@ -255,7 +270,7 @@ async function economiaDoJogador(db, steamId, from, to, groupId) {
      join match_round_econ e on e.match_id = mp.match_id and e.team = mp.team
      join rounds r on r.match_id = mp.match_id and r.round_number = e.round_number
      join matches m on m.id = mp.match_id
-     where mp.steam_id64 = $1${periodo}${grupo}
+     where mp.steam_id64 = $1${periodo}${visivel}
      group by e.buy_type`,
     params,
   )
@@ -270,12 +285,12 @@ async function economiaDoJogador(db, steamId, from, to, groupId) {
   )
 }
 
-export function createProfileRouter({ db, requireAuth, requireGroupMember }) {
+export function createProfileRouter({ db, requireAuth }) {
   const router = Router()
 
   // Comparação entre 2 Jogadores: stats lado a lado + confronto direto (mesmo time / times opostos).
   // Precisa vir antes de '/:steamId' — senão o Express casaria "compare" como um steamId.
-  router.get('/compare', requireAuth, requireGroupMember, async (req, res) => {
+  router.get('/compare', requireAuth, async (req, res) => {
     const a = String(req.query.a ?? '')
     const b = String(req.query.b ?? '')
     const { from, to } = req.query
@@ -293,20 +308,29 @@ export function createProfileRouter({ db, requireAuth, requireGroupMember }) {
     const jogadorB = playersQ.rows.find((p) => p.steam_id64 === b)
     if (!jogadorA || !jogadorB) return res.status(404).json({ erro: 'Jogador não encontrado' })
 
+    // Mesmo gate de presença do GET /:steamId: sem isso, nick/avatar de qualquer SteamID64
+    // válido em `players` vazariam pra qualquer conta logada, mesmo fora da rede de amizade
+    // do viewer (as stats agregadas já eram corretamente escopadas, só a identidade vazava).
+    const [presencaA, presencaB] = await Promise.all([
+      temPresenca(db, a, req.player.steamId),
+      temPresenca(db, b, req.player.steamId),
+    ])
+    if (!presencaA || !presencaB) return res.status(404).json({ erro: 'Jogador não encontrado' })
+
     const confrontoParams = [a, b]
     const confrontoPeriodo = periodoWhere(from, to, confrontoParams)
-    const confrontoGrupo = grupoWhere(req.groupId, confrontoParams)
+    const confrontoVisivel = visivelWhere(req.player.steamId, confrontoParams)
     const [statsA, statsB, evolA, evolB, confrontoQ] = await Promise.all([
-      statsAgregados(db, a, from, to, req.groupId),
-      statsAgregados(db, b, from, to, req.groupId),
-      evolucaoRating(db, a, from, to, req.groupId),
-      evolucaoRating(db, b, from, to, req.groupId),
+      statsAgregados(db, a, from, to, req.player.steamId),
+      statsAgregados(db, b, from, to, req.player.steamId),
+      evolucaoRating(db, a, from, to, req.player.steamId),
+      evolucaoRating(db, b, from, to, req.player.steamId),
       db.query(
         `select mp_a.team as team_a, mp_b.team as team_b, mp_a.won as a_venceu
          from match_players mp_a
          join match_players mp_b on mp_b.match_id = mp_a.match_id and mp_b.steam_id64 = $2
          join matches m on m.id = mp_a.match_id
-         where mp_a.steam_id64 = $1${confrontoPeriodo}${confrontoGrupo}`,
+         where mp_a.steam_id64 = $1${confrontoPeriodo}${confrontoVisivel}`,
         confrontoParams,
       ),
     ])
@@ -334,7 +358,7 @@ export function createProfileRouter({ db, requireAuth, requireGroupMember }) {
   // (não só uma, como o Replay 2D). Precisa vir antes de '/:steamId' — Express não
   // confundiria os dois (segmentos diferentes), mas por hábito/consistência com as
   // outras rotas de 2+ segmentos deste router.
-  router.get('/:steamId/posicoes', requireAuth, requireGroupMember, async (req, res) => {
+  router.get('/:steamId/posicoes', requireAuth, async (req, res) => {
     const { steamId } = req.params
     const modo = req.query.modo === 'kills' ? 'kills' : 'mortes'
 
@@ -343,7 +367,7 @@ export function createProfileRouter({ db, requireAuth, requireGroupMember }) {
        from kill_positions kp join matches m on m.id = kp.match_id
        where (kp.victim = $1 or kp.killer = $1) and ${partidaVisivelExpr('m', '$2')}
        group by m.map order by n desc`,
-      [steamId, req.groupId],
+      [steamId, req.player.steamId],
     )
     const mapas = mapasQ.rows.map((r) => ({ map: r.map, pontos: r.n }))
     const mapa = mapas.find((m) => m.map === req.query.map)?.map ?? mapas[0]?.map ?? null
@@ -354,7 +378,7 @@ export function createProfileRouter({ db, requireAuth, requireGroupMember }) {
       `select kp.${coluna}_x as x, kp.${coluna}_y as y
        from kill_positions kp join matches m on m.id = kp.match_id
        where kp.${coluna} = $1 and m.map = $2 and kp.${coluna}_x is not null and ${partidaVisivelExpr('m', '$3')}`,
-      [steamId, mapa, req.groupId],
+      [steamId, mapa, req.player.steamId],
     )
     const calibrated = isMapaCalibrado(mapa)
     const pontos = calibrated
@@ -365,12 +389,12 @@ export function createProfileRouter({ db, requireAuth, requireGroupMember }) {
 
   // Perfil do Jogador: stats agregados, por mapa, partidas recentes e Sinergia.
   // Filtro opcional de período (?from/?to) em tudo menos a Sinergia (view pré-computada).
-  router.get('/:steamId', requireAuth, requireGroupMember, async (req, res) => {
+  router.get('/:steamId', requireAuth, async (req, res) => {
     const { steamId } = req.params
     const { from, to } = req.query
     const playerQ = await db.query(
       `select p.steam_id64, p.nick, coalesce(p.avatar_url, sa.avatar_url) as avatar_url,
-              p.faceit_nick, p.faceit_elo, p.faceit_skill_level, p.ranking_publico
+              p.faceit_nick, p.faceit_elo, p.faceit_skill_level
        from players p
        left join steam_avatares sa on sa.steam_id64 = p.steam_id64
        where p.steam_id64 = $1`,
@@ -380,7 +404,7 @@ export function createProfileRouter({ db, requireAuth, requireGroupMember }) {
     if (!jogador) {
       // Nunca fez onboarding (ex.: adversário visto só numa demo) — ainda tem perfil,
       // com nick vindo do último match_players dele e avatar do cache (steam_avatares
-      // já cobre todo mundo visto em alguma demo, não só o grupo).
+      // já cobre todo mundo visto em alguma demo, não só quem é visível ao viewer).
       const fallbackQ = await db.query(
         `select mp.nick, sa.avatar_url
          from match_players mp
@@ -388,123 +412,91 @@ export function createProfileRouter({ db, requireAuth, requireGroupMember }) {
          left join steam_avatares sa on sa.steam_id64 = mp.steam_id64
          where mp.steam_id64 = $1 and ${partidaVisivelExpr('m', '$2')}
          order by m.played_at desc nulls last limit 1`,
-        [steamId, req.groupId],
+        [steamId, req.player.steamId],
       )
       if (fallbackQ.rows.length === 0) return res.status(404).json({ erro: 'Jogador não encontrado' })
       jogador = { steam_id64: steamId, nick: fallbackQ.rows[0].nick, avatar_url: fallbackQ.rows[0].avatar_url }
     }
 
-    // Só responde perfil de quem tem presença no grupo ativo (é membro OU jogou em alguma
-    // partida VISÍVEL ao grupo). Usa a mesma regra de visibilidade das telas de partida —
-    // senão um jogador que aparece numa partida compartilhada daria 404 ao abrir o perfil.
-    // Sem esse gate, o bloco `jogador` (nick/avatar/FACEIT) e a existência de jogadores de
-    // OUTROS grupos vazavam pra qualquer conta logada.
-    const presenca = await db.query(
-      `select (exists (select 1 from group_members where group_id = $2 and steam_id64 = $1)
-            or exists (select 1 from match_players mp join matches m on m.id = mp.match_id
-                       where mp.steam_id64 = $1 and ${partidaVisivelExpr('m', '$2')})) as tem`,
-      [steamId, req.groupId],
-    )
-    const temPresenca = Boolean(presenca.rows[0]?.tem)
-    // Exceção ao gate: o alvo OPTOU por aparecer no ranking público (ranking_publico) — então
-    // o perfil abre em "modo público" pra qualquer logado: stats agregados de TODAS as
-    // Partidas dele (grupoPerfil = null, mesmo recorte do ranking público), mas SEM
-    // recentes/destaques/sinergia/estilo, que linkariam Partidas e o grafo social do grupo
-    // alheio (essas continuam fechadas — as Partidas em si seguem sob requireGroupMember).
-    //
-    // ?publico=1 (clique vindo do ranking público) FORÇA o modo público mesmo quando o viewer
-    // divide grupo com o alvo — senão o número do perfil (só as partidas em comum) não bateria
-    // com o total global mostrado na linha do ranking que foi clicada. Só vale se o alvo optou
-    // pelo ranking público (ranking_publico), então não expõe nada além do que ele já publicou.
-    const querPublico = req.query.publico === '1'
-    const publico = jogador.ranking_publico === true && (querPublico || !temPresenca)
-    if (!temPresenca && !publico) return res.status(404).json({ erro: 'Jogador não encontrado' })
-    const grupoPerfil = publico ? null : req.groupId
+    // Só responde perfil de quem é visível ao viewer: o próprio viewer, um amigo `accepted`
+    // (mesmo com 0 partidas registradas — evita 404 ao abrir o perfil de um amigo recém
+    // adicionado que ainda não tem partida coletada), ou alguém que jogou em alguma partida
+    // visível ao viewer (mesma regra de matches.js/friendships.js: participação-ou-amigo-de-
+    // -participante). Sem esse gate, o bloco `jogador` (nick/avatar/FACEIT) e a existência de
+    // jogadores fora da rede de amizade vazariam pra qualquer conta logada.
+    if (!(await temPresenca(db, steamId, req.player.steamId))) {
+      return res.status(404).json({ erro: 'Jogador não encontrado' })
+    }
 
     const mapaParams = [steamId]
     const mapaPeriodo = periodoWhere(from, to, mapaParams)
-    const mapaGrupo = grupoWhere(grupoPerfil, mapaParams)
-    // recentes/destaques seguem grupoPerfil: no modo público (grupoPerfil = null) listam TODAS as
-    // partidas do alvo, não só as compartilhadas — o Filippe decidiu (2026-07-17) que quem optou
-    // pelo ranking público tem o histórico visível, e o detalhe da partida abre pela regra
-    // partidaPublicaExpr. Em modo normal grupoPerfil = req.groupId (só as visíveis ao grupo).
+    const mapaVisivel = visivelWhere(req.player.steamId, mapaParams)
     const recentesParams = [steamId]
     const recentesPeriodo = periodoWhere(from, to, recentesParams)
-    const recentesGrupo = grupoWhere(grupoPerfil, recentesParams)
+    const recentesVisivel = visivelWhere(req.player.steamId, recentesParams)
     const destaquesParams = [steamId]
     const destaquesPeriodo = periodoWhere(from, to, destaquesParams)
-    const destaquesGrupo = grupoWhere(grupoPerfil, destaquesParams)
+    const destaquesVisivel = visivelWhere(req.player.steamId, destaquesParams)
     const premierParams = [steamId]
-    const premierGrupo = grupoWhere(grupoPerfil, premierParams)
-    const vazio = { rows: [] }
+    const premierVisivel = visivelWhere(req.player.steamId, premierParams)
 
     const [stats, porMapa, recentes, sinergia, evolucao, statsGerais, sequencia, estilo, destaques, armas, economia, premierRow] = await Promise.all([
-      statsAgregados(db, steamId, from, to, grupoPerfil),
+      statsAgregados(db, steamId, from, to, req.player.steamId),
       db.query(
         `select m.map, count(*)::int as partidas,
                 coalesce(sum(case when mp.won then 1 else 0 end), 0)::int as vitorias,
                 avg(mp.rating) as rating
          from match_players mp join matches m on m.id = mp.match_id
-         where mp.steam_id64 = $1${mapaPeriodo}${mapaGrupo} group by m.map order by partidas desc`,
+         where mp.steam_id64 = $1${mapaPeriodo}${mapaVisivel} group by m.map order by partidas desc`,
         mapaParams,
       ),
-      // recentes: mesmo no modo público, lista as partidas VISÍVEIS ao viewer (recentesGrupo já é
-      // escopado por req.groupId), pra ele clicar e abrir o detalhe das que jogaram juntos.
       db.query(
         `select m.id, m.map, m.played_at, m.score_a, m.score_b, m.source,
                 mp.kills, mp.deaths, mp.assists, mp.rating, mp.won,
                 mp.damage, mp.rounds_played, mp.headshot_kills,
                 mp.premier_rating_before, mp.premier_rating_after
          from match_players mp join matches m on m.id = mp.match_id
-         where mp.steam_id64 = $1 and m.status = 'parsed'${recentesPeriodo}${recentesGrupo}
+         where mp.steam_id64 = $1 and m.status = 'parsed'${recentesPeriodo}${recentesVisivel}
          order by m.played_at desc nulls last limit 20`,
         recentesParams,
       ),
-      // Sinergia ESCOPADA ao grupo ativo pela regra de visibilidade por participação: recomputa as
-      // duplas direto de match_players (join em matches visíveis ao grupo) em vez de ler a view
-      // synergy_pairs, que é GLOBAL (agrega TODOS os grupos). Sem isso, o perfil vazava o grafo
-      // social (com quem cada jogador joga) de
-      // grupos alheios pra qualquer conta logada.
-      publico
-        ? Promise.resolve(vazio)
-        : db.query(
-            `select p.steam_id64, p.nick, coalesce(p.avatar_url, sa.avatar_url) as avatar_url,
-                    count(*)::int as partidas,
-                    count(*) filter (where mp1.won)::int as vitorias
-             from match_players mp1
-             join matches m on m.id = mp1.match_id and ${partidaVisivelExpr('m', '$2')}
-             join match_players mp2 on mp2.match_id = mp1.match_id and mp2.team = mp1.team
-               and mp2.steam_id64 <> mp1.steam_id64
-             join players p on p.steam_id64 = mp2.steam_id64
-             left join steam_avatares sa on sa.steam_id64 = mp2.steam_id64
-             where mp1.steam_id64 = $1
-             group by p.steam_id64, p.nick, p.avatar_url, sa.avatar_url
-             order by partidas desc`,
-            [steamId, req.groupId],
-          ),
-      evolucaoRating(db, steamId, from, to, grupoPerfil),
-      // Badges são conquista de carreira — sempre no histórico INTEIRO do grupo, não no período filtrado.
-      statsAgregados(db, steamId, undefined, undefined, grupoPerfil),
-      melhorSequencia(db, steamId, grupoPerfil),
-      // Estilo é relativo à média do grupo — sem grupo (modo público) não há recorte
-      // honesto pra comparar; devolve null e o front só não renderiza a tag.
-      publico ? Promise.resolve(null) : estiloDoJogador(db, steamId, from, to, grupoPerfil),
+      // Sinergia recomputada de match_players (join em partidas visíveis ao viewer) em vez de
+      // ler a view synergy_pairs, que é GLOBAL (agrega todo mundo). Sem isso, o perfil vazava
+      // o grafo social (com quem cada jogador joga) de fora da rede de amizade do viewer.
+      db.query(
+        `select p.steam_id64, p.nick, coalesce(p.avatar_url, sa.avatar_url) as avatar_url,
+                count(*)::int as partidas,
+                count(*) filter (where mp1.won)::int as vitorias
+         from match_players mp1
+         join matches m on m.id = mp1.match_id and ${partidaVisivelExpr('m', '$2')}
+         join match_players mp2 on mp2.match_id = mp1.match_id and mp2.team = mp1.team
+           and mp2.steam_id64 <> mp1.steam_id64
+         join players p on p.steam_id64 = mp2.steam_id64
+         left join steam_avatares sa on sa.steam_id64 = mp2.steam_id64
+         where mp1.steam_id64 = $1
+         group by p.steam_id64, p.nick, p.avatar_url, sa.avatar_url
+         order by partidas desc`,
+        [steamId, req.player.steamId],
+      ),
+      evolucaoRating(db, steamId, from, to, req.player.steamId),
+      // Badges são conquista de carreira — sempre no histórico INTEIRO visível, não no período filtrado.
+      statsAgregados(db, steamId, undefined, undefined, req.player.steamId),
+      melhorSequencia(db, steamId, req.player.steamId),
+      estiloDoJogador(db, steamId, from, to, req.player.steamId),
       // "Em qual partida foi esse clutch/ace mesmo?" — lista de Highlights com link pra Partida.
-      // No modo público, destaquesGrupo (grupoPerfil = null) traz os de TODAS as partidas dele,
-      // clicáveis (o detalhe abre via partidaPublicaExpr).
       db.query(
         `select h.id, h.match_id, h.round_number, h.kind, h.description, m.map, m.played_at
          from highlights h join matches m on m.id = h.match_id
-         where h.steam_id64 = $1${destaquesPeriodo}${destaquesGrupo}
+         where h.steam_id64 = $1${destaquesPeriodo}${destaquesVisivel}
          order by m.played_at desc nulls last limit 100`,
         destaquesParams,
       ),
-      armasDoJogador(db, steamId, from, to, grupoPerfil),
-      economiaDoJogador(db, steamId, from, to, grupoPerfil),
+      armasDoJogador(db, steamId, from, to, req.player.steamId),
+      economiaDoJogador(db, steamId, from, to, req.player.steamId),
       db.query(
         `select mp.premier_rating_after
          from match_players mp join matches m on m.id = mp.match_id
-         where mp.steam_id64 = $1 and m.status = 'parsed' and mp.premier_rating_after is not null${premierGrupo}
+         where mp.steam_id64 = $1 and m.status = 'parsed' and mp.premier_rating_after is not null${premierVisivel}
          order by m.played_at desc nulls last limit 1`,
         premierParams,
       ),
@@ -526,9 +518,6 @@ export function createProfileRouter({ db, requireAuth, requireGroupMember }) {
         faceitElo: jogador.faceit_elo ?? null,
         faceitSkillLevel: jogador.faceit_skill_level ?? null,
       },
-      // Avisa o front que é uma visão pública (cross-grupo) — ele esconde as seções que
-      // viriam vazias (recentes/destaques/sinergia) em vez de mostrar "nenhuma partida".
-      perfilPublico: publico,
       premierAtual: premierRow.rows[0]?.premier_rating_after != null ? Number(premierRow.rows[0].premier_rating_after) : null,
       stats,
       evolucao,

@@ -23,7 +23,6 @@ function appWith(rows = []) {
 
 const adminCookie = `resenha_token=${signToken({ steamId: '76561198000000001', isSuperAdmin: true }, config.jwtSecret)}`
 const memberCookie = `resenha_token=${signToken({ steamId: '76561198000000002', isSuperAdmin: false }, config.jwtSecret)}`
-const GRUPO = '11111111-1111-1111-1111-111111111111'
 
 describe('GET /api/players', () => {
   it('sem login: 401', async () => {
@@ -35,17 +34,29 @@ describe('GET /api/players', () => {
     const { app } = appWith([
       { steam_id64: '765', nick: 'fih', avatar_url: null, is_super_admin: true },
     ])
-    const res = await request(app).get('/api/players').set('Cookie', memberCookie).set('X-Group-Id', GRUPO)
+    const res = await request(app).get('/api/players').set('Cookie', memberCookie)
     expect(res.status).toBe(200)
     expect(res.body).toEqual([{ steamId: '765', nick: 'fih', avatarUrl: null, isSuperAdmin: true }])
+  })
+
+  it('escopo populacional: eu + meus amigos accepted (friendships), não group_members', async () => {
+    const db = { query: vi.fn().mockResolvedValue({ rows: [] }) }
+    const app = createApp({ config, db })
+    const res = await request(app).get('/api/players').set('Cookie', memberCookie)
+    expect(res.status).toBe(200)
+    const [sql, params] = db.query.mock.calls[0]
+    expect(sql).toContain('from friendships f')
+    expect(sql).toContain("f.status = 'accepted'")
+    expect(sql).not.toContain('group_members')
+    expect(params).toEqual(['76561198000000002'])
   })
 })
 
 describe('GET /api/players/bans', () => {
   it('sem fetchBans configurado (falta STEAM_API_KEY): 503', async () => {
-    const db = { query: vi.fn().mockImplementation((sql) => (sql.includes('group_members where group_id') ? Promise.resolve({ rows: [{}] }) : Promise.resolve({ rows: [] }))) }
+    const db = { query: vi.fn().mockResolvedValue({ rows: [] }) }
     const app = createApp({ config, db })
-    const res = await request(app).get('/api/players/bans').set('Cookie', memberCookie).set('X-Group-Id', GRUPO)
+    const res = await request(app).get('/api/players/bans').set('Cookie', memberCookie)
     expect(res.status).toBe(503)
   })
 
@@ -59,13 +70,26 @@ describe('GET /api/players/bans', () => {
       { steamId: '765', vacBanned: true, numVacBans: 1, daysSinceLastBan: 10, gameBanned: false, numGameBans: 0, communityBanned: false },
     ])
     const app = createApp({ config, db, fetchBans })
-    const res = await request(app).get('/api/players/bans').set('Cookie', memberCookie).set('X-Group-Id', GRUPO)
+    const res = await request(app).get('/api/players/bans').set('Cookie', memberCookie)
     expect(res.status).toBe(200)
     expect(fetchBans).toHaveBeenCalledWith(['765', '999'])
     expect(res.body).toEqual([
       { steamId: '765', nick: 'fih', ban: { steamId: '765', vacBanned: true, numVacBans: 1, daysSinceLastBan: 10, gameBanned: false, numGameBans: 0, communityBanned: false } },
       { steamId: '999', nick: 'limpo', ban: null },
     ])
+  })
+
+  it('escopo populacional dos bans: eu + meus amigos accepted (friendships), não group_members', async () => {
+    const db = { query: vi.fn().mockResolvedValue({ rows: [] }) }
+    const fetchBans = vi.fn().mockResolvedValue([])
+    const app = createApp({ config, db, fetchBans })
+    const res = await request(app).get('/api/players/bans').set('Cookie', memberCookie)
+    expect(res.status).toBe(200)
+    const [sql, params] = db.query.mock.calls[0]
+    expect(sql).toContain('from friendships f')
+    expect(sql).toContain("f.status = 'accepted'")
+    expect(sql).not.toContain('group_members')
+    expect(params).toEqual(['76561198000000002'])
   })
 })
 
@@ -195,21 +219,6 @@ describe('PUT /api/players/me (onboarding)', () => {
       'ABCD-12345-EFGH',
       shareCode,
     ])
-  })
-})
-
-describe('PUT /api/players/me/ranking-publico', () => {
-  it('sem login: 401', async () => {
-    const { app } = appWith()
-    expect((await request(app).put('/api/players/me/ranking-publico').send({ publico: true })).status).toBe(401)
-  })
-
-  it('grava o proprio opt-in', async () => {
-    const { app, db } = appWith()
-    const res = await request(app).put('/api/players/me/ranking-publico').set('Cookie', memberCookie).send({ publico: true })
-    expect(res.status).toBe(200)
-    expect(res.body).toEqual({ ok: true, publico: true })
-    expect(db.query.mock.calls[0][1]).toEqual(['76561198000000002', true])
   })
 })
 

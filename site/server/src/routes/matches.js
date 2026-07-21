@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { keyFromR2Url, streamObject, presignDownload } from '../r2.js'
-import { partidaVisivelExpr, partidaPublicaExpr } from '../matchVisibility.js'
+import { partidaVisivelExpr } from '../friendships.js'
 import { calcularStatsPorLado } from '../statsLado.js'
 import { pedirClipe } from '../allstarClip.js'
 
@@ -20,16 +20,16 @@ function categoriaArma(weapon) {
   return CATEGORIA_ARMA[weapon] ?? 'Outras'
 }
 
-export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Client, r2Bucket, config }) {
+export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, config }) {
   const router = Router()
 
   // Feed: Partidas parseadas, com os Jogadores do grupo que jogaram cada uma.
   // Filtros opcionais: ?from=YYYY-MM-DD&to=YYYY-MM-DD&map=de_mirage&source=valve_mm|upload
   // ?ids=uuid,uuid,... — Partidas específicas (ex.: todas de uma "Resenha" clicada no
   // Feed); ignora os demais filtros e a paginação, já que o conjunto já vem delimitado.
-  router.get('/', requireAuth, requireGroupMember, async (req, res) => {
+  router.get('/', requireAuth, async (req, res) => {
     const cond = ["m.status = 'parsed'"]
-    const params = [req.groupId]
+    const params = [req.player.steamId]
     cond.push(partidaVisivelExpr('m', `$${params.length}`))
     const { from, to, map, source, mvp, ids } = req.query
     if (ids) {
@@ -121,26 +121,31 @@ export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Cli
 
   // Status da sincronização: quantas Partidas descobertas ainda esperam download/parse.
   // (Precisa vir antes de '/:id' — senão o Express casaria "sync-status" como um id.)
-  router.get('/sync-status', requireAuth, requireGroupMember, async (req, res) => {
+  router.get('/sync-status', requireAuth, async (req, res) => {
+    // Nota: 'pending'/'failed' ainda não têm match_players (a partida não foi parseada
+    // ainda, então não dá pra saber quem jogou) — sem uma chave pra atribuir o "time" de
+    // upload a um steamId, esses dois contadores zeram pra todo viewer até o Coletor ganhar
+    // algum jeito de atribuir a descoberta a um steamId. 'parsed'/last_played_at continuam
+    // corretos, filtrados por participação/amizade como o resto do arquivo.
     const { rows } = await db.query(
       `select
          count(*) filter (where status = 'pending')::int as pending,
          count(*) filter (where status = 'failed')::int as failed,
          count(*) filter (where status = 'parsed')::int as parsed,
          max(played_at) filter (where status = 'parsed') as last_played_at
-       from matches where group_id = $1`,
-      [req.groupId],
+       from matches where ${partidaVisivelExpr('matches', '$1')}`,
+      [req.player.steamId],
     )
     const r = rows[0]
     res.json({ pending: r.pending, failed: r.failed, parsed: r.parsed, lastPlayedAt: r.last_played_at })
   })
 
   // Detalhe: placar dos 10 Participantes, rounds, highlights e clipes.
-  router.get('/:id', requireAuth, requireGroupMember, async (req, res) => {
+  router.get('/:id', requireAuth, async (req, res) => {
     const { id } = req.params
     const matchQ = await db.query(
-      `select id, map, played_at, score_a, score_b, source, status, demo_url, replay_url from matches where id = $1 and (${partidaVisivelExpr('matches', '$2')} or ${partidaPublicaExpr('matches')})`,
-      [id, req.groupId],
+      `select id, map, played_at, score_a, score_b, source, status, demo_url, replay_url from matches where id = $1 and ${partidaVisivelExpr('matches', '$2')}`,
+      [id, req.player.steamId],
     )
     if (matchQ.rows.length === 0) return res.status(404).json({ erro: 'Partida não encontrada' })
     const m = matchQ.rows[0]
@@ -300,11 +305,11 @@ export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Cli
   // Detalhe round-a-round de UM Jogador nessa Partida: o que matou/morreu, com que arma
   // e o gasto/itens comprados naquele round. Carregado só quando o modal abre pra esse
   // Jogador (recolhido por padrão na UI) — não bloa o payload do /:id pros outros 9.
-  router.get('/:id/jogador/:steamId/detalhe', requireAuth, requireGroupMember, async (req, res) => {
+  router.get('/:id/jogador/:steamId/detalhe', requireAuth, async (req, res) => {
     const { id, steamId } = req.params
     const matchQ = await db.query(
-      `select id from matches where id = $1 and (${partidaVisivelExpr('matches', '$2')} or ${partidaPublicaExpr('matches')})`,
-      [id, req.groupId],
+      `select id from matches where id = $1 and ${partidaVisivelExpr('matches', '$2')}`,
+      [id, req.player.steamId],
     )
     if (matchQ.rows.length === 0) return res.status(404).json({ erro: 'Partida não encontrada' })
 
@@ -365,12 +370,12 @@ export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Cli
   // Head to Head: jogador de referência (steamId) comparado contra TODOS os
   // adversários do time contrário nessa Partida (estilo Leetify) — kills por
   // categoria de arma, dano e flashes, nas duas direções, numa chamada só.
-  router.get('/:id/head-to-head/:steamId', requireAuth, requireGroupMember, async (req, res) => {
+  router.get('/:id/head-to-head/:steamId', requireAuth, async (req, res) => {
     const { id, steamId } = req.params
     const jogadorQ = await db.query(
       `select mp.team from matches m join match_players mp on mp.match_id = m.id
-       where m.id = $1 and (${partidaVisivelExpr('m', '$2')} or ${partidaPublicaExpr('m')}) and mp.steam_id64 = $3`,
-      [id, req.groupId, steamId],
+       where m.id = $1 and ${partidaVisivelExpr('m', '$2')} and mp.steam_id64 = $3`,
+      [id, req.player.steamId, steamId],
     )
     if (jogadorQ.rows.length === 0) return res.status(404).json({ erro: 'Partida ou jogador não encontrado' })
     const timeReferencia = jogadorQ.rows[0].team
@@ -458,12 +463,12 @@ export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Cli
   // (estilo scope.gg/Leetify). Só funciona pra partidas com side_a gravado (processadas
   // ou reprocessadas depois do FIL-51b); sem isso os filtros T/CT devolvem roundsPlayed=0
   // pra todo mundo (calcularStatsPorLado já trata isso, não quebra).
-  router.get('/:id/lado/:filtro', requireAuth, requireGroupMember, async (req, res) => {
+  router.get('/:id/lado/:filtro', requireAuth, async (req, res) => {
     const { id, filtro } = req.params
     if (!['all', 'CT', 'T'].includes(filtro)) return res.status(400).json({ erro: 'Filtro inválido' })
     const matchQ = await db.query(
-      `select id from matches where id = $1 and (${partidaVisivelExpr('matches', '$2')} or ${partidaPublicaExpr('matches')})`,
-      [id, req.groupId],
+      `select id from matches where id = $1 and ${partidaVisivelExpr('matches', '$2')}`,
+      [id, req.player.steamId],
     )
     if (matchQ.rows.length === 0) return res.status(404).json({ erro: 'Partida não encontrada' })
 
@@ -513,7 +518,7 @@ export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Cli
   // "gerar clipe" na tela da Partida, nada é automático. Restrito a uma allowlist de
   // steamId64 (config.allstarSteamIds) até o preço por clipe ser confirmado com o
   // suporte deles.
-  router.post('/:id/highlight/:highlightId/allstar-clip', requireAuth, requireGroupMember, async (req, res) => {
+  router.post('/:id/highlight/:highlightId/allstar-clip', requireAuth, async (req, res) => {
     if (!config.allstarApiKey || !r2Client) {
       return res.status(503).json({ erro: 'Integração com o Allstar não configurada' })
     }
@@ -524,8 +529,8 @@ export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Cli
        join matches m on m.id = h.match_id
        left join match_players mp on mp.match_id = h.match_id and mp.steam_id64 = h.steam_id64
        where h.id = $1 and h.match_id = $2
-         and (${partidaVisivelExpr('m', '$3')} or ${partidaPublicaExpr('m')})`,
-      [highlightId, id, req.groupId],
+         and ${partidaVisivelExpr('m', '$3')}`,
+      [highlightId, id, req.player.steamId],
     )
     const h = rows[0]
     if (!h) return res.status(404).json({ erro: 'Highlight não encontrado' })
@@ -572,11 +577,11 @@ export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Cli
   // `frames` por round, só a contagem; o client busca cada round em /replay/round/:n.
   // Partidas antigas (arquivadas antes dessa mudança): o objeto já é o replay INTEIRO
   // (com `frames`), e o client detecta isso pela ausência de `frameCount` no round.
-  router.get('/:id/replay', requireAuth, requireGroupMember, async (req, res) => {
+  router.get('/:id/replay', requireAuth, async (req, res) => {
     if (!r2Client) return res.status(503).json({ erro: 'Arquivamento (R2) não configurado' })
     const { rows } = await db.query(
-      `select replay_url from matches where id = $1 and (${partidaVisivelExpr('matches', '$2')} or ${partidaPublicaExpr('matches')})`,
-      [req.params.id, req.groupId],
+      `select replay_url from matches where id = $1 and ${partidaVisivelExpr('matches', '$2')}`,
+      [req.params.id, req.player.steamId],
     )
     const key = keyFromR2Url(rows[0]?.replay_url, r2Bucket)
     if (!key) return res.status(404).json({ erro: 'Replay não disponível' })
@@ -590,12 +595,12 @@ export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Cli
   // Um round do replay sob demanda (streaming por round) — só existe pro formato novo
   // (índice); a chave é o mesmo prefixo do índice, trocando ".json" por "/round-{n}.json"
   // (mesma convenção do coletor em `_upload_replay`, main.py).
-  router.get('/:id/replay/round/:n', requireAuth, requireGroupMember, async (req, res) => {
+  router.get('/:id/replay/round/:n', requireAuth, async (req, res) => {
     if (!/^\d+$/.test(req.params.n)) return res.status(400).json({ erro: 'Round inválido' })
     if (!r2Client) return res.status(503).json({ erro: 'Arquivamento (R2) não configurado' })
     const { rows } = await db.query(
-      `select replay_url from matches where id = $1 and (${partidaVisivelExpr('matches', '$2')} or ${partidaPublicaExpr('matches')})`,
-      [req.params.id, req.groupId],
+      `select replay_url from matches where id = $1 and ${partidaVisivelExpr('matches', '$2')}`,
+      [req.params.id, req.player.steamId],
     )
     const indexKey = keyFromR2Url(rows[0]?.replay_url, r2Bucket)
     if (!indexKey) return res.status(404).json({ erro: 'Replay não disponível' })
@@ -609,11 +614,11 @@ export function createMatchesRouter({ db, requireAuth, requireGroupMember, r2Cli
   })
 
   // Idem para o .dem bruto (arquivado por completude — ADR-0002 — não usado pela UI ainda).
-  router.get('/:id/demo', requireAuth, requireGroupMember, async (req, res) => {
+  router.get('/:id/demo', requireAuth, async (req, res) => {
     if (!r2Client) return res.status(503).json({ erro: 'Arquivamento (R2) não configurado' })
     const { rows } = await db.query(
       `select demo_url from matches where id = $1 and ${partidaVisivelExpr('matches', '$2')}`,
-      [req.params.id, req.groupId],
+      [req.params.id, req.player.steamId],
     )
     const key = keyFromR2Url(rows[0]?.demo_url, r2Bucket)
     if (!key) return res.status(404).json({ erro: 'Demo não disponível' })

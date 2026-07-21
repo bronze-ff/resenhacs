@@ -1,26 +1,22 @@
 import { useEffect, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext.jsx'
-import { setGrupoAtivo } from '../lib/grupoAtivo.js'
-import { Select } from './ui'
 
 const CHAVE_SIDEBAR_COLAPSADA = 'resenha_sidebar_colapsada'
 
 const ITENS = [
   { to: '/', end: true, label: 'Partidas', num: '01', icone: 'partidas' },
   { to: '/ranking', label: 'Ranking', num: '02', icone: 'ranking' },
-  { to: '/ranking-publico', label: 'Ranking público', num: '03', icone: 'ranking' },
-  { to: '/enviar-demo', label: 'Enviar demo', num: '04', icone: 'enviarDemo' },
-  { to: '/jogadores', label: 'Jogadores', num: '05', icone: 'jogadores' },
-  { to: '/comparar', label: 'Comparar', num: '06', icone: 'comparar' },
-  { to: '/times', label: 'Times', num: '07', icone: 'jogadores' },
+  { to: '/enviar-demo', label: 'Enviar demo', num: '03', icone: 'enviarDemo' },
+  { to: '/jogadores', label: 'Amigos', num: '04', icone: 'jogadores' },
+  { to: '/comparar', label: 'Comparar', num: '05', icone: 'comparar' },
   // Granadas/Táticas são públicos pra visualização (só criar/editar é admin — cada
   // página já esconde os controles de edição sozinha via isSuperAdmin) — por isso
   // ficam aqui, fora do bloco condicional a isSuperAdmin logo abaixo.
-  { to: '/granadas', label: 'Granadas', num: '08', icone: 'granadas' },
-  { to: '/taticas', label: 'Táticas', num: '09', icone: 'taticas' },
-  { to: '/conta', label: 'Minha conta', num: '10', icone: 'perfil' },
-  { to: '/curso', label: 'Curso de mira', num: '11', icone: 'curso' },
+  { to: '/granadas', label: 'Granadas', num: '06', icone: 'granadas' },
+  { to: '/taticas', label: 'Táticas', num: '07', icone: 'taticas' },
+  { to: '/conta', label: 'Minha conta', num: '08', icone: 'perfil' },
+  { to: '/curso', label: 'Curso de mira', num: '09', icone: 'curso' },
 ]
 
 // Itens da barra inferior mobile (estilo app da FACEIT): 4 rotas principais
@@ -276,7 +272,6 @@ export default function Shell({ children }) {
             </h1>
           </div>
           <div className="flex min-w-0 items-center gap-1.5 lg:gap-3">
-            <SeletorGrupo grupoAtivoId={jogador?.grupoAtivoId} />
             <a href={`/jogador/${jogador?.steamId}`} title="Meu perfil" className="group flex min-w-0 shrink-0 items-center gap-2">
               {jogador?.avatarUrl && (
                 <img
@@ -363,34 +358,5 @@ function BarraInferior({ menuAberto, onAbrirMenu }) {
         Mais
       </button>
     </nav>
-  )
-}
-
-// Troca de "workspace" — só aparece quando o jogador tem mais de 1 grupo.
-function SeletorGrupo({ grupoAtivoId }) {
-  const [grupos, setGrupos] = useState([])
-
-  useEffect(() => {
-    fetch('/api/groups/meus').then((res) => (res.ok ? res.json() : [])).then(setGrupos)
-  }, [])
-
-  async function trocar(e) {
-    const groupId = e.target.value
-    await fetch('/api/groups/ativo', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ groupId }),
-    })
-    setGrupoAtivo(groupId)
-    window.location.reload()
-  }
-
-  if (grupos.length <= 1) return null
-  return (
-    <Select value={grupoAtivoId ?? ''} onChange={trocar} className="max-w-[104px] lg:max-w-[180px]" selectClassName="py-1 pr-7 text-xs">
-      {grupos.map((g) => (
-        <option key={g.id} value={g.id}>{g.nome}</option>
-      ))}
-    </Select>
   )
 }

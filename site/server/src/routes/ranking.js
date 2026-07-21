@@ -1,19 +1,20 @@
 import { Router } from 'express'
 import { calcularEstilos } from '../analise.js'
-import { partidaVisivelExpr } from '../matchVisibility.js'
+import { partidaVisivelExpr } from '../friendships.js'
 
 function pct(parte, total) {
   if (!total) return 0
   return Math.round((parte / total) * 1000) / 10
 }
 
-export function createRankingRouter({ db, requireAuth, requireGroupMember }) {
+export function createRankingRouter({ db, requireAuth }) {
   const router = Router()
 
-  // Ranking interno do grupo: agrega os stats de cada Jogador em todas as Partidas.
-  // Filtro opcional de período: ?from=YYYY-MM-DD&to=YYYY-MM-DD (sobre matches.played_at).
-  router.get('/', requireAuth, requireGroupMember, async (req, res) => {
-    const params = [req.groupId]
+  // Ranking interno: agrega os stats de cada Jogador em todas as Partidas visíveis ao
+  // viewer (eu + amigos accepted). Filtro opcional de período:
+  // ?from=YYYY-MM-DD&to=YYYY-MM-DD (sobre matches.played_at).
+  router.get('/', requireAuth, async (req, res) => {
+    const params = [req.player.steamId]
     let periodo = ''
     const { from, to } = req.query
     if (from && /^\d{4}-\d{2}-\d{2}$/.test(from)) {
@@ -41,7 +42,7 @@ export function createRankingRouter({ db, requireAuth, requireGroupMember }) {
          where mp.is_tracked and ${partidaVisivelExpr('m', '$1')} and mp.rating is not null
        ) t
        group by steam_id64`,
-      [req.groupId],
+      [req.player.steamId],
     )
     // Diferença mínima pra não piscar seta por ruído estatístico; abaixo disso é "estável".
     const LIMIAR_FORMA = 0.05
@@ -75,7 +76,13 @@ export function createRankingRouter({ db, requireAuth, requireGroupMember }) {
               coalesce(sum(mp.rounds_played), 0)::int as rounds,
               coalesce(sum(mp.shots_fired), 0)::int as shots_fired,
               coalesce(sum(mp.shots_hit), 0)::int as shots_hit
-       from (select distinct steam_id64 from group_members where group_id = $1) gm
+       from (
+         select $1::text as steam_id64
+         union
+         select case when f.player_a = $1 then f.player_b else f.player_a end
+         from friendships f
+         where (f.player_a = $1 or f.player_b = $1) and f.status = 'accepted'
+       ) gm
        join players p on p.steam_id64 = gm.steam_id64
        left join steam_avatares sa on sa.steam_id64 = p.steam_id64
        left join (

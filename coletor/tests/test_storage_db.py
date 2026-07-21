@@ -104,31 +104,17 @@ class FakeCursor:
         # (None = partida inédita, caminho do insert).
         if self._last.startswith("select id from matches where fingerprint"):
             return self.conn.fingerprint_row
-        if self._last.startswith("select grupo_ativo_id from players"):
-            return self.conn.grupo_ativo_row
-        if self._last.startswith("select id from groups"):
-            return self.conn.grupo_mais_antigo_row
-        if self._last.startswith("select discord_webhook_url from groups"):
-            return self.conn.webhook_do_grupo_row
-        if self._last.startswith("select 1 from discord_notifications"):
-            return self.conn.ja_notificado_discord_row
-        if self._last.startswith("select map, score_a, score_b from matches"):
-            return self.conn.resumo_match_row
         return ["00000000-0000-0000-0000-000000000001"]
 
     def fetchall(self):
         if self._last.startswith("select id, hltv_url, arquivo_r2_key from partidas_pro_fila"):
             return self.conn.fila_rows
-        if self._last.startswith("select id, group_id, adicionado_por, arquivo_r2_key, share_code, played_at from uploads_pendentes"):
+        if self._last.startswith("select id, adicionado_por, arquivo_r2_key, share_code, played_at from uploads_pendentes"):
             return self.conn.uploads_rows
         if self._last.startswith("select steam_id64 from steam_avatares"):
             return [(s,) for s in self.conn.avatares_frescos]
         if "distinct mp.steam_id64" in self._last:
             return [(s,) for s in self.conn.match_players_sem_avatar]
-        if self._last.startswith("select mp.steam_id64, mp.nick, mp.team, mp.rating"):
-            return self.conn.resumo_membros_rows
-        if "group_members gm" in self._last and "match_players mp" in self._last:
-            return self.conn.grupos_da_partida_rows
         return []
 
 
@@ -141,13 +127,6 @@ class FakeConn:
         self.uploads_rows = []
         self.avatares_frescos = []
         self.match_players_sem_avatar = []
-        self.grupo_ativo_row = None
-        self.grupo_mais_antigo_row = None
-        self.grupos_da_partida_rows = []
-        self.webhook_do_grupo_row = None
-        self.ja_notificado_discord_row = None
-        self.resumo_membros_rows = []
-        self.resumo_match_row = (None, None, None)
 
     def cursor(self):
         return FakeCursor(self)
@@ -376,10 +355,10 @@ def test_atualizar_fila_pro_com_match_ids():
 def test_listar_uploads_pendentes_devolve_so_status_pendente():
     conn = FakeConn()
     conn.uploads_rows = [
-        ("u1", "g1", "765", "uploads-pendentes/abc.dem", None, None),
+        ("u1", "765", "uploads-pendentes/abc.dem", None, None),
     ]
     resultado = db.listar_uploads_pendentes(conn)
-    assert resultado == [("u1", "g1", "765", "uploads-pendentes/abc.dem", None, None)]
+    assert resultado == [("u1", "765", "uploads-pendentes/abc.dem", None, None)]
     assert any("uploads_pendentes" in c[0] and "pendente" in c[0] for c in conn.calls)
 
 
@@ -458,32 +437,12 @@ def test_listar_steam_ids_de_match_players_sem_avatar_fresco():
 
 def test_record_pending_match():
     conn = FakeConn()
-    mid = db.record_pending_match(conn, "CSGO-novo", "grupo-1")
+    mid = db.record_pending_match(conn, "CSGO-novo")
     assert mid == "00000000-0000-0000-0000-000000000001"
     assert conn.commits == 1
-    assert conn.calls[0][1] == ("CSGO-novo", "valve_mm", "grupo-1")
+    assert conn.calls[0][1] == ("CSGO-novo", "valve_mm")
     assert "played_at" in conn.calls[0][0] and "now()" in conn.calls[0][0]
-    assert "group_id" in conn.calls[0][0]
-
-
-def test_store_parsed_grava_group_id_na_partida_nova():
-    conn = FakeConn()
-    db.store_parsed(conn, _parsed(), share_code="CSGO-x", source="upload", group_id="grupo-1")
-    match_call = next(c for c in conn.calls if c[0].startswith("insert into matches"))
-    assert match_call[1][-1] == "grupo-1"
-
-
-def test_grupo_para_ingest_usa_grupo_ativo_de_jogador_conhecido():
-    conn = FakeConn()
-    conn.grupo_ativo_row = ["grupo-do-jogador"]
-    assert db.grupo_para_ingest(conn, ["765"]) == "grupo-do-jogador"
-
-
-def test_grupo_para_ingest_cai_no_grupo_mais_antigo_sem_jogador_conhecido():
-    conn = FakeConn()
-    conn.grupo_ativo_row = None
-    conn.grupo_mais_antigo_row = ["grupo-original"]
-    assert db.grupo_para_ingest(conn, ["999"]) == "grupo-original"
+    assert "group_id" not in conn.calls[0][0]
 
 
 def test_store_parsed_por_padrao_preserva_played_at_existente():
@@ -519,10 +478,10 @@ def test_match_fingerprint_estavel_e_sensivel_ao_conteudo():
 
 def test_enfileirar_faceit_e_idempotente_e_alinha_placeholders():
     conn = FakeConn()
-    db.enfileirar_faceit(conn, "fm1", "111", "g1")
+    db.enfileirar_faceit(conn, "fm1", "111")
     sql, params = conn.calls[-1]
     assert "on conflict (faceit_match_id) do nothing" in sql
-    assert sql.count("%s") == len(params) == 3
+    assert sql.count("%s") == len(params) == 2
 
 
 def test_falhar_faceit_pendente_incrementa_e_marca_failed_no_limite():
@@ -554,98 +513,3 @@ def test_store_parsed_dedupe_por_fingerprint_atualiza_em_vez_de_inserir():
     assert any(s.startswith("update matches set share_code = coalesce") for s in sqls)
     # absorve o placeholder pending que segurava o share code
     assert any("status = 'pending'" in s and s.startswith("delete from matches") for s in sqls)
-
-
-# ---- discord ----
-
-def test_grupos_da_partida():
-    conn = FakeConn()
-    conn.grupos_da_partida_rows = [("g1",), ("g2",)]
-    resultado = db.grupos_da_partida(conn, "m1")
-    assert resultado == ["g1", "g2"]
-    assert any("group_members gm" in c[0] and "match_players mp" in c[0] for c in conn.calls)
-
-
-def test_webhook_do_grupo_configurado():
-    conn = FakeConn()
-    conn.webhook_do_grupo_row = ("https://discord.com/api/webhooks/x/y",)
-    resultado = db.webhook_do_grupo(conn, "g1")
-    assert resultado == "https://discord.com/api/webhooks/x/y"
-
-
-def test_webhook_do_grupo_nao_configurado():
-    conn = FakeConn()
-    conn.webhook_do_grupo_row = None
-    resultado = db.webhook_do_grupo(conn, "g1")
-    assert resultado is None
-
-
-def test_ja_notificado_discord_true():
-    conn = FakeConn()
-    conn.ja_notificado_discord_row = (1,)
-    assert db.ja_notificado_discord(conn, "m1", "g1") is True
-
-
-def test_ja_notificado_discord_false():
-    conn = FakeConn()
-    conn.ja_notificado_discord_row = None
-    assert db.ja_notificado_discord(conn, "m1", "g1") is False
-
-
-def test_marcar_notificado_discord():
-    conn = FakeConn()
-    db.marcar_notificado_discord(conn, "m1", "g1")
-    insert = next(c for c in conn.calls if c[0].startswith("insert into discord_notifications"))
-    assert insert[1] == ("m1", "g1")
-    assert conn.commits == 1
-
-
-def test_resumo_da_partida_para_grupo_sem_membros_devolve_none():
-    conn = FakeConn()
-    conn.resumo_membros_rows = []
-    resultado = db.resumo_da_partida_para_grupo(conn, "m1", "g1")
-    assert resultado is None
-
-
-def test_resumo_da_partida_para_grupo_vitoria_time_a():
-    conn = FakeConn()
-    conn.resumo_membros_rows = [
-        ("111", "fulano", "A", 1.45),
-        ("222", "ciclano", "A", 0.90),
-    ]
-    conn.resumo_match_row = ("de_mirage", 13, 9)
-    resultado = db.resumo_da_partida_para_grupo(conn, "m1", "g1")
-    assert resultado == {
-        "map": "de_mirage",
-        "score_grupo": 13,
-        "score_rival": 9,
-        "mvp_nick": "fulano",
-        "mvp_rating": 1.45,
-    }
-
-
-def test_resumo_da_partida_para_grupo_derrota_time_b():
-    conn = FakeConn()
-    conn.resumo_membros_rows = [("111", "fulano", "B", 0.80)]
-    conn.resumo_match_row = ("de_dust2", 13, 4)
-    resultado = db.resumo_da_partida_para_grupo(conn, "m1", "g1")
-    assert resultado["score_grupo"] == 4
-    assert resultado["score_rival"] == 13
-
-
-def test_resumo_da_partida_para_grupo_empate_de_time_usa_menor_steam_id():
-    conn = FakeConn()
-    # "222" tá no time B mas tem o menor steam_id64 entre os dois — desempate escolhe o time dele (B).
-    conn.resumo_membros_rows = [("333", "fulano", "A", 1.0), ("222", "ciclano", "B", 1.0)]
-    conn.resumo_match_row = ("de_inferno", 10, 16)
-    resultado = db.resumo_da_partida_para_grupo(conn, "m1", "g1")
-    assert resultado["score_grupo"] == 16  # time B
-
-
-def test_resumo_da_partida_para_grupo_sem_rating_mvp_none():
-    conn = FakeConn()
-    conn.resumo_membros_rows = [("111", "fulano", "A", None)]
-    conn.resumo_match_row = ("de_mirage", 13, 9)
-    resultado = db.resumo_da_partida_para_grupo(conn, "m1", "g1")
-    assert resultado["mvp_nick"] is None
-    assert resultado["mvp_rating"] is None

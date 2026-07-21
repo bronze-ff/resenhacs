@@ -20,7 +20,7 @@ def match_fingerprint(parsed):
     return hashlib.sha256(base.encode("utf-8")).hexdigest()[:32]
 
 
-def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status, prefer_new_played_at=False, group_id=None):
+def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status, prefer_new_played_at=False):
     fingerprint = match_fingerprint(parsed)
 
     # Dedupe por conteúdo ANTES do insert: se a mesma partida já existe (chegou pelo
@@ -76,8 +76,8 @@ def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status,
     )
     cur.execute(
         f"""
-        insert into matches (share_code, source, map, score_a, score_b, played_at, demo_url, replay_url, status, fingerprint, team_a_name, team_b_name, group_id)
-        values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        insert into matches (share_code, source, map, score_a, score_b, played_at, demo_url, replay_url, status, fingerprint, team_a_name, team_b_name)
+        values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         on conflict (share_code) do update set
           source = excluded.source, map = excluded.map,
           score_a = excluded.score_a, score_b = excluded.score_b,
@@ -103,7 +103,6 @@ def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status,
             fingerprint,
             parsed.get("team_a_name"),
             parsed.get("team_b_name"),
-            group_id,
         ),
     )
     return cur.fetchone()[0]
@@ -394,17 +393,11 @@ def _write_lineups(cur, match_id, lineups):
 
 
 def store_parsed(conn, parsed, share_code=None, source="valve_mm", demo_url=None,
-                 replay_url=None, status="parsed", prefer_new_played_at=False, group_id=None):
-    """Grava a Partida inteira numa transação. Devolve o match_id (uuid).
-
-    group_id só é usado quando a Partida ainda não existe (nem por fingerprint nem por
-    share_code) — se já existe (reprocess, ou union com um 'pending' do discover), o
-    group_id já gravado antes é preservado, nunca sobrescrito aqui.
-    """
+                 replay_url=None, status="parsed", prefer_new_played_at=False):
+    """Grava a Partida inteira numa transação. Devolve o match_id (uuid)."""
     with conn.cursor() as cur:
         match_id = _insert_match(
             cur, share_code, source, parsed, demo_url, replay_url, status, prefer_new_played_at,
-            group_id=group_id,
         )
         _write_players(cur, match_id, parsed.get("players", []))
         _write_rounds(cur, match_id, parsed.get("rounds", []))
@@ -422,25 +415,22 @@ def store_parsed(conn, parsed, share_code=None, source="valve_mm", demo_url=None
     return match_id
 
 
-def record_pending_match(conn, share_code, group_id, source="valve_mm"):
+def record_pending_match(conn, share_code, source="valve_mm"):
     """Registra um share code descoberto sem demo ainda (status pending). Idempotente.
 
     Grava played_at = now() (hora da descoberta): é bem mais próximo da hora real
     da Partida do que a mtime do .dem, que só reflete quando o arquivo foi baixado
     (pode ser dias depois — o formato .dem não guarda data em lugar nenhum).
-
-    group_id é obrigatório (matches.group_id é not null) — o chamador (cmd_discover)
-    já sabe de qual Jogador veio esse share code, então usa o grupo_ativo_id dele.
     """
     with conn.cursor() as cur:
         cur.execute(
             """
-            insert into matches (share_code, source, status, played_at, group_id)
-            values (%s, %s, 'pending', now(), %s)
+            insert into matches (share_code, source, status, played_at)
+            values (%s, %s, 'pending', now())
             on conflict (share_code) do nothing
             returning id
             """,
-            (share_code, source, group_id),
+            (share_code, source),
         )
         row = cur.fetchone()
     conn.commit()
@@ -488,36 +478,13 @@ def mark_skipped(conn, share_code):
 
 
 def list_tracked_players(conn):
-    """[(steam_id64, match_auth_code, last_share_code, grupo_ativo_id)] dos Jogadores com
-    onboarding feito. grupo_ativo_id pode vir None se o Jogador nunca escolheu/criou um
-    grupo (o chamador decide o que fazer nesse caso — hoje: pula e avisa)."""
+    """[(steam_id64, match_auth_code, last_share_code)] dos Jogadores com onboarding feito."""
     with conn.cursor() as cur:
         cur.execute(
-            "select steam_id64, match_auth_code, last_share_code, grupo_ativo_id from players "
+            "select steam_id64, match_auth_code, last_share_code from players "
             "where match_auth_code is not null and last_share_code is not null"
         )
         return cur.fetchall()
-
-
-def grupo_para_ingest(conn, steam_ids):
-    """Escolhe o grupo pra atribuir uma Partida ingerida sem contexto explícito de "quem
-    importou" (upload manual, fila de Partidas Pro, reprocess de fingerprint novo): usa o
-    grupo ativo de qualquer Jogador conhecido presente na Partida; se nenhum (ex.: demo pro
-    sem ninguém do sistema), cai no grupo mais antigo. Stopgap enquanto o Coletor não tem um
-    conceito explícito de "grupo de quem fez o upload" — ver spec de multi-tenancy (fora de
-    escopo lá, mas sem isso a inserção falha com not-null violation em matches.group_id)."""
-    with conn.cursor() as cur:
-        cur.execute(
-            "select grupo_ativo_id from players "
-            "where steam_id64 = any(%s) and grupo_ativo_id is not null limit 1",
-            (list(steam_ids),),
-        )
-        row = cur.fetchone()
-        if row:
-            return row[0]
-        cur.execute("select id from groups order by criado_em limit 1")
-        row = cur.fetchone()
-        return row[0] if row else None
 
 
 def set_last_share_code(conn, steam_id64, share_code):
@@ -549,11 +516,10 @@ def atualizar_fila_pro(conn, fila_id, status, match_id=None, erro=None, match_id
 
 def listar_uploads_pendentes(conn):
     """Fila de uploads manuais (qualquer membro do grupo, via 'Enviar Demo' no site) —
-    par simplificado de listar_fila_pro_pendente: um .dem só por item, sem .rar/multi-mapa,
-    e já sabendo o group_id de quem enviou (não precisa de grupo_para_ingest)."""
+    par simplificado de listar_fila_pro_pendente: um .dem só por item, sem .rar/multi-mapa."""
     with conn.cursor() as cur:
         cur.execute(
-            "select id, group_id, adicionado_por, arquivo_r2_key, share_code, played_at "
+            "select id, adicionado_por, arquivo_r2_key, share_code, played_at "
             "from uploads_pendentes where status = 'pendente' order by adicionado_em"
         )
         return cur.fetchall()
@@ -631,12 +597,10 @@ def connect(database_url):
 
 
 def listar_vinculados_faceit(conn):
-    """Membros com conta FACEIT vinculada (Fase A) e grupo ativo — a descoberta roda
-    pra cada um deles."""
+    """Membros com conta FACEIT vinculada (Fase A) — a descoberta roda pra cada um deles."""
     with conn.cursor() as cur:
         cur.execute(
-            "select steam_id64, faceit_id, grupo_ativo_id from players "
-            "where faceit_id is not null and grupo_ativo_id is not null"
+            "select steam_id64, faceit_id from players where faceit_id is not null"
         )
         return cur.fetchall()
 
@@ -659,12 +623,12 @@ def membro_ja_sincronizou_faceit(conn, steam_id64):
         return cur.fetchone() is not None
 
 
-def enfileirar_faceit(conn, faceit_match_id, steam_id64, group_id):
+def enfileirar_faceit(conn, faceit_match_id, steam_id64):
     with conn.cursor() as cur:
         cur.execute(
-            "insert into faceit_pendentes (faceit_match_id, steam_id64, group_id) "
-            "values (%s, %s, %s) on conflict (faceit_match_id) do nothing",
-            (faceit_match_id, steam_id64, group_id),
+            "insert into faceit_pendentes (faceit_match_id, steam_id64) "
+            "values (%s, %s) on conflict (faceit_match_id) do nothing",
+            (faceit_match_id, steam_id64),
         )
     conn.commit()
 
@@ -672,7 +636,7 @@ def enfileirar_faceit(conn, faceit_match_id, steam_id64, group_id):
 def listar_faceit_pendentes(conn, limite=10):
     with conn.cursor() as cur:
         cur.execute(
-            "select faceit_match_id, steam_id64, group_id, tentativas from faceit_pendentes "
+            "select faceit_match_id, steam_id64, tentativas from faceit_pendentes "
             "where status = 'pending' order by created_at limit %s",
             (limite,),
         )
@@ -740,102 +704,3 @@ def gravar_elo_partida(conn, match_id, steam_id64, before, after):
             (before, after, match_id, steam_id64),
         )
     conn.commit()
-
-
-# ---- discord ----
-
-def grupos_da_partida(conn, match_id):
-    """Grupos com pelo menos 1 membro presente numa Partida — mesma regra de
-    visibilidade por participação usada no servidor (site/server/src/matchVisibility.js):
-    group_id = G é visível se algum steam_id64 de group_members(G) está em
-    match_players da partida."""
-    with conn.cursor() as cur:
-        cur.execute(
-            "select distinct gm.group_id from group_members gm "
-            "join match_players mp on mp.steam_id64 = gm.steam_id64 "
-            "where mp.match_id = %s",
-            (match_id,),
-        )
-        return [row[0] for row in cur.fetchall()]
-
-
-def webhook_do_grupo(conn, group_id):
-    """URL do webhook do Discord configurada pelo admin do grupo, ou None se o grupo
-    nunca configurou (caso normal — não é erro)."""
-    with conn.cursor() as cur:
-        cur.execute("select discord_webhook_url from groups where id = %s", (group_id,))
-        row = cur.fetchone()
-        return row[0] if row else None
-
-
-def ja_notificado_discord(conn, match_id, group_id):
-    """True se esse par (partida, grupo) já recebeu aviso no Discord — evita duplicar
-    em reprocessamento."""
-    with conn.cursor() as cur:
-        cur.execute(
-            "select 1 from discord_notifications where match_id = %s and group_id = %s",
-            (match_id, group_id),
-        )
-        return cur.fetchone() is not None
-
-
-def marcar_notificado_discord(conn, match_id, group_id):
-    with conn.cursor() as cur:
-        cur.execute(
-            "insert into discord_notifications (match_id, group_id) values (%s, %s)",
-            (match_id, group_id),
-        )
-    conn.commit()
-
-
-def resumo_da_partida_para_grupo(conn, match_id, group_id):
-    """Placar e MVP de uma Partida do ponto de vista de UM grupo específico.
-
-    Time do grupo = time majoritário entre os membros do grupo presentes na partida;
-    empate na contagem é resolvido pelo time do membro de MENOR steam_id64 (critério
-    determinístico, documentado no design). MVP = maior `rating` entre os membros do
-    grupo nessa partida; None se nenhum tiver rating (ex.: fonte stats-only sem parse
-    completo). Devolve None se nenhum membro do grupo está na partida (não deveria
-    acontecer — quem chama já filtrou por grupos_da_partida — mas fica seguro).
-    """
-    with conn.cursor() as cur:
-        cur.execute(
-            "select mp.steam_id64, mp.nick, mp.team, mp.rating "
-            "from match_players mp "
-            "join group_members gm on gm.steam_id64 = mp.steam_id64 and gm.group_id = %s "
-            "where mp.match_id = %s",
-            (group_id, match_id),
-        )
-        membros = cur.fetchall()
-        if not membros:
-            return None
-        cur.execute(
-            "select map, score_a, score_b from matches where id = %s", (match_id,)
-        )
-        mapa, score_a, score_b = cur.fetchone()
-
-    contagem = {}
-    for _, _, team, _ in membros:
-        contagem[team] = contagem.get(team, 0) + 1
-    maior = max(contagem.values())
-    empatados = [t for t, n in contagem.items() if n == maior]
-    if len(empatados) == 1:
-        time_grupo = empatados[0]
-    else:
-        time_grupo = sorted(membros, key=lambda m: m[0])[0][2]
-
-    score_grupo = score_a if time_grupo == "A" else score_b
-    score_rival = score_b if time_grupo == "A" else score_a
-
-    candidatos_mvp = [(nick, rating) for _, nick, _, rating in membros if rating is not None]
-    mvp_nick, mvp_rating = (
-        max(candidatos_mvp, key=lambda p: p[1]) if candidatos_mvp else (None, None)
-    )
-
-    return {
-        "map": mapa,
-        "score_grupo": score_grupo,
-        "score_rival": score_rival,
-        "mvp_nick": mvp_nick,
-        "mvp_rating": mvp_rating,
-    }

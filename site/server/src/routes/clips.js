@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import { partidaVisivelExpr } from '../friendships.js'
 
 const PROVIDERS = [
   { host: 'allstar.gg', nome: 'allstar' },
@@ -24,11 +25,11 @@ export function detectProvider(url) {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-export function createClipsRouter({ db, requireAuth, requireGroupMember }) {
+export function createClipsRouter({ db, requireAuth }) {
   const router = Router()
 
   // Anexa um Clipe (link externo) a uma Partida e, opcionalmente, a um Highlight.
-  router.post('/', requireAuth, requireGroupMember, async (req, res) => {
+  router.post('/', requireAuth, async (req, res) => {
     const { matchId, highlightId, steamId, url, title } = req.body ?? {}
     if (!matchId) return res.status(400).json({ erro: 'matchId é obrigatório' })
     if (!UUID_RE.test(String(matchId))) return res.status(400).json({ erro: 'matchId inválido' })
@@ -38,9 +39,13 @@ export function createClipsRouter({ db, requireAuth, requireGroupMember }) {
       return res.status(400).json({ erro: 'steamId (de quem é a jogada) inválido' })
     }
 
-    // A Partida precisa existir E pertencer ao grupo ativo — sem isso, qualquer conta
-    // logada anexava clipe a partida de outro grupo (broken access control / OWASP A01).
-    const dono = await db.query('select 1 from matches where id = $1 and group_id = $2', [matchId, req.groupId])
+    // A Partida precisa existir E ser visível ao viewer (jogou ou é amigo accepted de quem
+    // jogou) — sem isso, qualquer conta logada anexava clipe a partida de outro grupo/pessoa
+    // (broken access control / OWASP A01).
+    const dono = await db.query(
+      `select 1 from matches m where m.id = $1 and ${partidaVisivelExpr('m', '$2')}`,
+      [matchId, req.player.steamId],
+    )
     if (dono.rows.length === 0) return res.status(404).json({ erro: 'Partida não encontrada' })
 
     const { rows } = await db.query(

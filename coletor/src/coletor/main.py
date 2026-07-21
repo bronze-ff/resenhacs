@@ -29,7 +29,6 @@ from . import replay as replaymod
 from . import sharecode
 from . import steam_api
 from . import faceit
-from . import discord_notify
 from . import storage_r2
 from . import transform
 from .config import Config
@@ -38,10 +37,7 @@ from .config import Config
 def cmd_discover(config, conn):
     config.require("steam_api_key")
     total = 0
-    for steam_id64, auth_code, last_code, grupo_ativo_id in dbmod.list_tracked_players(conn):
-        if not grupo_ativo_id:
-            print(f"{steam_id64}: sem grupo ativo — pulando (matches.group_id é obrigatório)")
-            continue
+    for steam_id64, auth_code, last_code in dbmod.list_tracked_players(conn):
         # Um jogador com auth code inválido/expirado (ou rate limit persistente) não deve
         # abortar a descoberta dos outros.
         try:
@@ -51,7 +47,7 @@ def cmd_discover(config, conn):
             continue
         for code in novos:
             if sharecode.is_valid(code):
-                dbmod.record_pending_match(conn, code, grupo_ativo_id)
+                dbmod.record_pending_match(conn, code)
                 total += 1
         if novos:
             dbmod.set_last_share_code(conn, steam_id64, novos[-1])
@@ -122,34 +118,6 @@ def _baixar_e_descomprimir(url, destino_dem):
         raise RuntimeError("download truncado: stream bz2 incompleto (sem EOF)")
 
 
-def _notificar_discord_grupos(config, conn, match_id):
-    """Avisa no Discord cada grupo com membro na Partida recém-ingerida. Best-effort:
-    grupo sem webhook configurado é pulado em silêncio; falha ao enviar é logada e
-    NUNCA derruba o fetch (a Partida já foi ingerida com sucesso, isso é só um aviso)."""
-    if not config.app_url:
-        return
-    try:
-        for group_id in dbmod.grupos_da_partida(conn, match_id):
-            if dbmod.ja_notificado_discord(conn, match_id, group_id):
-                continue
-            webhook_url = dbmod.webhook_do_grupo(conn, group_id)
-            if not webhook_url:
-                continue
-            try:
-                resumo = dbmod.resumo_da_partida_para_grupo(conn, match_id, group_id)
-                if resumo is None:
-                    continue
-                payload = discord_notify.montar_embed(resumo, match_id, config.app_url)
-                discord_notify.enviar_webhook(webhook_url, payload)
-                dbmod.marcar_notificado_discord(conn, match_id, group_id)
-            except Exception as e:  # noqa: BLE001
-                conn.rollback()
-                print(f"  discord: falha ao notificar grupo {group_id} da partida {match_id}: {e}")
-    except Exception as e:  # noqa: BLE001
-        conn.rollback()
-        print(f"  discord: falha ao notificar grupos da partida {match_id}: {e}")
-
-
 def cmd_fetch(config, conn, since=None, bot_dir=None, node_bin="node"):
     """Baixa e ingere as Partidas pendentes (descobertas pelo discover, ainda sem demo).
 
@@ -207,7 +175,6 @@ def cmd_fetch(config, conn, since=None, bot_dir=None, node_bin="node"):
                 )
                 print(f"  {code}: ingerida {mid} (played_at={played_at})")
                 total += 1
-                _notificar_discord_grupos(config, conn, mid)
         except Exception as e:  # noqa: BLE001
             # Uma partida com demo problemático não derruba o lote; marca failed pra
             # não ficar re-baixando 200MB toda hora (dá pra re-tentar voltando pra
@@ -388,8 +355,7 @@ def cmd_processar_uploads_pendentes(config, conn):
     """Processa a fila de uploads manuais de demo (qualquer membro do grupo, via
     'Enviar Demo' no site): baixa o .dem do R2 (staging de upload direto via URL
     pré-assinada — a Vercel não aguenta receber o arquivo síncrono, ver
-    site/server/src/routes/upload.js) e ingere com o group_id de quem enviou
-    (não usa grupo_para_ingest aqui: já sabemos com certeza de qual grupo veio)."""
+    site/server/src/routes/upload.js)."""
     import tempfile
     from pathlib import Path
 
@@ -400,7 +366,7 @@ def cmd_processar_uploads_pendentes(config, conn):
 
     client = storage_r2.make_client(config)
     total = 0
-    for upload_id, group_id, adicionado_por, arquivo_r2_key, share_code, played_at in pendentes:
+    for upload_id, adicionado_por, arquivo_r2_key, share_code, played_at in pendentes:
         dbmod.atualizar_upload_pendente(conn, upload_id, "processando")
         try:
             with tempfile.TemporaryDirectory() as tmp:
@@ -413,7 +379,7 @@ def cmd_processar_uploads_pendentes(config, conn):
                 match_id = ingest_demo(
                     config, conn, dem_path,
                     share_code=share_code, source="upload", upload=True,
-                    played_at=played_at, group_id=group_id,
+                    played_at=played_at,
                 )
                 dbmod.atualizar_upload_pendente(conn, upload_id, "concluido", match_id=match_id)
                 print(f"  {upload_id}: concluido ({match_id})")
@@ -586,15 +552,11 @@ def _upload_replay(client, bucket, rkey, replay_json):
         )
 
 
-def _finalizar_ingest(config, conn, parsed, replay_json, dem_path_upload, share_code, source, upload, played_at, group_id=None):
+def _finalizar_ingest(config, conn, parsed, replay_json, dem_path_upload, share_code, source, upload, played_at):
     """Cauda comum de ingest_demo/ingest_demo_multiparte: arquiva demo+replay no R2 (se
     configurado) e grava no banco. Devolve match_id. `dem_path_upload` é o .dem cujos
     bytes brutos sobem pro R2 (partida de arquivo único: o próprio; partida fundida de
-    várias partes: ver escolha em ingest_demo_multiparte).
-
-    `group_id` (opcional): quando o chamador já sabe com certeza de qual grupo a Partida
-    veio (ex.: fila de uploads manuais — cmd_processar_uploads_pendentes — onde o upload
-    já está associado a um group_id explícito), pula o guess de grupo_para_ingest."""
+    várias partes: ver escolha em ingest_demo_multiparte)."""
     demo_url = replay_url = None
     if upload and config.r2_endpoint:
         client = storage_r2.make_client(config)
@@ -613,14 +575,10 @@ def _finalizar_ingest(config, conn, parsed, replay_json, dem_path_upload, share_
             _upload_replay(client, config.r2_bucket, rkey, replay_json)
             replay_url = f"{config.r2_endpoint}/{config.r2_bucket}/{rkey}"
 
-    if group_id is None:
-        steam_ids = [p["steam_id64"] for p in parsed.get("players", []) if p.get("steam_id64")]
-        group_id = dbmod.grupo_para_ingest(conn, steam_ids)
     return dbmod.store_parsed(
         conn, parsed, share_code=share_code, source=source,
         demo_url=demo_url, replay_url=replay_url,
         prefer_new_played_at=bool(played_at),
-        group_id=group_id,
     )
 
 
@@ -641,15 +599,13 @@ def _atualizar_avatares(config, conn, steam_ids):
         print(f"aviso: avatares Steam não atualizados ({e})")
 
 
-def ingest_demo(config, conn, path, share_code=None, source="upload", upload=True, played_at=None, group_id=None):
+def ingest_demo(config, conn, path, share_code=None, source="upload", upload=True, played_at=None):
     """Parseia um .dem, arquiva no R2 (se configurado) e grava no banco. Devolve match_id.
 
     `played_at` (ISO 8601, opcional): quando o operador sabe a hora real da Partida,
     essa informação é mais confiável que a mtime do arquivo (que só reflete quando o
     .dem foi baixado/copiado — pode ser dias depois) e vence mesmo sobre um played_at
     já gravado por descoberta automática (prefer_new_played_at=True em store_parsed).
-
-    `group_id` (opcional): repassado direto pra _finalizar_ingest — ver docstring lá.
     """
     parsed = parsemod.parse_demo(path)
     parsed["players"] = transform.fill_kd_from_kills(parsed["players"], parsed["kills"])
@@ -678,7 +634,7 @@ def ingest_demo(config, conn, path, share_code=None, source="upload", upload=Tru
     except Exception as e:  # noqa: BLE001
         print(f"aviso: replay 2D / clutch não gerado ({e})")
 
-    match_id = _finalizar_ingest(config, conn, parsed, replay_json, path, share_code, source, upload, played_at, group_id=group_id)
+    match_id = _finalizar_ingest(config, conn, parsed, replay_json, path, share_code, source, upload, played_at)
     _atualizar_avatares(config, conn, [p["steam_id64"] for p in parsed.get("players", [])])
     return match_id
 
@@ -774,14 +730,14 @@ def cmd_sincronizar_faceit(config, conn, limite=10):
 
     # 1. Descoberta — enfileira o que ainda não foi visto (histórico inteiro na 1ª vez)
     conhecidas = dbmod.faceit_match_ids_conhecidos(conn)
-    for steam_id64, faceit_id, group_id in vinculados:
+    for steam_id64, faceit_id in vinculados:
         try:
             primeira = not dbmod.membro_ja_sincronizou_faceit(conn, steam_id64)
             novas = faceit.listar_historico_5v5(
                 config.faceit_api_key, faceit_id, conhecidas, andar_tudo=primeira,
             )
             for item in novas:
-                dbmod.enfileirar_faceit(conn, item["faceit_match_id"], steam_id64, group_id)
+                dbmod.enfileirar_faceit(conn, item["faceit_match_id"], steam_id64)
                 conhecidas.add(item["faceit_match_id"])
             if novas:
                 print(f"  descoberta {steam_id64}: {len(novas)} partida(s) nova(s)")
@@ -790,10 +746,10 @@ def cmd_sincronizar_faceit(config, conn, limite=10):
             print(f"  descoberta {steam_id64}: FALHOU ({e})")
 
     # 2. Processamento — lote limitado; falha de um item não derruba os outros
-    vinculados_por_steam = {s: (f, g) for s, f, g in vinculados}
+    vinculados_por_steam = {s: f for s, f in vinculados}
     ingeridas_por_membro = {}
     total = 0
-    for faceit_match_id, steam_id64, group_id, tentativas in dbmod.listar_faceit_pendentes(conn, limite):
+    for faceit_match_id, steam_id64, tentativas in dbmod.listar_faceit_pendentes(conn, limite):
         try:
             detalhes = faceit.detalhes_partida(config.faceit_api_key, faceit_match_id)
             stats = faceit.stats_partida(config.faceit_api_key, faceit_match_id)
@@ -814,7 +770,7 @@ def cmd_sincronizar_faceit(config, conn, limite=10):
                         match_id = ingest_demo(
                             config, conn, dem_path,
                             share_code=None, source="faceit", upload=True,
-                            played_at=played_at, group_id=group_id,
+                            played_at=played_at,
                         )
                 except Exception as e:  # noqa: BLE001
                     conn.rollback()
@@ -837,7 +793,6 @@ def cmd_sincronizar_faceit(config, conn, limite=10):
                 match_id = dbmod.store_parsed(
                     conn, parsed, source="faceit",
                     prefer_new_played_at=bool(parsed.get("played_at")),
-                    group_id=group_id,
                 )
 
             dbmod.marcar_faceit_match(conn, match_id, faceit_match_id)
@@ -852,7 +807,7 @@ def cmd_sincronizar_faceit(config, conn, limite=10):
             print(f"  {faceit_match_id}: FALHOU ({e})")
 
     # 3. ELO — snapshot por membro + carimbo na partida nova mais recente
-    for steam_id64, faceit_id, _ in vinculados:
+    for steam_id64, faceit_id in vinculados:
         try:
             elo, level = faceit.elo_atual(config.faceit_api_key, faceit_id)
             if elo is None:

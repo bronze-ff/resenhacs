@@ -49,11 +49,11 @@ function validarUpload(req, res, r2Client, { exigirUploadId = false } = {}) {
   return { video, uploadId }
 }
 
-export function createCursoRouter({ db, requireAuth, requireGroupMember, r2Client, r2Bucket }) {
+export function createCursoRouter({ db, requireAuth, r2Client, r2Bucket }) {
   const router = Router()
   const requireSuperAdmin = createRequireSuperAdmin(db)
 
-  router.get('/', requireAuth, requireGroupMember, async (req, res) => {
+  router.get('/', requireAuth, async (req, res) => {
     const { rows } = await db.query(
       'select video_slug, concluido, posicao_segundos from curso_progresso where steam_id64 = $1',
       [req.player.steamId],
@@ -76,7 +76,7 @@ export function createCursoRouter({ db, requireAuth, requireGroupMember, r2Clien
     )
   })
 
-  router.get('/:slug/url', requireAuth, requireGroupMember, async (req, res) => {
+  router.get('/:slug/url', requireAuth, async (req, res) => {
     const video = encontrarVideo(req.params.slug)
     if (!video) return res.status(404).json({ erro: 'Vídeo não encontrado' })
     if (!r2Client) return res.status(503).json({ erro: 'Arquivamento (R2) não configurado' })
@@ -84,7 +84,7 @@ export function createCursoRouter({ db, requireAuth, requireGroupMember, r2Clien
     res.json({ url })
   })
 
-  router.put('/:slug/progresso', requireAuth, requireGroupMember, async (req, res) => {
+  router.put('/:slug/progresso', requireAuth, async (req, res) => {
     const video = encontrarVideo(req.params.slug)
     if (!video) return res.status(404).json({ erro: 'Vídeo não encontrado' })
     const posicaoSegundos = Number(req.body?.posicaoSegundos ?? 0)

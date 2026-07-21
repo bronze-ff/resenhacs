@@ -23,7 +23,6 @@ import {
 const config = { jwtSecret: 's', appUrl: 'http://localhost:5173', isProduction: false, r2Bucket: 'resenha-demos' }
 const cookieMembro = `resenha_token=${signToken({ steamId: '765', isSuperAdmin: false }, config.jwtSecret)}`
 const cookieAdmin = `resenha_token=${signToken({ steamId: '111', isSuperAdmin: true }, config.jwtSecret)}`
-const GRUPO = '11111111-1111-1111-1111-111111111111'
 
 // Defaults re-aplicados a cada teste: vi.clearAllMocks() zera as CHAMADAS mas mantém as
 // implementações, e um teste que troca a implementação de objetoExiste não pode vazar pro
@@ -44,7 +43,6 @@ function appWith({ progresso = [] } = {}) {
       if (typeof sql === 'string' && sql.includes('is_super_admin from players')) {
         return Promise.resolve({ rows: [{ is_super_admin: true }] })
       }
-      if (sql.includes('group_members where group_id')) return Promise.resolve({ rows: [{}] })
       if (sql.includes('from curso_progresso')) return Promise.resolve({ rows: progresso })
       if (sql.includes('insert into curso_progresso')) return Promise.resolve({ rows: [] })
       return Promise.resolve({ rows: [] })
@@ -60,17 +58,11 @@ describe('GET /api/curso', () => {
     expect(res.status).toBe(401)
   })
 
-  it('sem X-Group-Id: 400', async () => {
-    const { app } = appWith()
-    const res = await request(app).get('/api/curso').set('Cookie', cookieMembro)
-    expect(res.status).toBe(400)
-  })
-
   it('devolve os 5 vídeos do catálogo, em ordem, com progresso do jogador', async () => {
     const { app } = appWith({
       progresso: [{ video_slug: 'modulo-1-aimbotz', concluido: true, posicao_segundos: 600 }],
     })
-    const res = await request(app).get('/api/curso').set('Cookie', cookieMembro).set('X-Group-Id', GRUPO)
+    const res = await request(app).get('/api/curso').set('Cookie', cookieMembro)
     expect(res.status).toBe(200)
     expect(res.body).toHaveLength(5)
     expect(res.body[0]).toMatchObject({ slug: 'introducao', titulo: 'Introdução', concluido: false, posicaoSegundos: 0 })
@@ -80,7 +72,7 @@ describe('GET /api/curso', () => {
   it('disponivel reflete o que existe no R2', async () => {
     objetoExiste.mockImplementation((c, b, key) => Promise.resolve(key === 'curso-mira/introducao.mp4'))
     const { app } = appWith()
-    const res = await request(app).get('/api/curso').set('Cookie', cookieMembro).set('X-Group-Id', GRUPO)
+    const res = await request(app).get('/api/curso').set('Cookie', cookieMembro)
     expect(res.status).toBe(200)
     expect(res.body[0]).toMatchObject({ slug: 'introducao', disponivel: true })
     expect(res.body[1]).toMatchObject({ slug: 'modulo-1-aimbotz', disponivel: false })
@@ -90,14 +82,14 @@ describe('GET /api/curso', () => {
 describe('GET /api/curso/:slug/url', () => {
   it('slug fora do catálogo: 404', async () => {
     const { app } = appWith()
-    const res = await request(app).get('/api/curso/nao-existe/url').set('Cookie', cookieMembro).set('X-Group-Id', GRUPO)
+    const res = await request(app).get('/api/curso/nao-existe/url').set('Cookie', cookieMembro)
     expect(res.status).toBe(404)
     expect(res.body.erro).toBe('Vídeo não encontrado')
   })
 
   it('slug válido: devolve a URL assinada', async () => {
     const { app } = appWith()
-    const res = await request(app).get('/api/curso/introducao/url').set('Cookie', cookieMembro).set('X-Group-Id', GRUPO)
+    const res = await request(app).get('/api/curso/introducao/url').set('Cookie', cookieMembro)
     expect(res.status).toBe(200)
     expect(res.body).toEqual({ url: 'https://r2.example/presigned-get' })
   })
@@ -108,7 +100,7 @@ describe('PUT /api/curso/:slug/progresso', () => {
     const { app } = appWith()
     const res = await request(app)
       .put('/api/curso/nao-existe/progresso')
-      .set('Cookie', cookieMembro).set('X-Group-Id', GRUPO)
+      .set('Cookie', cookieMembro)
       .send({ posicaoSegundos: 10, concluido: false })
     expect(res.status).toBe(404)
   })
@@ -117,7 +109,7 @@ describe('PUT /api/curso/:slug/progresso', () => {
     const { app, db } = appWith()
     const res = await request(app)
       .put('/api/curso/introducao/progresso')
-      .set('Cookie', cookieMembro).set('X-Group-Id', GRUPO)
+      .set('Cookie', cookieMembro)
       .send({ posicaoSegundos: 42, concluido: false })
     expect(res.status).toBe(204)
     const chamada = db.query.mock.calls.find(([sql]) => sql.includes('insert into curso_progresso'))
