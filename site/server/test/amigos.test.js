@@ -5,6 +5,7 @@ import { signToken } from '../src/auth/jwt.js'
 
 const config = { jwtSecret: 's', appUrl: 'http://localhost:5173', isProduction: false }
 const cookieA = `resenha_token=${signToken({ steamId: '111' }, config.jwtSecret)}`
+const cookieB = `resenha_token=${signToken({ steamId: '999' }, config.jwtSecret)}`
 
 function appWith(handlers) {
   const query = vi.fn().mockImplementation((sql) => {
@@ -38,6 +39,14 @@ describe('POST /api/amigos/:steamId/aceitar', () => {
     const upd = db.query.mock.calls.find((c) => c[0].includes('update friendships'))
     expect(upd[0]).toContain("status = 'accepted'")
     expect(upd[1]).toEqual(['111', '999'])                   // par canônico
+  })
+  it('aceita com steamId menor: marca accepted ($2 branch)', async () => {
+    const { app, db } = appWith([['update friendships', [{}]]])
+    const res = await request(app).post('/api/amigos/111/aceitar').set('Cookie', cookieB)
+    expect(res.status).toBe(200)
+    const upd = db.query.mock.calls.find((c) => c[0].includes('update friendships'))
+    expect(upd[0]).toContain("status = 'accepted'")
+    expect(upd[1]).toEqual(['111', '999'])                   // par canônico, mas euEhA=false usa $2
   })
   it('sem pendente pra aceitar: 404', async () => {
     const { app } = appWith([['update friendships', []]])
