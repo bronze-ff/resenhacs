@@ -29,20 +29,29 @@ export function createClipesRouter({ db, requireAuth }) {
   // com pontuação própria (a Allstar não expõe a fórmula deles) + leaderboard de
   // jogadores. Links manuais (tabela `clips`) ficam de fora — não têm highlight/round
   // pra pontuar. Ver docs/superpowers/specs/2026-07-21-aba-clipes-design.md.
+  //
+  // allstar_clips não depende mais de highlight_id (migração 0042 — clipe virou "por
+  // jogador+partida", ver allstarClip.js): a query lê match_id/steam_id64/round_number
+  // direto da própria allstar_clips, e só tenta achar um `kind` (ace/clutch/etc.) via
+  // subquery em highlights pra reaproveitar a pontuação quando o round que a Allstar
+  // escolheu bateu com um highlight nosso. Sem bater, kind vem null — a fórmula já usa
+  // um piso padrão (calcularPontuacao) em vez de excluir o clipe da lista.
   router.get('/', requireAuth, async (req, res) => {
     const periodo = PERIODOS[req.query.periodo] !== undefined ? req.query.periodo : 'sempre'
     const eu = req.player.steamId
     const { rows } = await db.query(
       `select ac.id, ac.clip_url, ac.clip_snapshot_url,
-              h.round_number, h.kind, h.match_id, h.steam_id64,
+              ac.round_number, ac.match_id, ac.steam_id64,
+              (select h.kind from highlights h
+               where h.match_id = ac.match_id and h.steam_id64 = ac.steam_id64 and h.round_number = ac.round_number
+               limit 1) as kind,
               m.map, m.played_at,
               coalesce(p.nick, mp.nick) as nick, coalesce(p.avatar_url, sa.avatar_url) as avatar_url
        from allstar_clips ac
-       join highlights h on h.id = ac.highlight_id
-       join matches m on m.id = h.match_id
-       left join players p on p.steam_id64 = h.steam_id64
-       left join match_players mp on mp.match_id = h.match_id and mp.steam_id64 = h.steam_id64
-       left join steam_avatares sa on sa.steam_id64 = h.steam_id64
+       join matches m on m.id = ac.match_id
+       left join players p on p.steam_id64 = ac.steam_id64
+       left join match_players mp on mp.match_id = ac.match_id and mp.steam_id64 = ac.steam_id64
+       left join steam_avatares sa on sa.steam_id64 = ac.steam_id64
        where ac.status = 'Processed' and ${partidaVisivelExpr('m', '$1')} ${PERIODOS[periodo]}
        order by m.played_at desc`,
       [eu],

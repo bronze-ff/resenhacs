@@ -77,6 +77,21 @@ describe('GET /api/clipes', () => {
     expect(call[0]).toContain("ac.status = 'Processed'")
   })
 
+  it('clipe gerado por jogador (sem highlight nosso batendo o round) ainda aparece, com pontuação padrão', async () => {
+    // Clipe gerado pelo novo fluxo por jogador (BP, ver allstarClip.js) — a Allstar
+    // escolheu um round que não bate com nenhum highlight nosso, então o subquery de
+    // kind não acha nada (null). O clipe não pode sumir da lista por isso.
+    const semKind = { ...CLIPE_ROW, id: 'c3', kind: null, round_number: 9 }
+    const { app } = appWith({ clipes: [semKind], killPositions: { hs: 0, total: 0 } })
+    const res = await request(app).get('/api/clipes').set('Cookie', cookieA)
+    expect(res.status).toBe(200)
+    expect(res.body.clipes).toHaveLength(1)
+    expect(res.body.clipes[0]).toMatchObject({
+      id: 'c3', steamId: '111', roundNumber: 9, kind: null,
+      pontuacao: { base: 10, kind: null, bonusHeadshot: 0, total: 10 },
+    })
+  })
+
   it('escopa por amizade via partidaVisivelExpr (sem group_id)', async () => {
     const { app, db } = appWith({ clipes: [] })
     await request(app).get('/api/clipes').set('Cookie', cookieA)

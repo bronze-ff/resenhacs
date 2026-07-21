@@ -25,6 +25,23 @@ describe('Clipes', () => {
     expect(screen.getAllByText('120').length).toBeGreaterThan(0)
   })
 
+  it('clipe sem kind (gerado por jogador, sem highlight nosso batendo o round) mostra fallback "MOMENTO" sem quebrar', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        clipes: [{
+          id: 'c2', matchId: 'm1', steamId: '222', nick: 'outro', avatarUrl: null,
+          clipUrl: 'https://allstar.gg/clip/2', clipSnapshotUrl: null,
+          kind: null, roundNumber: 9, map: 'de_dust2', playedAt: '2026-07-21T00:00:00Z',
+          pontuacao: { base: 10, kind: null, bonusHeadshot: 0, total: 10 },
+        }],
+        leaderboard: [],
+      }),
+    })
+    render(<MemoryRouter><Clipes /></MemoryRouter>)
+    await waitFor(() => expect(screen.getByText('MOMENTO')).toBeInTheDocument())
+  })
+
   it('troca de período dispara novo fetch com o query param certo', async () => {
     render(<MemoryRouter><Clipes /></MemoryRouter>)
     await waitFor(() => expect(global.fetch).toHaveBeenCalledWith('/api/clipes?periodo=sempre'))

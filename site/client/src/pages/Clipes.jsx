@@ -14,7 +14,11 @@ const NOME_KIND = {
   clutch_1v2: 'CLUTCH 1v2', clutch_1v1: 'CLUTCH 1v1',
 }
 
+// kind vem null quando o round que a Allstar escolheu (gerar clipe por JOGADOR, não
+// mais por highlight — ver allstarClip.js) não bate com nenhum highlight nosso pra
+// esse jogador/round: a Allstar viu uma jogada boa que a gente não tinha detectado.
 function nomeDoKind(kind) {
+  if (!kind) return 'MOMENTO'
   return NOME_KIND[kind] ?? kind
 }
 
@@ -70,7 +74,7 @@ function CardClipe({ clipe, aberto, onAbrir, viewerSteamId }) {
         <div className="shrink-0 text-right">
           <div
             className="font-display text-lg font-bold text-destaque"
-            title={`${pontuacao.kind} (${pontuacao.base})${pontuacao.bonusHeadshot ? ` + All Headshots (+${pontuacao.bonusHeadshot})` : ''} = ${pontuacao.total}`}
+            title={`${pontuacao.kind ?? 'momento'} (${pontuacao.base})${pontuacao.bonusHeadshot ? ` + All Headshots (+${pontuacao.bonusHeadshot})` : ''} = ${pontuacao.total}`}
           >
             {pontuacao.total}
           </div>
