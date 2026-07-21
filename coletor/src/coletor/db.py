@@ -597,12 +597,10 @@ def connect(database_url):
 
 
 def listar_vinculados_faceit(conn):
-    """Membros com conta FACEIT vinculada (Fase A) e grupo ativo — a descoberta roda
-    pra cada um deles."""
+    """Membros com conta FACEIT vinculada (Fase A) — a descoberta roda pra cada um deles."""
     with conn.cursor() as cur:
         cur.execute(
-            "select steam_id64, faceit_id, grupo_ativo_id from players "
-            "where faceit_id is not null and grupo_ativo_id is not null"
+            "select steam_id64, faceit_id from players where faceit_id is not null"
         )
         return cur.fetchall()
 

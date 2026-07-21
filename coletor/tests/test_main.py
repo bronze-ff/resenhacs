@@ -126,43 +126,9 @@ def test_montar_lineups_e_o_mesmo_independente_de_quem_chama():
     assert len(de_reprocess) == 1
 
 
-# ---- ingest_demo / group_id explicito ----
-
-def test_ingest_demo_com_group_id_explicito_nao_chama_grupo_para_ingest(monkeypatch, tmp_path):
-    chamou_grupo_para_ingest = []
-    monkeypatch.setattr(
-        main.dbmod, "grupo_para_ingest",
-        lambda conn, steam_ids: chamou_grupo_para_ingest.append(1) or "grupo-errado",
-    )
-    store_calls = []
-    monkeypatch.setattr(
-        main.dbmod, "store_parsed",
-        lambda conn, parsed, **kw: store_calls.append(kw) or "m1",
-    )
-    monkeypatch.setattr(main.parsemod, "parse_demo", lambda path: {"players": [], "kills": [], "map": "de_mirage"})
-    monkeypatch.setattr(main.transform, "fill_kd_from_kills", lambda players, kills: players)
-    monkeypatch.setattr(main.transform, "enrich", lambda parsed: {**parsed, "kills": [], "highlights": []})
-    # extract_replay chama o parser Rust de verdade num .dem falso; um erro comum
-    # (KeyError/ValueError etc.) o próprio ingest_demo engole (best-effort, replay 2D
-    # não é o que este teste verifica) — mocka pra não depender do parser real aqui.
-    monkeypatch.setattr(
-        main.parsemod, "extract_replay",
-        lambda path: (_ for _ in ()).throw(RuntimeError("sem replay nesse teste")),
-    )
-
-    config = Config(env={})
-    dem = tmp_path / "demo.dem"
-    dem.write_bytes(b"x")
-    main.ingest_demo(config, None, dem, group_id="g-explicito", upload=False)
-
-    assert chamou_grupo_para_ingest == []
-    assert store_calls[-1]["group_id"] == "g-explicito"
-
-
 # ---- upload do .dem arquivado no R2 (dívida técnica: subia sem comprimir) ----
 
 def test_finalizar_ingest_comprime_o_dem_antes_de_subir_pro_r2(monkeypatch, tmp_path):
-    monkeypatch.setattr(main.dbmod, "grupo_para_ingest", lambda conn, steam_ids: "g1")
     monkeypatch.setattr(main.dbmod, "store_parsed", lambda conn, parsed, **kw: "m1")
     monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
     monkeypatch.setattr(main.storage_r2, "demo_key", lambda match_id: "demos/m1.dem.bz2")
@@ -535,7 +501,7 @@ class _UploadsCursor:
 
     def fetchall(self):
         if self._last.startswith(
-            "select id, group_id, adicionado_por, arquivo_r2_key, share_code, played_at from uploads_pendentes"
+            "select id, adicionado_por, arquivo_r2_key, share_code, played_at from uploads_pendentes"
         ):
             return self.conn.upload_rows
         return []
@@ -558,8 +524,8 @@ class _UploadsConn:
         self.rollbacks += 1
 
 
-def test_processar_uploads_pendentes_baixa_do_r2_ingere_com_group_id_e_apaga_em_sucesso(monkeypatch):
-    conn = _UploadsConn([("u1", "g1", "765", "uploads-pendentes/abc.dem", None, None)])
+def test_processar_uploads_pendentes_baixa_do_r2_e_apaga_em_sucesso(monkeypatch):
+    conn = _UploadsConn([("u1", "765", "uploads-pendentes/abc.dem", None, None)])
     config = _config_com_r2()
 
     monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
@@ -575,8 +541,8 @@ def test_processar_uploads_pendentes_baixa_do_r2_ingere_com_group_id_e_apaga_em_
     )
     ingests = []
 
-    def _ingest_fake(cfg, cn, dem_path, share_code=None, source=None, upload=None, played_at=None, group_id=None):
-        ingests.append((dem_path.name, source, upload, group_id))
+    def _ingest_fake(cfg, cn, dem_path, share_code=None, source=None, upload=None, played_at=None):
+        ingests.append((dem_path.name, source, upload))
         return "m1"
 
     monkeypatch.setattr(main, "ingest_demo", _ingest_fake)
@@ -585,14 +551,14 @@ def test_processar_uploads_pendentes_baixa_do_r2_ingere_com_group_id_e_apaga_em_
 
     assert total == 1
     assert downloads == [("fake-client", "resenha-demos", "uploads-pendentes/abc.dem")]
-    assert ingests == [("demo.dem", "upload", True, "g1")]
+    assert ingests == [("demo.dem", "upload", True)]
     assert deletes == [("resenha-demos", "uploads-pendentes/abc.dem")]
     update = next(c for c in conn.calls if c[0].startswith("update uploads_pendentes") and c[1][0] == "concluido")
     assert update[1][1] == "m1"
 
 
 def test_processar_uploads_pendentes_mantem_staging_no_r2_quando_falha(monkeypatch):
-    conn = _UploadsConn([("u1", "g1", "765", "uploads-pendentes/abc.dem", None, None)])
+    conn = _UploadsConn([("u1", "765", "uploads-pendentes/abc.dem", None, None)])
     config = _config_com_r2()
 
     monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
@@ -633,15 +599,15 @@ def test_sincronizar_faceit_descobre_processa_demo_e_carimba_elo(monkeypatch):
     # correto da função) e a asserção de elo_gravado nunca passar.
     finished_at_epoch = 1784196000
 
-    monkeypatch.setattr(main.dbmod, "listar_vinculados_faceit", lambda c: [("111", "f-111", "g1")])
+    monkeypatch.setattr(main.dbmod, "listar_vinculados_faceit", lambda c: [("111", "f-111")])
     monkeypatch.setattr(main.dbmod, "faceit_match_ids_conhecidos", lambda c: set())
     monkeypatch.setattr(main.dbmod, "membro_ja_sincronizou_faceit", lambda c, s: True)
     enfileiradas = []
-    monkeypatch.setattr(main.dbmod, "enfileirar_faceit", lambda c, m, s, g: enfileiradas.append(m))
+    monkeypatch.setattr(main.dbmod, "enfileirar_faceit", lambda c, m, s: enfileiradas.append(m))
     monkeypatch.setattr(main.faceit, "listar_historico_5v5",
                         lambda key, fid, ja_vistas, andar_tudo=False, **kw: [
                             {"faceit_match_id": "fm1", "finished_at": finished_at_epoch}])
-    monkeypatch.setattr(main.dbmod, "listar_faceit_pendentes", lambda c, limite=10: [("fm1", "111", "g1", 0)])
+    monkeypatch.setattr(main.dbmod, "listar_faceit_pendentes", lambda c, limite=10: [("fm1", "111", 0)])
     monkeypatch.setattr(main.faceit, "detalhes_partida",
                         lambda key, mid, **kw: {"demo_url": ["https://d/x.dem.gz"],
                                                 "finished_at": finished_at_epoch, "teams": {}, "results": {}})
@@ -670,11 +636,11 @@ def test_sincronizar_faceit_descobre_processa_demo_e_carimba_elo(monkeypatch):
 def test_sincronizar_faceit_cai_no_stats_only_quando_demo_falha(monkeypatch):
     config = Config(env={"FACEIT_API_KEY": "k"})
     conn = None  # todo acesso a banco é via dbmod.* monkeypatchado — conn nunca é lido
-    monkeypatch.setattr(main.dbmod, "listar_vinculados_faceit", lambda c: [("111", "f-111", "g1")])
+    monkeypatch.setattr(main.dbmod, "listar_vinculados_faceit", lambda c: [("111", "f-111")])
     monkeypatch.setattr(main.dbmod, "faceit_match_ids_conhecidos", lambda c: {"fm1"})
     monkeypatch.setattr(main.dbmod, "membro_ja_sincronizou_faceit", lambda c, s: True)
     monkeypatch.setattr(main.faceit, "listar_historico_5v5", lambda *a, **kw: [])
-    monkeypatch.setattr(main.dbmod, "listar_faceit_pendentes", lambda c, limite=10: [("fm1", "111", "g1", 0)])
+    monkeypatch.setattr(main.dbmod, "listar_faceit_pendentes", lambda c, limite=10: [("fm1", "111", 0)])
     monkeypatch.setattr(main.faceit, "detalhes_partida",
                         lambda key, mid, **kw: {"demo_url": [], "finished_at": 1752660000,
                                                 "teams": {}, "results": {}})
@@ -702,12 +668,12 @@ def test_sincronizar_faceit_demo_falha_com_tentativas_restantes_faz_retry_sem_st
     # (mesmo motivo documentado em test_sincronizar_faceit_falha_de_item_nao_derruba_o_lote) —
     # com conn=None isso levantaria AttributeError antes mesmo de chegar na lógica de retry.
     conn = types.SimpleNamespace(rollback=lambda: None)
-    monkeypatch.setattr(main.dbmod, "listar_vinculados_faceit", lambda c: [("111", "f-111", "g1")])
+    monkeypatch.setattr(main.dbmod, "listar_vinculados_faceit", lambda c: [("111", "f-111")])
     monkeypatch.setattr(main.dbmod, "faceit_match_ids_conhecidos", lambda c: {"fm1"})
     monkeypatch.setattr(main.dbmod, "membro_ja_sincronizou_faceit", lambda c, s: True)
     monkeypatch.setattr(main.faceit, "listar_historico_5v5", lambda *a, **kw: [])
     # tentativas=0 -> 0+1 < 3, ainda tem tentativa sobrando
-    monkeypatch.setattr(main.dbmod, "listar_faceit_pendentes", lambda c, limite=10: [("fm1", "111", "g1", 0)])
+    monkeypatch.setattr(main.dbmod, "listar_faceit_pendentes", lambda c, limite=10: [("fm1", "111", 0)])
     monkeypatch.setattr(main.faceit, "detalhes_partida",
                         lambda key, mid, **kw: {"demo_url": ["https://d/x.dem.gz"],
                                                 "finished_at": 1752660000, "teams": {}, "results": {}})
@@ -743,12 +709,12 @@ def test_sincronizar_faceit_demo_falha_apos_esgotar_tentativas_cai_pro_stats_onl
     # conn NÃO pode ser None aqui pelo mesmo motivo do teste anterior: baixar_demo_falha
     # dispara uma exceção real que passa por conn.rollback() direto na implementação.
     conn = types.SimpleNamespace(rollback=lambda: None)
-    monkeypatch.setattr(main.dbmod, "listar_vinculados_faceit", lambda c: [("111", "f-111", "g1")])
+    monkeypatch.setattr(main.dbmod, "listar_vinculados_faceit", lambda c: [("111", "f-111")])
     monkeypatch.setattr(main.dbmod, "faceit_match_ids_conhecidos", lambda c: {"fm1"})
     monkeypatch.setattr(main.dbmod, "membro_ja_sincronizou_faceit", lambda c, s: True)
     monkeypatch.setattr(main.faceit, "listar_historico_5v5", lambda *a, **kw: [])
     # tentativas=2 -> 2+1 >= 3, já esgotou (essa é a 3a tentativa)
-    monkeypatch.setattr(main.dbmod, "listar_faceit_pendentes", lambda c, limite=10: [("fm1", "111", "g1", 2)])
+    monkeypatch.setattr(main.dbmod, "listar_faceit_pendentes", lambda c, limite=10: [("fm1", "111", 2)])
     monkeypatch.setattr(main.faceit, "detalhes_partida",
                         lambda key, mid, **kw: {"demo_url": ["https://d/x.dem.gz"],
                                                 "finished_at": 1752660000, "teams": {}, "results": {}})
@@ -789,12 +755,12 @@ def test_sincronizar_faceit_falha_de_item_nao_derruba_o_lote(monkeypatch):
     # falha que este teste existe pra verificar — por isso um stub mínimo com rollback()
     # no-op, sem virar uma FakeConn de verdade (nenhum acesso a banco é de fato lido).
     conn = types.SimpleNamespace(rollback=lambda: None)
-    monkeypatch.setattr(main.dbmod, "listar_vinculados_faceit", lambda c: [("111", "f-111", "g1")])
+    monkeypatch.setattr(main.dbmod, "listar_vinculados_faceit", lambda c: [("111", "f-111")])
     monkeypatch.setattr(main.dbmod, "faceit_match_ids_conhecidos", lambda c: set())
     monkeypatch.setattr(main.dbmod, "membro_ja_sincronizou_faceit", lambda c, s: True)
     monkeypatch.setattr(main.faceit, "listar_historico_5v5", lambda *a, **kw: [])
     monkeypatch.setattr(main.dbmod, "listar_faceit_pendentes",
-                        lambda c, limite=10: [("fm-ruim", "111", "g1", 0), ("fm-bom", "111", "g1", 0)])
+                        lambda c, limite=10: [("fm-ruim", "111", 0), ("fm-bom", "111", 0)])
 
     def detalhes(key, mid, **kw):
         if mid == "fm-ruim":
@@ -816,97 +782,6 @@ def test_sincronizar_faceit_falha_de_item_nao_derruba_o_lote(monkeypatch):
     total = main.cmd_sincronizar_faceit(config, conn)
     assert total == 1
     assert falhas == ["fm-ruim"]
-
-
-# ---- _notificar_discord_grupos ----
-
-
-def test_notificar_discord_sem_app_url_nao_faz_nada(monkeypatch):
-    config = main.Config(env={})
-    chamado = []
-    monkeypatch.setattr(main.dbmod, "grupos_da_partida", lambda *a, **k: chamado.append(1))
-    main._notificar_discord_grupos(config, conn=None, match_id="m1")
-    assert chamado == []
-
-
-def test_notificar_discord_pula_grupo_sem_webhook(monkeypatch):
-    config = main.Config(env={"APP_URL": "https://x.com"})
-    monkeypatch.setattr(main.dbmod, "grupos_da_partida", lambda conn, mid: ["g1"])
-    monkeypatch.setattr(main.dbmod, "ja_notificado_discord", lambda conn, mid, gid: False)
-    monkeypatch.setattr(main.dbmod, "webhook_do_grupo", lambda conn, gid: None)
-    enviados = []
-    monkeypatch.setattr(main.discord_notify, "enviar_webhook", lambda *a, **k: enviados.append(1))
-    main._notificar_discord_grupos(config, conn=object(), match_id="m1")
-    assert enviados == []
-
-
-def test_notificar_discord_pula_grupo_ja_notificado(monkeypatch):
-    config = main.Config(env={"APP_URL": "https://x.com"})
-    monkeypatch.setattr(main.dbmod, "grupos_da_partida", lambda conn, mid: ["g1"])
-    monkeypatch.setattr(main.dbmod, "ja_notificado_discord", lambda conn, mid, gid: True)
-    enviados = []
-    monkeypatch.setattr(main.discord_notify, "enviar_webhook", lambda *a, **k: enviados.append(1))
-    main._notificar_discord_grupos(config, conn=object(), match_id="m1")
-    assert enviados == []
-
-
-def test_notificar_discord_envia_e_marca_notificado(monkeypatch):
-    config = main.Config(env={"APP_URL": "https://x.com"})
-    monkeypatch.setattr(main.dbmod, "grupos_da_partida", lambda conn, mid: ["g1"])
-    monkeypatch.setattr(main.dbmod, "ja_notificado_discord", lambda conn, mid, gid: False)
-    monkeypatch.setattr(main.dbmod, "webhook_do_grupo", lambda conn, gid: "https://discord.com/wh")
-    resumo = {"map": "de_mirage", "score_grupo": 13, "score_rival": 9, "mvp_nick": "f", "mvp_rating": 1.0}
-    monkeypatch.setattr(main.dbmod, "resumo_da_partida_para_grupo", lambda conn, mid, gid: resumo)
-    enviados = []
-    monkeypatch.setattr(main.discord_notify, "montar_embed", lambda r, mid, url: {"payload": True})
-    monkeypatch.setattr(main.discord_notify, "enviar_webhook", lambda url, payload: enviados.append((url, payload)))
-    marcados = []
-    monkeypatch.setattr(main.dbmod, "marcar_notificado_discord", lambda conn, mid, gid: marcados.append((mid, gid)))
-    main._notificar_discord_grupos(config, conn=object(), match_id="m1")
-    assert enviados == [("https://discord.com/wh", {"payload": True})]
-    assert marcados == [("m1", "g1")]
-
-
-def test_notificar_discord_nao_derruba_em_erro_de_envio(monkeypatch, capsys):
-    config = main.Config(env={"APP_URL": "https://x.com"})
-    monkeypatch.setattr(main.dbmod, "grupos_da_partida", lambda conn, mid: ["g1"])
-    monkeypatch.setattr(main.dbmod, "ja_notificado_discord", lambda conn, mid, gid: False)
-    monkeypatch.setattr(main.dbmod, "webhook_do_grupo", lambda conn, gid: "https://discord.com/wh")
-    resumo = {"map": "de_mirage", "score_grupo": 13, "score_rival": 9, "mvp_nick": None, "mvp_rating": None}
-    monkeypatch.setattr(main.dbmod, "resumo_da_partida_para_grupo", lambda conn, mid, gid: resumo)
-    monkeypatch.setattr(main.discord_notify, "montar_embed", lambda r, mid, url: {})
-
-    def _explode(url, payload):
-        raise RuntimeError("timeout")
-
-    monkeypatch.setattr(main.discord_notify, "enviar_webhook", _explode)
-    marcados = []
-    monkeypatch.setattr(main.dbmod, "marcar_notificado_discord", lambda conn, mid, gid: marcados.append(1))
-
-    class FakeConn:
-        def __init__(self):
-            self.rollbacks = 0
-
-        def rollback(self):
-            self.rollbacks += 1
-
-    conn = FakeConn()
-    main._notificar_discord_grupos(config, conn=conn, match_id="m1")  # não deve lançar
-    assert marcados == []
-    assert conn.rollbacks == 1
-    assert "timeout" in capsys.readouterr().out
-
-
-def test_notificar_discord_pula_grupo_sem_resumo(monkeypatch):
-    config = main.Config(env={"APP_URL": "https://x.com"})
-    monkeypatch.setattr(main.dbmod, "grupos_da_partida", lambda conn, mid: ["g1"])
-    monkeypatch.setattr(main.dbmod, "ja_notificado_discord", lambda conn, mid, gid: False)
-    monkeypatch.setattr(main.dbmod, "webhook_do_grupo", lambda conn, gid: "https://discord.com/wh")
-    monkeypatch.setattr(main.dbmod, "resumo_da_partida_para_grupo", lambda conn, mid, gid: None)
-    enviados = []
-    monkeypatch.setattr(main.discord_notify, "enviar_webhook", lambda *a, **k: enviados.append(1))
-    main._notificar_discord_grupos(config, conn=object(), match_id="m1")
-    assert enviados == []
 
 
 # ---- _baixar_e_descomprimir (dívida técnica: download truncado passava em silêncio) ----
