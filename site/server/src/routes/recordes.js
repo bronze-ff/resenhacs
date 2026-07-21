@@ -61,19 +61,22 @@ export function createRecordesRouter({ db, requireAuth, requireGroupMember }) {
 
     // Maior sequência de vitórias do GRUPO (não de um jogador): percorre as Partidas
     // em ordem cronológica contando vitórias seguidas; derrota/empate/misto zera.
+    // fimMatchId aponta pra Partida que fechou a sequência — é ela que o card leva o
+    // clique, já que "onde a sequência terminou" é o ponto de referência mais natural.
     let maiorSequencia = null
-    let atual = { vitorias: 0, inicio: null }
+    let atual = { vitorias: 0, inicio: null, fimMatchId: null }
     for (const m of matchesQ.rows) {
       const resultado = resultadoDeUmaPartida(jogadoresPorPartida.get(m.id) ?? [])
       if (resultado === 'vitoria') {
         if (atual.vitorias === 0) atual.inicio = m.played_at
         atual.vitorias += 1
         atual.fim = m.played_at
+        atual.fimMatchId = m.id
         if (!maiorSequencia || atual.vitorias > maiorSequencia.vitorias) {
-          maiorSequencia = { vitorias: atual.vitorias, inicio: atual.inicio, fim: atual.fim }
+          maiorSequencia = { vitorias: atual.vitorias, inicio: atual.inicio, fim: atual.fim, fimMatchId: atual.fimMatchId }
         }
       } else {
-        atual = { vitorias: 0, inicio: null }
+        atual = { vitorias: 0, inicio: null, fimMatchId: null }
       }
     }
 
@@ -94,9 +97,14 @@ export function createRecordesRouter({ db, requireAuth, requireGroupMember }) {
     }
     for (const s of sessoes) {
       const porJogador = new Map()
+      // matchId da última Partida da sessão em que o Jogador realmente teve clutch —
+      // é o ponto de referência do card, já que a "Resenha" inteira não tem uma Partida
+      // única representá-la.
+      const ultimoMatchComClutchPorJogador = new Map()
       for (const mid of s.matchIds) {
         for (const r of jogadoresPorPartida.get(mid) ?? []) {
           porJogador.set(r.steam_id64, (porJogador.get(r.steam_id64) ?? 0) + r.clutch_wins)
+          if (r.clutch_wins > 0) ultimoMatchComClutchPorJogador.set(r.steam_id64, mid)
         }
       }
       for (const [steamId, clutches] of porJogador) {
@@ -105,7 +113,7 @@ export function createRecordesRouter({ db, requireAuth, requireGroupMember }) {
             ?? [...jogadoresPorPartida.values()].flat().find((j) => j.steam_id64 === steamId)
           maisClutchesNaNoite = {
             steamId, nick: r?.nick ?? steamId, avatarUrl: r?.avatar_url ?? null,
-            clutches, sessaoInicio: s.inicio,
+            clutches, sessaoInicio: s.inicio, matchId: ultimoMatchComClutchPorJogador.get(steamId) ?? null,
           }
         }
       }

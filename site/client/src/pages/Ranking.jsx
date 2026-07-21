@@ -86,15 +86,29 @@ function CardJogador({ r, posicao, souEu }) {
   )
 }
 
-function CardDestaque({ rotulo, nick, valor }) {
-  return (
-    <div className="panel-cut-sm relative border border-borda bg-superficie p-4">
+// `to` opcional: quando presente o card vira um Link (pra Partida ou Jogador de
+// referência), com hover/cursor de affordance clicável. Sem `to` (ex.: recorde sem
+// Partida única associável) permanece um card estático.
+function CardDestaque({ rotulo, nick, valor, to }) {
+  const conteudo = (
+    <>
       <div className="absolute left-0 top-0 h-[2px] w-6 bg-destaque/60" />
       <div className="font-mono text-[10px] uppercase tracking-[0.15em] text-texto-fraco">{rotulo}</div>
       <div className="mt-1 font-display text-lg font-bold text-destaque">{nick}</div>
       <div className="font-mono text-sm text-texto-fraco">{valor}</div>
-    </div>
+    </>
   )
+  if (to) {
+    return (
+      <Link
+        to={to}
+        className="panel-cut-sm relative block border border-borda bg-superficie p-4 transition-colors duration-200 hover:border-destaque/60"
+      >
+        {conteudo}
+      </Link>
+    )
+  }
+  return <div className="panel-cut-sm relative border border-borda bg-superficie p-4">{conteudo}</div>
 }
 
 // Recordes do grupo (hall da fama): marcas históricas, sempre de TODAS as Partidas —
@@ -125,6 +139,7 @@ function Recordes() {
             rotulo="Mais kills numa partida"
             nick={maisKills.nick}
             valor={`${maisKills.kills} kills · ${nomeMapa(maisKills.map)} · ${dataHora(maisKills.playedAt)}`}
+            to={maisKills.matchId ? `/partida/${maisKills.matchId}` : undefined}
           />
         )}
         {melhorAdr && (
@@ -132,6 +147,7 @@ function Recordes() {
             rotulo="Melhor ADR numa partida"
             nick={melhorAdr.nick}
             valor={`${melhorAdr.adr} ADR · ${nomeMapa(melhorAdr.map)} · ${dataHora(melhorAdr.playedAt)}`}
+            to={melhorAdr.matchId ? `/partida/${melhorAdr.matchId}` : undefined}
           />
         )}
         {maiorSequencia && (
@@ -139,6 +155,7 @@ function Recordes() {
             rotulo="Maior sequência de vitórias"
             nick={`${maiorSequencia.vitorias} seguida${maiorSequencia.vitorias === 1 ? '' : 's'}`}
             valor={`${dataHora(maiorSequencia.inicio)} até ${dataHora(maiorSequencia.fim)}`}
+            to={maiorSequencia.fimMatchId ? `/partida/${maiorSequencia.fimMatchId}` : undefined}
           />
         )}
         {maisClutchesNaNoite && (
@@ -146,6 +163,7 @@ function Recordes() {
             rotulo="Mais clutches numa Resenha"
             nick={maisClutchesNaNoite.nick}
             valor={`${maisClutchesNaNoite.clutches} clutch${maisClutchesNaNoite.clutches === 1 ? '' : 'es'} · ${dataHora(maisClutchesNaNoite.sessaoInicio)}`}
+            to={maisClutchesNaNoite.matchId ? `/partida/${maisClutchesNaNoite.matchId}` : undefined}
           />
         )}
       </div>
@@ -260,23 +278,35 @@ export default function Ranking() {
       {comPartida.length > 0 && (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           {maisAces?.aces > 0 && (
-            <CardDestaque rotulo="Mais ACEs" nick={maisAces.nick} valor={`${maisAces.aces} ace${maisAces.aces > 1 ? 's' : ''}`} />
+            <CardDestaque
+              rotulo="Mais ACEs"
+              nick={maisAces.nick}
+              valor={`${maisAces.aces} ace${maisAces.aces > 1 ? 's' : ''}`}
+              to={`/jogador/${maisAces.steamId}`}
+            />
           )}
           {maisClutches?.clutchWins > 0 && (
             <CardDestaque
               rotulo="Mais clutches"
               nick={maisClutches.nick}
               valor={`${maisClutches.clutchWins}/${maisClutches.clutchAttempts} tentativas · ${maisClutches.clutchPct}%`}
+              to={`/jogador/${maisClutches.steamId}`}
             />
           )}
           {melhorWinrate && (
-            <CardDestaque rotulo="Melhor winrate (3+ partidas)" nick={melhorWinrate.nick} valor={`${melhorWinrate.winrate}%`} />
+            <CardDestaque
+              rotulo="Melhor winrate (3+ partidas)"
+              nick={melhorWinrate.nick}
+              valor={`${melhorWinrate.winrate}%`}
+              to={`/jogador/${melhorWinrate.steamId}`}
+            />
           )}
           {melhorClutchPct && (
             <CardDestaque
               rotulo="Melhor clutch% (5+ tentativas)"
               nick={melhorClutchPct.nick}
               valor={`${melhorClutchPct.clutchPct}% (${melhorClutchPct.clutchWins}/${melhorClutchPct.clutchAttempts})`}
+              to={`/jogador/${melhorClutchPct.steamId}`}
             />
           )}
           {melhorEntryRate && (
@@ -284,6 +314,7 @@ export default function Ranking() {
               rotulo="Melhor entry rate (10+ duelos)"
               nick={melhorEntryRate.nick}
               valor={`${melhorEntryRate.entryWinPct}% (${melhorEntryRate.entryKills}/${melhorEntryRate.entryKills + melhorEntryRate.entryDeaths})`}
+              to={`/jogador/${melhorEntryRate.steamId}`}
             />
           )}
         </div>
