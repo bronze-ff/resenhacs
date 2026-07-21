@@ -1,15 +1,16 @@
 import { Router } from 'express'
+import { partidaVisivelExpr } from '../friendships.js'
 
 const TIPOS_VALIDOS = new Set(['smoke', 'flash', 'he', 'molotov'])
 
-export function createLineupsRouter({ db, requireAuth, requireGroupMember }) {
+export function createLineupsRouter({ db, requireAuth }) {
   const router = Router()
 
-  // Lineups são auto-extraídos das demos reais do grupo — escopados ao group_id do grupo
-  // ativo (join em matches), senão vazariam SteamID+nick+matchId de partidas de outros grupos.
-  router.get('/', requireAuth, requireGroupMember, async (req, res) => {
-    const cond = ['m.group_id = $1']
-    const params = [req.groupId]
+  // Lineups são auto-extraídos das demos reais — escopados à visibilidade por amizade
+  // (join em matches), senão vazariam SteamID+nick+matchId de partidas de outra pessoa.
+  router.get('/', requireAuth, async (req, res) => {
+    const cond = [partidaVisivelExpr('m', '$1')]
+    const params = [req.player.steamId]
     const { map, tipo, origem } = req.query
     if (map && /^[a-z0-9_]+$/.test(map)) {
       params.push(map)

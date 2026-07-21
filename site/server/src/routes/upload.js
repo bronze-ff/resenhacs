@@ -11,12 +11,12 @@ const PLAYED_AT_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?([+-]\d{2}:\d{2}|Z)
 // (limite de payload da Vercel, poucos MB, não aguentaria). Uma linha fica
 // pendente em uploads_pendentes; o Coletor (GitHub Actions, a cada 30 min)
 // baixa do R2 e processa. Mesmo padrão já usado pela fila de Partidas Pro
-// (site/server/src/routes/partidasPro.js), mas aberto a qualquer membro do
-// grupo, não só super admin.
-export function createUploadRouter({ db, requireAuth, requireGroupMember, r2Client, r2Bucket }) {
+// (site/server/src/routes/partidasPro.js), mas aberto a qualquer jogador logado,
+// não só super admin.
+export function createUploadRouter({ db, requireAuth, r2Client, r2Bucket }) {
   const router = Router()
 
-  router.post('/upload-url', requireAuth, requireGroupMember, async (req, res) => {
+  router.post('/upload-url', requireAuth, async (req, res) => {
     if (!r2Client) return res.status(503).json({ erro: 'Arquivamento (R2) não configurado' })
 
     const filename = String(req.body?.filename ?? '').trim()
@@ -34,9 +34,9 @@ export function createUploadRouter({ db, requireAuth, requireGroupMember, r2Clie
 
     const key = `uploads-pendentes/${crypto.randomUUID()}.dem`
     const { rows } = await db.query(
-      `insert into uploads_pendentes (group_id, adicionado_por, arquivo_r2_key, share_code, played_at)
-       values ($1, $2, $3, $4, $5) returning id`,
-      [req.groupId, req.player.steamId, key, shareCode || null, playedAt || null],
+      `insert into uploads_pendentes (adicionado_por, arquivo_r2_key, share_code, played_at)
+       values ($1, $2, $3, $4) returning id`,
+      [req.player.steamId, key, shareCode || null, playedAt || null],
     )
     const uploadUrl = await presignUpload(r2Client, r2Bucket, key, 'application/octet-stream')
     res.json({ id: rows[0].id, uploadUrl, key })

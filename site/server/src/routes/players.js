@@ -1,22 +1,26 @@
 import { Router } from 'express'
 import { createRequireSuperAdmin } from '../auth/middleware.js'
 
-export function createPlayersRouter({ db, requireAuth, requireGroupMember, fetchBans }) {
+export function createPlayersRouter({ db, requireAuth, fetchBans }) {
   const router = Router()
   const requireSuperAdmin = createRequireSuperAdmin(db)
 
-  // Alerta de ban/smurf: cruza os Jogadores do grupo com GetPlayerBans da Steam —
-  // "a conta de alguém do grupo tomou VAC/Overwatch ban?" Precisa vir antes de
+  // Alerta de ban/smurf: cruza eu + meus amigos accepted com GetPlayerBans da Steam —
+  // "a conta de algum amigo tomou VAC/Overwatch ban?" Precisa vir antes de
   // qualquer rota "/:algo" (não tem hoje em players.js, mas por hábito/segurança).
-  router.get('/bans', requireAuth, requireGroupMember, async (req, res) => {
+  router.get('/bans', requireAuth, async (req, res) => {
     if (!fetchBans) return res.status(503).json({ erro: 'Checagem de ban não configurada (falta STEAM_API_KEY)' })
-    // Escopado ao grupo: checa ban só dos membros do grupo ativo, não do roster global do
-    // sistema inteiro (era vazamento de SteamID+nick de todos os grupos pra qualquer logado).
+    const eu = req.player.steamId
+    // Escopado por amizade: checa ban só de mim + amigos accepted, não do roster global do
+    // sistema inteiro (era vazamento de SteamID+nick de todo mundo pra qualquer logado).
     const { rows } = await db.query(
-      `select p.steam_id64, p.nick from group_members gm
-       join players p on p.steam_id64 = gm.steam_id64
-       where gm.group_id = $1 order by p.nick`,
-      [req.groupId],
+      `select p.steam_id64, p.nick
+       from players p
+       where p.steam_id64 = $1 or p.steam_id64 in (
+         select case when f.player_a = $1 then f.player_b else f.player_a end
+         from friendships f where (f.player_a = $1 or f.player_b = $1) and f.status = 'accepted')
+       order by p.nick`,
+      [eu],
     )
     const bans = await fetchBans(rows.map((p) => p.steam_id64))
     const porId = new Map(bans.map((b) => [b.steamId, b]))
@@ -29,15 +33,17 @@ export function createPlayersRouter({ db, requireAuth, requireGroupMember, fetch
     )
   })
 
-  router.get('/', requireAuth, requireGroupMember, async (req, res) => {
+  router.get('/', requireAuth, async (req, res) => {
+    const eu = req.player.steamId
     const { rows } = await db.query(
       `select p.steam_id64, p.nick, coalesce(p.avatar_url, sa.avatar_url) as avatar_url, p.is_super_admin
-       from group_members gm
-       join players p on p.steam_id64 = gm.steam_id64
+       from players p
        left join steam_avatares sa on sa.steam_id64 = p.steam_id64
-       where gm.group_id = $1
+       where p.steam_id64 = $1 or p.steam_id64 in (
+         select case when f.player_a = $1 then f.player_b else f.player_a end
+         from friendships f where (f.player_a = $1 or f.player_b = $1) and f.status = 'accepted')
        order by p.nick`,
-      [req.groupId],
+      [eu],
     )
     res.json(
       rows.map((p) => ({
@@ -101,12 +107,6 @@ export function createPlayersRouter({ db, requireAuth, requireGroupMember, fetch
       [req.player.steamId, matchAuthCode, lastShareCode],
     )
     res.json({ ok: true })
-  })
-
-  router.put('/me/ranking-publico', requireAuth, async (req, res) => {
-    const publico = Boolean(req.body?.publico)
-    await db.query('update players set ranking_publico = $2 where steam_id64 = $1', [req.player.steamId, publico])
-    res.json({ ok: true, publico })
   })
 
   router.put('/me/tour-concluido', requireAuth, async (req, res) => {
