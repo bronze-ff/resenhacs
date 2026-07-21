@@ -2,10 +2,15 @@ name: Coletor
 
 on:
   schedule:
-    - cron: '*/30 * * * *' # de 30 em 30 min. Repo virou PUBLIC em 2026-07-21, o que dá
-                        # minutos ilimitados no GitHub Actions — por isso voltou de 1h em
-                        # 1h pro cadenciamento original. O workflow_dispatch continua pra
-                        # rodar na mão quando precisar.
+    - cron: '*/10 * * * *' # de 10 em 10 min. Repo é PUBLIC desde 2026-07-21 (minutos
+                        # ilimitados no GitHub Actions) — sem custo de minuto, o teto real
+                        # é a duração da própria run: histórico real (gh run list,
+                        # 2026-07-21) mostra runs ociosas (sem Partida nova) em <1min e
+                        # runs processando demo em ~6-6.5min. 10 min dá folga mesmo na run
+                        # mais lenta observada, sem empilhar (concurrency abaixo serializa,
+                        # não roda 2 ao mesmo tempo — a conta-bot só aguenta 1 sessão CS2).
+                        # 5 min é o piso prático documentado pelo GitHub pra scheduled
+                        # workflows; abaixo disso o agendamento pode ser ignorado/atrasado.
   workflow_dispatch:
     inputs:
       reprocessar_tudo:
