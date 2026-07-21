@@ -16,15 +16,13 @@ const config = {
   allstarApiKey: null, allstarSteamIds: new Set(),
 }
 const cookie = `resenha_token=${signToken({ steamId: '76561198000000009', isSuperAdmin: false }, config.jwtSecret)}`
-const GRUPO = '11111111-1111-1111-1111-111111111111'
+const STEAM_ID = '76561198000000009'
 
-// Roteia por SQL para simular as várias queries de cada handler. O check de
-// membro do grupo (requireGroupMember) sempre resolve "é membro" por padrão,
-// a menos que o teste passe seu próprio handler pra esse needle.
+// Roteia por SQL para simular as várias queries de cada handler.
 function appWith(handlers, extra = {}) {
   const db = {
     query: vi.fn().mockImplementation((sql) => {
-      for (const [needle, rows] of [...handlers, ['group_members where group_id = $1 and steam_id64', [{}]]]) {
+      for (const [needle, rows] of handlers) {
         if (sql.includes(needle)) return Promise.resolve({ rows })
       }
       return Promise.resolve({ rows: [] })
@@ -39,31 +37,27 @@ describe('GET /api/matches', () => {
     expect((await request(app).get('/api/matches')).status).toBe(401)
   })
 
-  it('sem X-Group-Id: 400', async () => {
-    const { app } = appWith([])
-    const res = await request(app).get('/api/matches').set('Cookie', cookie)
-    expect(res.status).toBe(400)
-  })
-
   it('lista partidas do feed', async () => {
     const { app, db } = appWith([
       ['from matches m', [{ id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9, status: 'parsed', source: 'valve_mm', tracked: [{ steamId: '765', nick: 'fih', won: true }], mvp: { steamId: '765', nick: 'fih', rating: '1.35' } }]],
     ])
-    const res = await request(app).get('/api/matches').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    const res = await request(app).get('/api/matches').set('Cookie', cookie)
     expect(res.status).toBe(200)
     expect(res.body[0]).toMatchObject({ id: 'm1', map: 'de_mirage', scoreA: 13, tracked: [{ nick: 'fih' }], mvp: { steamId: '765', nick: 'fih', rating: 1.35 } })
-    // Visibilidade por participação: o feed não filtra só por group_id — inclui partidas
-    // em que um membro do grupo jogou (regra de matchVisibility.js).
+    // Visibilidade por amizade (friendships.js): o feed inclui partidas em que o
+    // viewer jogou OU em que um amigo accepted dele jogou — nada de group_id/ranking_publico.
     const sql = db.query.mock.calls.find(([s]) => s.includes('from matches m'))[0]
-    expect(sql).toContain('m.group_id = $1 or exists')
-    expect(sql).toContain('group_members gmv')
+    expect(sql).toContain('mv.steam_id64 = $1')
+    expect(sql).toContain('from friendships f')
+    expect(sql).not.toContain('group_id')
+    expect(sql).not.toContain('ranking_publico')
   })
 
   it('partida sem mvp rastreado devolve mvp null', async () => {
     const { app } = appWith([
       ['from matches m', [{ id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9, status: 'parsed', source: 'valve_mm', tracked: [], mvp: null }]],
     ])
-    const res = await request(app).get('/api/matches').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    const res = await request(app).get('/api/matches').set('Cookie', cookie)
     expect(res.body[0].mvp).toBeNull()
   })
 
@@ -71,7 +65,7 @@ describe('GET /api/matches', () => {
     const { app, db } = appWith([
       ['from matches m', [{ id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9, status: 'parsed', source: 'valve_mm', tracked: [], mvp: { steamId: '76561198000000009', nick: 'fih', rating: '1.35' } }]],
     ])
-    const res = await request(app).get('/api/matches?mvp=76561198000000009').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    const res = await request(app).get('/api/matches?mvp=76561198000000009').set('Cookie', cookie)
     expect(res.status).toBe(200)
     const sql = db.query.mock.calls.find(([s]) => s.includes('from matches m'))[0]
     expect(sql).toContain('mvp_filter')
@@ -81,7 +75,7 @@ describe('GET /api/matches', () => {
     const { app, db } = appWith([
       ['from matches m', [{ id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9, status: 'parsed', source: 'valve_mm', tracked: [], mvp: null }]],
     ])
-    const res = await request(app).get('/api/matches?mvp=abc').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    const res = await request(app).get('/api/matches?mvp=abc').set('Cookie', cookie)
     expect(res.status).toBe(200)
     const sql = db.query.mock.calls.find(([s]) => s.includes('from matches m'))[0]
     expect(sql).not.toContain('mvp_filter')
@@ -89,7 +83,7 @@ describe('GET /api/matches', () => {
 
   it('aceita limit e offset e os manda como params parametrizados', async () => {
     const { app, db } = appWith([['from matches m', []]])
-    const res = await request(app).get('/api/matches?limit=5&offset=10').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    const res = await request(app).get('/api/matches?limit=5&offset=10').set('Cookie', cookie)
     expect(res.status).toBe(200)
     const call = db.query.mock.calls.find(([s]) => s.includes('from matches m'))
     const [sql, params] = call
@@ -100,7 +94,7 @@ describe('GET /api/matches', () => {
 
   it('limit/offset inválidos caem no default (20/0)', async () => {
     const { app, db } = appWith([['from matches m', []]])
-    const res = await request(app).get('/api/matches?limit=abc&offset=-3').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    const res = await request(app).get('/api/matches?limit=abc&offset=-3').set('Cookie', cookie)
     expect(res.status).toBe(200)
     const call = db.query.mock.calls.find(([s]) => s.includes('from matches m'))
     const [, params] = call
@@ -109,7 +103,7 @@ describe('GET /api/matches', () => {
 
   it('limit fora do range 1..100 cai no default', async () => {
     const { app, db } = appWith([['from matches m', []]])
-    await request(app).get('/api/matches?limit=500').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    await request(app).get('/api/matches?limit=500').set('Cookie', cookie)
     const call = db.query.mock.calls.find(([s]) => s.includes('from matches m'))
     const [, params] = call
     expect(params.slice(-2)).toEqual([20, 0])
@@ -117,18 +111,18 @@ describe('GET /api/matches', () => {
 
   it('sem limit/offset usa default (20/0) e não quebra filtros existentes', async () => {
     const { app, db } = appWith([['from matches m', []]])
-    await request(app).get('/api/matches?map=de_mirage').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    await request(app).get('/api/matches?map=de_mirage').set('Cookie', cookie)
     const call = db.query.mock.calls.find(([s]) => s.includes('from matches m'))
     const [sql, params] = call
     expect(sql).toContain('m.map = $2')
-    expect(params).toEqual([GRUPO, 'de_mirage', 20, 0])
+    expect(params).toEqual([STEAM_ID, 'de_mirage', 20, 0])
   })
 })
 
 describe('GET /api/matches/:id', () => {
   it('404 quando não existe', async () => {
     const { app } = appWith([['from matches where id', []]])
-    const res = await request(app).get('/api/matches/xxx').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    const res = await request(app).get('/api/matches/xxx').set('Cookie', cookie)
     expect(res.status).toBe(404)
   })
 
@@ -144,7 +138,7 @@ describe('GET /api/matches/:id', () => {
         { steam_id64: '765', weapon: 'knife', kills: 3, hs_kills: 0, shots_fired: 0, shots_hit: 0, damage: 150 },
       ]],
     ])
-    const res = await request(app).get('/api/matches/m1').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    const res = await request(app).get('/api/matches/m1').set('Cookie', cookie)
     expect(res.status).toBe(200)
     expect(res.body.players[0]).toMatchObject({ nick: 'fih', rating: 1.35, kastPct: 72.5, premierBefore: 15420, premierAfter: 15480, faceitEloBefore: 1400, faceitEloAfter: 1425, isTracked: true, teamKills: 1, avatarUrl: 'https://avatars.steamstatic.com/fih.jpg' })
     expect(res.body.players[0].weapons).toEqual([
@@ -162,7 +156,7 @@ describe('GET /api/matches/:id', () => {
       ['from matches where id', [{ id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9, source: 'valve_mm', status: 'parsed', demo_url: null }]],
       ['from match_players mp', [{ steam_id64: '999', nick: 'zerado', team: 'B', kills: 0, team_kills: 0, deaths: 20, assists: 0, headshot_kills: 0, damage: 0, rounds_played: 22, rating: '0.2', won: false, is_tracked: false, avatar_url: null }]],
     ])
-    const res = await request(app).get('/api/matches/m1').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    const res = await request(app).get('/api/matches/m1').set('Cookie', cookie)
     expect(res.body.players[0].weapons).toEqual([])
     // Sem Premier rating registrado (partida antiga, coletada antes da Task 2): null, não undefined.
     expect(res.body.players[0].premierBefore).toBeNull()
@@ -179,7 +173,7 @@ describe('GET /api/matches/:id', () => {
       ['from highlights h', []],
       ['from clips where match_id', []],
     ])
-    const res = await request(app).get('/api/matches/m1').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    const res = await request(app).get('/api/matches/m1').set('Cookie', cookie)
     expect(res.status).toBe(200)
     expect(res.body.players[0]).toMatchObject({ nick: 'adversario', isTracked: false, avatarUrl: 'https://avatars.steamstatic.com/cache.jpg' })
   })
@@ -193,7 +187,7 @@ describe('GET /api/matches/:id', () => {
         replay_url: 'https://acc.r2.cloudflarestorage.com/resenha-demos/replays/1.json',
       }]],
     ])
-    const res = await request(app).get('/api/matches/m1').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    const res = await request(app).get('/api/matches/m1').set('Cookie', cookie)
     expect(res.body.demoUrl).toBe('/api/matches/m1/demo')
     expect(res.body.replayUrl).toBe('/api/matches/m1/replay')
     expect(res.body.replayUrl).not.toContain('r2.cloudflarestorage.com')
@@ -208,13 +202,13 @@ describe('GET /api/matches/:id/lado/:filtro', () => {
 
   it('filtro invalido: 400', async () => {
     const { app } = appWith([])
-    const res = await request(app).get('/api/matches/m1/lado/xyz').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    const res = await request(app).get('/api/matches/m1/lado/xyz').set('Cookie', cookie)
     expect(res.status).toBe(400)
   })
 
   it('partida nao encontrada no grupo: 404', async () => {
     const { app } = appWith([['from matches where id', []]])
-    const res = await request(app).get('/api/matches/m1/lado/all').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    const res = await request(app).get('/api/matches/m1/lado/all').set('Cookie', cookie)
     expect(res.status).toBe(404)
   })
 
@@ -236,7 +230,7 @@ describe('GET /api/matches/:id/lado/:filtro', () => {
         { round_number: 1, steam_id64: 'A1', damage: 100 },
       ]],
     ])
-    const res = await request(app).get('/api/matches/m1/lado/all').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    const res = await request(app).get('/api/matches/m1/lado/all').set('Cookie', cookie)
     expect(res.status).toBe(200)
     const fih = res.body.find((p) => p.steamId === 'A1')
     expect(fih).toMatchObject({ nick: 'fih', team: 'A', kills: 1, deaths: 0, roundsPlayed: 2, damage: 100, adr: 50 })
@@ -253,19 +247,19 @@ describe('POST /api/matches/:id/highlight/:highlightId/allstar-clip', () => {
 
   it('sem allstarApiKey configurado: 503', async () => {
     const { app } = appWith([], { config: { ...config, allstarApiKey: null }, r2Client: {} })
-    const res = await request(app).post('/api/matches/m1/highlight/h1/allstar-clip').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    const res = await request(app).post('/api/matches/m1/highlight/h1/allstar-clip').set('Cookie', cookie)
     expect(res.status).toBe(503)
   })
 
   it('sem r2Client: 503', async () => {
     const { app } = appWith([], { config: configComAllstar, r2Client: null })
-    const res = await request(app).post('/api/matches/m1/highlight/h1/allstar-clip').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    const res = await request(app).post('/api/matches/m1/highlight/h1/allstar-clip').set('Cookie', cookie)
     expect(res.status).toBe(503)
   })
 
   it('highlight nao encontrado: 404', async () => {
     const { app } = appWith([['from highlights h', []]], { config: configComAllstar, r2Client: {} })
-    const res = await request(app).post('/api/matches/m1/highlight/h1/allstar-clip').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    const res = await request(app).post('/api/matches/m1/highlight/h1/allstar-clip').set('Cookie', cookie)
     expect(res.status).toBe(404)
   })
 
@@ -274,7 +268,7 @@ describe('POST /api/matches/:id/highlight/:highlightId/allstar-clip', () => {
       [['from highlights h', [{ id: 'h1', kind: 'ace', steam_id64: '999', round_number: 1, nick: 'outro', demo_url: 'https://r2/demos/x.dem.bz2' }]]],
       { config: configComAllstar, r2Client: {} },
     )
-    const res = await request(app).post('/api/matches/m1/highlight/h1/allstar-clip').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    const res = await request(app).post('/api/matches/m1/highlight/h1/allstar-clip').set('Cookie', cookie)
     expect(res.status).toBe(403)
   })
 
@@ -286,7 +280,7 @@ describe('POST /api/matches/:id/highlight/:highlightId/allstar-clip', () => {
       ],
       { config: configComAllstar, r2Client: {} },
     )
-    const res = await request(app).post('/api/matches/m1/highlight/h1/allstar-clip').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    const res = await request(app).post('/api/matches/m1/highlight/h1/allstar-clip').set('Cookie', cookie)
     expect(res.status).toBe(200)
     expect(res.body).toEqual({ status: 'Processed' })
   })
@@ -296,7 +290,6 @@ describe('POST /api/matches/:id/highlight/:highlightId/allstar-clip', () => {
     const gravados = []
     const db = {
       query: vi.fn().mockImplementation((sql, params) => {
-        if (sql.includes('group_members where group_id')) return Promise.resolve({ rows: [{}] })
         if (sql.includes('from highlights h')) {
           return Promise.resolve({ rows: [{ id: 'h1', kind: 'ace', steam_id64: '765', round_number: 3, nick: 'bronze', demo_url: 'https://acc.r2.cloudflarestorage.com/resenha-demos/demos/x.dem.bz2' }] })
         }
@@ -311,7 +304,7 @@ describe('POST /api/matches/:id/highlight/:highlightId/allstar-clip', () => {
     const originalFetch = globalThis.fetch
     globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, status: 201, json: async () => ({ requestId: 'req-2' }) })
     try {
-      const res = await request(app).post('/api/matches/m1/highlight/h1/allstar-clip').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+      const res = await request(app).post('/api/matches/m1/highlight/h1/allstar-clip').set('Cookie', cookie)
       expect(res.status).toBe(200)
       expect(res.body).toEqual({ status: 'Submitted' })
       expect(deletados).toEqual([['h1']])
@@ -325,7 +318,6 @@ describe('POST /api/matches/:id/highlight/:highlightId/allstar-clip', () => {
     const gravados = []
     const db = {
       query: vi.fn().mockImplementation((sql, params) => {
-        if (sql.includes('group_members where group_id')) return Promise.resolve({ rows: [{}] })
         if (sql.includes('from highlights h')) {
           return Promise.resolve({ rows: [{ id: 'h1', kind: 'ace', steam_id64: '765', round_number: 14, nick: 'bronze', demo_url: 'https://acc.r2.cloudflarestorage.com/resenha-demos/demos/x.dem.bz2' }] })
         }
@@ -338,7 +330,7 @@ describe('POST /api/matches/:id/highlight/:highlightId/allstar-clip', () => {
     const originalFetch = globalThis.fetch
     globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ requestId: 'req-1' }) })
     try {
-      const res = await request(app).post('/api/matches/m1/highlight/h1/allstar-clip').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+      const res = await request(app).post('/api/matches/m1/highlight/h1/allstar-clip').set('Cookie', cookie)
       expect(res.status).toBe(200)
       expect(res.body).toEqual({ status: 'Submitted' })
       expect(gravados).toEqual([['h1', 'req-1']])
@@ -359,14 +351,14 @@ describe('GET /api/matches/:id/replay', () => {
 
   it('R2 não configurado: 503', async () => {
     const { app } = appWith([], { r2Client: null })
-    const res = await request(app).get('/api/matches/m1/replay').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    const res = await request(app).get('/api/matches/m1/replay').set('Cookie', cookie)
     expect(res.status).toBe(503)
   })
 
   it('partida sem replay: 404', async () => {
     const fakeR2 = { send: vi.fn() }
     const { app } = appWith([['select replay_url', [{ replay_url: null }]]], { r2Client: fakeR2 })
-    const res = await request(app).get('/api/matches/m1/replay').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    const res = await request(app).get('/api/matches/m1/replay').set('Cookie', cookie)
     expect(res.status).toBe(404)
     expect(fakeR2.send).not.toHaveBeenCalled()
   })
@@ -380,7 +372,7 @@ describe('GET /api/matches/:id/replay', () => {
       [['select replay_url', [{ replay_url: 'https://acc.r2.cloudflarestorage.com/resenha-demos/replays/701c.json' }]]],
       { r2Client: fakeR2 },
     )
-    const res = await request(app).get('/api/matches/701c/replay').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    const res = await request(app).get('/api/matches/701c/replay').set('Cookie', cookie)
     expect(res.status).toBe(200)
     expect(res.text).toBe('{"map":"de_anubis"}')
     const cmd = fakeR2.send.mock.calls[0][0]
@@ -396,7 +388,7 @@ describe('GET /api/matches/:id/replay/round/:n', () => {
 
   it('n não numérico: 400', async () => {
     const { app } = appWith([])
-    const res = await request(app).get('/api/matches/m1/replay/round/abc').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    const res = await request(app).get('/api/matches/m1/replay/round/abc').set('Cookie', cookie)
     expect(res.status).toBe(400)
   })
 
@@ -408,7 +400,7 @@ describe('GET /api/matches/:id/replay/round/:n', () => {
       [['select replay_url', [{ replay_url: 'https://acc.r2.cloudflarestorage.com/resenha-demos/replays/701c.json' }]]],
       { r2Client: fakeR2 },
     )
-    const res = await request(app).get('/api/matches/701c/replay/round/2').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    const res = await request(app).get('/api/matches/701c/replay/round/2').set('Cookie', cookie)
     expect(res.status).toBe(200)
     expect(res.text).toBe('{"round":2}')
     const cmd = fakeR2.send.mock.calls[0][0]
@@ -418,7 +410,7 @@ describe('GET /api/matches/:id/replay/round/:n', () => {
   it('partida sem replay: 404', async () => {
     const fakeR2 = { send: vi.fn() }
     const { app } = appWith([['select replay_url', [{ replay_url: null }]]], { r2Client: fakeR2 })
-    const res = await request(app).get('/api/matches/m1/replay/round/1').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    const res = await request(app).get('/api/matches/m1/replay/round/1').set('Cookie', cookie)
     expect(res.status).toBe(404)
     expect(fakeR2.send).not.toHaveBeenCalled()
   })
@@ -432,7 +424,7 @@ describe('GET /api/matches/:id/jogador/:steamId/detalhe', () => {
 
   it('partida nao encontrada no grupo: 404', async () => {
     const { app } = appWith([['from matches where id', []]])
-    const res = await request(app).get('/api/matches/m1/jogador/765/detalhe').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    const res = await request(app).get('/api/matches/m1/jogador/765/detalhe').set('Cookie', cookie)
     expect(res.status).toBe(404)
   })
 
@@ -451,7 +443,7 @@ describe('GET /api/matches/:id/jogador/:steamId/detalhe', () => {
         { round_number: 1, item: 'deagle', cost: 700, tick: 50 },
       ]],
     ])
-    const res = await request(app).get('/api/matches/m1/jogador/765/detalhe').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    const res = await request(app).get('/api/matches/m1/jogador/765/detalhe').set('Cookie', cookie)
     expect(res.status).toBe(200)
     expect(res.body.rounds).toEqual([
       { roundNumber: 1, matou: [{ weapon: 'deagle', headshot: true, tick: 100 }], morreu: null, equipValue: 4000, buyType: 'eco', compras: [{ item: 'deagle', cost: 700 }] },
@@ -468,7 +460,7 @@ describe('GET /api/matches/:id/head-to-head/:steamId', () => {
 
   it('jogador nao encontrado nessa partida do grupo: 404', async () => {
     const { app } = appWith([['from matches m join match_players mp', []]])
-    const res = await request(app).get('/api/matches/m1/head-to-head/765').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    const res = await request(app).get('/api/matches/m1/head-to-head/765').set('Cookie', cookie)
     expect(res.status).toBe(404)
   })
 
@@ -490,7 +482,7 @@ describe('GET /api/matches/:id/head-to-head/:steamId', () => {
         { attacker: '765', victim: '999', count: 1, duration_sum: '1.50' },
       ]],
     ])
-    const res = await request(app).get('/api/matches/m1/head-to-head/765').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    const res = await request(app).get('/api/matches/m1/head-to-head/765').set('Cookie', cookie)
     expect(res.status).toBe(200)
     expect(res.body).toEqual({
       steamId: '765',
@@ -509,7 +501,7 @@ describe('GET /api/matches/:id/head-to-head/:steamId', () => {
       ['from matches m join match_players mp', [{ team: 'A' }]],
       ['from match_players mp\n       left join players p', []],
     ])
-    const res = await request(app).get('/api/matches/m1/head-to-head/765').set('Cookie', cookie).set('X-Group-Id', GRUPO)
+    const res = await request(app).get('/api/matches/m1/head-to-head/765').set('Cookie', cookie)
     expect(res.status).toBe(200)
     expect(res.body).toEqual({ steamId: '765', oponentes: [] })
   })
