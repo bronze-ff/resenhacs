@@ -366,7 +366,7 @@ def cmd_processar_uploads_pendentes(config, conn):
 
     client = storage_r2.make_client(config)
     total = 0
-    for upload_id, adicionado_por, arquivo_r2_key, share_code, played_at in pendentes:
+    for upload_id, adicionado_por, arquivo_r2_key, share_code, played_at, plataforma_manual in pendentes:
         dbmod.atualizar_upload_pendente(conn, upload_id, "processando")
         try:
             with tempfile.TemporaryDirectory() as tmp:
@@ -379,7 +379,7 @@ def cmd_processar_uploads_pendentes(config, conn):
                 match_id = ingest_demo(
                     config, conn, dem_path,
                     share_code=share_code, source="upload", upload=True,
-                    played_at=played_at,
+                    played_at=played_at, plataforma_manual=plataforma_manual,
                 )
                 dbmod.atualizar_upload_pendente(conn, upload_id, "concluido", match_id=match_id)
                 print(f"  {upload_id}: concluido ({match_id})")
@@ -599,19 +599,24 @@ def _atualizar_avatares(config, conn, steam_ids):
         print(f"aviso: avatares Steam não atualizados ({e})")
 
 
-def ingest_demo(config, conn, path, share_code=None, source="upload", upload=True, played_at=None):
+def ingest_demo(config, conn, path, share_code=None, source="upload", upload=True, played_at=None, plataforma_manual=None):
     """Parseia um .dem, arquiva no R2 (se configurado) e grava no banco. Devolve match_id.
 
     `played_at` (ISO 8601, opcional): quando o operador sabe a hora real da Partida,
     essa informação é mais confiável que a mtime do arquivo (que só reflete quando o
     .dem foi baixado/copiado — pode ser dias depois) e vence mesmo sobre um played_at
     já gravado por descoberta automática (prefer_new_played_at=True em store_parsed).
+
+    `plataforma_manual` (opcional, 'faceit'|'gamers_club'|'xplay_gg'): rótulo informativo
+    de qual plataforma sem integração oficial o jogador escolheu no upload manual (ver
+    site/server/src/routes/upload.js) — não vem da demo, só metadado do fluxo de envio.
     """
     parsed = parsemod.parse_demo(path)
     parsed["players"] = transform.fill_kd_from_kills(parsed["players"], parsed["kills"])
     parsed = transform.enrich(parsed)
     if played_at:
         parsed["played_at"] = played_at
+    parsed["plataforma_manual"] = plataforma_manual
 
     # Replay 2D + clutch (sempre computados; só ARQUIVADOS no R2 se configurado).
     # Falha aqui não derruba o ingest dos stats.

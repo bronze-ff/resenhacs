@@ -70,7 +70,7 @@ function CardPartida({ m }) {
             {nomeMapa(m.map)}
           </span>
           {m.source === 'pro' && <Badge tom="destaque" className="shrink-0">PRO</Badge>}
-          <PlataformaBadge source={m.source} className="shrink-0" />
+          <PlataformaBadge source={m.source} plataformaManual={m.plataformaManual} className="shrink-0" />
           <Badge tom="neutro" title={origem.title} className="shrink-0">{origem.label}</Badge>
         </div>
         <div className="ml-auto">

@@ -5,6 +5,9 @@ import { presignUpload } from '../r2.js'
 const SHARE_CODE_RE = /^CSGO(-\S{5}){5}$/
 // aceita datetime-local do browser ("2026-07-09T20:15") ou ISO completo com timezone
 const PLAYED_AT_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?([+-]\d{2}:\d{2}|Z)?$/
+// Sem integração oficial com essas plataformas (diferente de valve_mm/faceit, que a
+// gente puxa automático) — é só um rótulo informativo que o próprio jogador escolhe.
+const PLATAFORMAS_MANUAIS = new Set(['faceit', 'gamers_club', 'xplay_gg'])
 
 // Upload manual de demo: o arquivo (100-300MB) sobe DIRETO pro R2 via URL
 // pré-assinada — nunca passa pelo corpo da request na função serverless
@@ -31,12 +34,16 @@ export function createUploadRouter({ db, requireAuth, r2Client, r2Bucket }) {
     if (playedAt && !PLAYED_AT_RE.test(playedAt)) {
       return res.status(400).json({ erro: 'Data/hora inválida' })
     }
+    const plataformaManual = String(req.body?.plataformaManual ?? '').trim()
+    if (plataformaManual && !PLATAFORMAS_MANUAIS.has(plataformaManual)) {
+      return res.status(400).json({ erro: 'Plataforma inválida' })
+    }
 
     const key = `uploads-pendentes/${crypto.randomUUID()}.dem`
     const { rows } = await db.query(
-      `insert into uploads_pendentes (adicionado_por, arquivo_r2_key, share_code, played_at)
-       values ($1, $2, $3, $4) returning id`,
-      [req.player.steamId, key, shareCode || null, playedAt || null],
+      `insert into uploads_pendentes (adicionado_por, arquivo_r2_key, share_code, played_at, plataforma_manual)
+       values ($1, $2, $3, $4, $5) returning id`,
+      [req.player.steamId, key, shareCode || null, playedAt || null, plataformaManual || null],
     )
     const uploadUrl = await presignUpload(r2Client, r2Bucket, key, 'application/octet-stream')
     res.json({ id: rows[0].id, uploadUrl, key })

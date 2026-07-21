@@ -501,7 +501,7 @@ class _UploadsCursor:
 
     def fetchall(self):
         if self._last.startswith(
-            "select id, adicionado_por, arquivo_r2_key, share_code, played_at from uploads_pendentes"
+            "select id, adicionado_por, arquivo_r2_key, share_code, played_at, plataforma_manual from uploads_pendentes"
         ):
             return self.conn.upload_rows
         return []
@@ -525,7 +525,7 @@ class _UploadsConn:
 
 
 def test_processar_uploads_pendentes_baixa_do_r2_e_apaga_em_sucesso(monkeypatch):
-    conn = _UploadsConn([("u1", "765", "uploads-pendentes/abc.dem", None, None)])
+    conn = _UploadsConn([("u1", "765", "uploads-pendentes/abc.dem", None, None, "gamers_club")])
     config = _config_com_r2()
 
     monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
@@ -541,8 +541,8 @@ def test_processar_uploads_pendentes_baixa_do_r2_e_apaga_em_sucesso(monkeypatch)
     )
     ingests = []
 
-    def _ingest_fake(cfg, cn, dem_path, share_code=None, source=None, upload=None, played_at=None):
-        ingests.append((dem_path.name, source, upload))
+    def _ingest_fake(cfg, cn, dem_path, share_code=None, source=None, upload=None, played_at=None, plataforma_manual=None):
+        ingests.append((dem_path.name, source, upload, plataforma_manual))
         return "m1"
 
     monkeypatch.setattr(main, "ingest_demo", _ingest_fake)
@@ -551,14 +551,14 @@ def test_processar_uploads_pendentes_baixa_do_r2_e_apaga_em_sucesso(monkeypatch)
 
     assert total == 1
     assert downloads == [("fake-client", "resenha-demos", "uploads-pendentes/abc.dem")]
-    assert ingests == [("demo.dem", "upload", True)]
+    assert ingests == [("demo.dem", "upload", True, "gamers_club")]
     assert deletes == [("resenha-demos", "uploads-pendentes/abc.dem")]
     update = next(c for c in conn.calls if c[0].startswith("update uploads_pendentes") and c[1][0] == "concluido")
     assert update[1][1] == "m1"
 
 
 def test_processar_uploads_pendentes_mantem_staging_no_r2_quando_falha(monkeypatch):
-    conn = _UploadsConn([("u1", "765", "uploads-pendentes/abc.dem", None, None)])
+    conn = _UploadsConn([("u1", "765", "uploads-pendentes/abc.dem", None, None, None)])
     config = _config_com_r2()
 
     monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")

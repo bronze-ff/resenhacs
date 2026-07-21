@@ -76,7 +76,7 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
     }
     const { rows } = await db.query(
       `select m.id, m.map, m.played_at, m.score_a, m.score_b, m.status, m.source,
-         m.team_a_name, m.team_b_name,
+         m.team_a_name, m.team_b_name, m.plataforma_manual,
          coalesce(json_agg(json_build_object('steamId', mp.steam_id64, 'nick', mp.nick, 'won', mp.won))
            filter (where mp.is_tracked), '[]') as tracked,
          mvp.mvp
@@ -111,6 +111,7 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
         scoreA: m.score_a,
         scoreB: m.score_b,
         source: m.source,
+        plataformaManual: m.plataforma_manual,
         teamAName: m.team_a_name,
         teamBName: m.team_b_name,
         tracked: m.tracked,
@@ -151,7 +152,7 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
     const { id } = req.params
     const matchQ = await db.query(
       `select mt.id, mt.map, mt.played_at, mt.score_a, mt.score_b, mt.source, mt.status, mt.demo_url, mt.replay_url,
-              mt.ended_early, mt.abandoned_by_steam_id64,
+              mt.ended_early, mt.abandoned_by_steam_id64, mt.plataforma_manual,
               coalesce(ap.nick, amp.nick) as abandoned_by_nick
        from matches mt
        left join players ap on ap.steam_id64 = mt.abandoned_by_steam_id64
@@ -231,6 +232,7 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
       scoreA: m.score_a,
       scoreB: m.score_b,
       source: m.source,
+      plataformaManual: m.plataforma_manual,
       status: m.status,
       // O R2 é privado de propósito (dados reais dos participantes) — nunca expor a
       // URL bruta do bucket. O client busca via esses paths, autenticados e

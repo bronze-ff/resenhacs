@@ -46,7 +46,8 @@ def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status,
               demo_url = coalesce(%s, demo_url), replay_url = coalesce(%s, replay_url),
               status = %s, team_a_name = coalesce(%s, team_a_name),
               team_b_name = coalesce(%s, team_b_name),
-              ended_early = %s, abandoned_by_steam_id64 = %s
+              ended_early = %s, abandoned_by_steam_id64 = %s,
+              plataforma_manual = coalesce(%s, plataforma_manual)
             where id = %s
             """,
             (
@@ -63,6 +64,7 @@ def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status,
                 parsed.get("team_b_name"),
                 parsed.get("ended_early", False),
                 parsed.get("abandoned_by"),
+                parsed.get("plataforma_manual"),
                 match_id,
             ),
         )
@@ -79,8 +81,8 @@ def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status,
     )
     cur.execute(
         f"""
-        insert into matches (share_code, source, map, score_a, score_b, played_at, demo_url, replay_url, status, fingerprint, team_a_name, team_b_name, ended_early, abandoned_by_steam_id64)
-        values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        insert into matches (share_code, source, map, score_a, score_b, played_at, demo_url, replay_url, status, fingerprint, team_a_name, team_b_name, ended_early, abandoned_by_steam_id64, plataforma_manual)
+        values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         on conflict (share_code) do update set
           source = excluded.source, map = excluded.map,
           score_a = excluded.score_a, score_b = excluded.score_b,
@@ -92,7 +94,8 @@ def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status,
           team_a_name = coalesce(excluded.team_a_name, matches.team_a_name),
           team_b_name = coalesce(excluded.team_b_name, matches.team_b_name),
           ended_early = excluded.ended_early,
-          abandoned_by_steam_id64 = excluded.abandoned_by_steam_id64
+          abandoned_by_steam_id64 = excluded.abandoned_by_steam_id64,
+          plataforma_manual = coalesce(excluded.plataforma_manual, matches.plataforma_manual)
         returning id
         """,
         (
@@ -110,6 +113,7 @@ def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status,
             parsed.get("team_b_name"),
             parsed.get("ended_early", False),
             parsed.get("abandoned_by"),
+            parsed.get("plataforma_manual"),
         ),
     )
     return cur.fetchone()[0]
@@ -530,7 +534,7 @@ def listar_uploads_pendentes(conn):
     par simplificado de listar_fila_pro_pendente: um .dem só por item, sem .rar/multi-mapa."""
     with conn.cursor() as cur:
         cur.execute(
-            "select id, adicionado_por, arquivo_r2_key, share_code, played_at "
+            "select id, adicionado_por, arquivo_r2_key, share_code, played_at, plataforma_manual "
             "from uploads_pendentes where status = 'pendente' order by adicionado_em"
         )
         return cur.fetchall()

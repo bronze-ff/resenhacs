@@ -1201,7 +1201,7 @@ export default function Partida() {
           <div className="mt-1 flex flex-wrap items-center gap-2">
             <MapIcon map={m.map} size={40} />
             <h2 className="font-display text-2xl font-bold uppercase tracking-wide text-texto">{nomeMapa(m.map)}</h2>
-            <PlataformaBadge source={m.source} />
+            <PlataformaBadge source={m.source} plataformaManual={m.plataformaManual} />
             <span
               title={origemPartida(m.source).title}
               className="panel-cut-sm border border-borda bg-superficie px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-widest text-texto-fraco"
