@@ -1219,7 +1219,8 @@ export default function Partida() {
     autoJumpFeito.current = false
     setLadoFiltro('all')
     setStatsLado(null)
-    setClipeAllstarAberto(null)
+    setClipeAbertoId(null)
+    setJogadorClipeSelecionado(null)
     carregar()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
