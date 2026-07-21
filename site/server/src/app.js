@@ -54,7 +54,17 @@ function patchRouterAsync() {
   }
 }
 
-export function createApp({ config, db, verifySteamLogin, fetchPersona, fetchBans, staticDir, r2Client: r2ClientOverride, faceitFetchImpl } = {}) {
+export function createApp({
+  config,
+  db,
+  verifySteamLogin,
+  fetchPersona,
+  fetchBans,
+  fetchFriendList = async () => [],
+  staticDir,
+  r2Client: r2ClientOverride,
+  faceitFetchImpl,
+} = {}) {
   const app = express()
   app.use(express.json())
   app.use(cookieParser())
@@ -72,7 +82,7 @@ export function createApp({ config, db, verifySteamLogin, fetchPersona, fetchBan
   const requireAuth = createRequireAuth(config.jwtSecret)
   const requireGroupMember = createRequireGroupMember(db)
   const r2Client = r2ClientOverride !== undefined ? r2ClientOverride : createR2Client(config)
-  app.use('/api/auth', createAuthRouter({ config, db, verifySteamLogin, fetchPersona, requireAuth }))
+  app.use('/api/auth', createAuthRouter({ config, db, verifySteamLogin, fetchPersona, fetchFriendList, requireAuth }))
   app.use('/api/groups', requireAuth, createGroupsRouter({ db }))
   app.use('/api/convites', requireAuth, createConvitesRouter({ db }))
   app.use('/api/amigos', createFriendshipsRouter({ db, requireAuth }))

@@ -4,7 +4,7 @@ import { loadConfig } from './config.js'
 import { createDb } from './db.js'
 import { createApp } from './app.js'
 import { verifySteamAssertion } from './steam/openid.js'
-import { createFetchPersona, createFetchBans } from './steam/api.js'
+import { createFetchPersona, createFetchBans, createFetchFriendList } from './steam/api.js'
 
 const config = loadConfig()
 const db = createDb(config.databaseUrl)
@@ -17,6 +17,7 @@ const app = createApp({
   verifySteamLogin: verifySteamAssertion,
   fetchPersona: createFetchPersona(config.steamApiKey),
   fetchBans: createFetchBans(config.steamApiKey),
+  fetchFriendList: createFetchFriendList(config.steamApiKey),
   staticDir,
 })
 
