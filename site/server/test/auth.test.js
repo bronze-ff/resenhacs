@@ -14,22 +14,19 @@ const JOGADOR = {
   nick: 'fih',
   avatar_url: 'https://avatars.steamstatic.com/x.jpg',
   is_super_admin: true,
-  grupo_ativo_id: 'g1',
   faceit_nick: null,
   tour_concluido: false,
 }
 
 // Fake que roteia por SQL: players devolve `rows`; o insert de nonce devolve
-// rowCount 1 (nonce novo) ou 0 (replay); a checagem de papel no grupo ativo devolve
-// `role`; a checagem de amigos Steam com conta devolve `amigosComConta`; qualquer
-// outra query devolve vazio.
-function fakeDb({ rows = [], nonceReplay = false, role = 'admin', amigosComConta = [] } = {}) {
+// rowCount 1 (nonce novo) ou 0 (replay); a checagem de amigos Steam com conta
+// devolve `amigosComConta`; qualquer outra query devolve vazio.
+function fakeDb({ rows = [], nonceReplay = false, amigosComConta = [] } = {}) {
   return {
     query: vi.fn().mockImplementation((sql) => {
       if (sql.includes('used_openid_nonces')) {
         return Promise.resolve({ rows: nonceReplay ? [] : [{ nonce: 'n' }], rowCount: nonceReplay ? 0 : 1 })
       }
-      if (sql.includes('role from group_members')) return Promise.resolve({ rows: [{ role }] })
       if (sql.includes('conta_criada_em is not null')) return Promise.resolve({ rows: amigosComConta })
       if (sql.includes('from players')) return Promise.resolve({ rows })
       return Promise.resolve({ rows: [] })
@@ -40,12 +37,11 @@ function fakeDb({ rows = [], nonceReplay = false, role = 'admin', amigosComConta
 function appWith({
   rows = [],
   nonceReplay = false,
-  role = 'admin',
   amigosComConta = [],
   login = { steamId: JOGADOR.steam_id64, nonce: 'n1' },
   fetchFriendList = vi.fn().mockResolvedValue([]),
 } = {}) {
-  const db = fakeDb({ rows, nonceReplay, role, amigosComConta })
+  const db = fakeDb({ rows, nonceReplay, amigosComConta })
   const app = createApp({
     config,
     db,
@@ -93,7 +89,7 @@ describe('GET /api/auth/steam/return', () => {
   })
 
   it('primeiro login (fora da whitelist antiga): cria o jogador e loga mesmo assim', async () => {
-    const { app } = appWith({ rows: [{ ...JOGADOR, is_super_admin: false, grupo_ativo_id: null }] })
+    const { app } = appWith({ rows: [{ ...JOGADOR, is_super_admin: false }] })
     const res = await request(app).get('/api/auth/steam/return?openid.mode=id_res')
     expect(res.status).toBe(302)
     expect(res.headers.location).toBe(config.appUrl)
@@ -180,24 +176,9 @@ describe('GET /api/auth/me', () => {
       nick: 'fih',
       avatarUrl: JOGADOR.avatar_url,
       isSuperAdmin: true,
-      grupoAtivoId: 'g1',
       faceitNick: null,
       tourConcluido: false,
-      souAdminDoGrupo: true,
     })
-  })
-
-  it('membro comum do grupo ativo: souAdminDoGrupo false', async () => {
-    const { app } = appWith({ rows: [JOGADOR], role: 'membro' })
-    const res = await request(app).get('/api/auth/me').set('Cookie', cookieFor())
-    expect(res.body.souAdminDoGrupo).toBe(false)
-  })
-
-  it('sem grupo ativo: souAdminDoGrupo nao aparece', async () => {
-    const { app } = appWith({ rows: [{ ...JOGADOR, grupo_ativo_id: null }] })
-    const res = await request(app).get('/api/auth/me').set('Cookie', cookieFor())
-    expect(res.body.grupoAtivoId).toBeNull()
-    expect(res.body.souAdminDoGrupo).toBeUndefined()
   })
 })
 

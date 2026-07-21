@@ -123,10 +123,10 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
   // (Precisa vir antes de '/:id' — senão o Express casaria "sync-status" como um id.)
   router.get('/sync-status', requireAuth, async (req, res) => {
     // Nota: 'pending'/'failed' ainda não têm match_players (a partida não foi parseada
-    // ainda, então não dá pra saber quem jogou) — sem group_id pra agrupar por "time" de
-    // upload, esses dois contadores zeram pra todo viewer até o Coletor ganhar algum jeito
-    // de atribuir a descoberta a um steamId. 'parsed'/last_played_at continuam corretos,
-    // filtrados por participação/amizade como o resto do arquivo.
+    // ainda, então não dá pra saber quem jogou) — sem uma chave pra atribuir o "time" de
+    // upload a um steamId, esses dois contadores zeram pra todo viewer até o Coletor ganhar
+    // algum jeito de atribuir a descoberta a um steamId. 'parsed'/last_played_at continuam
+    // corretos, filtrados por participação/amizade como o resto do arquivo.
     const { rows } = await db.query(
       `select
          count(*) filter (where status = 'pending')::int as pending,

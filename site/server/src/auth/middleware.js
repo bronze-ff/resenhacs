@@ -27,21 +27,3 @@ export function createRequireSuperAdmin(db) {
     next()
   }
 }
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
-export function createRequireGroupMember(db) {
-  return async function requireGroupMember(req, res, next) {
-    const groupId = req.get('X-Group-Id')
-    if (!groupId || !UUID_RE.test(groupId)) {
-      return res.status(400).json({ erro: 'Cabeçalho X-Group-Id ausente ou inválido' })
-    }
-    const { rows } = await db.query(
-      'select 1 from group_members where group_id = $1 and steam_id64 = $2',
-      [groupId, req.player.steamId],
-    )
-    if (rows.length === 0) return res.status(403).json({ erro: 'Você não pertence a esse grupo' })
-    req.groupId = groupId
-    next()
-  }
-}
