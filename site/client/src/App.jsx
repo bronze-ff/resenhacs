@@ -17,9 +17,6 @@ import Perfil from './pages/Perfil.jsx'
 import Admin from './pages/Admin.jsx'
 import PartidasPro from './pages/PartidasPro.jsx'
 import ReplayDemo from './pages/ReplayDemo.jsx'
-import Times from './pages/Times.jsx'
-import CompararTimes from './pages/CompararTimes.jsx'
-import RankingPublico from './pages/RankingPublico.jsx'
 import Tour from './pages/Tour.jsx'
 import Apoie from './pages/Apoie.jsx'
 import Curso from './pages/Curso.jsx'
@@ -58,9 +55,6 @@ export default function App() {
           <Route path="/jogadores" element={<RotaProtegida><Amigos /></RotaProtegida>} />
           <Route path="/jogador/:steamId" element={<RotaProtegida><JogadorPerfil /></RotaProtegida>} />
           <Route path="/comparar" element={<RotaProtegida><Comparar /></RotaProtegida>} />
-          <Route path="/times" element={<RotaProtegida><Times /></RotaProtegida>} />
-          <Route path="/times/comparar" element={<RotaProtegida><CompararTimes /></RotaProtegida>} />
-          <Route path="/ranking-publico" element={<RotaProtegida><RankingPublico /></RotaProtegida>} />
           <Route path="/granadas" element={<RotaProtegida><Granadas /></RotaProtegida>} />
           <Route path="/taticas" element={<RotaProtegida><Taticas /></RotaProtegida>} />
           <Route path="/conta" element={<RotaProtegida><Perfil /></RotaProtegida>} />

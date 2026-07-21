@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { nomeMapa, dataHora, corRating, nomeArma, TIPO_COMPRA } from '../lib/format.js'
 import { Card, SectionHeader, StatTile, RatingBadge, DataTable, MapIcon, Badge, Select, PremierBadge, PlataformaBadge, FaceitEloBadge, SteamIcon, FaceitIcon } from '../components/ui'
 import LinhaEvolucao from '../components/LinhaEvolucao.jsx'
@@ -168,10 +168,6 @@ function SecaoHighlights({ destaques }) {
 export default function JogadorPerfil() {
   const { steamId } = useParams()
   const navegar = useNavigate()
-  // Veio do ranking público? Então o perfil abre no modo público (stats globais do jogador),
-  // pra o número bater com a linha clicada — mesmo que o viewer divida grupo com ele.
-  const [searchParams] = useSearchParams()
-  const viePublico = searchParams.get('publico') === '1'
   const [data, setData] = useState(null)
   const [erro, setErro] = useState(false)
   const [de, setDe] = useState('')
@@ -183,7 +179,6 @@ export default function JogadorPerfil() {
     const qs = new URLSearchParams()
     if (de) qs.set('from', de)
     if (ate) qs.set('to', ate)
-    if (viePublico) qs.set('publico', '1')
     fetch(`/api/profile/${steamId}${qs.size ? `?${qs}` : ''}`)
       .then((res) => {
         if (!res.ok) throw new Error()
@@ -191,12 +186,12 @@ export default function JogadorPerfil() {
       })
       .then(setData)
       .catch(() => setErro(true))
-  }, [steamId, de, ate, viePublico])
+  }, [steamId, de, ate])
 
   if (erro) return <p className="font-mono text-sm text-texto-fraco">Jogador não encontrado.</p>
   if (!data) return <p className="font-mono text-sm text-texto-fraco">Carregando…</p>
 
-  const { jogador, stats, porMapa, recentes, sinergia, evolucao, badges, estilo, destaques, armas, economia, premierAtual, perfilPublico } = data
+  const { jogador, stats, porMapa, recentes, sinergia, evolucao, badges, estilo, destaques, armas, economia, premierAtual } = data
 
   return (
     <div className="space-y-6">
@@ -216,11 +211,6 @@ export default function JogadorPerfil() {
               <FaceitEloBadge elo={jogador.faceitElo} level={jogador.faceitSkillLevel} />
             </div>
             <p className="font-mono text-sm text-texto-fraco">{stats.partidas} partidas · {stats.winrate}% de vitória</p>
-            {perfilPublico && (
-              <p className="font-mono text-xs text-texto-fraco">
-                Perfil público — stats agregadas de todas as partidas dele (o histórico de partidas fica fechado pro grupo dele).
-              </p>
-            )}
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3 lg:gap-4">
@@ -249,16 +239,12 @@ export default function JogadorPerfil() {
               <FaceitIcon className="h-4 w-4" />
             </a>
           )}
-          {/* Comparar é escopado ao grupo ativo — no perfil público (outro grupo) a
-              comparação sairia zerada, então o botão some. */}
-          {!perfilPublico && (
-            <Link
-              to={`/comparar?a=${jogador.steamId}`}
-              className="panel-cut-sm min-h-10 border border-borda px-3 py-2 font-mono text-xs uppercase tracking-wide text-texto-fraco transition-colors hover:border-destaque/60 hover:text-destaque lg:min-h-0"
-            >
-              Comparar com…
-            </Link>
-          )}
+          <Link
+            to={`/comparar?a=${jogador.steamId}`}
+            className="panel-cut-sm min-h-10 border border-borda px-3 py-2 font-mono text-xs uppercase tracking-wide text-texto-fraco transition-colors hover:border-destaque/60 hover:text-destaque lg:min-h-0"
+          >
+            Comparar com…
+          </Link>
         </div>
       </div>
 
@@ -294,10 +280,7 @@ export default function JogadorPerfil() {
         </section>
       )}
 
-      {/* 3. Histórico de partidas — o que mais se consulta, logo depois dos tiles.
-          No perfil público também aparece: o alvo optou pelo ranking público, então o backend
-          devolve as partidas dele e o detalhe abre (partidaPublicaExpr). Só some se vier vazio. */}
-      {(!perfilPublico || recentes.length > 0) && (
+      {/* 3. Histórico de partidas — o que mais se consulta, logo depois dos tiles. */}
       <section>
         <SectionHeader titulo={<>
           Partidas recentes
@@ -415,7 +398,6 @@ export default function JogadorPerfil() {
           </>
         )}
       </section>
-      )}
 
       {/* 4. Highlights — aces/clutches com deep-link, resumo por tipo/mapa e carregar mais. */}
       {destaques.length > 0 && <SecaoHighlights destaques={destaques} />}
@@ -468,9 +450,7 @@ export default function JogadorPerfil() {
         </div>
       </section>
 
-      {/* 7. Sinergia / com quem joga. No perfil público some: o grafo social do grupo
-          alheio é privado (o backend já devolve a lista vazia). */}
-      {!perfilPublico && (
+      {/* 7. Sinergia / com quem joga. */}
       <section>
         <SectionHeader titulo="Com quem mais joga" />
         {sinergia.length === 0 && <p className="font-mono text-sm text-texto-fraco">Sem duplas registradas ainda.</p>}
@@ -499,7 +479,6 @@ export default function JogadorPerfil() {
           ))}
         </div>
       </section>
-      )}
 
       {/* 8. Resto — evolução, stats avançadas/utilitária, economia e posicionamento. */}
       <section>
@@ -633,14 +612,10 @@ export default function JogadorPerfil() {
         </p>
       </section>
 
-      {/* Posicionamento usa /posicoes, que é escopado ao grupo ativo — no perfil
-          público mostraria "sem dados" enganoso, então a seção some. */}
-      {!perfilPublico && (
       <section>
         <SectionHeader titulo="Posicionamento" />
         <PosicionamentoAgregado steamId={jogador.steamId} />
       </section>
-      )}
     </div>
   )
 }
