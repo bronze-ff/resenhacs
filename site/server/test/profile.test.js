@@ -263,6 +263,22 @@ describe('GET /api/profile/compare', () => {
     expect(res.status).toBe(404)
   })
 
+  it('404 quando um dos dois existe em players mas não é visível ao viewer (não é amigo accepted nem participa de partida visível)', async () => {
+    const a = STEAM_ID // o próprio viewer
+    const b = '76561198000000099' // linha válida em players, mas fora da rede de amizade
+    const { app } = appWith([
+      ['where p.steam_id64 in', [
+        { steam_id64: a, nick: 'fih', avatar_url: null },
+        { steam_id64: b, nick: 'estranho', avatar_url: null },
+      ]],
+    ], { temPresenca: false })
+    const res = await request(app)
+      .get(`/api/profile/compare?a=${a}&b=${b}`)
+      .set('Cookie', cookie)
+    expect(res.status).toBe(404)
+    expect(res.body).toEqual({ erro: 'Jogador não encontrado' })
+  })
+
   it('compara stats e monta o confronto direto (mesmo time / times opostos)', async () => {
     const a = '76561198000000001'
     const b = '76561198000000002'

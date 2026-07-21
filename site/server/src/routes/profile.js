@@ -239,6 +239,23 @@ async function armasDoJogador(db, steamId, from, to, viewerSteamId) {
   }))
 }
 
+// Mesmo gate de presença usado por GET /:steamId (ver comentário lá): o alvo só é visível
+// se for o próprio viewer, um amigo `accepted`, ou alguém que jogou numa partida visível
+// ao viewer. Extraído aqui porque agora é usado em 2 lugares neste arquivo (/compare
+// precisa checar os DOIS lados, a e b).
+async function temPresenca(db, steamId, viewerSteamId) {
+  const presenca = await db.query(
+    `select ($1 = $2
+          or exists (select 1 from friendships f
+                     where ((f.player_a = $2 and f.player_b = $1) or (f.player_b = $2 and f.player_a = $1))
+                       and f.status = 'accepted')
+          or exists (select 1 from match_players mp join matches m on m.id = mp.match_id
+                     where mp.steam_id64 = $1 and ${partidaVisivelExpr('m', '$2')})) as tem`,
+    [steamId, viewerSteamId],
+  )
+  return Boolean(presenca.rows[0]?.tem)
+}
+
 const BUY_TYPES = ['eco', 'forcado', 'semi', 'full']
 
 async function economiaDoJogador(db, steamId, from, to, viewerSteamId) {
@@ -290,6 +307,15 @@ export function createProfileRouter({ db, requireAuth }) {
     const jogadorA = playersQ.rows.find((p) => p.steam_id64 === a)
     const jogadorB = playersQ.rows.find((p) => p.steam_id64 === b)
     if (!jogadorA || !jogadorB) return res.status(404).json({ erro: 'Jogador não encontrado' })
+
+    // Mesmo gate de presença do GET /:steamId: sem isso, nick/avatar de qualquer SteamID64
+    // válido em `players` vazariam pra qualquer conta logada, mesmo fora da rede de amizade
+    // do viewer (as stats agregadas já eram corretamente escopadas, só a identidade vazava).
+    const [presencaA, presencaB] = await Promise.all([
+      temPresenca(db, a, req.player.steamId),
+      temPresenca(db, b, req.player.steamId),
+    ])
+    if (!presencaA || !presencaB) return res.status(404).json({ erro: 'Jogador não encontrado' })
 
     const confrontoParams = [a, b]
     const confrontoPeriodo = periodoWhere(from, to, confrontoParams)
@@ -398,17 +424,9 @@ export function createProfileRouter({ db, requireAuth }) {
     // visível ao viewer (mesma regra de matches.js/friendships.js: participação-ou-amigo-de-
     // -participante). Sem esse gate, o bloco `jogador` (nick/avatar/FACEIT) e a existência de
     // jogadores fora da rede de amizade vazariam pra qualquer conta logada.
-    const presenca = await db.query(
-      `select ($1 = $2
-            or exists (select 1 from friendships f
-                       where ((f.player_a = $2 and f.player_b = $1) or (f.player_b = $2 and f.player_a = $1))
-                         and f.status = 'accepted')
-            or exists (select 1 from match_players mp join matches m on m.id = mp.match_id
-                       where mp.steam_id64 = $1 and ${partidaVisivelExpr('m', '$2')})) as tem`,
-      [steamId, req.player.steamId],
-    )
-    const temPresenca = Boolean(presenca.rows[0]?.tem)
-    if (!temPresenca) return res.status(404).json({ erro: 'Jogador não encontrado' })
+    if (!(await temPresenca(db, steamId, req.player.steamId))) {
+      return res.status(404).json({ erro: 'Jogador não encontrado' })
+    }
 
     const mapaParams = [steamId]
     const mapaPeriodo = periodoWhere(from, to, mapaParams)

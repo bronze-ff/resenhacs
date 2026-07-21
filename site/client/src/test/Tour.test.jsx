@@ -10,7 +10,6 @@ const JOGADOR = {
   nick: 'fih',
   avatarUrl: null,
   isSuperAdmin: false,
-  grupoAtivoId: 'g1',
   tourConcluido: false,
   faceitNick: null,
 }

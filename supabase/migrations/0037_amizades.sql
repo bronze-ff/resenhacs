@@ -34,3 +34,14 @@ select distinct
 from group_members g1
 join group_members g2 on g1.group_id = g2.group_id and g1.steam_id64 < g2.steam_id64
 on conflict (player_a, player_b) do nothing;
+
+-- O código novo (Tasks 2-8, já escrito nesta branch) para de popular `group_id` em
+-- matches/uploads_pendentes/faceit_pendentes — visibilidade agora é só por amizade.
+-- Essas 3 colunas continuam `not null` (0020_grupos.sql / 0026_uploads_pendentes.sql /
+-- 0030_faceit_fase_b.sql), sem default. Sem relaxar aqui, a janela de deploy entre "código
+-- novo em produção" e "0038_remove_grupos.sql dropar as colunas" quebraria todo insert
+-- nessas 3 tabelas com violação de not-null. Ainda é seguro incluir isso nesta migração
+-- aditiva: ela relaxa a constraint, não apaga a coluna (isso só acontece no 0038).
+alter table matches alter column group_id drop not null;
+alter table uploads_pendentes alter column group_id drop not null;
+alter table faceit_pendentes alter column group_id drop not null;

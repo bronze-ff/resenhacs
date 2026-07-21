@@ -27,8 +27,9 @@ export function createAuthRouter({ config, db, verifySteamLogin, fetchPersona, f
     )
     if (nonceInsert.rowCount === 0) return res.redirect(`${config.appUrl}/?erro=login-invalido`)
 
-    // Login aberto: qualquer conta Steam entra (privacidade vem do isolamento por grupo,
-    // não de uma whitelist global). Upsert em vez de lookup-que-bloqueia. `conta_criada_em`
+    // Login aberto: qualquer conta Steam entra (privacidade vem do modelo de amizade/
+    // visibilidade por participação, não de uma whitelist global ou de isolamento por
+    // grupo). Upsert em vez de lookup-que-bloqueia. `conta_criada_em`
     // marca a conta como real (usado pelo auto-friend abaixo, e por lógica futura de
     // amizade): no insert vira `now()`; num conflito, `coalesce` preserva o valor já
     // gravado (nunca sobrescreve) e só carimba se ainda estava null (linha pré-migração).
