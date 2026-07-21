@@ -1248,7 +1248,17 @@ export default function Partida() {
               <SectionHeader titulo="Highlights" />
               {erroClipe && <p className="mb-2 font-mono text-xs text-perigo">{erroClipe}</p>}
               <div className="flex flex-wrap gap-2">
-                {m.highlights.map((h) => {
+                {(() => {
+                  // A Allstar dedupe clipe por jogador+demo (não por round): depois que um
+                  // jogador já tem UM clipe pedido nessa partida (Submitted/Processed), pedir
+                  // outro pra ele mesmo (highlight diferente) sempre volta 204 "deduplicado".
+                  // Descobrimos isso na prática (ver conversa) — não tem workaround do nosso
+                  // lado, só evitar o clique que já sabemos que vai falhar.
+                  const steamIdsComClipe = new Set(
+                    m.highlights.filter((h) => h.allstarStatus === 'Processed' || h.allstarStatus === 'Submitted').map((h) => h.steamId),
+                  )
+                  return m.highlights.map((h) => {
+                  const jaTemClipeNaPartida = steamIdsComClipe.has(h.steamId) && h.allstarStatus !== 'Processed' && h.allstarStatus !== 'Submitted'
                   const podeAssistir = h.frame != null && m.replayUrl
                   const conteudo = (
                     <>
@@ -1280,6 +1290,13 @@ export default function Partida() {
                         <span className="font-mono text-xs text-texto-fraco" title="Ver na aba Clipes">
                           {h.allstarClipUrl ? '🎬 clipe na aba Clipes' : 'gerando clipe…'}
                         </span>
+                      ) : jaTemClipeNaPartida ? (
+                        <span
+                          className="font-mono text-xs text-texto-fraco"
+                          title="A Allstar só permite 1 clipe por jogador em cada partida — esse jogador já pediu um nessa"
+                        >
+                          já gerado nessa partida
+                        </span>
                       ) : (
                         <button
                           onClick={() => pedirClipeAllstar(h.id)}
@@ -1292,7 +1309,8 @@ export default function Partida() {
                       )}
                     </span>
                   )
-                })}
+                  })
+                })()}
               </div>
             </section>
           )}
