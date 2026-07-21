@@ -2,6 +2,7 @@ import path from 'node:path'
 import express from 'express'
 import cookieParser from 'cookie-parser'
 import { createAuthRouter } from './routes/auth.js'
+import { createFriendshipsRouter } from './routes/friendships.js'
 import { createPlayersRouter } from './routes/players.js'
 import { createFaceitRouter } from './routes/faceit.js'
 import { createMatchesRouter } from './routes/matches.js'
@@ -74,6 +75,7 @@ export function createApp({ config, db, verifySteamLogin, fetchPersona, fetchBan
   app.use('/api/auth', createAuthRouter({ config, db, verifySteamLogin, fetchPersona, requireAuth }))
   app.use('/api/groups', requireAuth, createGroupsRouter({ db }))
   app.use('/api/convites', requireAuth, createConvitesRouter({ db }))
+  app.use('/api/amigos', createFriendshipsRouter({ db, requireAuth }))
   app.use('/api/players', createPlayersRouter({ db, requireAuth, requireGroupMember, fetchBans }))
   app.use('/api/faceit', requireAuth, createFaceitRouter({ config, db, ...(faceitFetchImpl ? { fetchImpl: faceitFetchImpl } : {}) }))
   app.use('/api/teams', createTeamsRouter({ db, requireAuth, requireGroupMember }))
