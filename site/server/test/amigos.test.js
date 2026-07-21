@@ -39,6 +39,7 @@ describe('POST /api/amigos/:steamId/aceitar', () => {
     const upd = db.query.mock.calls.find((c) => c[0].includes('update friendships'))
     expect(upd[0]).toContain("status = 'accepted'")
     expect(upd[1]).toEqual(['111', '999'])                   // par canônico
+    expect(upd[0]).toMatch(/requested_by <> \$1\b/)
   })
   it('aceita com steamId menor: marca accepted ($2 branch)', async () => {
     const { app, db } = appWith([['update friendships', [{}]]])
@@ -47,6 +48,7 @@ describe('POST /api/amigos/:steamId/aceitar', () => {
     const upd = db.query.mock.calls.find((c) => c[0].includes('update friendships'))
     expect(upd[0]).toContain("status = 'accepted'")
     expect(upd[1]).toEqual(['111', '999'])                   // par canônico, mas euEhA=false usa $2
+    expect(upd[0]).toMatch(/requested_by <> \$2\b/)
   })
   it('sem pendente pra aceitar: 404', async () => {
     const { app } = appWith([['update friendships', []]])
