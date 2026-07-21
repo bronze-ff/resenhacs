@@ -1214,6 +1214,15 @@ export default function Partida() {
         <ResultChip resultado={resultadoGrupo} a={placar.a} b={placar.b} size="lg" />
       </div>
 
+      {m.endedEarly && (
+        <div className="panel-cut-sm border border-perigo/40 bg-perigo/10 px-3 py-2 font-mono text-xs text-perigo">
+          ⚠ Partida encerrada antes do fim — nenhum time chegou a 13 rounds, então isso não foi uma vitória normal.
+          {m.abandonedBy
+            ? ` Provável motivo: ${m.abandonedBy.nick || m.abandonedBy.steamId} desconectou e não voltou.`
+            : ' Provavelmente por desistência/desconexão de algum jogador (não deu pra identificar quem com certeza).'}
+        </div>
+      )}
+
       <BarraAbas abas={ABAS} ativa={abaAtiva} onSelecionar={setAbaAtiva} />
 
       {abaAtiva === 'geral' && (

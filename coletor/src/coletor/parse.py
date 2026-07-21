@@ -84,6 +84,51 @@ def _construir_rounds(end_ticks, by_tick, score, lado_por_round=None):
     return rounds
 
 
+_ROUNDS_PRA_VENCER_MR12 = 13
+
+
+def _detectar_abandono(score, end_ticks, disconnects, kills):
+    """(ended_early, abandoned_by_steam_id64_ou_None).
+
+    Descoberta empírica (2026-07-21, partida 44a32a9e/de_mirage 4x1, comparada com uma
+    partida normal 13x7): o round_officially_ended do round DECISIVO nunca dispara —
+    mesmo numa partida 100% normal (a 13x7 real também tem exatamente esse gap de 1).
+    Não dá pra usar isso como sinal de abandono. O placar É o sinal confiável: o
+    formato competitivo/premier (MR12) só termina com um time batendo 13 — os dois
+    lados abaixo de 13 numa partida já 'parsed' (demo completo, a Valve só libera o
+    demo depois que a partida termina) só é possível por abandono/forfeit técnico.
+
+    Pra achar QUEM abandonou: pega o ÚLTIMO disconnect de cada jogador (`disconnects`,
+    steam_id64+tick); se não teve NENHUM kill/death depois desse tick E o disconnect
+    aconteceu até o último round_officially_ended REAL (`end_ticks[-1]` — não faz
+    parte da debandada normal de fim de partida, que sempre acontece por último), é
+    candidato a ter sido quem abandonou. Só atribui quando há exatamente 1 candidato —
+    ambíguo (2+ ao mesmo tempo, ou nenhum) fica sem atribuição (abandoned_by=None)."""
+    ended_early = score.get("A", 0) < _ROUNDS_PRA_VENCER_MR12 and score.get("B", 0) < _ROUNDS_PRA_VENCER_MR12
+    if not ended_early or not end_ticks:
+        return ended_early, None
+
+    ultimo_tick_real = end_ticks[-1]
+    ultimo_disconnect_por_sid = {}
+    for d in disconnects:
+        sid = d.get("steam_id64")
+        if not sid:
+            continue
+        ultimo_disconnect_por_sid[sid] = max(ultimo_disconnect_por_sid.get(sid, -1), d["tick"])
+
+    candidatos = []
+    for sid, tick in ultimo_disconnect_por_sid.items():
+        if tick > ultimo_tick_real:
+            continue
+        teve_atividade_depois = any(
+            k["tick"] > tick and (k["attacker"] == sid or k["victim"] == sid) for k in kills
+        )
+        if not teve_atividade_depois:
+            candidatos.append(sid)
+
+    return ended_early, candidatos[0] if len(candidatos) == 1 else None
+
+
 def _nomes_de_time(registros, fixed):
     """(nome_time_a, nome_time_b) a partir de um snapshot de tick com team_clan_name —
     None quando a demo não traz nome de clã (comum em partida de matchmaking do grupo,
@@ -1042,6 +1087,19 @@ def parse_demo(path):
                 by_tick.setdefault(int(r["tick"]), {})[ft] = total
     rounds = _construir_rounds(end_ticks, by_tick, score, lado_por_round=lado_por_round)
 
+    # Abandono: ver docstring de _detectar_abandono. Best-effort — parse_event pode
+    # não achar o evento numa versão antiga do demo; cai pra "sem dado" (mesmo padrão
+    # de round_econ/purchases/blind acima) em vez de derrubar o ingest inteiro.
+    try:
+        disc_evt = parser.parse_event("player_disconnect")
+        disconnects = [
+            {"steam_id64": _sid(r.get("user_steamid")), "tick": int(r["tick"])}
+            for r in disc_evt.to_dict("records")
+        ]
+    except Exception:  # noqa: BLE001
+        disconnects = []
+    ended_early, abandoned_by = _detectar_abandono(score, end_ticks, disconnects, kills)
+
     played_at = datetime.datetime.fromtimestamp(
         os.path.getmtime(path), tz=datetime.timezone.utc
     ).isoformat()
@@ -1076,6 +1134,8 @@ def parse_demo(path):
         "player_flashes": player_flashes,
         "kill_positions": kill_positions,
         "player_round_damage": player_round_damage,
+        "ended_early": ended_early,
+        "abandoned_by": abandoned_by,
     }
 
 

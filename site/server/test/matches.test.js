@@ -144,14 +144,14 @@ describe('GET /api/matches/sync-status', () => {
 
 describe('GET /api/matches/:id', () => {
   it('404 quando não existe', async () => {
-    const { app } = appWith([['from matches where id', []]])
+    const { app } = appWith([['from matches mt', []]])
     const res = await request(app).get('/api/matches/xxx').set('Cookie', cookie)
     expect(res.status).toBe(404)
   })
 
   it('devolve placar, rounds, highlights, clipes e armas por jogador', async () => {
     const { app } = appWith([
-      ['from matches where id', [{ id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9, source: 'valve_mm', status: 'parsed', demo_url: null }]],
+      ['from matches mt', [{ id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9, source: 'valve_mm', status: 'parsed', demo_url: null }]],
       ['from match_players mp', [{ steam_id64: '765', nick: 'fih', team: 'A', kills: 25, team_kills: 1, deaths: 10, assists: 5, headshot_kills: 12, damage: 2500, rounds_played: 22, rating: '1.35', kast_pct: '72.5', premier_rating_before: 15420, premier_rating_after: 15480, faceit_elo_before: 1400, faceit_elo_after: 1425, won: true, is_tracked: true, avatar_url: 'https://avatars.steamstatic.com/fih.jpg' }]],
       ['from rounds where match_id', [{ round_number: 1, winner_team: 'A', win_reason: 'elim' }]],
       ['from highlights h', [{ id: 'h1', steam_id64: '765', round_number: 5, kind: 'ace', description: 'ACE', frame: 12, nick: 'fih' }]],
@@ -176,7 +176,7 @@ describe('GET /api/matches/:id', () => {
 
   it('jogador sem kills registrados: weapons vem vazio', async () => {
     const { app } = appWith([
-      ['from matches where id', [{ id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9, source: 'valve_mm', status: 'parsed', demo_url: null }]],
+      ['from matches mt', [{ id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9, source: 'valve_mm', status: 'parsed', demo_url: null }]],
       ['from match_players mp', [{ steam_id64: '999', nick: 'zerado', team: 'B', kills: 0, team_kills: 0, deaths: 20, assists: 0, headshot_kills: 0, damage: 0, rounds_played: 22, rating: '0.2', won: false, is_tracked: false, avatar_url: null }]],
     ])
     const res = await request(app).get('/api/matches/m1').set('Cookie', cookie)
@@ -190,7 +190,7 @@ describe('GET /api/matches/:id', () => {
 
   it('jogador sem cadastro no grupo usa o avatar em cache da steam_avatares (fallback)', async () => {
     const { app } = appWith([
-      ['from matches where id', [{ id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9, source: 'valve_mm', status: 'parsed', demo_url: null }]],
+      ['from matches mt', [{ id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9, source: 'valve_mm', status: 'parsed', demo_url: null }]],
       ['from match_players mp', [{ steam_id64: '999', nick: 'adversario', team: 'B', kills: 10, team_kills: 0, deaths: 15, assists: 2, headshot_kills: 3, damage: 1200, rounds_played: 22, rating: '0.85', won: false, is_tracked: false, avatar_url: 'https://avatars.steamstatic.com/cache.jpg' }]],
       ['from rounds where match_id', []],
       ['from highlights h', []],
@@ -201,9 +201,35 @@ describe('GET /api/matches/:id', () => {
     expect(res.body.players[0]).toMatchObject({ nick: 'adversario', isTracked: false, avatarUrl: 'https://avatars.steamstatic.com/cache.jpg' })
   })
 
+  it('partida encerrada por abandono devolve endedEarly e abandonedBy com nick', async () => {
+    const { app } = appWith([
+      ['from matches mt', [{
+        id: 'm1', map: 'de_mirage', played_at: null, score_a: 1, score_b: 4,
+        source: 'valve_mm', status: 'parsed', demo_url: null,
+        ended_early: true, abandoned_by_steam_id64: '765', abandoned_by_nick: 'krn',
+      }]],
+    ])
+    const res = await request(app).get('/api/matches/m1').set('Cookie', cookie)
+    expect(res.body.endedEarly).toBe(true)
+    expect(res.body.abandonedBy).toEqual({ steamId: '765', nick: 'krn' })
+  })
+
+  it('partida normal devolve endedEarly false e abandonedBy null', async () => {
+    const { app } = appWith([
+      ['from matches mt', [{
+        id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9,
+        source: 'valve_mm', status: 'parsed', demo_url: null,
+        ended_early: false, abandoned_by_steam_id64: null, abandoned_by_nick: null,
+      }]],
+    ])
+    const res = await request(app).get('/api/matches/m1').set('Cookie', cookie)
+    expect(res.body.endedEarly).toBe(false)
+    expect(res.body.abandonedBy).toBeNull()
+  })
+
   it('replayUrl aponta pro proxy do servidor, nunca pra URL crua do R2', async () => {
     const { app } = appWith([
-      ['from matches where id', [{
+      ['from matches mt', [{
         id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9,
         source: 'valve_mm', status: 'parsed',
         demo_url: 'https://acc.r2.cloudflarestorage.com/resenha-demos/demos/1.dem.bz2',

@@ -142,6 +142,68 @@ def test_construir_rounds_sem_lado_conhecido_devolve_side_a_none():
     assert rounds[0]["side_a"] is None
 
 
+# ---- _detectar_abandono (partida 44a32a9e/de_mirage 4x1, 2026-07-21) ----
+
+def test_detectar_abandono_placar_normal_nao_e_abandono():
+    # Um time bateu 13 -> terminou pelo formato normal (MR12), mesmo tendo disconnect
+    # registrado (jogador que saiu e voltou, ou saiu só depois do resultado decidido).
+    score = {"A": 13, "B": 7}
+    end_ticks = [100, 200]
+    disconnects = [{"steam_id64": "1", "tick": 50}]
+    ended_early, abandoned_by = parse._detectar_abandono(score, end_ticks, disconnects, [])
+    assert (ended_early, abandoned_by) == (False, None)
+
+
+def test_detectar_abandono_placar_abaixo_de_13_dos_dois_lados_e_abandono():
+    score = {"A": 1, "B": 4}
+    ended_early, _ = parse._detectar_abandono(score, [100], [], [])
+    assert ended_early is True
+
+
+def test_detectar_abandono_atribui_unico_candidato_sem_atividade_depois():
+    score = {"A": 1, "B": 4}
+    end_ticks = [100, 200, 300, 400]  # último round_officially_ended real
+    disconnects = [{"steam_id64": "krn", "tick": 150}]  # antes do último tick real, sem volta
+    kills = [{"tick": 120, "attacker": "krn", "victim": "outro"}]  # só ANTES do disconnect
+    ended_early, abandoned_by = parse._detectar_abandono(score, end_ticks, disconnects, kills)
+    assert ended_early is True
+    assert abandoned_by == "krn"
+
+
+def test_detectar_abandono_nao_atribui_quando_tem_atividade_depois_do_disconnect():
+    # Reconectou e voltou a jogar (kill depois do disconnect) -> não é o abandonador.
+    score = {"A": 1, "B": 4}
+    end_ticks = [100, 200, 300, 400]
+    disconnects = [{"steam_id64": "krn", "tick": 150}]
+    kills = [{"tick": 250, "attacker": "krn", "victim": "outro"}]
+    ended_early, abandoned_by = parse._detectar_abandono(score, end_ticks, disconnects, kills)
+    assert (ended_early, abandoned_by) == (True, None)
+
+
+def test_detectar_abandono_ignora_disconnect_da_debandada_final_pos_ultimo_round_real():
+    # Disconnect DEPOIS do último round_officially_ended real é a debandada normal de
+    # fim de partida (todo mundo sai do servidor) -- não conta como candidato.
+    score = {"A": 1, "B": 4}
+    end_ticks = [100, 200, 300, 400]
+    disconnects = [{"steam_id64": "jogador", "tick": 450}]
+    ended_early, abandoned_by = parse._detectar_abandono(score, end_ticks, disconnects, [])
+    assert (ended_early, abandoned_by) == (True, None)
+
+
+def test_detectar_abandono_dois_candidatos_ambiguo_nao_atribui():
+    score = {"A": 1, "B": 4}
+    end_ticks = [100, 200, 300, 400]
+    disconnects = [{"steam_id64": "a", "tick": 150}, {"steam_id64": "b", "tick": 160}]
+    ended_early, abandoned_by = parse._detectar_abandono(score, end_ticks, disconnects, [])
+    assert (ended_early, abandoned_by) == (True, None)
+
+
+def test_detectar_abandono_sem_end_ticks_nao_atribui():
+    score = {"A": 1, "B": 4}
+    ended_early, abandoned_by = parse._detectar_abandono(score, [], [{"steam_id64": "a", "tick": 10}], [])
+    assert (ended_early, abandoned_by) == (True, None)
+
+
 def test_nomes_de_time_extrai_dos_dois_lados():
     fixed = {"1": "A", "2": "A", "3": "B", "4": "B"}
     registros = [

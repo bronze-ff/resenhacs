@@ -172,6 +172,34 @@ def test_store_parsed_grava_tudo_e_commita():
     assert any(s.startswith("delete from rounds") for s in sqls)
 
 
+def test_store_parsed_grava_ended_early_e_abandoned_by():
+    conn = FakeConn()
+    parsed = _parsed()
+    parsed["ended_early"] = True
+    parsed["abandoned_by"] = "76561199447162948"
+    db.store_parsed(conn, parsed, share_code="CSGO-x", source="valve_mm")
+    match_call = next(c for c in conn.calls if c[0].startswith("insert into matches"))
+    assert match_call[1][-2:] == (True, "76561199447162948")
+
+
+def test_store_parsed_sem_ended_early_grava_false_e_none_por_padrao():
+    conn = FakeConn()
+    db.store_parsed(conn, _parsed(), share_code="CSGO-x", source="valve_mm")
+    match_call = next(c for c in conn.calls if c[0].startswith("insert into matches"))
+    assert match_call[1][-2:] == (False, None)
+
+
+def test_store_parsed_dedupe_por_fingerprint_atualiza_ended_early_tambem():
+    existente = "11111111-1111-1111-1111-111111111111"
+    conn = FakeConn(fingerprint_row=[existente])
+    parsed = _parsed()
+    parsed["ended_early"] = True
+    parsed["abandoned_by"] = "765"
+    db.store_parsed(conn, parsed, share_code="CSGO-x", source="valve_mm")
+    match_call = next(c for c in conn.calls if c[0].startswith("update matches set share_code"))
+    assert match_call[1][-3:-1] == (True, "765")
+
+
 def test_store_parsed_limpa_jogador_e_round_orfao_no_reprocess():
     # Reprocessar (parser corrigido reduz o nº de jogadores/rounds) não pode deixar
     # a linha antiga pra trás — mesma garantia que highlights/weapons/econ já têm.

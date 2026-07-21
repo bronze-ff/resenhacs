@@ -150,7 +150,13 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
   router.get('/:id', requireAuth, async (req, res) => {
     const { id } = req.params
     const matchQ = await db.query(
-      `select id, map, played_at, score_a, score_b, source, status, demo_url, replay_url from matches where id = $1 and ${partidaVisivelExpr('matches', '$2')}`,
+      `select mt.id, mt.map, mt.played_at, mt.score_a, mt.score_b, mt.source, mt.status, mt.demo_url, mt.replay_url,
+              mt.ended_early, mt.abandoned_by_steam_id64,
+              coalesce(ap.nick, amp.nick) as abandoned_by_nick
+       from matches mt
+       left join players ap on ap.steam_id64 = mt.abandoned_by_steam_id64
+       left join match_players amp on amp.match_id = mt.id and amp.steam_id64 = mt.abandoned_by_steam_id64
+       where mt.id = $1 and ${partidaVisivelExpr('mt', '$2')}`,
       [id, req.player.steamId],
     )
     if (matchQ.rows.length === 0) return res.status(404).json({ erro: 'Partida não encontrada' })
@@ -231,6 +237,13 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
       // proxiados pelo próprio servidor (ver rotas /:id/demo e /:id/replay abaixo).
       demoUrl: m.demo_url ? `/api/matches/${m.id}/demo` : null,
       replayUrl: m.replay_url ? `/api/matches/${m.id}/replay` : null,
+      // Placar sem nenhum time batendo 13 (MR12) só é possível por abandono/forfeit
+      // técnico — ver coletor/src/coletor/parse.py:_detectar_abandono. abandonedBy é
+      // best-effort (só quando dá pra atribuir a exatamente 1 jogador).
+      endedEarly: m.ended_early,
+      abandonedBy: m.abandoned_by_steam_id64
+        ? { steamId: m.abandoned_by_steam_id64, nick: m.abandoned_by_nick }
+        : null,
       players: players.rows.map((p) => ({
         steamId: p.steam_id64,
         nick: p.nick,
