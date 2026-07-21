@@ -47,7 +47,7 @@ def cmd_discover(config, conn):
             continue
         for code in novos:
             if sharecode.is_valid(code):
-                dbmod.record_pending_match(conn, code)
+                dbmod.record_pending_match(conn, code, discovered_by=steam_id64)
                 total += 1
         if novos:
             dbmod.set_last_share_code(conn, steam_id64, novos[-1])

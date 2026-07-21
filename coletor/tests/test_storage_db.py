@@ -440,9 +440,16 @@ def test_record_pending_match():
     mid = db.record_pending_match(conn, "CSGO-novo")
     assert mid == "00000000-0000-0000-0000-000000000001"
     assert conn.commits == 1
-    assert conn.calls[0][1] == ("CSGO-novo", "valve_mm")
+    assert conn.calls[0][1] == ("CSGO-novo", "valve_mm", None)
     assert "played_at" in conn.calls[0][0] and "now()" in conn.calls[0][0]
     assert "group_id" not in conn.calls[0][0]
+
+
+def test_record_pending_match_grava_discovered_by():
+    conn = FakeConn()
+    db.record_pending_match(conn, "CSGO-novo", discovered_by="76500000000000001")
+    assert conn.calls[0][1] == ("CSGO-novo", "valve_mm", "76500000000000001")
+    assert "discovered_by" in conn.calls[0][0]
 
 
 def test_store_parsed_por_padrao_preserva_played_at_existente():

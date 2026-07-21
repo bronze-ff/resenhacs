@@ -122,19 +122,25 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
   // Status da sincronização: quantas Partidas descobertas ainda esperam download/parse.
   // (Precisa vir antes de '/:id' — senão o Express casaria "sync-status" como um id.)
   router.get('/sync-status', requireAuth, async (req, res) => {
-    // Nota: 'pending'/'failed' ainda não têm match_players (a partida não foi parseada
-    // ainda, então não dá pra saber quem jogou) — sem uma chave pra atribuir o "time" de
-    // upload a um steamId, esses dois contadores zeram pra todo viewer até o Coletor ganhar
-    // algum jeito de atribuir a descoberta a um steamId. 'parsed'/last_played_at continuam
-    // corretos, filtrados por participação/amizade como o resto do arquivo.
+    // 'pending'/'failed' ainda não têm match_players (a partida não foi parseada ainda),
+    // então partidaVisivelExpr (que checa participação via match_players) nunca dá match
+    // pra elas — usamos discovered_by (steamId de quem descobriu, ver matches.discovered_by
+    // e coletor/src/coletor/main.py:cmd_discover) escopado por "eu ou um amigo meu"
+    // em vez disso. 'parsed'/last_played_at seguem por participação/amizade como o resto.
+    const eu = req.player.steamId
+    const descobertoPorMimOuAmigo = `(m.discovered_by = $1 or exists (
+      select 1 from friendships f
+      where f.status = 'accepted'
+        and ((f.player_a = $1 and f.player_b = m.discovered_by) or (f.player_b = $1 and f.player_a = m.discovered_by))
+    ))`
     const { rows } = await db.query(
       `select
-         count(*) filter (where status = 'pending')::int as pending,
-         count(*) filter (where status = 'failed')::int as failed,
-         count(*) filter (where status = 'parsed')::int as parsed,
-         max(played_at) filter (where status = 'parsed') as last_played_at
-       from matches where ${partidaVisivelExpr('matches', '$1')}`,
-      [req.player.steamId],
+         count(*) filter (where status = 'pending' and ${descobertoPorMimOuAmigo})::int as pending,
+         count(*) filter (where status = 'failed' and ${descobertoPorMimOuAmigo})::int as failed,
+         count(*) filter (where status = 'parsed' and ${partidaVisivelExpr('m', '$1')})::int as parsed,
+         max(played_at) filter (where status = 'parsed' and ${partidaVisivelExpr('m', '$1')}) as last_played_at
+       from matches m`,
+      [eu],
     )
     const r = rows[0]
     res.json({ pending: r.pending, failed: r.failed, parsed: r.parsed, lastPlayedAt: r.last_played_at })

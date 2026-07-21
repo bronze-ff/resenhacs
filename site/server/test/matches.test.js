@@ -119,6 +119,29 @@ describe('GET /api/matches', () => {
   })
 })
 
+describe('GET /api/matches/sync-status', () => {
+  it('sem login: 401', async () => {
+    const { app } = appWith([])
+    expect((await request(app).get('/api/matches/sync-status')).status).toBe(401)
+  })
+
+  it('escopa pending/failed por discovered_by (eu ou amigo), parsed por participação/amizade', async () => {
+    const { app, db } = appWith([
+      ['count(*) filter', [{ pending: 2, failed: 1, parsed: 10, last_played_at: '2026-07-01T00:00:00.000Z' }]],
+    ])
+    const res = await request(app).get('/api/matches/sync-status').set('Cookie', cookie)
+    expect(res.status).toBe(200)
+    expect(res.body).toEqual({ pending: 2, failed: 1, parsed: 10, lastPlayedAt: '2026-07-01T00:00:00.000Z' })
+    const [sql, params] = db.query.mock.calls.find(([s]) => s.includes('count(*) filter'))
+    expect(sql).toContain('m.discovered_by = $1')
+    expect(sql).toContain("status = 'pending'")
+    expect(sql).toContain("status = 'failed'")
+    expect(sql).toContain('mv.steam_id64 = $1')
+    expect(sql).toContain('from friendships f')
+    expect(params).toEqual([STEAM_ID])
+  })
+})
+
 describe('GET /api/matches/:id', () => {
   it('404 quando não existe', async () => {
     const { app } = appWith([['from matches where id', []]])

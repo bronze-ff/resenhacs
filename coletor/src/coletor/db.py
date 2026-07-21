@@ -415,22 +415,26 @@ def store_parsed(conn, parsed, share_code=None, source="valve_mm", demo_url=None
     return match_id
 
 
-def record_pending_match(conn, share_code, source="valve_mm"):
+def record_pending_match(conn, share_code, discovered_by=None, source="valve_mm"):
     """Registra um share code descoberto sem demo ainda (status pending). Idempotente.
 
     Grava played_at = now() (hora da descoberta): é bem mais próximo da hora real
     da Partida do que a mtime do .dem, que só reflete quando o arquivo foi baixado
     (pode ser dias depois — o formato .dem não guarda data em lugar nenhum).
+
+    `discovered_by` (opcional): steamId64 do jogador cujo polling encontrou esse share
+    code (ver cmd_discover) — permite o site mostrar "partidas pendentes" escopado por
+    amizade sem precisar de match_players (que só existe depois do parse).
     """
     with conn.cursor() as cur:
         cur.execute(
             """
-            insert into matches (share_code, source, status, played_at)
-            values (%s, %s, 'pending', now())
+            insert into matches (share_code, source, status, played_at, discovered_by)
+            values (%s, %s, 'pending', now(), %s)
             on conflict (share_code) do nothing
             returning id
             """,
-            (share_code, source),
+            (share_code, source, discovered_by),
         )
         row = cur.fetchone()
     conn.commit()
