@@ -61,7 +61,7 @@ export default function Entrar() {
           className="animate-surgir mt-8 font-mono text-[11px] uppercase tracking-widest text-texto-fraco/60"
           style={{ animationDelay: '360ms' }}
         >
-          Depois de entrar, crie o seu grupo ou use um link de convite
+          Depois de entrar, adicione seus amigos na aba Amigos — quem já é seu amigo na Steam entra automático
         </p>
       </div>
 

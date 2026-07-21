@@ -35,14 +35,14 @@ function SnapshotPlaceholder() {
 // (site/client/src/pages/Partida.jsx), reaproveitado aqui pro modo "assistir" do card.
 // `viewerSteamId` vai no ?UID= igual lá — é o parâmetro que a Allstar usa pra saber
 // quem tá assistindo, não quem fez a jogada.
-function PlayerClipe({ clipUrl, viewerSteamId }) {
+function PlayerClipe({ clipUrl, viewerSteamId, titulo }) {
   return (
     <div className="mt-3 aspect-video w-full">
       <iframe
         src={`${clipUrl}&UID=${viewerSteamId ?? ''}&location=melhoresClipes`}
-        allow="clipboard-write; autoplay"
+        allow="autoplay; encrypted-media; picture-in-picture; clipboard-write"
         className="h-full w-full border border-borda"
-        title="Clipe Allstar"
+        title={titulo ?? 'Clipe Allstar'}
       />
     </div>
   )
@@ -86,7 +86,13 @@ function CardClipe({ clipe, aberto, onAbrir, viewerSteamId }) {
       >
         {aberto ? 'Fechar' : '▶ Assistir'}
       </button>
-      {aberto && <PlayerClipe clipUrl={clipe.clipUrl} viewerSteamId={viewerSteamId} />}
+      {aberto && (
+        <PlayerClipe
+          clipUrl={clipe.clipUrl}
+          viewerSteamId={viewerSteamId}
+          titulo={`Clipe Allstar de ${clipe.nick} — ${nomeDoKind(clipe.kind)} round ${clipe.roundNumber}`}
+        />
+      )}
     </Card>
   )
 }

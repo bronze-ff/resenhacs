@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, Fragment } from 'react'
 import { useParams, useSearchParams, Link } from 'react-router-dom'
 import { nomeMapa, dataHora, origemPartida, nomeArma, corRating, TIPO_COMPRA } from '../lib/format.js'
 import { orientarPlacar } from '../lib/resultado.js'
-import { Avatar, MapIcon, SectionHeader, Select, ResultChip, PlataformaBadge, SteamIcon } from '../components/ui'
+import { Avatar, MapIcon, SectionHeader, Select, ResultChip, PlataformaBadge, SteamIcon, Badge } from '../components/ui'
 import ReplayViewer from '../components/ReplayViewer.jsx'
 import MapaCalor from '../components/MapaCalor.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
@@ -1392,13 +1392,33 @@ export default function Partida() {
                         )}
                       </div>
                       {clipeAllstarAberto === h.id && h.allstarClipUrl && (
-                        <div className="mt-3 aspect-video w-full max-w-2xl">
-                          <iframe
-                            src={`${h.allstarClipUrl}&UID=${jogador?.steamId ?? ''}&location=matchResults`}
-                            allow="clipboard-write; autoplay"
-                            className="h-full w-full border border-borda"
-                            title="Clipe Allstar"
-                          />
+                        <div className="mt-3 flex flex-col gap-4 lg:flex-row">
+                          <div className="aspect-video w-full lg:max-w-xl">
+                            <iframe
+                              src={`${h.allstarClipUrl}&UID=${jogador?.steamId ?? ''}&location=matchResults`}
+                              allow="autoplay; encrypted-media; picture-in-picture; clipboard-write"
+                              className="h-full w-full border border-borda"
+                              title={`Clipe Allstar de ${h.nick || h.steamId} — ${h.kind} round ${h.roundNumber}`}
+                            />
+                          </div>
+                          <div className="panel-cut-sm flex-1 space-y-3 border border-borda bg-superficie-alta p-4 lg:max-w-xs">
+                            <div>
+                              <Badge tom="destaque">{h.kind}</Badge>
+                              <p className="mt-2 font-mono text-sm text-texto">{h.nick || h.steamId} · round {h.roundNumber}</p>
+                            </div>
+                            <div className="space-y-1 font-mono text-xs text-texto-fraco">
+                              <p>{nomeMapa(m.map)} · {placar.a}-{placar.b}</p>
+                              <p>{dataHora(m.playedAt)}</p>
+                            </div>
+                            <a
+                              href={h.allstarClipUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 font-mono text-xs uppercase tracking-wide text-destaque hover:underline"
+                            >
+                              Abrir no Allstar.gg ↗
+                            </a>
+                          </div>
                         </div>
                       )}
                     </div>
