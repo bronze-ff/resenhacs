@@ -305,7 +305,9 @@ describe('GET /api/matches/:id/lado/:filtro', () => {
 })
 
 describe('POST /api/matches/:id/jogador/:steamId/clipe', () => {
-  const configComAllstar = { ...config, allstarApiKey: 'api-key', allstarSteamIds: new Set(['765']) }
+  // A allowlist é de quem PEDE (req.player.steamId, o dono do cookie = STEAM_ID),
+  // não do alvo do clipe — por isso usa STEAM_ID aqui, não um steamId qualquer.
+  const configComAllstar = { ...config, allstarApiKey: 'api-key', allstarSteamIds: new Set([STEAM_ID]) }
 
   it('sem login: 401', async () => {
     const { app } = appWith([])
@@ -330,13 +332,43 @@ describe('POST /api/matches/:id/jogador/:steamId/clipe', () => {
     expect(res.status).toBe(404)
   })
 
-  it('jogador fora da allowlist: 403', async () => {
+  it('quem pede (nao o alvo do clipe) fora da allowlist: 403', async () => {
+    // A allowlist é de quem PEDE (req.player.steamId, o cookie = '765'), não do alvo
+    // do clipe — mesmo pedindo um clipe do próprio '765', se ele não estiver na
+    // allowlist a resposta é 403.
+    const configSemAcesso = { ...config, allstarApiKey: 'api-key', allstarSteamIds: new Set(['999']) }
     const { app } = appWith(
-      [['from match_players mp', [{ steam_id64: '999', nick: 'outro', demo_url: 'https://r2/demos/x.dem.bz2' }]]],
-      { config: configComAllstar, r2Client: {} },
+      [['from match_players mp', [{ steam_id64: '765', nick: 'bronze', demo_url: 'https://r2/demos/x.dem.bz2' }]]],
+      { config: configSemAcesso, r2Client: {} },
     )
-    const res = await request(app).post('/api/matches/m1/jogador/999/clipe').set('Cookie', cookie)
+    const res = await request(app).post('/api/matches/m1/jogador/765/clipe').set('Cookie', cookie)
     expect(res.status).toBe(403)
+  })
+
+  it('quem pede na allowlist pode gerar clipe de OUTRO jogador da partida, não só do próprio', async () => {
+    const gravados = []
+    const db = {
+      query: vi.fn().mockImplementation((sql, params) => {
+        if (sql.includes('from match_players mp')) {
+          return Promise.resolve({ rows: [{ steam_id64: '999', nick: 'outro', demo_url: 'https://acc.r2.cloudflarestorage.com/resenha-demos/demos/x.dem.bz2' }] })
+        }
+        if (sql.includes('from allstar_clips where match_id')) return Promise.resolve({ rows: [] })
+        if (sql.includes('insert into allstar_clips')) { gravados.push(params); return Promise.resolve({ rows: [] }) }
+        return Promise.resolve({ rows: [] })
+      }),
+    }
+    // allowlist só tem '765' (o cookie/requester) — '999' (o alvo) nem precisa estar nela.
+    const app = createApp({ config: configComAllstar, db, r2Client: {} })
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ requestId: 'req-outro' }) })
+    try {
+      const res = await request(app).post('/api/matches/m1/jogador/999/clipe').set('Cookie', cookie)
+      expect(res.status).toBe(200)
+      expect(res.body).toEqual({ status: 'Submitted' })
+      expect(gravados).toEqual([['m1', '999', 'req-outro']])
+    } finally {
+      globalThis.fetch = originalFetch
+    }
   })
 
   it('ja tem clipe pedido: devolve o status existente sem pedir de novo', async () => {
