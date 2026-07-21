@@ -39,6 +39,10 @@ aceitou. Novo usuário loga com Steam e cai direto no sistema, sem etapa de grup
   do sistema ("feito pra resenha do grupo, não pra internet") e é a única fonte da
   complexidade de "viewer null". Sem ele, a visibilidade vira puramente
   "eu + meus amigos", sem exceção.
+- **Webhook do Discord**: removido inteiro. Era por grupo (roteava notificação por
+  qual grupo enxerga a partida); sem grupos, não há mais conceito de roteamento. Um
+  webhook único não serve (times diferentes usam canais diferentes). A notificação
+  de Discord por "jogadores-gatilho" fica pra um projeto futuro próprio, se desejado.
 - **Escopo**: server + client + Coletor + migração de banco, num projeto só.
 
 ## Modelo de dados
@@ -181,6 +185,21 @@ Removido por inteiro — server, client e banco:
 Consequência: **não existe mais nenhum acesso sem login**. Toda visibilidade é
 "eu + meus amigos accepted". A decisão de 2026-07-17 (abrir partidas via perfil
 público) fica sem efeito e é revertida.
+
+## Remoção do Webhook do Discord
+
+Removido por inteiro — pertencia aos grupos (roteava por qual grupo enxerga a
+partida), e sem grupos não há roteamento:
+
+- **Server**: rota `PUT /api/groups/:id/discord-webhook` (some com o arquivo
+  `routes/groups.js` inteiro).
+- **Client**: seção de configurar webhook do Discord em `Perfil.jsx`.
+- **Coletor**: módulo `coletor/src/coletor/discord_notify.py` (deletado); o bloco
+  de notificação em `main.py`; as funções `grupos_da_partida`, `webhook_do_grupo`,
+  `ja_notificado_discord`, `marcar_notificado_discord`,
+  `resumo_da_partida_para_grupo` em `db.py`; qualquer referência em `transform.py`.
+- **Banco**: coluna `groups.discord_webhook_url` e tabela `discord_notifications`
+  saem junto com o drop de `groups` (a tabela tem FK pra `groups`, cascateia).
 
 ## Frontend / Navegação
 
