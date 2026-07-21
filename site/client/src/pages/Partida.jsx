@@ -930,6 +930,116 @@ function TabelaUtilitaria({ timeA, timeB }) {
   )
 }
 
+// Seletor de jogador pro clipe (estilo Allstar.gg "Your Moments" — avatar + nick,
+// clicável, time A/B lado a lado). Um ✓ pequeno indica que esse jogador já tem
+// clipe pronto (Processed), pra não precisar clicar em todos pra descobrir.
+function BotaoJogadorClipe({ p, selecionado, onClick }) {
+  const temClipeProcessado = p.allstarClip?.status === 'Processed'
+  return (
+    <button
+      onClick={onClick}
+      className={`panel-cut-sm flex min-h-10 items-center gap-1.5 border px-2 py-1.5 font-mono text-xs transition-colors lg:min-h-0 ${
+        selecionado ? 'border-destaque bg-destaque/10 text-destaque' : 'border-borda bg-superficie text-texto-fraco hover:border-destaque/40 hover:text-texto'
+      }`}
+    >
+      <Avatar p={p} size={20} />
+      <span className="max-w-[7rem] truncate">{p.nick || p.steamId}</span>
+      {temClipeProcessado && <span title="Já tem clipe pronto">🎬</span>}
+    </button>
+  )
+}
+
+// Painel do jogador selecionado na aba Clipes: sem clipe ainda -> botão "gerar";
+// Submitted -> "gerando…"; Error -> permite tentar de novo; Processed -> player
+// embutido do Allstar, mesmo layout (vídeo + info ao lado) do resto do sistema.
+function PainelClipeJogador({ jogador, clip, pedindo, erro, aberto, onAbrir, onGerar, viewerSteamId, m, placar }) {
+  if (!clip) {
+    return (
+      <div className="mt-4 panel-cut-sm border border-borda bg-superficie p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <span className="font-mono text-sm text-texto">{jogador.nick || jogador.steamId}</span>
+          <button
+            onClick={onGerar}
+            disabled={pedindo}
+            className="panel-cut-sm border border-borda bg-superficie px-3 py-2 font-mono text-xs uppercase text-texto-fraco transition-colors hover:border-destaque/60 hover:text-destaque disabled:opacity-50"
+          >
+            {pedindo ? '…' : '🎬 gerar melhor clipe da partida'}
+          </button>
+        </div>
+        {erro && <p className="mt-2 font-mono text-xs text-perigo">{erro}</p>}
+      </div>
+    )
+  }
+  if (clip.status === 'Submitted') {
+    return (
+      <div className="mt-4 panel-cut-sm border border-borda bg-superficie p-4 font-mono text-sm text-texto-fraco">
+        Gerando o melhor clipe de {jogador.nick || jogador.steamId}… pode levar alguns minutos.
+      </div>
+    )
+  }
+  if (clip.status === 'Error') {
+    return (
+      <div className="mt-4 panel-cut-sm border border-borda bg-superficie p-4">
+        <p className="font-mono text-sm text-perigo">Falha ao gerar o clipe de {jogador.nick || jogador.steamId}.</p>
+        <button
+          onClick={onGerar}
+          disabled={pedindo}
+          className="mt-2 panel-cut-sm border border-borda bg-superficie px-3 py-2 font-mono text-xs uppercase text-texto-fraco transition-colors hover:border-destaque/60 hover:text-destaque disabled:opacity-50"
+        >
+          {pedindo ? '…' : 'tentar de novo'}
+        </button>
+        {erro && <p className="mt-2 font-mono text-xs text-perigo">{erro}</p>}
+      </div>
+    )
+  }
+  // Processed
+  return (
+    <div className="mt-4 panel-cut-sm border border-borda bg-superficie p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="font-mono text-sm text-texto">{jogador.nick || jogador.steamId}{clip.roundNumber ? ` · round ${clip.roundNumber}` : ''}</span>
+        <button
+          onClick={onAbrir}
+          className="panel-cut-sm border border-destaque/60 bg-destaque/10 px-2 py-1 font-mono text-xs uppercase text-destaque transition-colors hover:bg-destaque/20"
+        >
+          {aberto ? 'fechar' : '▶ assistir'}
+        </button>
+      </div>
+      {aberto && (
+        <div className="mt-3 flex flex-col gap-4 lg:flex-row">
+          <div className="aspect-video w-full lg:max-w-xl">
+            <iframe
+              src={`${clip.clipUrl}&UID=${viewerSteamId ?? ''}&location=matchResults`}
+              allow="autoplay; encrypted-media; picture-in-picture; clipboard-write"
+              className="h-full w-full border border-borda"
+              title={`Melhor clipe de ${jogador.nick || jogador.steamId}`}
+            />
+          </div>
+          <div className="panel-cut-sm flex-1 space-y-3 border border-borda bg-superficie-alta p-4 lg:max-w-xs">
+            <div>
+              <Badge tom="destaque">MELHOR MOMENTO</Badge>
+              <p className="mt-2 font-mono text-sm text-texto">
+                {jogador.nick || jogador.steamId}{clip.roundNumber ? ` · round ${clip.roundNumber}` : ''}
+              </p>
+            </div>
+            <div className="space-y-1 font-mono text-xs text-texto-fraco">
+              <p>{nomeMapa(m.map)} · {placar.a}-{placar.b}</p>
+              <p>{dataHora(m.playedAt)}</p>
+            </div>
+            <a
+              href={clip.clipUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 font-mono text-xs uppercase tracking-wide text-destaque hover:underline"
+            >
+              Abrir no Allstar.gg ↗
+            </a>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function FormClipe({ matchId, jogadores, onAdicionado }) {
   const doGrupo = jogadores.filter((p) => p.isTracked)
   const [steamId, setSteamId] = useState(doGrupo[0]?.steamId ?? '')
@@ -1029,31 +1139,37 @@ export default function Partida() {
   // (nenhum fetch extra); T/CT busca /lado/:filtro e sobrescreve por steamId.
   const [ladoFiltro, setLadoFiltro] = useState('all')
   const [statsLado, setStatsLado] = useState(null)
-  // Clipe de vídeo real do Allstar (ADR-0004, teste restrito) aberto na aba Highlights.
-  const [clipeAllstarAberto, setClipeAllstarAberto] = useState(null)
-  const [pedindoClipe, setPedindoClipe] = useState(null) // id do highlight com pedido em voo
-  const [erroClipe, setErroClipe] = useState(null)
+  // Clipe de vídeo real do Allstar (ADR-0004, teste restrito) — por JOGADOR, não mais
+  // por highlight (só POTG/BP habilitados na nossa conta, e nenhum mira um round
+  // específico; BP mira o jogador, então virou "gerar o melhor clipe da partida pra
+  // esse jogador" — ver allstarClip.js e a aba Clipes abaixo).
+  const [jogadorClipeSelecionado, setJogadorClipeSelecionado] = useState(null) // steamId em foco na aba Clipes
+  const [clipeAbertoId, setClipeAbertoId] = useState(null) // steamId cujo player está expandido
+  const [pedindoClipeJogador, setPedindoClipeJogador] = useState(null) // steamId com pedido em voo
+  const [erroClipeJogador, setErroClipeJogador] = useState(null)
 
   // SOB DEMANDA: só chama o Allstar quando o jogador clica — nada automático. Restrito
   // a uma allowlist do lado do servidor; 403 pra quem não tá nela vira mensagem de erro.
-  async function pedirClipeAllstar(highlightId) {
-    setPedindoClipe(highlightId)
-    setErroClipe(null)
+  async function pedirClipeAllstar(steamId) {
+    setPedindoClipeJogador(steamId)
+    setErroClipeJogador(null)
     try {
-      const res = await fetch(`/api/matches/${id}/highlight/${highlightId}/allstar-clip`, { method: 'POST' })
+      const res = await fetch(`/api/matches/${id}/jogador/${steamId}/clipe`, { method: 'POST' })
       const corpo = await res.json().catch(() => ({}))
       if (!res.ok) {
-        setErroClipe(corpo.erro || 'Falha ao pedir o clipe')
+        setErroClipeJogador(corpo.erro || 'Falha ao pedir o clipe')
         return
       }
       setM((atual) => atual && ({
         ...atual,
-        highlights: atual.highlights.map((h) => (h.id === highlightId ? { ...h, allstarStatus: corpo.status } : h)),
+        players: atual.players.map((p) => (
+          p.steamId === steamId ? { ...p, allstarClip: { ...(p.allstarClip ?? {}), status: corpo.status } } : p
+        )),
       }))
     } catch {
-      setErroClipe('Falha ao pedir o clipe')
+      setErroClipeJogador('Falha ao pedir o clipe')
     } finally {
-      setPedindoClipe(null)
+      setPedindoClipeJogador(null)
     }
   }
   const replayRef = useRef(null)
@@ -1251,78 +1367,6 @@ export default function Partida() {
             <Scoreboard time="A" jogadores={timeA} matchId={m.id} podePromover={jogador?.isSuperAdmin} onPromover={promover} promovendo={promovendo} melhores={melhores} carregando={carregandoLado} />
             <Scoreboard time="B" jogadores={timeB} matchId={m.id} podePromover={jogador?.isSuperAdmin} onPromover={promover} promovendo={promovendo} melhores={melhores} carregando={carregandoLado} />
           </div>
-
-          {m.highlights.length > 0 && (
-            <section>
-              <SectionHeader titulo="Highlights" />
-              {erroClipe && <p className="mb-2 font-mono text-xs text-perigo">{erroClipe}</p>}
-              <div className="flex flex-wrap gap-2">
-                {(() => {
-                  // A Allstar dedupe clipe por jogador+demo (não por round): depois que um
-                  // jogador já tem UM clipe pedido nessa partida (Submitted/Processed), pedir
-                  // outro pra ele mesmo (highlight diferente) sempre volta 204 "deduplicado".
-                  // Descobrimos isso na prática (ver conversa) — não tem workaround do nosso
-                  // lado, só evitar o clique que já sabemos que vai falhar.
-                  const steamIdsComClipe = new Set(
-                    m.highlights.filter((h) => h.allstarStatus === 'Processed' || h.allstarStatus === 'Submitted').map((h) => h.steamId),
-                  )
-                  return m.highlights.map((h) => {
-                  const jaTemClipeNaPartida = steamIdsComClipe.has(h.steamId) && h.allstarStatus !== 'Processed' && h.allstarStatus !== 'Submitted'
-                  const podeAssistir = h.frame != null && m.replayUrl
-                  const conteudo = (
-                    <>
-                      <span className="font-display font-semibold uppercase text-destaque">{h.kind}</span>{' '}
-                      <span className="text-texto">{h.nick || h.steamId}</span>{' '}
-                      <span className="text-texto-fraco">round {h.roundNumber}</span>
-                      {podeAssistir && <span className="ml-1.5 text-texto-fraco">▶</span>}
-                    </>
-                  )
-                  return (
-                    <span key={h.id} className="inline-flex items-center gap-1.5">
-                      {podeAssistir ? (
-                        <button
-                          onClick={() => irParaHighlight(h)}
-                          className="panel-cut-sm border border-borda bg-superficie px-3 py-2 font-mono text-sm transition-colors hover:border-destaque/60 hover:bg-superficie-alta"
-                          title="Assistir no Replay 2D"
-                        >
-                          {conteudo}
-                        </button>
-                      ) : (
-                        <div className="panel-cut-sm border border-borda bg-superficie px-3 py-2 font-mono text-sm">
-                          {conteudo}
-                        </div>
-                      )}
-                      {/* Clipe de vídeo real do Allstar (ADR-0004) — SOB DEMANDA (teste
-                          restrito): só pede quando o jogador clica, nada automático.
-                          O clipe em si (quando pronto) aparece na aba Clipes, não aqui. */}
-                      {h.allstarClipUrl || h.allstarStatus === 'Submitted' ? (
-                        <span className="font-mono text-xs text-texto-fraco" title="Ver na aba Clipes">
-                          {h.allstarClipUrl ? '🎬 clipe na aba Clipes' : 'gerando clipe…'}
-                        </span>
-                      ) : jaTemClipeNaPartida ? (
-                        <span
-                          className="font-mono text-xs text-texto-fraco"
-                          title="A Allstar só permite 1 clipe por jogador em cada partida — esse jogador já pediu um nessa"
-                        >
-                          já gerado nessa partida
-                        </span>
-                      ) : (
-                        <button
-                          onClick={() => pedirClipeAllstar(h.id)}
-                          disabled={pedindoClipe === h.id}
-                          className="panel-cut-sm border border-borda bg-superficie px-2 py-2 font-mono text-xs uppercase text-texto-fraco transition-colors hover:border-destaque/60 hover:text-destaque disabled:opacity-50"
-                          title="Pedir clipe de vídeo real ao Allstar"
-                        >
-                          {pedindoClipe === h.id ? '…' : '🎬 gerar clipe'}
-                        </button>
-                      )}
-                    </span>
-                  )
-                  })
-                })()}
-              </div>
-            </section>
-          )}
         </>
       )}
 
@@ -1353,6 +1397,39 @@ export default function Partida() {
               map={m.map}
             />
           </section>
+
+          {m.highlights.length > 0 && (
+            <section>
+              <SectionHeader titulo="Highlights" />
+              <div className="flex flex-wrap gap-2">
+                {m.highlights.map((h) => {
+                  const podeAssistir = h.frame != null && m.replayUrl
+                  const conteudo = (
+                    <>
+                      <span className="font-display font-semibold uppercase text-destaque">{h.kind}</span>{' '}
+                      <span className="text-texto">{h.nick || h.steamId}</span>{' '}
+                      <span className="text-texto-fraco">round {h.roundNumber}</span>
+                      {podeAssistir && <span className="ml-1.5 text-texto-fraco">▶</span>}
+                    </>
+                  )
+                  return podeAssistir ? (
+                    <button
+                      key={h.id}
+                      onClick={() => irParaHighlight(h)}
+                      className="panel-cut-sm border border-borda bg-superficie px-3 py-2 font-mono text-sm transition-colors hover:border-destaque/60 hover:bg-superficie-alta"
+                      title="Assistir nesse momento"
+                    >
+                      {conteudo}
+                    </button>
+                  ) : (
+                    <div key={h.id} className="panel-cut-sm border border-borda bg-superficie px-3 py-2 font-mono text-sm">
+                      {conteudo}
+                    </div>
+                  )
+                })}
+              </div>
+            </section>
+          )}
         </>
       )}
 
@@ -1374,68 +1451,53 @@ export default function Partida() {
 
       {abaAtiva === 'clipes' && (
         <section className="space-y-6">
-          {(() => {
-            const comAllstar = m.highlights.filter((h) => h.allstarClipUrl || h.allstarStatus)
-            if (comAllstar.length === 0) return null
-            return (
-              <div>
-                <SectionHeader titulo="Clipes reais (Allstar)" className="mb-2" />
-                <div className="space-y-2">
-                  {comAllstar.map((h) => (
-                    <div key={h.id} className="panel-cut-sm border border-borda bg-superficie p-3">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <span className="font-mono text-sm">
-                          <span className="font-display font-semibold uppercase text-destaque">{h.kind}</span>{' '}
-                          <span className="text-texto">{h.nick || h.steamId}</span>{' '}
-                          <span className="text-texto-fraco">round {h.roundNumber}</span>
-                        </span>
-                        {h.allstarClipUrl ? (
-                          <button
-                            onClick={() => setClipeAllstarAberto(clipeAllstarAberto === h.id ? null : h.id)}
-                            className="panel-cut-sm border border-destaque/60 bg-destaque/10 px-2 py-1 font-mono text-xs uppercase text-destaque transition-colors hover:bg-destaque/20"
-                          >
-                            {clipeAllstarAberto === h.id ? 'fechar' : '▶ assistir'}
-                          </button>
-                        ) : (
-                          <span className="font-mono text-xs text-texto-fraco">gerando…</span>
-                        )}
-                      </div>
-                      {clipeAllstarAberto === h.id && h.allstarClipUrl && (
-                        <div className="mt-3 flex flex-col gap-4 lg:flex-row">
-                          <div className="aspect-video w-full lg:max-w-xl">
-                            <iframe
-                              src={`${h.allstarClipUrl}&UID=${jogador?.steamId ?? ''}&location=matchResults`}
-                              allow="autoplay; encrypted-media; picture-in-picture; clipboard-write"
-                              className="h-full w-full border border-borda"
-                              title={`Clipe Allstar de ${h.nick || h.steamId} — ${h.kind} round ${h.roundNumber}`}
-                            />
-                          </div>
-                          <div className="panel-cut-sm flex-1 space-y-3 border border-borda bg-superficie-alta p-4 lg:max-w-xs">
-                            <div>
-                              <Badge tom="destaque">{h.kind}</Badge>
-                              <p className="mt-2 font-mono text-sm text-texto">{h.nick || h.steamId} · round {h.roundNumber}</p>
-                            </div>
-                            <div className="space-y-1 font-mono text-xs text-texto-fraco">
-                              <p>{nomeMapa(m.map)} · {placar.a}-{placar.b}</p>
-                              <p>{dataHora(m.playedAt)}</p>
-                            </div>
-                            <a
-                              href={h.allstarClipUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center gap-1 font-mono text-xs uppercase tracking-wide text-destaque hover:underline"
-                            >
-                              Abrir no Allstar.gg ↗
-                            </a>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
+          <div>
+            <SectionHeader titulo="Melhor clipe do jogador (Allstar)" className="mb-2" />
+            <p className="mb-3 font-mono text-xs text-texto-fraco">
+              A Allstar escolhe sozinha o melhor momento do jogador na partida inteira — não dá
+              pra escolher um round específico. Selecione um jogador:
+            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex flex-wrap gap-2">
+                {timeA.map((p) => (
+                  <BotaoJogadorClipe
+                    key={p.steamId} p={p}
+                    selecionado={jogadorClipeSelecionado === p.steamId}
+                    onClick={() => setJogadorClipeSelecionado(p.steamId)}
+                  />
+                ))}
               </div>
-            )
-          })()}
+              <span className="font-mono text-xs uppercase text-texto-fraco">vs</span>
+              <div className="flex flex-wrap gap-2">
+                {timeB.map((p) => (
+                  <BotaoJogadorClipe
+                    key={p.steamId} p={p}
+                    selecionado={jogadorClipeSelecionado === p.steamId}
+                    onClick={() => setJogadorClipeSelecionado(p.steamId)}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {(() => {
+              const jogadorSel = m.players.find((p) => p.steamId === jogadorClipeSelecionado)
+              if (!jogadorSel) return null
+              return (
+                <PainelClipeJogador
+                  jogador={jogadorSel}
+                  clip={jogadorSel.allstarClip}
+                  pedindo={pedindoClipeJogador === jogadorSel.steamId}
+                  erro={jogadorClipeSelecionado === jogadorSel.steamId ? erroClipeJogador : null}
+                  aberto={clipeAbertoId === jogadorSel.steamId}
+                  onAbrir={() => setClipeAbertoId(clipeAbertoId === jogadorSel.steamId ? null : jogadorSel.steamId)}
+                  onGerar={() => pedirClipeAllstar(jogadorSel.steamId)}
+                  viewerSteamId={jogador?.steamId}
+                  m={m}
+                  placar={placar}
+                />
+              )
+            })()}
+          </div>
 
           <div>
             <div className="mb-3 space-y-2">

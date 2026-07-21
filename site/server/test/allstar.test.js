@@ -46,19 +46,19 @@ describe('POST /api/allstar/webhook', () => {
     expect(res.status).toBe(400)
   })
 
-  it('clipProcessed: atualiza status/clipUrl/clipTitle/clipSnapshotURL por requestId', async () => {
+  it('clipProcessed: atualiza status/clipUrl/clipTitle/clipSnapshotURL/roundNumber por requestId', async () => {
     const { app, db } = appWith()
     const res = await request(app)
       .post('/api/allstar/webhook')
       .set('Authorization', 'token segredo-123')
       .send({
-        event: 'clip', requestId: 'r1', status: 'Processed',
+        event: 'clip', requestId: 'r1', status: 'Processed', roundNumber: 14,
         clipUrl: 'https://allstar.gg/iframe?clip=abc', clipTitle: 'AWP 5K', clipSnapshotURL: 'https://media/abc.jpg',
       })
     expect(res.status).toBe(200)
     const [sql, params] = db.query.mock.calls[0]
     expect(sql).toContain('update allstar_clips')
-    expect(params).toEqual(['r1', 'Processed', 'https://allstar.gg/iframe?clip=abc', 'AWP 5K', 'https://media/abc.jpg', null])
+    expect(params).toEqual(['r1', 'Processed', 'https://allstar.gg/iframe?clip=abc', 'AWP 5K', 'https://media/abc.jpg', null, 14])
   })
 
   it('clipError: grava a mensagem de erro, sempre devolve 2xx (evita retry deles a toa)', async () => {
@@ -69,6 +69,6 @@ describe('POST /api/allstar/webhook', () => {
       .send({ event: 'clip', status: 'Error', requestId: 'r1', message: 'telnet timed out' })
     expect(res.status).toBe(200)
     const [, params] = db.query.mock.calls[0]
-    expect(params).toEqual(['r1', 'Error', null, null, null, 'telnet timed out'])
+    expect(params).toEqual(['r1', 'Error', null, null, null, 'telnet timed out', null])
   })
 })

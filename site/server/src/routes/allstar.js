@@ -1,8 +1,9 @@
 import { Router } from 'express'
 
 // Webhook do Allstar (ADR-0004, docs/allstar/) — recebe o retorno assíncrono de um
-// pedido de clipe (feito pelo Coletor em _gerar_clipes_allstar). Rota PÚBLICA (o
-// Allstar não tem como autenticar como um Jogador nosso) — a segurança é o header
+// pedido de clipe (POST /:id/jogador/:steamId/clipe em routes/matches.js, via
+// allstarClip.js). Rota PÚBLICA (o Allstar não tem como autenticar como um Jogador
+// nosso) — a segurança é o header
 // Authorization batendo com o valor configurado no dashboard deles ("Webhook Auth"),
 // sem isso qualquer um poderia forjar "clipe pronto" com uma URL maliciosa.
 //
@@ -15,7 +16,7 @@ export function createAllstarRouter({ db, config }) {
     if (!config.allstarWebhookAuth || req.get('Authorization') !== config.allstarWebhookAuth) {
       return res.status(401).json({ erro: 'Não autorizado' })
     }
-    const { requestId, status, clipUrl, clipTitle, clipSnapshotURL, message } = req.body || {}
+    const { requestId, status, clipUrl, clipTitle, clipSnapshotURL, message, roundNumber } = req.body || {}
     if (!requestId) return res.status(400).json({ erro: 'requestId ausente' })
 
     await db.query(
@@ -25,9 +26,10 @@ export function createAllstarRouter({ db, config }) {
          clip_title = coalesce($4, clip_title),
          clip_snapshot_url = coalesce($5, clip_snapshot_url),
          error_message = coalesce($6, error_message),
+         round_number = coalesce($7, round_number),
          updated_at = now()
        where request_id = $1`,
-      [requestId, status ?? null, clipUrl ?? null, clipTitle ?? null, clipSnapshotURL ?? null, message ?? null],
+      [requestId, status ?? null, clipUrl ?? null, clipTitle ?? null, clipSnapshotURL ?? null, message ?? null, roundNumber ?? null],
     )
     // 2xx sempre, mesmo se o request_id não bater com nada gravado (evento de um
     // clipe que a gente nunca chegou a registrar não é erro do lado deles) — senão

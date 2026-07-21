@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { keyFromR2Url, streamObject, presignDownload } from '../r2.js'
 import { partidaVisivelExpr } from '../friendships.js'
 import { calcularStatsPorLado } from '../statsLado.js'
-import { pedirClipe } from '../allstarClip.js'
+import { pedirMelhorClipeDoJogador } from '../allstarClip.js'
 
 // Categoria de arma pro Head to Head (estilo Leetify: agrupa kills por família de
 // arma em vez de listar cada uma). Faca/granadas caem em "Outras".
@@ -163,7 +163,7 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
     if (matchQ.rows.length === 0) return res.status(404).json({ erro: 'Partida não encontrada' })
     const m = matchQ.rows[0]
 
-    const [players, rounds, highlights, clips, econ, weapons] = await Promise.all([
+    const [players, rounds, highlights, clips, econ, weapons, allstarClips] = await Promise.all([
       db.query(
         `select mp.steam_id64, mp.nick, mp.team, mp.kills, mp.deaths, mp.assists, mp.headshot_kills,
                 mp.damage, mp.rounds_played, mp.rating, mp.kast_pct, mp.won, mp.is_tracked, mp.team_kills,
@@ -186,11 +186,9 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
         [id],
       ),
       db.query(
-        `select h.id, h.steam_id64, h.round_number, h.kind, h.description, h.frame, mp.nick,
-                ac.status as allstar_status, ac.clip_url as allstar_clip_url
+        `select h.id, h.steam_id64, h.round_number, h.kind, h.description, h.frame, mp.nick
          from highlights h
          left join match_players mp on mp.match_id = h.match_id and mp.steam_id64 = h.steam_id64
-         left join allstar_clips ac on ac.highlight_id = h.id
          where h.match_id = $1 order by h.round_number`,
         [id],
       ),
@@ -211,6 +209,13 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
          from match_player_weapons where match_id = $1 order by steam_id64, kills desc`,
         [id],
       ),
+      // Clipe real do Allstar por JOGADOR (não mais por highlight — ver allstarClip.js):
+      // no máximo 1 por (match, steamId), gerado sob demanda na aba Clipes.
+      db.query(
+        `select steam_id64, status, clip_url, clip_snapshot_url, round_number
+         from allstar_clips where match_id = $1`,
+        [id],
+      ),
     ])
     const armasPorJogador = new Map()
     for (const w of weapons.rows) {
@@ -224,6 +229,17 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
         damage: w.damage,
       })
     }
+    const allstarClipPorJogador = new Map(
+      allstarClips.rows.map((c) => [
+        c.steam_id64,
+        {
+          status: c.status,
+          clipUrl: c.status === 'Processed' ? c.clip_url : null,
+          clipSnapshotUrl: c.clip_snapshot_url,
+          roundNumber: c.round_number,
+        },
+      ]),
+    )
 
     res.json({
       id: m.id,
@@ -267,6 +283,8 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
         won: p.won,
         isTracked: p.is_tracked,
         weapons: armasPorJogador.get(p.steam_id64) ?? [],
+        // Clipe real do Allstar (ADR-0004) — ver allstarClip.js. null = nunca pedido.
+        allstarClip: allstarClipPorJogador.get(p.steam_id64) ?? null,
         // Taxa de duelo: de todo confronto que terminou em morte envolvendo esse
         // Jogador (matou OU morreu), quanto % ele venceu. Não identifica "quase matou"
         // (precisaria de dado de engajamento que não temos) — só confrontos concluídos.
@@ -300,11 +318,6 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
         kind: h.kind,
         description: h.description,
         frame: h.frame,
-        // Clipe de vídeo real do Allstar (ADR-0004) — teste restrito, a maioria dos
-        // highlights não vai ter isso ainda. allstarClipUrl só vem quando o webhook já
-        // confirmou "Processed"; "Submitted" mostra "gerando" na UI, sem link ainda.
-        allstarStatus: h.allstar_status,
-        allstarClipUrl: h.allstar_status === 'Processed' ? h.allstar_clip_url : null,
       })),
       clips: clips.rows.map((c) => ({
         id: c.id,
@@ -535,40 +548,49 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
     )
   })
 
-  // Pedido SOB DEMANDA de clipe de vídeo real ao Allstar (ADR-0004) — o jogador clica
-  // "gerar clipe" na tela da Partida, nada é automático. Restrito a uma allowlist de
-  // steamId64 (config.allstarSteamIds) até o preço por clipe ser confirmado com o
-  // suporte deles.
-  router.post('/:id/highlight/:highlightId/allstar-clip', requireAuth, async (req, res) => {
+  // Pedido SOB DEMANDA do melhor clipe da partida pra um JOGADOR (ADR-0004) — o
+  // jogador clica "gerar melhor clipe" na aba Clipes, nada é automático. Restrito a
+  // uma allowlist de steamId64 (config.allstarSteamIds) até o preço por clipe ser
+  // confirmado com o suporte deles.
+  //
+  // Por que "por jogador" e não mais "por highlight": só POTG e BP estão habilitados
+  // na nossa conta (dashboard Allstar + sondagem real, 2026-07-21) — nenhum dos dois
+  // aceita mirar um round específico. POTG nem aceita steamId (podia devolver o
+  // clipe de OUTRO jogador — bug real reportado pelo usuário); BP aceita steamId,
+  // então garante que o clipe é sempre daquele jogador, mas ainda é "a melhor jogada
+  // DELE na partida inteira", não um round escolhido. Ver allstarClip.js.
+  router.post('/:id/jogador/:steamId/clipe', requireAuth, async (req, res) => {
     if (!config.allstarApiKey || !r2Client) {
       return res.status(503).json({ erro: 'Integração com o Allstar não configurada' })
     }
-    const { id, highlightId } = req.params
+    const { id, steamId } = req.params
     const { rows } = await db.query(
-      `select h.id, h.kind, h.steam_id64, h.round_number, mp.nick, m.demo_url
-       from highlights h
-       join matches m on m.id = h.match_id
-       left join match_players mp on mp.match_id = h.match_id and mp.steam_id64 = h.steam_id64
-       where h.id = $1 and h.match_id = $2
+      `select mp.steam_id64, mp.nick, m.demo_url
+       from match_players mp
+       join matches m on m.id = mp.match_id
+       where mp.match_id = $1 and mp.steam_id64 = $2
          and ${partidaVisivelExpr('m', '$3')}`,
-      [highlightId, id, req.player.steamId],
+      [id, steamId, req.player.steamId],
     )
-    const h = rows[0]
-    if (!h) return res.status(404).json({ erro: 'Highlight não encontrado' })
-    if (!config.allstarSteamIds.has(h.steam_id64)) {
+    const jogador = rows[0]
+    if (!jogador) return res.status(404).json({ erro: 'Jogador não encontrado nessa partida' })
+    if (!config.allstarSteamIds.has(steamId)) {
       return res.status(403).json({ erro: 'Clipe Allstar ainda restrito a um grupo de teste' })
     }
-    if (!h.demo_url) return res.status(404).json({ erro: 'Demo não arquivada pra essa partida' })
+    if (!jogador.demo_url) return res.status(404).json({ erro: 'Demo não arquivada pra essa partida' })
 
-    const existente = await db.query('select status, clip_url from allstar_clips where highlight_id = $1', [highlightId])
+    const existente = await db.query(
+      'select status, clip_url from allstar_clips where match_id = $1 and steam_id64 = $2',
+      [id, steamId],
+    )
     if (existente.rows.length > 0 && existente.rows[0].status !== 'Error') {
       // Já pedido antes (ex.: clique duplo) — devolve o que já existe em vez de pedir
-      // outro clipe do mesmo momento. Status 'Error' passa direto: o jogador pode
+      // outro clipe do mesmo jogador. Status 'Error' passa direto: o jogador pode
       // tentar de novo (a linha antiga é substituída pelo pedido novo logo abaixo).
       return res.json({ status: existente.rows[0].status })
     }
 
-    const demoKey = keyFromR2Url(h.demo_url, r2Bucket)
+    const demoKey = keyFromR2Url(jogador.demo_url, r2Bucket)
     if (!demoKey) return res.status(404).json({ erro: 'Demo fora do bucket configurado' })
     try {
       // URL assinada temporária — o bucket é privado, o Allstar busca o .dem sozinho
@@ -576,19 +598,20 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
       // validade (não o default de 2h): a fila de render deles pode demorar horas pra
       // pegar o job, e uma URL expirada no meio da fila viraria erro de download.
       const demoUrlAssinada = await presignDownload(r2Client, r2Bucket, demoKey, 86400)
-      const requestId = await pedirClipe({
-        apiKey: config.allstarApiKey, steamId: h.steam_id64, nick: h.nick,
-        demoUrl: demoUrlAssinada, roundNumber: h.round_number,
+      const requestId = await pedirMelhorClipeDoJogador({
+        apiKey: config.allstarApiKey, steamId, nick: jogador.nick,
+        demoUrl: demoUrlAssinada,
         webhookUrl: `${config.appUrl}/api/allstar/webhook`,
-        metadata: [{ key: 'highlightId', value: highlightId }],
+        metadata: [{ key: 'matchId', value: id }, { key: 'steamId', value: steamId }],
       })
       // Retry depois de Error: remove a tentativa falhada antes de gravar a nova —
-      // sem isso o join do GET /:id devolveria duas linhas pro mesmo highlight.
-      await db.query("delete from allstar_clips where highlight_id = $1 and status = 'Error'", [highlightId])
-      await db.query('insert into allstar_clips (highlight_id, request_id) values ($1, $2)', [highlightId, requestId])
+      // sem isso o GET /:id devolveria duas linhas pro mesmo jogador (o unique
+      // constraint em (match_id, steam_id64) rejeitaria o insert de qualquer forma).
+      await db.query("delete from allstar_clips where match_id = $1 and steam_id64 = $2 and status = 'Error'", [id, steamId])
+      await db.query('insert into allstar_clips (match_id, steam_id64, request_id) values ($1, $2, $3)', [id, steamId, requestId])
       res.json({ status: 'Submitted' })
     } catch (e) {
-      console.error(`allstar: falha ao pedir clipe do highlight ${highlightId}:`, e)
+      console.error(`allstar: falha ao pedir clipe do jogador ${steamId} na partida ${id}:`, e)
       res.status(502).json({ erro: `Falha ao pedir o clipe ao Allstar: ${e.message}` })
     }
   })
