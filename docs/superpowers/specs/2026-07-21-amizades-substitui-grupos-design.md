@@ -35,6 +35,10 @@ aceitou. Novo usuário loga com Steam e cai direto no sistema, sem etapa de grup
 - **Auto-friend Steam**: ao logar, amigo Steam que já tem conta no Resenha vira
   amizade `accepted` automática (aceite implícito), sem passar por `pending`.
 - **Times**: aba removida (não vale manter escopada por amizade).
+- **Ranking Público / perfil público**: removido inteiro. Contradiz a filosofia
+  do sistema ("feito pra resenha do grupo, não pra internet") e é a única fonte da
+  complexidade de "viewer null". Sem ele, a visibilidade vira puramente
+  "eu + meus amigos", sem exceção.
 - **Escopo**: server + client + Coletor + migração de banco, num projeto só.
 
 ## Modelo de dados
@@ -73,6 +77,7 @@ novo `site/server/src/friendships.js` junto com as expressões de visibilidade.
 - Tabelas `groups`, `group_members` — dropadas após a migração.
 - `players.grupo_ativo_id` — removida.
 - `group_id` em `uploads_pendentes`, `faceit_pendentes` e demais filas do Coletor.
+- `players.ranking_publico` — removida junto com o Ranking Público (abaixo).
 
 ### Migração de dados (ordem)
 
@@ -103,13 +108,11 @@ Hoje `matchVisibility.js` define `partidaVisivelExpr(alias, groupParam)`:
             where mv.match_id = <alias>.id and f.status = 'accepted'))
 ```
 
-- `partidaPublicaExpr` (ranking público) permanece **inalterado** — já é opt-in
-  cross-tenant e não depende de grupo.
+- `partidaPublicaExpr` e o modo viewer-null são **removidos** junto com o Ranking
+  Público (ver seção própria). Todo call site que hoje é
+  `partidaVisivelExpr(...) or partidaPublicaExpr(...)` passa a ser só
+  `partidaVisivelExpr(...)`. Não existe mais acesso sem viewer autenticado.
 - Todos os call sites que hoje passam `req.groupId` passam `req.player.steamId`.
-- **Modo perfil público (viewer null)**: hoje `partidaVisivelWhere` devolve `''`
-  (sem filtro) quando `groupId` é null — usado quando um perfil público é aberto
-  sem viewer autenticado. O helper novo mantém exatamente esse contrato: viewer
-  null → `''`, e a abertura do detalhe da partida cai só no `partidaPublicaExpr`.
 
 ## Middleware
 
@@ -161,6 +164,24 @@ coluna `players.conta_criada_em timestamptz` preenchida no login (backfill via
 `group_members` na migração). O auto-friend intersecta contra
 `conta_criada_em is not null`.
 
+## Remoção do Ranking Público
+
+Removido por inteiro — server, client e banco:
+
+- **Server**: rota `routes/rankingPublico.js` (deletada e desregistrada em
+  `app.js`); `partidaPublicaExpr` em `matchVisibility.js`; toda leitura/escrita de
+  `players.ranking_publico` (inclusive o toggle de opt-in em `routes/profile.js` /
+  Minha Conta); o modo `?publico=1` nos endpoints de perfil (`routes/profile.js`,
+  `routes/players.js`).
+- **Client**: página `RankingPublico.jsx`, a aba "Ranking público" do menu
+  (`Shell.jsx`, `App.jsx`), o modo `?publico=1` em `JogadorPerfil.jsx`/`Perfil.jsx`,
+  e o controle de opt-in em Minha Conta.
+- **Banco**: coluna `players.ranking_publico` dropada na migração.
+
+Consequência: **não existe mais nenhum acesso sem login**. Toda visibilidade é
+"eu + meus amigos accepted". A decisão de 2026-07-17 (abrir partidas via perfil
+público) fica sem efeito e é revertida.
+
 ## Frontend / Navegação
 
 - **Login → Feed direto.** Remove `Onboarding.jsx` e o fluxo de escolha de grupo.
@@ -170,9 +191,9 @@ coluna `players.conta_criada_em timestamptz` preenchida no login (backfill via
   (recebidos com aceitar/recusar; enviados com cancelar), e "adicionar amigo"
   (por steamID/link de perfil). Alerta de VAC/Game ban migra pra cá.
 - Remove a aba **Times** do menu (`Shell.jsx`, `App.jsx`) e a página `Times.jsx`.
-- Menu resultante: Partidas, Ranking, Ranking Público, Enviar Demo, Amigos,
-  Comparar, Granadas, Táticas, Minha Conta, Curso de Mira (+ Admin/Partidas Pro
-  pra super-admin).
+- Remove a aba **Ranking Público** do menu e a página `RankingPublico.jsx`.
+- Menu resultante: Partidas, Ranking, Enviar Demo, Amigos, Comparar, Granadas,
+  Táticas, Minha Conta, Curso de Mira (+ Admin/Partidas Pro pra super-admin).
 
 ## Rotas novas de amizade (`routes/friendships.js`)
 
@@ -185,9 +206,9 @@ coluna `players.conta_criada_em timestamptz` preenchida no login (backfill via
 
 ## O que NÃO muda
 
-Ranking Público, Comparar, Granadas, Táticas, Curso de Mira, Minha Conta, Enviar
-Demo (só perde `X-Group-Id`), detecção de VAC/Game ban (migra de tela), e todo o
-mecanismo de super-admin.
+Comparar, Granadas, Táticas, Curso de Mira, Minha Conta (só perde o toggle de
+ranking público), Enviar Demo (só perde `X-Group-Id`), detecção de VAC/Game ban
+(migra de tela), e todo o mecanismo de super-admin.
 
 ## Testes
 
