@@ -21,7 +21,6 @@ import { createPartidasProRouter } from './routes/partidasPro.js'
 import { createGranadasRouter } from './routes/granadas.js'
 import { createCursoRouter } from './routes/curso.js'
 import { createGroupsRouter, createConvitesRouter } from './routes/groups.js'
-import { createTeamsRouter } from './routes/teams.js'
 import { createRequireAuth, createRequireGroupMember } from './auth/middleware.js'
 import { createR2Client } from './r2.js'
 
@@ -87,7 +86,6 @@ export function createApp({
   app.use('/api/amigos', createFriendshipsRouter({ db, requireAuth }))
   app.use('/api/players', createPlayersRouter({ db, requireAuth, fetchBans }))
   app.use('/api/faceit', requireAuth, createFaceitRouter({ config, db, ...(faceitFetchImpl ? { fetchImpl: faceitFetchImpl } : {}) }))
-  app.use('/api/teams', createTeamsRouter({ db, requireAuth, requireGroupMember }))
   app.use('/api/matches', createMatchesRouter({ db, requireAuth, requireGroupMember, r2Client, r2Bucket: config.r2Bucket, config }))
   app.use('/api/profile', createProfileRouter({ db, requireAuth, requireGroupMember }))
   app.use('/api/clips', createClipsRouter({ db, requireAuth }))
