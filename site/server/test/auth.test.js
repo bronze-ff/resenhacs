@@ -15,7 +15,6 @@ const JOGADOR = {
   avatar_url: 'https://avatars.steamstatic.com/x.jpg',
   is_super_admin: true,
   grupo_ativo_id: 'g1',
-  ranking_publico: false,
   faceit_nick: null,
   tour_concluido: false,
 }
@@ -182,7 +181,6 @@ describe('GET /api/auth/me', () => {
       avatarUrl: JOGADOR.avatar_url,
       isSuperAdmin: true,
       grupoAtivoId: 'g1',
-      rankingPublico: false,
       faceitNick: null,
       tourConcluido: false,
       souAdminDoGrupo: true,
