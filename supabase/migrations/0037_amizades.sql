@@ -21,18 +21,24 @@ alter table players add column conta_criada_em timestamptz;
 update players p set conta_criada_em = now()
   where exists (select 1 from group_members gm where gm.steam_id64 = p.steam_id64);
 
--- Backfill de amizades: todo par distinto de membros do MESMO grupo vira amigo accepted.
--- least/greatest garantem a ordem canônica; on conflict cobre pessoas em 2 grupos.
+-- Backfill de amizades: TODO PAR de contas reais (não só dentro do mesmo grupo) vira
+-- amigo accepted — o pedido original era "todo mundo amigo de todo mundo", como se os
+-- vários grupos existentes (062, BALAO, Grupo original) virassem uma panelinha só, não
+-- 3 panelinhas isoladas. Por isso o join é em `players` (via conta_criada_em, já
+-- preenchido acima), não em `group_members`: senão só criaria amizade DENTRO de cada
+-- grupo, deixando quem está em grupos diferentes sem amizade entre si (bug real,
+-- corrigido em produção com um backfill manual equivalente a este).
 insert into friendships (player_a, player_b, status, requested_by, created_at, accepted_at)
 select distinct
-  least(g1.steam_id64, g2.steam_id64),
-  greatest(g1.steam_id64, g2.steam_id64),
+  least(p1.steam_id64, p2.steam_id64),
+  greatest(p1.steam_id64, p2.steam_id64),
   'accepted',
-  least(g1.steam_id64, g2.steam_id64),
+  least(p1.steam_id64, p2.steam_id64),
   now(),
   now()
-from group_members g1
-join group_members g2 on g1.group_id = g2.group_id and g1.steam_id64 < g2.steam_id64
+from players p1
+join players p2 on p1.steam_id64 < p2.steam_id64
+where p1.conta_criada_em is not null and p2.conta_criada_em is not null
 on conflict (player_a, player_b) do nothing;
 
 -- O código novo (Tasks 2-8, já escrito nesta branch) para de popular `group_id` em
