@@ -6,7 +6,7 @@ import Entrar from './pages/Entrar.jsx'
 import AcessoNegado from './pages/AcessoNegado.jsx'
 import Feed from './pages/Feed.jsx'
 import Partida from './pages/Partida.jsx'
-import Jogadores from './pages/Jogadores.jsx'
+import Amigos from './pages/Amigos.jsx'
 import JogadorPerfil from './pages/JogadorPerfil.jsx'
 import Comparar from './pages/Comparar.jsx'
 import Granadas from './pages/Granadas.jsx'
@@ -55,7 +55,7 @@ export default function App() {
           <Route path="/partida/:id" element={<RotaProtegida><Partida /></RotaProtegida>} />
           <Route path="/ranking" element={<RotaProtegida><Ranking /></RotaProtegida>} />
           <Route path="/enviar-demo" element={<RotaProtegida><EnviarDemo /></RotaProtegida>} />
-          <Route path="/jogadores" element={<RotaProtegida><Jogadores /></RotaProtegida>} />
+          <Route path="/jogadores" element={<RotaProtegida><Amigos /></RotaProtegida>} />
           <Route path="/jogador/:steamId" element={<RotaProtegida><JogadorPerfil /></RotaProtegida>} />
           <Route path="/comparar" element={<RotaProtegida><Comparar /></RotaProtegida>} />
           <Route path="/times" element={<RotaProtegida><Times /></RotaProtegida>} />
