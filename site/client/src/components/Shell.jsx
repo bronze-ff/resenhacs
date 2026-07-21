@@ -228,7 +228,7 @@ export default function Shell({ children }) {
                 aria-label={colapsada ? 'Admin' : undefined}
               >
                 <span className="shrink-0">{NAV_ICONES.admin}</span>
-                <span className={`font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque ${colapsada ? 'lg:hidden' : ''}`}>12</span>
+                <span className={`font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque ${colapsada ? 'lg:hidden' : ''}`}>10</span>
                 <span className={colapsada ? 'lg:hidden' : ''}>Admin</span>
               </NavLink>
               <NavLink
@@ -239,7 +239,7 @@ export default function Shell({ children }) {
                 aria-label={colapsada ? 'Partidas pro' : undefined}
               >
                 <span className="shrink-0">{NAV_ICONES.partidasPro}</span>
-                <span className={`font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque ${colapsada ? 'lg:hidden' : ''}`}>13</span>
+                <span className={`font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque ${colapsada ? 'lg:hidden' : ''}`}>11</span>
                 <span className={colapsada ? 'lg:hidden' : ''}>Partidas pro</span>
               </NavLink>
             </>
