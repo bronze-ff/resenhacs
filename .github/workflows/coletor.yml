@@ -2,13 +2,10 @@ name: Coletor
 
 on:
   schedule:
-    - cron: '0 * * * *' # de hora em hora. Era */30, mas num repo PRIVADO a cota grátis
-                        # do GitHub Actions (2000 min/mês) não aguenta 48 runs/dia — em
-                        # 2026-07-18 a cota estourou (jobs falhando em ~5s sem rodar passo)
-                        # depois de uma noite de fila grande. De hora em hora + o fetch em
-                        # lote (15/run) mantém dentro da cota. Se ainda apertar: subir pra
-                        # '0 */2 * * *' (2 em 2h), aumentar o limite de gasto, ou repo público
-                        # (Actions ilimitado). O workflow_dispatch continua pra rodar na mão.
+    - cron: '*/30 * * * *' # de 30 em 30 min. Repo virou PUBLIC em 2026-07-21, o que dá
+                        # minutos ilimitados no GitHub Actions — por isso voltou de 1h em
+                        # 1h pro cadenciamento original. O workflow_dispatch continua pra
+                        # rodar na mão quando precisar.
   workflow_dispatch:
     inputs:
       reprocessar_tudo:
