@@ -42,7 +42,10 @@ export default function Admin() {
   function carregarCompeticoes() {
     fetch('/api/competicoes')
       .then((r) => r.json())
-      .then((d) => setCompeticoes([d.ativa, ...d.encerradas].filter(Boolean)))
+      // Achado do review final: sem `agendadas`, uma competicao criada pro futuro
+      // sumia da tela do admin assim que ele fechava o formulario - inclusive pra ele
+      // mesmo editar ou confirmar o que acabou de criar.
+      .then((d) => setCompeticoes([d.ativa, ...d.agendadas, ...d.encerradas].filter(Boolean)))
       .catch(() => setCompeticoes([]))
   }
 

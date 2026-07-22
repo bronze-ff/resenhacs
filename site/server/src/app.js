@@ -23,6 +23,7 @@ import { createPartidasProRouter } from './routes/partidasPro.js'
 import { createGranadasRouter } from './routes/granadas.js'
 import { createCursoRouter } from './routes/curso.js'
 import { createRequireAuth } from './auth/middleware.js'
+import { limiteGeral } from './rateLimit.js'
 import { createR2Client } from './r2.js'
 
 // Express 4 NÃO encaminha rejections de handler async pro error middleware: uma query
@@ -67,6 +68,10 @@ export function createApp({
   const app = express()
   app.use(express.json())
   app.use(cookieParser())
+  // Achado do review final: rateLimit.js documentava limiteGeral como "aplicado
+  // GLOBALMENTE em toda a API", mas nunca era importado aqui - dead code, sem limite
+  // nenhum de fato. Fiando de verdade, antes de qualquer rota.
+  app.use(limiteGeral)
   app.use((req, res, next) => {
     res.set('X-Content-Type-Options', 'nosniff')
     res.set('X-Frame-Options', 'DENY')

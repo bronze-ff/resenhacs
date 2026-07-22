@@ -24,11 +24,11 @@ describe('GET /api/competicoes', () => {
     expect((await request(app).get('/api/competicoes')).status).toBe(401)
   })
 
-  it('sem competicao nenhuma: ativa null, encerradas vazio', async () => {
+  it('sem competicao nenhuma: ativa null, agendadas e encerradas vazios', async () => {
     const { app } = appWith([])
     const res = await request(app).get('/api/competicoes').set('Cookie', cookieJogador)
     expect(res.status).toBe(200)
-    expect(res.body).toEqual({ ativa: null, encerradas: [] })
+    expect(res.body).toEqual({ ativa: null, agendadas: [], encerradas: [] })
   })
 
   it('devolve a competicao ativa (data_inicio <= now <= data_fim)', async () => {
@@ -43,6 +43,23 @@ describe('GET /api/competicoes', () => {
     const res = await request(app).get('/api/competicoes').set('Cookie', cookieJogador)
     expect(res.status).toBe(200)
     expect(res.body.ativa.id).toBe('comp1')
+  })
+
+  it('competicao com data_inicio no futuro aparece em agendadas, nao some da resposta', async () => {
+    const agora = new Date()
+    const { app } = appWith([
+      ['from competicoes', [{
+        id: 'comp-futura', nome: 'Semana que vem', descricao: '', premio_descricao: 'Skin',
+        data_inicio: new Date(agora.getTime() + 86400000), data_fim: new Date(agora.getTime() + 7 * 86400000),
+        limite_diario: 2, limite_total: 10, minimo_para_rankear: 3, vencedor_steam_id64: null,
+      }]],
+    ])
+    const res = await request(app).get('/api/competicoes').set('Cookie', cookieJogador)
+    expect(res.status).toBe(200)
+    expect(res.body.ativa).toBeNull()
+    expect(res.body.encerradas).toEqual([])
+    expect(res.body.agendadas).toHaveLength(1)
+    expect(res.body.agendadas[0].id).toBe('comp-futura')
   })
 })
 

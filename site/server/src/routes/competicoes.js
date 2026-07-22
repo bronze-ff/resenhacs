@@ -122,16 +122,22 @@ export function createCompeticoesRouter({ db, requireAuth }) {
       }
     }
     const ativa = rows.find((c) => new Date(c.data_inicio) <= agora && agora <= new Date(c.data_fim))
+    // Achado do review final: uma competicao com data_inicio no futuro nao caia em
+    // `ativa` nem em `encerradas` - sem este terceiro balde ela simplesmente sumia da
+    // resposta, inclusive pro admin que acabou de cria-la (Admin.jsx so mostra
+    // [ativa, ...encerradas]). "Agendada" resolve isso.
+    const agendadas = rows.filter((c) => new Date(c.data_inicio) > agora)
     const encerradas = rows.filter((c) => new Date(c.data_fim) < agora)
     res.json({
       ativa: ativa ? await montar(ativa) : null,
+      agendadas: await Promise.all(agendadas.map(montar)),
       encerradas: await Promise.all(encerradas.map(montar)),
     })
   })
 
   // #9 da auditoria (rate limiting como defesa em profundidade, além da regra de
-  // negócio de limite diário/total): mesmo middleware já usado no webhook da Allstar
-  // e no upload de demo (site/server/src/rateLimit.js).
+  // negócio de limite diário/total) e #11 da spec (submissões também precisam do
+  // limite estrito, não só as rotas de admin) - site/server/src/rateLimit.js.
   router.post('/admin', limiteEstrito, requireAuth, requireSuperAdmin, async (req, res) => {
     const { nome, descricao, premioDescricao, dataInicio, dataFim, limiteDiario, limiteTotal, minimoParaRankear } = req.body ?? {}
     if (!nome || !dataInicio || !dataFim) return res.status(400).json({ erro: 'nome, dataInicio e dataFim são obrigatórios' })
@@ -221,7 +227,7 @@ export function createCompeticoesRouter({ db, requireAuth }) {
     })))
   })
 
-  router.post('/:id/submissoes', requireAuth, async (req, res) => {
+  router.post('/:id/submissoes', limiteEstrito, requireAuth, async (req, res) => {
     if (!UUID_RE.test(req.params.id)) return res.status(404).json({ erro: 'competição não encontrada' })
     const allstarClipId = String(req.body?.allstarClipId ?? '')
     if (!UUID_RE.test(allstarClipId)) return res.status(400).json({ erro: 'allstarClipId inválido' })
