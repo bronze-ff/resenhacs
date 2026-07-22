@@ -661,66 +661,285 @@ git commit -m "fix: /api/clipes usa pontuacao gravada e remove leaderboard"
 
 ---
 
-### Task 6: Client `Clipes.jsx` — remove seção de Leaderboard
+### Task 6: Criar `Clipes.jsx` (portado de `main`, adaptado pra pontuação granular, sem Leaderboard)
+
+**Descoberta ao executar esta task (worktree diverge de `main` antes da feature Clipes
+existir):** `site/client/src/pages/Clipes.jsx` **não existe neste branch** — ele só existe
+em commits exclusivos de `main` (`28ee641` em diante), que este worktree nunca recebeu. O
+item de menu `/clipes` já existe em `Shell.jsx` (`ITENS_BASE` já tem
+`{ to: '/clipes', label: 'Clipes', icone: 'clipes' }`) — só a página e a rota faltam. Em
+vez de "remover uma seção" (como uma versão anterior desta task assumia), esta task cria
+o arquivo do zero com o conteúdo de `main` já adaptado ao novo esquema de pontuação da
+Task 2 (nunca com o esquema antigo `kind/base/bonusHeadshot`) e sem a seção de Leaderboard
+(que sai daqui e fica só dentro de Competições, Task 9/12).
 
 **Files:**
-- Modify: `site/client/src/pages/Clipes.jsx`
-- Test: `site/client/src/test/Clipes.test.jsx`
+- Create: `site/client/src/pages/Clipes.jsx`
+- Create: `site/client/src/test/Clipes.test.jsx`
+- Modify: `site/client/src/App.jsx`
 
 **Interfaces:**
-- Consumes: `GET /api/clipes` (Task 5) — resposta sem `leaderboard`.
+- Consumes: `GET /api/clipes` (Task 5) — resposta `{ clipes: [...] }` sem `leaderboard`,
+  cada clipe com `pontuacao: { kills, pontosKills, headshots, pontosHeadshots, clutch,
+  pontosClutch, armas, pontosArmas, total }` (mesmo formato de `calcularPontuacao`, Task 2).
 
-- [ ] **Step 1: Atualizar o teste existente**
+- [ ] **Step 1: Escrever o teste**
 
-Em `site/client/src/test/Clipes.test.jsx`, remova qualquer asserção que espera a palavra
-"Leaderboard" ou colunas da tabela de ranking na tela. Ajuste o mock de fetch pra não
-incluir `leaderboard` na resposta (só `{ clipes: [...] }`).
+```jsx
+// site/client/src/test/Clipes.test.jsx
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, waitFor } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
+import Clipes from '../pages/Clipes.jsx'
+
+const RESPOSTA = {
+  clipes: [{
+    id: 'c1', matchId: 'm1', steamId: '111', nick: 'bronze', avatarUrl: null,
+    clipUrl: 'https://allstar.gg/clip/1', clipSnapshotUrl: null,
+    kind: 'ace', roundNumber: 5, map: 'de_mirage', playedAt: '2026-07-20T00:00:00Z',
+    pontuacao: { kills: 5, pontosKills: 120, headshots: 3, pontosHeadshots: 24, clutch: null, pontosClutch: 0, armas: 2, pontosArmas: 10, total: 154 },
+  }],
+}
+
+describe('Clipes', () => {
+  beforeEach(() => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => RESPOSTA })
+  })
+
+  it('mostra o clipe com a pontuacao total', async () => {
+    render(<MemoryRouter><Clipes /></MemoryRouter>)
+    await waitFor(() => expect(screen.getAllByText('bronze').length).toBeGreaterThan(0))
+    expect(screen.getByText('154')).toBeInTheDocument()
+  })
+
+  it('nao mostra nenhuma secao de Leaderboard (saiu pra dentro de Competicoes)', async () => {
+    render(<MemoryRouter><Clipes /></MemoryRouter>)
+    await waitFor(() => expect(screen.getAllByText('bronze').length).toBeGreaterThan(0))
+    expect(screen.queryByText(/leaderboard/i)).not.toBeInTheDocument()
+  })
+
+  it('clipe sem kind (gerado por jogador, sem highlight nosso batendo o round) mostra fallback "MOMENTO" sem quebrar', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        clipes: [{
+          id: 'c2', matchId: 'm1', steamId: '222', nick: 'outro', avatarUrl: null,
+          clipUrl: 'https://allstar.gg/clip/2', clipSnapshotUrl: null,
+          kind: null, roundNumber: 9, map: 'de_dust2', playedAt: '2026-07-21T00:00:00Z',
+          pontuacao: { kills: 1, pontosKills: 10, headshots: 0, pontosHeadshots: 0, clutch: null, pontosClutch: 0, armas: 1, pontosArmas: 5, total: 15 },
+        }],
+      }),
+    })
+    render(<MemoryRouter><Clipes /></MemoryRouter>)
+    await waitFor(() => expect(screen.getByText('MOMENTO')).toBeInTheDocument())
+  })
+
+  it('troca de periodo dispara novo fetch com o query param certo', async () => {
+    render(<MemoryRouter><Clipes /></MemoryRouter>)
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledWith('/api/clipes?periodo=sempre'))
+    screen.getByText('Semana').click()
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledWith('/api/clipes?periodo=semana'))
+  })
+})
+```
 
 - [ ] **Step 2: Rodar e confirmar que falha**
 
 Run: `cd site/client && npx vitest run src/test/Clipes.test.jsx`
-Expected: FAIL se o teste antigo ainda checava o leaderboard.
+Expected: FAIL (`Clipes.jsx` ainda não existe neste branch).
 
-- [ ] **Step 3: Remover a seção do componente**
-
-Em `site/client/src/pages/Clipes.jsx`, remova o bloco inteiro:
+- [ ] **Step 3: Criar `site/client/src/pages/Clipes.jsx`**
 
 ```jsx
-{dados.leaderboard.length > 0 && (
-  <section>
-    <h3 className="mb-2 font-display text-sm font-semibold uppercase tracking-wide text-texto-fraco">
-      Leaderboard
-    </h3>
-    ...
-  </section>
-)}
+// site/client/src/pages/Clipes.jsx
+import { useEffect, useState } from 'react'
+import { Card, SectionHeader, Badge } from '../components/ui'
+import { useAuth } from '../auth/AuthContext.jsx'
+
+const PERIODOS = [
+  { valor: 'semana', label: 'Semana' },
+  { valor: 'mes', label: 'Mês' },
+  { valor: 'sempre', label: 'Sempre' },
+]
+
+const NOME_KIND = {
+  ace: 'ACE', quad: 'QUAD KILL', triple: 'TRIPLE KILL',
+  clutch_1v5: 'CLUTCH 1v5', clutch_1v4: 'CLUTCH 1v4', clutch_1v3: 'CLUTCH 1v3',
+  clutch_1v2: 'CLUTCH 1v2', clutch_1v1: 'CLUTCH 1v1',
+}
+
+// kind vem null quando o round que a Allstar escolheu (gerar clipe por JOGADOR, não
+// mais por highlight) não bate com nenhum highlight nosso pra esse jogador/round — só
+// afeta o rótulo exibido, a pontuação (Task 2, clipesScore.js) não depende de kind.
+function nomeDoKind(kind) {
+  if (!kind) return 'MOMENTO'
+  return NOME_KIND[kind] ?? kind
+}
+
+function SnapshotPlaceholder() {
+  return (
+    <div className="mt-3 flex aspect-video w-full items-center justify-center border border-borda bg-superficie-alta text-texto-fraco">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-8 w-8">
+        <rect x="3" y="5" width="18" height="14" rx="1" />
+        <path d="M9 9L15 12L9 15V9Z" fill="currentColor" stroke="none" />
+      </svg>
+    </div>
+  )
+}
+
+function PlayerClipe({ clipUrl, viewerSteamId, titulo }) {
+  return (
+    <div className="mt-3 aspect-video w-full">
+      <iframe
+        src={`${clipUrl}&UID=${viewerSteamId ?? ''}&location=melhoresClipes`}
+        allow="autoplay; encrypted-media; picture-in-picture; clipboard-write; fullscreen"
+        allowFullScreen
+        className="h-full w-full border border-borda"
+        title={titulo ?? 'Clipe Allstar'}
+      />
+    </div>
+  )
+}
+
+// Tooltip explica o calculo — mesma logica de transparencia da spec (Competicoes
+// tambem mostra o detalhamento, Task 12/13), aqui e so leitura sobre o clipe.
+function tituloPontuacao(p) {
+  const partes = [`${p.kills} kills (${p.pontosKills})`]
+  if (p.headshots > 0) partes.push(`${p.headshots} headshots (+${p.pontosHeadshots})`)
+  if (p.clutch) partes.push(`clutch ${p.clutch} (+${p.pontosClutch})`)
+  if (p.armas > 0) partes.push(`${p.armas} armas distintas (+${p.pontosArmas})`)
+  return `${partes.join(' + ')} = ${p.total}`
+}
+
+function CardClipe({ clipe, aberto, onAbrir, viewerSteamId }) {
+  const { pontuacao } = clipe
+  return (
+    <Card className="p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          {clipe.avatarUrl && (
+            <img src={clipe.avatarUrl} alt="" className="panel-cut-sm h-8 w-8 shrink-0 border border-borda object-cover" />
+          )}
+          <div className="min-w-0">
+            <Badge tom="destaque">{nomeDoKind(clipe.kind)}</Badge>
+            <p className="mt-1 truncate font-mono text-sm text-texto">
+              {clipe.nick} · round {clipe.roundNumber} · {clipe.map}
+            </p>
+          </div>
+        </div>
+        <div className="shrink-0 text-right">
+          <div className="font-display text-lg font-bold text-destaque" title={tituloPontuacao(pontuacao)}>
+            {pontuacao.total}
+          </div>
+        </div>
+      </div>
+      {!aberto && (clipe.clipSnapshotUrl
+        ? <img src={clipe.clipSnapshotUrl} alt="" className="mt-3 aspect-video w-full border border-borda object-cover" />
+        : <SnapshotPlaceholder />)}
+      <button
+        type="button"
+        onClick={() => onAbrir(aberto ? null : clipe.id)}
+        className="panel-cut-sm mt-3 min-h-10 w-full border border-borda px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-texto-fraco hover:border-destaque/50 hover:text-destaque lg:min-h-0"
+      >
+        {aberto ? 'Fechar' : '▶ Assistir'}
+      </button>
+      {aberto && (
+        <PlayerClipe
+          clipUrl={clipe.clipUrl}
+          viewerSteamId={viewerSteamId}
+          titulo={`Clipe Allstar de ${clipe.nick} — ${nomeDoKind(clipe.kind)} round ${clipe.roundNumber}`}
+        />
+      )}
+    </Card>
+  )
+}
+
+export default function Clipes() {
+  const { jogador } = useAuth()
+  const [periodo, setPeriodo] = useState('sempre')
+  const [dados, setDados] = useState(null)
+  const [clipeAberto, setClipeAberto] = useState(null)
+
+  useEffect(() => {
+    setDados(null)
+    fetch(`/api/clipes?periodo=${periodo}`)
+      .then((res) => (res.ok ? res.json() : { clipes: [] }))
+      .then(setDados)
+      .catch(() => setDados({ clipes: [] }))
+  }, [periodo])
+
+  return (
+    <div className="space-y-6">
+      <SectionHeader
+        titulo="Clipes"
+        className="flex-wrap"
+        acao={
+          <div className="flex gap-2">
+            {PERIODOS.map((p) => (
+              <button
+                key={p.valor}
+                onClick={() => setPeriodo(p.valor)}
+                className={`panel-cut-sm min-h-10 border px-3 py-1.5 font-mono text-xs uppercase tracking-wide lg:min-h-0 ${
+                  periodo === p.valor ? 'border-destaque bg-destaque/10 text-destaque' : 'border-borda text-texto-fraco'
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+        }
+      />
+      <p className="font-mono text-xs text-texto-fraco">
+        Pontuação: kills (curva não-linear) + headshots + clutch + variedade de armas — passe o mouse no número pra ver o cálculo.
+      </p>
+
+      {dados === null ? (
+        <p className="font-mono text-sm text-texto-fraco">Carregando…</p>
+      ) : dados.clipes.length === 0 ? (
+        <p className="font-mono text-sm text-texto-fraco">Nenhum clipe nesse período ainda.</p>
+      ) : (
+        <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {dados.clipes.map((c) => (
+            <CardClipe key={c.id} clipe={c} aberto={clipeAberto === c.id} onAbrir={setClipeAberto} viewerSteamId={jogador?.steamId} />
+          ))}
+        </section>
+      )}
+    </div>
+  )
+}
 ```
-
-E troque o fetch (que hoje faz fallback pra `{ clipes: [], leaderboard: [] }`) por:
-
-```jsx
-useEffect(() => {
-  setDados(null)
-  fetch(`/api/clipes?periodo=${periodo}`)
-    .then((res) => (res.ok ? res.json() : { clipes: [] }))
-    .then(setDados)
-    .catch(() => setDados({ clipes: [] }))
-}, [periodo])
-```
-
-Remova também o import de `DataTable` do topo do arquivo se ele não for usado em
-nenhum outro lugar dessa página (confira com grep antes de remover).
 
 - [ ] **Step 4: Rodar e confirmar que passa**
 
 Run: `cd site/client && npx vitest run src/test/Clipes.test.jsx`
-Expected: PASS.
+Expected: PASS (4/4).
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Adicionar a rota em `App.jsx`**
+
+Abra `site/client/src/App.jsx`. Ele já define `function RotaProtegida({ children })` e usa
+esse wrapper em todas as rotas autenticadas (`/ranking`, `/granadas`, etc.) — siga o mesmo
+padrão. Adicione o import perto dos outros imports de página:
+
+```jsx
+import Clipes from './pages/Clipes.jsx'
+```
+
+E adicione a rota (perto de `/jogadores` ou `/comparar`, junto das outras rotas protegidas):
+
+```jsx
+<Route path="/clipes" element={<RotaProtegida><Clipes /></RotaProtegida>} />
+```
+
+- [ ] **Step 6: Rodar a suíte inteira do client**
+
+Run: `cd site/client && npx vitest run`
+Expected: todos os testes passam.
+
+- [ ] **Step 7: Commit**
 
 ```bash
-git add site/client/src/pages/Clipes.jsx site/client/src/test/Clipes.test.jsx
-git commit -m "fix: remove leaderboard da aba Clipes agregada"
+git add site/client/src/pages/Clipes.jsx site/client/src/test/Clipes.test.jsx site/client/src/App.jsx
+git commit -m "feat: adiciona pagina Clipes.jsx (portada de main, adaptada pra pontuacao granular, sem leaderboard)"
 ```
 
 ---
