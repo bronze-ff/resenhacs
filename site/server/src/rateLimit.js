@@ -1,8 +1,11 @@
 import rateLimit from 'express-rate-limit'
 
 // Auditoria finding #9 (ausência de rate limiting como defesa em profundidade): sem isso,
-// rotas sensíveis — admin de competições, webhook, geração de clipe pago, upload — ficam
-// abertas a abuso ilimitado por um único IP mesmo com requireAuth/requireSuperAdmin no lugar.
+// rotas sensíveis ficam abertas a abuso ilimitado por um único IP mesmo com
+// requireAuth/requireSuperAdmin no lugar. Neste worktree, hoje, `limiteEstrito` só está
+// aplicado nas rotas de competições (admin + submissões) — webhook/upload/login ainda
+// contam só com o `limiteGeral` global (ver app.js) até alguém aplicar `limiteEstrito`
+// neles também.
 //
 // Portado de `main` (commit 510ff47) pro worktree `worktree-amizades-substitui-grupos`, que
 // divergiu antes desse commit e nunca recebeu o arquivo. Ver Task 7 do plano de Competições
@@ -26,9 +29,9 @@ export const limiteGeral = rateLimit({
   skip: pulaEmTeste,
 })
 
-// Limite apertado pra rotas sensíveis (login, webhook, geração de clipe pago, upload) —
-// não é aplicado a nenhuma rota aqui; outras partes do código importam e aplicam nas
-// rotas específicas que precisarem, além do limiteGeral global.
+// Limite apertado pra rotas sensíveis (hoje: admin de competições e submissões — ver
+// routes/competicoes.js) — outras rotas sensíveis (login, webhook, upload) ainda
+// podem importar e aplicar este mesmo limiter quando alguém tratar disso.
 export const limiteEstrito = rateLimit({
   windowMs: 60_000,
   max: 10,

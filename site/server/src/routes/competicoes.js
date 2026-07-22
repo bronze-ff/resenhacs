@@ -35,7 +35,7 @@ function mapCompeticao(c) {
 async function buscarLeaderboard(db, competicaoId, minimoParaRankear) {
   const { rows } = await db.query(
     `select cs.steam_id64, coalesce(p.nick, mp.nick) as nick, coalesce(p.avatar_url, sa.avatar_url) as avatar_url,
-            sum(ac.pontuacao_total) as total, count(*) as qtd
+            sum(ac.pontuacao_total) as total, count(*) as qtd, max(cs.enviado_em) as ultimo_envio
      from competicao_submissoes cs join allstar_clips ac on ac.id = cs.allstar_clip_id
      join highlights h on h.id = ac.highlight_id
      left join players p on p.steam_id64 = cs.steam_id64
@@ -48,9 +48,12 @@ async function buscarLeaderboard(db, competicaoId, minimoParaRankear) {
   const leaderboard = rows.map((r) => ({
     steamId: r.steam_id64, nick: r.nick, avatarUrl: r.avatar_url,
     total: Number(r.total), qualificado: Number(r.qtd) >= minimoParaRankear,
+    ultimoEnvio: r.ultimo_envio,
   }))
-  leaderboard.sort((a, b) => b.total - a.total)
-  return leaderboard
+  // Spec (desempate): em empate exato de total, vence quem fechou aquele total mais
+  // cedo (enviado_em da ÚLTIMA submissão de cada jogador, timestamp menor primeiro).
+  leaderboard.sort((a, b) => b.total - a.total || new Date(a.ultimoEnvio) - new Date(b.ultimoEnvio))
+  return leaderboard.map(({ ultimoEnvio, ...resto }) => resto)
 }
 
 // Vencedor só é decidido depois que a competição encerra (data_fim já passou) — antes

@@ -311,6 +311,20 @@ describe('leaderboard isolado por competicao', () => {
     expect(comp.leaderboard.find((l) => l.steamId === '999').qualificado).toBe(true)
     expect(comp.leaderboard.find((l) => l.steamId === '765').qualificado).toBe(false)
   })
+
+  it('empate exato: desempata pelo enviado_em da ultima submissao, quem fechou o total mais cedo vence', async () => {
+    const { app } = appWith([
+      ['from competicoes', [{ id: 'comp1', nome: 'X', data_inicio: '2026-07-01', data_fim: '2026-07-10', limite_diario: 2, limite_total: 10, minimo_para_rankear: 1, vencedor_steam_id64: null }]],
+      ['from competicao_submissoes cs join', [
+        { competicao_id: 'comp1', steam_id64: '765', nick: 'bronze', avatar_url: null, total: 100, qtd: 1, ultimo_envio: '2026-07-05T12:00:00Z' },
+        { competicao_id: 'comp1', steam_id64: '999', nick: 'troya', avatar_url: null, total: 100, qtd: 1, ultimo_envio: '2026-07-03T09:00:00Z' },
+      ]],
+    ])
+    const res = await request(app).get('/api/competicoes').set('Cookie', cookieJogador)
+    const comp = res.body.encerradas[0] ?? res.body.ativa
+    expect(comp.leaderboard[0].steamId).toBe('999')
+    expect(comp.leaderboard[1].steamId).toBe('765')
+  })
 })
 
 describe('PUT /api/competicoes/:id/tradelink', () => {
