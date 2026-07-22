@@ -27,6 +27,46 @@ function mapCompeticao(c) {
   }
 }
 
+// Leaderboard isolado por competição (Global Constraint do plano: nunca agregado entre
+// competições nem na aba Clipes) — soma pontuacao_total das submissões só daquela
+// competicao_id. `allstar_clips` não guarda match_id/steam_id64 direto (só
+// highlight_id), então o join com match_players precisa passar por `highlights`
+// primeiro, mesmo padrão já usado em routes/clipes.js e routes/allstar.js.
+async function buscarLeaderboard(db, competicaoId, minimoParaRankear) {
+  const { rows } = await db.query(
+    `select cs.steam_id64, coalesce(p.nick, mp.nick) as nick, coalesce(p.avatar_url, sa.avatar_url) as avatar_url,
+            sum(ac.pontuacao_total) as total, count(*) as qtd
+     from competicao_submissoes cs join allstar_clips ac on ac.id = cs.allstar_clip_id
+     join highlights h on h.id = ac.highlight_id
+     left join players p on p.steam_id64 = cs.steam_id64
+     left join match_players mp on mp.match_id = h.match_id and mp.steam_id64 = cs.steam_id64
+     left join steam_avatares sa on sa.steam_id64 = cs.steam_id64
+     where cs.competicao_id = $1
+     group by cs.steam_id64, p.nick, mp.nick, p.avatar_url, sa.avatar_url`,
+    [competicaoId],
+  )
+  const leaderboard = rows.map((r) => ({
+    steamId: r.steam_id64, nick: r.nick, avatarUrl: r.avatar_url,
+    total: Number(r.total), qualificado: Number(r.qtd) >= minimoParaRankear,
+  }))
+  leaderboard.sort((a, b) => b.total - a.total)
+  return leaderboard
+}
+
+// Vencedor só é decidido depois que a competição encerra (data_fim já passou) — antes
+// disso devolve null, mesmo que já exista alguém na frente (pode mudar até o fim). Uma
+// vez calculado, grava em competicoes.vencedor_steam_id64 (só se ainda não tiver um,
+// pra não sobrescrever um valor já fixado por reprocessamento futuro).
+async function calcularOuLerVencedor(db, comp) {
+  if (comp.vencedor_steam_id64 || new Date() <= new Date(comp.data_fim)) return comp.vencedor_steam_id64
+  const leaderboard = await buscarLeaderboard(db, comp.id, comp.minimo_para_rankear)
+  const qualificados = leaderboard.filter((l) => l.qualificado)
+  if (!qualificados.length) return null
+  const vencedor = qualificados[0].steamId
+  await db.query('update competicoes set vencedor_steam_id64 = $1 where id = $2 and vencedor_steam_id64 is null', [vencedor, comp.id])
+  return vencedor
+}
+
 export function createCompeticoesRouter({ db, requireAuth }) {
   const router = Router()
   const requireSuperAdmin = createRequireSuperAdmin(db)
@@ -34,16 +74,28 @@ export function createCompeticoesRouter({ db, requireAuth }) {
   router.get('/', requireAuth, async (req, res) => {
     const { rows } = await db.query(
       `select id, nome, descricao, premio_descricao, data_inicio, data_fim,
-              limite_diario, limite_total, minimo_para_rankear, vencedor_steam_id64
+              limite_diario, limite_total, minimo_para_rankear, vencedor_steam_id64, tradelink_vencedor
        from competicoes
        order by data_inicio desc`,
     )
     const agora = new Date()
+    async function montar(c) {
+      const vencedorSteamId = await calcularOuLerVencedor(db, c)
+      const leaderboard = await buscarLeaderboard(db, c.id, c.minimo_para_rankear)
+      const ehVencedorOuAdmin = req.player.steamId === vencedorSteamId || req.player.isSuperAdmin
+      return {
+        ...mapCompeticao({ ...c, vencedor_steam_id64: vencedorSteamId }),
+        leaderboard,
+        // #6/#12 da auditoria: tradelink só aparece pro próprio vencedor ou admin —
+        // omitido da resposta (não só escondido no client) pra qualquer outro jogador.
+        ...(ehVencedorOuAdmin ? { tradelinkVencedor: c.tradelink_vencedor } : {}),
+      }
+    }
     const ativa = rows.find((c) => new Date(c.data_inicio) <= agora && agora <= new Date(c.data_fim))
     const encerradas = rows.filter((c) => new Date(c.data_fim) < agora)
     res.json({
-      ativa: ativa ? mapCompeticao(ativa) : null,
-      encerradas: encerradas.map(mapCompeticao),
+      ativa: ativa ? await montar(ativa) : null,
+      encerradas: await Promise.all(encerradas.map(montar)),
     })
   })
 
@@ -185,6 +237,19 @@ export function createCompeticoesRouter({ db, requireAuth }) {
       'insert into competicao_submissoes (competicao_id, allstar_clip_id, steam_id64) values ($1, $2, $3) on conflict do nothing',
       [comp.id, allstarClipId, req.player.steamId],
     )
+    res.json({ ok: true })
+  })
+
+  router.put('/:id/tradelink', requireAuth, async (req, res) => {
+    if (!UUID_RE.test(req.params.id)) return res.status(404).json({ erro: 'competição não encontrada' })
+    const { rows } = await db.query('select id, data_fim, vencedor_steam_id64 from competicoes where id = $1', [req.params.id])
+    if (!rows.length) return res.status(404).json({ erro: 'competição não encontrada' })
+    const comp = rows[0]
+    if (new Date() <= new Date(comp.data_fim)) return res.status(400).json({ erro: 'a competição ainda não encerrou' })
+    if (req.player.steamId !== comp.vencedor_steam_id64) return res.status(403).json({ erro: 'só o vencedor pode informar o tradelink' })
+    const tradelink = String(req.body?.tradelink ?? '').trim()
+    if (!tradelink) return res.status(400).json({ erro: 'tradelink obrigatório' })
+    await db.query('update competicoes set tradelink_vencedor = $1 where id = $2', [tradelink, req.params.id])
     res.json({ ok: true })
   })
 

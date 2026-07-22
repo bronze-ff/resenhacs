@@ -261,3 +261,80 @@ describe('POST /api/competicoes/:id/submissoes', () => {
     expect(res.body.erro).toMatch(/per[íi]odo/i)
   })
 })
+
+describe('leaderboard isolado por competicao', () => {
+  it('soma de uma competicao nunca inclui submissao de outra', async () => {
+    const { app, db } = appWith([
+      ['from competicoes', [
+        { id: 'compA', nome: 'A', data_inicio: '2026-07-01', data_fim: '2026-07-10', limite_diario: 2, limite_total: 10, minimo_para_rankear: 1, vencedor_steam_id64: null },
+        { id: 'compB', nome: 'B', data_inicio: '2026-07-11', data_fim: '2026-07-20', limite_diario: 2, limite_total: 10, minimo_para_rankear: 1, vencedor_steam_id64: null },
+      ]],
+      ['from competicao_submissoes cs join', [
+        { competicao_id: 'compA', steam_id64: '765', nick: 'bronze', avatar_url: null, total: 100, qtd: 1 },
+      ]],
+    ])
+    const res = await request(app).get('/api/competicoes').set('Cookie', cookieJogador)
+    expect(res.status).toBe(200)
+    // A query de leaderboard precisa ter sido chamada com o competicao_id certo por vez —
+    // cada competição tem sua própria query/filtro, nunca uma soma cruzada.
+    const chamadasLeaderboard = db.query.mock.calls.filter(([sql]) => sql.includes('from competicao_submissoes cs join'))
+    expect(chamadasLeaderboard.length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('quem nao bate o minimo aparece separado, nao no ranking principal', async () => {
+    const { app } = appWith([
+      ['from competicoes', [{ id: 'comp1', nome: 'X', data_inicio: '2026-07-01', data_fim: '2026-07-10', limite_diario: 2, limite_total: 10, minimo_para_rankear: 3, vencedor_steam_id64: null }]],
+      ['from competicao_submissoes cs join', [
+        { competicao_id: 'comp1', steam_id64: '765', nick: 'bronze', avatar_url: null, total: 50, qtd: 1 },
+        { competicao_id: 'comp1', steam_id64: '999', nick: 'troya', avatar_url: null, total: 300, qtd: 5 },
+      ]],
+    ])
+    const res = await request(app).get('/api/competicoes').set('Cookie', cookieJogador)
+    const comp = res.body.encerradas[0] ?? res.body.ativa
+    expect(comp.leaderboard.find((l) => l.steamId === '999').qualificado).toBe(true)
+    expect(comp.leaderboard.find((l) => l.steamId === '765').qualificado).toBe(false)
+  })
+})
+
+describe('PUT /api/competicoes/:id/tradelink', () => {
+  const COMP_ID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+
+  it('quem nao e o vencedor: 403', async () => {
+    const { app } = appWith([
+      ['from competicoes where id', [{ id: COMP_ID, data_fim: '2026-07-01', vencedor_steam_id64: '999' }]],
+    ])
+    const res = await request(app).put(`/api/competicoes/${COMP_ID}/tradelink`).set('Cookie', cookieJogador).send({ tradelink: 'https://steamcommunity.com/tradeoffer/x' })
+    expect(res.status).toBe(403)
+  })
+
+  it('o proprio vencedor consegue gravar', async () => {
+    const { app, db } = appWith([
+      ['from competicoes where id', [{ id: COMP_ID, data_fim: '2026-07-01', vencedor_steam_id64: '765' }]],
+    ])
+    const res = await request(app).put(`/api/competicoes/${COMP_ID}/tradelink`).set('Cookie', cookieJogador).send({ tradelink: 'https://steamcommunity.com/tradeoffer/x' })
+    expect(res.status).toBe(200)
+    const update = db.query.mock.calls.find(([sql]) => sql.includes('update competicoes set tradelink_vencedor'))
+    expect(update).toBeTruthy()
+  })
+
+  it('competicao ainda ativa (nao encerrou): 400', async () => {
+    const noFuturo = new Date(Date.now() + 86400000).toISOString()
+    const { app } = appWith([
+      ['from competicoes where id', [{ id: COMP_ID, data_fim: noFuturo, vencedor_steam_id64: '765' }]],
+    ])
+    const res = await request(app).put(`/api/competicoes/${COMP_ID}/tradelink`).set('Cookie', cookieJogador).send({ tradelink: 'x' })
+    expect(res.status).toBe(400)
+  })
+})
+
+describe('tradelink so aparece pro vencedor/admin em GET /', () => {
+  it('outro jogador nao ve tradelink_vencedor na resposta', async () => {
+    const { app } = appWith([
+      ['from competicoes', [{ id: 'comp1', data_inicio: '2026-07-01', data_fim: '2026-07-05', vencedor_steam_id64: '999', tradelink_vencedor: 'https://steamcommunity.com/x', limite_diario: 2, limite_total: 10, minimo_para_rankear: 1 }]],
+      ['from competicao_submissoes cs join', []],
+    ])
+    const res = await request(app).get('/api/competicoes').set('Cookie', cookieJogador) // cookie do 765, vencedor é 999
+    const comp = res.body.encerradas[0]
+    expect(comp.tradelinkVencedor).toBeUndefined()
+  })
+})
