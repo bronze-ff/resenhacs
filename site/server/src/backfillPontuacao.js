@@ -6,8 +6,14 @@
 import { calcularPontuacao } from './clipesScore.js'
 
 export async function backfillPontuacao(db) {
+  // allstar_clips não guarda match_id/steam_id64/round_number direto (só
+  // highlight_id) — junta com highlights, mesmo padrão usado no webhook
+  // (routes/allstar.js) e na rota de clipes (routes/clipes.js).
   const { rows: pendentes } = await db.query(
-    "select id, match_id, steam_id64, round_number from allstar_clips where status = 'Processed' and pontuacao_total is null",
+    `select ac.id, h.match_id, h.steam_id64, h.round_number
+     from allstar_clips ac
+     join highlights h on h.id = ac.highlight_id
+     where ac.status = 'Processed' and ac.pontuacao_total is null`,
   )
   let atualizados = 0
   let falhas = 0
