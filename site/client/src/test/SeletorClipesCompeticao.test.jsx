@@ -15,7 +15,7 @@ describe('SeletorClipesCompeticao', () => {
       ]),
     })
     render(<SeletorClipesCompeticao competicaoId="comp1" onFechar={() => {}} onEnviado={() => {}} />)
-    await waitFor(() => expect(screen.getByText('de_dust2')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/Dust2/)).toBeInTheDocument())
     expect(screen.getByText(/enviado/i)).toBeInTheDocument()
   })
 
@@ -28,7 +28,7 @@ describe('SeletorClipesCompeticao', () => {
       ]) })
     })
     render(<SeletorClipesCompeticao competicaoId="comp1" onFechar={() => {}} onEnviado={onEnviado} />)
-    await waitFor(() => screen.getByText('de_dust2'))
+    await waitFor(() => screen.getByText(/Dust2/))
     fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
     await waitFor(() => expect(onEnviado).toHaveBeenCalled())
   })

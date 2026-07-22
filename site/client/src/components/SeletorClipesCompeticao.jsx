@@ -1,5 +1,6 @@
 // site/client/src/components/SeletorClipesCompeticao.jsx
 import { useEffect, useState } from 'react'
+import { nomeMapa } from '../lib/format.js'
 
 // Tela de seleção compartilhada — acionada tanto pelo botão "Enviar clipe" da aba
 // Competições quanto pelo atalho "Enviar pra competição →" dentro de Partida > Clipes.
@@ -60,7 +61,7 @@ export default function SeletorClipesCompeticao({ competicaoId, onFechar, onEnvi
             {clipes.map((c) => (
               <div key={c.allstarClipId} className="panel-cut-sm border border-borda p-3">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="font-mono text-xs text-texto"><span>{c.map}</span> · round {c.roundNumber}</span>
+                  <span className="font-mono text-xs text-texto">{nomeMapa(c.map)} · round {c.roundNumber}</span>
                   <span className="font-display font-bold text-destaque">{c.pontuacao.total}</span>
                 </div>
                 <button
