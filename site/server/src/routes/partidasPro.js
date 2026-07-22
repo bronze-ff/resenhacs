@@ -2,8 +2,16 @@ import crypto from 'node:crypto'
 import { Router } from 'express'
 import { createRequireSuperAdmin } from '../auth/middleware.js'
 import { presignUpload } from '../r2.js'
+import { parseHttpUrl, hostMatchesDomain } from './urlValidation.js'
 
 const EXTENSOES_ACEITAS = ['.rar', '.dem']
+// Auditoria finding #16: aceitava qualquer link https:// — o Coletor baixa esse link
+// (cmd_processar_fila_pro em main.py) sem mais nenhuma checagem de origem, então uma
+// URL fora do HLTV vazava como um SSRF de fato (o job do Actions baixando de onde
+// quisesse). Restrito à allowlist real de onde a demo profissional realmente vem, com
+// o mesmo par parseHttpUrl/hostMatchesDomain já usado por clips.js/allstar.js (finding
+// #5) — comparação por sufixo de domínio, não substring solta.
+const HLTV_HOST = 'hltv.org'
 
 export function createPartidasProRouter({ db, requireAuth, r2Client, r2Bucket }) {
   const router = Router()
@@ -25,8 +33,9 @@ export function createPartidasProRouter({ db, requireAuth, r2Client, r2Bucket })
 
   router.post('/', requireAuth, requireSuperAdmin, async (req, res) => {
     const hltvUrl = String(req.body?.hltvUrl ?? '').trim()
-    if (!/^https:\/\/.+/.test(hltvUrl)) {
-      return res.status(400).json({ erro: 'hltvUrl deve ser um link válido' })
+    const parsed = parseHttpUrl(hltvUrl)
+    if (!parsed || parsed.protocol !== 'https:' || !hostMatchesDomain(parsed.hostname, HLTV_HOST)) {
+      return res.status(400).json({ erro: 'hltvUrl deve ser um link do hltv.org' })
     }
     const { rows } = await db.query(
       'insert into partidas_pro_fila (hltv_url, adicionado_por) values ($1, $2) returning id',

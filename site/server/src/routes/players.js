@@ -50,7 +50,10 @@ export function createPlayersRouter({ db, requireAuth, fetchBans }) {
         steamId: p.steam_id64,
         nick: p.nick,
         avatarUrl: p.avatar_url,
-        isSuperAdmin: p.is_super_admin,
+        // isSuperAdmin só vai no próprio registro do jogador logado — pra qualquer amigo,
+        // isso é reconhecimento de alvo de maior privilégio (client não usa esse campo
+        // pros outros jogadores da lista, só pro `jogador` do /api/auth/me).
+        ...(p.steam_id64 === eu ? { isSuperAdmin: p.is_super_admin } : {}),
       })),
     )
   })

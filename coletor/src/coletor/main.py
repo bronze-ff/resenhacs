@@ -118,6 +118,33 @@ def _baixar_e_descomprimir(url, destino_dem):
         raise RuntimeError("download truncado: stream bz2 incompleto (sem EOF)")
 
 
+# Auditoria finding #16: a fila de Partidas Pro (hltvUrl) lia a resposta inteira em
+# memória de uma vez (resp.read() sem teto). A validação de origem em si (allowlist
+# hltv.org) já vive em site/server/src/routes/partidasPro.js, ANTES de enfileirar — mas
+# mesmo restrito ao domínio certo, uma resposta inesperadamente enorme (ou um redirect
+# pra outro lugar que a validação de string não pega) não devia poder estourar a memória
+# do runner. 1GB cobre uma série Bo5 inteira num único .rar com folga.
+_MAX_HLTV_DOWNLOAD_BYTES = 1_000_000_000
+
+
+def _baixar_com_teto(url, max_bytes, timeout=120):
+    """Baixa `url` em streaming (chunks de 1MB), abortando assim que o total lido
+    ultrapassa `max_bytes` — em vez de só descobrir que era grande demais depois de
+    um resp.read() completo já ter consumido a memória inteira."""
+    with urllib.request.urlopen(url, timeout=timeout) as resp:
+        partes = []
+        total = 0
+        while True:
+            chunk = resp.read(1 << 20)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > max_bytes:
+                raise RuntimeError(f"download de {url} excedeu o teto de {max_bytes} bytes")
+            partes.append(chunk)
+        return b"".join(partes)
+
+
 def cmd_fetch(config, conn, since=None, bot_dir=None, node_bin="node"):
     """Baixa e ingere as Partidas pendentes (descobertas pelo discover, ainda sem demo).
 
@@ -167,7 +194,10 @@ def cmd_fetch(config, conn, since=None, bot_dir=None, node_bin="node"):
         try:
             with tempfile.TemporaryDirectory() as tmp:
                 dem = Path(tmp) / "match.dem"
-                print(f"  {code}: baixando {url}")
+                # Auditoria finding #10: nunca logar a URL assinada de download — ela
+                # dá acesso direto ao .dem por tempo limitado, sem exigir autenticação
+                # nenhuma; o share code já identifica a Partida sem vazar isso.
+                print(f"  {code}: baixando demo")
                 _baixar_e_descomprimir(url, dem)
                 mid = ingest_demo(
                     config, conn, dem, share_code=code, source="valve_mm",
@@ -285,8 +315,7 @@ def cmd_processar_fila_pro(config, conn):
                     ext = Path(arquivo_r2_key).suffix.lower()
                 else:
                     print(f"  {fila_id}: baixando {hltv_url}")
-                    with urllib.request.urlopen(hltv_url, timeout=120) as resp:
-                        dados = resp.read()
+                    dados = _baixar_com_teto(hltv_url, _MAX_HLTV_DOWNLOAD_BYTES)
                     ext = ".rar"
 
                 dbmod.atualizar_fila_pro(conn, fila_id, "processando")
@@ -351,6 +380,15 @@ def cmd_processar_fila_pro(config, conn):
     return total
 
 
+# Auditoria finding #2: teto de tamanho aplicado no HEAD do objeto antes do download
+# (ver storage_r2.download_bytes) — mesmo valor comunicado ao usuário no upload.js.
+_MAX_UPLOAD_BYTES = 400 * 1024 * 1024
+
+# Auditoria finding #8: quanto tempo um item pode ficar 'processando' antes de ser
+# considerado travado (processo morreu no meio — crash do runner, timeout do job).
+_TIMEOUT_PROCESSANDO_MINUTOS = 30
+
+
 def cmd_processar_uploads_pendentes(config, conn):
     """Processa a fila de uploads manuais de demo (qualquer membro do grupo, via
     'Enviar Demo' no site): baixa o .dem do R2 (staging de upload direto via URL
@@ -358,6 +396,13 @@ def cmd_processar_uploads_pendentes(config, conn):
     site/server/src/routes/upload.js)."""
     import tempfile
     from pathlib import Path
+
+    # Antes de listar: qualquer item preso em 'processando' há mais que o teto (o
+    # processo anterior morreu no meio, sem chance de marcar 'concluido'/'falhou')
+    # volta a ficar elegível — senão fica 'processando' pra sempre (achado #8).
+    revertidos = dbmod.reverter_uploads_travados(conn, minutos=_TIMEOUT_PROCESSANDO_MINUTOS)
+    if revertidos:
+        print(f"processar-uploads-pendentes: {len(revertidos)} upload(s) travado(s) em 'processando' revertido(s)")
 
     pendentes = dbmod.listar_uploads_pendentes(conn)
     if not pendentes:
@@ -372,7 +417,9 @@ def cmd_processar_uploads_pendentes(config, conn):
             with tempfile.TemporaryDirectory() as tmp:
                 tmp = Path(tmp)
                 print(f"  {upload_id}: baixando do R2 ({arquivo_r2_key})")
-                dados = storage_r2.download_bytes(client, config.r2_bucket, arquivo_r2_key)
+                dados = storage_r2.download_bytes(
+                    client, config.r2_bucket, arquivo_r2_key, max_bytes=_MAX_UPLOAD_BYTES,
+                )
                 dem_path = tmp / "demo.dem"
                 dem_path.write_bytes(dados)
 
@@ -393,6 +440,33 @@ def cmd_processar_uploads_pendentes(config, conn):
             print(f"  {upload_id}: FALHOU ({e})")
 
     print(f"processar-uploads-pendentes: {total} partida(s) processada(s)")
+    return total
+
+
+def cmd_limpar_uploads_orfaos(config, conn, dias=30):
+    """Auditoria finding #17: apaga do R2 o `.dem` órfão de uploads manuais que
+    falharam definitivamente há mais de `dias` dias — sem isso, todo upload com erro
+    fica pra sempre ocupando espaço no bucket, ao contrário da fila de Partidas Pro
+    (que tem retry reaproveitando o staging, e cleanup/reprocess pro caminho de
+    sucesso). NÃO roda automaticamente ainda (sem cron/schedule): é um subcomando
+    manual (`python -m coletor.main limpar-uploads-orfaos [--days N]`), pra rodar sob
+    demanda — ver README (seção Manutenção) sobre quando/como usar."""
+    candidatos = dbmod.listar_uploads_falhos_antigos(conn, dias=dias)
+    if not candidatos:
+        print(f"limpar-uploads-orfaos: nenhum upload falho há mais de {dias} dias")
+        return 0
+
+    client = storage_r2.make_client(config)
+    total = 0
+    for upload_id, arquivo_r2_key in candidatos:
+        try:
+            storage_r2.delete_object(client, config.r2_bucket, arquivo_r2_key)
+            dbmod.marcar_upload_limpo(conn, upload_id)
+            total += 1
+            print(f"  {upload_id}: objeto órfão apagado ({arquivo_r2_key})")
+        except Exception as e:  # noqa: BLE001
+            print(f"  {upload_id}: falha ao apagar ({e})")
+    print(f"limpar-uploads-orfaos: {total} objeto(s) apagado(s)")
     return total
 
 
@@ -881,6 +955,11 @@ def main(argv=None):
         "processar-uploads-pendentes",
         help="Processa a fila de uploads manuais de demo (qualquer membro do grupo, via 'Enviar Demo').",
     )
+    p_limpar = sub.add_parser(
+        "limpar-uploads-orfaos",
+        help="Apaga do R2 o .dem de uploads que falharam definitivamente há mais de N dias (default 30). Comando manual — não roda automaticamente ainda.",
+    )
+    p_limpar.add_argument("--days", type=int, default=30, help="Idade mínima em dias do status 'falhou' (default: 30).")
     sub.add_parser(
         "configurar-cors",
         help="Configura CORS no bucket R2 (uma vez) pra aceitar upload direto do navegador.",
@@ -923,6 +1002,8 @@ def main(argv=None):
             cmd_processar_fila_pro(config, conn)
         elif args.cmd == "processar-uploads-pendentes":
             cmd_processar_uploads_pendentes(config, conn)
+        elif args.cmd == "limpar-uploads-orfaos":
+            cmd_limpar_uploads_orfaos(config, conn, dias=args.days)
         elif args.cmd == "configurar-cors":
             client = storage_r2.make_client(config)
             storage_r2.configurar_cors(

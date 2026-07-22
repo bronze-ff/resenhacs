@@ -23,6 +23,7 @@ import { createGranadasRouter } from './routes/granadas.js'
 import { createCursoRouter } from './routes/curso.js'
 import { createRequireAuth } from './auth/middleware.js'
 import { createR2Client } from './r2.js'
+import { limiteGeral } from './rateLimit.js'
 
 // Express 4 NÃO encaminha rejections de handler async pro error middleware: uma query
 // que lance (ex.: cast de uuid inválido em /api/matches/abc) viraria unhandled rejection
@@ -64,6 +65,12 @@ export function createApp({
   faceitFetchImpl,
 } = {}) {
   const app = express()
+  // Em produção (Vercel) a função fica atrás de UM proxy (o edge deles), que sempre manda
+  // X-Forwarded-For; sem confiar nesse hop o express-rate-limit não consegue identificar o
+  // IP do cliente e lança erro de validação em TODA requisição (ERR_ERL_UNEXPECTED_X_FORWARDED_FOR),
+  // derrubando a API inteira. "1" confia só no primeiro hop — não em qualquer proxy (evita
+  // o outro erro deles, trust proxy permissivo, que abriria brecha pra spoofar IP e burlar o limite).
+  app.set('trust proxy', 1)
   app.use(express.json())
   app.use(cookieParser())
   app.use((req, res, next) => {
@@ -72,12 +79,13 @@ export function createApp({
     res.set('Referrer-Policy', 'same-origin')
     next()
   })
+  app.use(limiteGeral)
 
   patchRouterAsync()
 
   app.get('/api/health', (req, res) => res.json({ ok: true }))
 
-  const requireAuth = createRequireAuth(config.jwtSecret)
+  const requireAuth = createRequireAuth(config.jwtSecret, db)
   const r2Client = r2ClientOverride !== undefined ? r2ClientOverride : createR2Client(config)
   app.use('/api/auth', createAuthRouter({ config, db, verifySteamLogin, fetchPersona, fetchFriendList, requireAuth }))
   app.use('/api/amigos', createFriendshipsRouter({ db, requireAuth }))

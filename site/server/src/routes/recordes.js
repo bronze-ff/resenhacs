@@ -21,10 +21,21 @@ export function createRecordesRouter({ db, requireAuth }) {
   // de vitórias, mais clutches numa Resenha (noite).
   router.get('/', requireAuth, async (req, res) => {
     const eu = req.player.steamId
+    // Sem LIMIT aqui a query varria TODO o histórico de Partidas visíveis (e o join de
+    // Jogadores abaixo) a cada request — caro e sem teto conforme o círculo de amigos
+    // cresce/joga mais, e um vetor de DoS barato. 750 Partidas é uma janela generosa
+    // (bem além do que um grupo de amigos acumula em meses de uso real); o efeito
+    // colateral aceito é que "Recordes" vira uma janela móvel das últimas 750 Partidas
+    // em vez de all-time estrito — se o produto realmente precisar de all-time sem teto
+    // algum dia, isso pede um agregado incremental (tabela própria), não dá pra fazer só
+    // com LIMIT. "id desc" desempata o "order by played_at" (podem repetir) garantindo
+    // que as duas queries abaixo recortem exatamente o mesmo conjunto de Partidas.
+    const recentes = `order by played_at desc nulls last, id desc limit 750`
     const matchesQ = await db.query(
-      `select id, map, played_at from matches m where status = 'parsed'
-         and ${partidaVisivelExpr('m', '$1')}
-       order by played_at asc nulls last`,
+      `select id, map, played_at from (
+         select id, map, played_at from matches m where status = 'parsed'
+           and ${partidaVisivelExpr('m', '$1')} ${recentes}
+       ) recentes order by played_at asc nulls last`,
       [eu],
     )
     const playersQ = await db.query(
@@ -33,7 +44,9 @@ export function createRecordesRouter({ db, requireAuth }) {
        from match_players mp
        join players p on p.steam_id64 = mp.steam_id64
        left join steam_avatares sa on sa.steam_id64 = mp.steam_id64
-       where mp.match_id in (select id from matches m where status = 'parsed' and ${partidaVisivelExpr('m', '$1')})`,
+       where mp.match_id in (
+         select id from matches m where status = 'parsed' and ${partidaVisivelExpr('m', '$1')} ${recentes}
+       )`,
       [eu],
     )
 

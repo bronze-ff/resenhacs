@@ -113,18 +113,19 @@ O `site/client` é um site estático (Vite build) e o `site/server` é uma API E
 
 **Projeto 2 — Client**:
 1. Importar do GitHub → Root Directory: `site/client`
-2. Criar `site/client/vercel.json` com o domínio real da API:
-   ```json
-   {
-     "rewrites": [
-       { "source": "/api/:path*", "destination": "https://SEU-DOMINIO-DA-API/api/:path*" },
-       { "source": "/(.*)", "destination": "/index.html" }
-     ]
-   }
-   ```
+2. O proxy de `/api/*` pro domínio da API é feito em `site/client/middleware.js` (Vercel
+   Routing Middleware, não `vercel.json` — assim o destino pode variar por ambiente em vez
+   de ficar hardcoded). Se o domínio de produção da API mudar, atualize a constante
+   `PRODUCTION_API_URL` nesse arquivo.
 3. Deploy.
 
 **Importante**: depois do primeiro deploy do client, volte no projeto da API e confirme que `APP_URL` bate com o domínio final do client (o login da Steam falha silenciosamente se não bater).
+
+**Preview Deployments do client**: por padrão, Preview e Development **não** falam com a API
+de produção (o `middleware.js` bloqueia com 503) — isso evita que todo PR/branch de teste
+acabe lendo/gravando no banco real. Se você tiver um backend de staging, configure a
+Environment Variable `PREVIEW_API_URL` no projeto do client na Vercel (Project Settings →
+Environment Variables, escopo Preview/Development) apontando pra ele.
 
 **Coletor (GitHub Actions):** configure os Secrets do repositório — `DATABASE_URL`, `STEAM_API_KEY`, `STEAM_BOT_USER`, `STEAM_BOT_PASS`, `R2_*`, `FACEIT_API_KEY` — e o workflow `.github/workflows/coletor.yml` roda sozinho de hora em hora.
 

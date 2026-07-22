@@ -26,16 +26,9 @@ export function partidaVisivelExpr(alias, viewerParam) {
     where mv.match_id = ${alias}.id and f.status = 'accepted'))`
 }
 
-// Fragmento ` and (...)` que dá push no viewer em `params`. viewer nulo → '' (sem filtro;
-// usado por chamadas internas que já garantiram escopo de outra forma).
-export function partidaVisivelWhere(alias, viewerSteamId, params) {
-  if (!viewerSteamId) return ''
-  params.push(viewerSteamId)
-  return ` and ${partidaVisivelExpr(alias, `$${params.length}`)}`
-}
-
-// Predicado sem ` and ` (pra compor em `where id = $1 and <predicado>`), dá push no viewer.
-export function partidaVisivelPredicado(alias, viewerSteamId, params) {
-  params.push(viewerSteamId)
-  return partidaVisivelExpr(alias, `$${params.length}`)
-}
+// partidaVisivelWhere/partidaVisivelPredicado (helpers que dariam push do viewer em `params`)
+// existiram aqui mas nunca foram importados por nenhuma rota — todo call site usa
+// partidaVisivelExpr diretamente. Removidos: a versão *Where tratava viewer ausente como
+// "sem filtro" (fail-OPEN, mostraria todas as partidas), e não valia a pena manter dead
+// code cuja única função era essa armadilha. Se precisar de novo, refaça fail-CLOSED
+// (lançar erro se o viewer estiver ausente, nunca devolver '').

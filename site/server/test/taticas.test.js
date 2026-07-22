@@ -39,6 +39,7 @@ describe('GET /api/taticas', () => {
 describe('POST /api/taticas', () => {
   it('qualquer jogador autenticado pode sugerir, entra como sugerida', async () => {
     const { app, db } = appWith([
+      ['from matches m where m.id', [{ id: 1 }]], // partida visível ao viewer
       ['insert into taticas', [{ id: 't1' }]],
     ])
     const res = await request(app).post('/api/taticas').set('Cookie', cookieJogador).send({
@@ -54,6 +55,29 @@ describe('POST /api/taticas', () => {
     const { app } = appWith([])
     const res = await request(app).post('/api/taticas').set('Cookie', cookieJogador).send({ map: 'de_mirage', matchId: 'm1', roundNumber: 1 })
     expect(res.status).toBe(400)
+  })
+
+  it('partida não visível ao viewer (não jogou nem é amigo de quem jogou): 404', async () => {
+    const { app } = appWith([]) // sem handler pra 'from matches m where m.id' → rows: []
+    const res = await request(app).post('/api/taticas').set('Cookie', cookieJogador).send({
+      nome: 'Execução B', map: 'de_mirage',
+      matchId: '22222222-2222-2222-2222-222222222222', roundNumber: 5,
+    })
+    expect(res.status).toBe(404)
+  })
+
+  it('checagem de posse usa visibilidade por amizade (não group_id)', async () => {
+    const { app, db } = appWith([
+      ['from matches m where m.id', [{ id: 1 }]],
+      ['insert into taticas', [{ id: 't1' }]],
+    ])
+    await request(app).post('/api/taticas').set('Cookie', cookieJogador).send({
+      nome: 'Execução B', map: 'de_mirage',
+      matchId: '22222222-2222-2222-2222-222222222222', roundNumber: 5,
+    })
+    const visivel = db.query.mock.calls.find((c) => c[0].includes('from matches m where m.id'))
+    expect(visivel[0]).toContain('from friendships f')
+    expect(visivel[1]).toEqual(['22222222-2222-2222-2222-222222222222', '765'])
   })
 })
 

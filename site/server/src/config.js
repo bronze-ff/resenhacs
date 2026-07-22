@@ -4,13 +4,20 @@ export function loadConfig(env = process.env) {
   if (missing.length > 0) {
     throw new Error(`Variáveis de ambiente faltando: ${missing.join(', ')}`)
   }
+  const isProduction = env.NODE_ENV === 'production'
+  // Só barra em produção: dev/teste comumente usa um JWT_SECRET curto tipo 'segredo-de-teste'
+  // ou 's', e isso não pode quebrar o ambiente local. Checagem é no boot (uma vez), não a
+  // cada request — um secret fraco permite forjar cookie de sessão (inclusive isSuperAdmin).
+  if (isProduction && env.JWT_SECRET.length < 32) {
+    throw new Error('JWT_SECRET fraco: precisa de pelo menos 32 caracteres em produção')
+  }
   return {
     databaseUrl: env.DATABASE_URL,
     jwtSecret: env.JWT_SECRET,
     steamApiKey: env.STEAM_API_KEY,
     appUrl: env.APP_URL ?? 'http://localhost:5173',
     port: Number(env.PORT ?? 3001),
-    isProduction: env.NODE_ENV === 'production',
+    isProduction,
     // R2 (Cloudflare) — o bucket é PRIVADO de propósito (replays/demos têm dados
     // reais dos 10 participantes de cada Partida, incluindo randoms não whitelistados
     // que nunca consentiram ficar públicos). O server faz proxy autenticado; nunca

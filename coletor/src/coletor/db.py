@@ -542,10 +542,69 @@ def listar_uploads_pendentes(conn):
 
 def atualizar_upload_pendente(conn, upload_id, status, match_id=None, erro=None):
     with conn.cursor() as cur:
+        if status == "processando":
+            # Carimba o início do processamento — é o que permite
+            # reverter_uploads_travados() detectar depois que esse item ficou
+            # 'processando' tempo demais (achado #8: processo morto no meio nunca
+            # revertia sozinho).
+            cur.execute(
+                "update uploads_pendentes set status = %s, match_id = %s, erro = %s, "
+                "processando_desde = now() where id = %s",
+                (status, match_id, erro, upload_id),
+            )
+        else:
+            cur.execute(
+                "update uploads_pendentes set status = %s, match_id = %s, erro = %s where id = %s",
+                (status, match_id, erro, upload_id),
+            )
+    conn.commit()
+
+
+def reverter_uploads_travados(conn, minutos=30, max_tentativas=3):
+    """Auditoria finding #8: um upload preso em 'processando' porque o Coletor morreu
+    no meio (crash do runner, timeout do job do Actions) nunca voltava sozinho pra
+    fila — ficava 'processando' pra sempre, invisível tanto pro retry quanto pro
+    usuário. Chamado no INÍCIO de cmd_processar_uploads_pendentes: qualquer item
+    'processando' há mais de `minutos` volta pra 'pendente' (nova tentativa) ou vira
+    'falhou' quando já esgotou `max_tentativas` — mesma semântica de esgotamento já
+    usada em falhar_faceit_pendente. Devolve a lista de ids revertidos (só para log)."""
+    mensagem_erro = f"travado em 'processando' por mais de {minutos} min — provável processo morto no meio"
+    with conn.cursor() as cur:
         cur.execute(
-            "update uploads_pendentes set status = %s, match_id = %s, erro = %s where id = %s",
-            (status, match_id, erro, upload_id),
+            "update uploads_pendentes set "
+            "status = case when tentativas + 1 >= %s then 'falhou' else 'pendente' end, "
+            "tentativas = tentativas + 1, "
+            "erro = case when tentativas + 1 >= %s then %s else erro end, "
+            "processando_desde = null "
+            "where status = 'processando' and processando_desde < now() - (%s || ' minutes')::interval "
+            "returning id",
+            (max_tentativas, max_tentativas, mensagem_erro, minutos),
         )
+        ids = [r[0] for r in cur.fetchall()]
+    conn.commit()
+    return ids
+
+
+def listar_uploads_falhos_antigos(conn, dias=30):
+    """Uploads com status 'falhou' há mais de `dias` dias — candidatos à limpeza do
+    objeto órfão no R2 (achado #17 da auditoria: uploads falhos nunca tinham uma rota
+    de limpeza equivalente ao cleanup/reprocess da fila de Partidas Pro; o `.dem` que
+    deu erro ficava ocupando espaço no bucket pra sempre, sem custo zero)."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "select id, arquivo_r2_key from uploads_pendentes "
+            "where status = 'falhou' and adicionado_em < now() - (%s || ' days')::interval",
+            (dias,),
+        )
+        return cur.fetchall()
+
+
+def marcar_upload_limpo(conn, upload_id):
+    """Marca que o objeto órfão desse upload já foi apagado do R2 — status 'limpo'
+    tira o item de listar_uploads_falhos_antigos, então rodar a limpeza de novo não
+    tenta apagar o mesmo objeto (que já não existe mais) uma segunda vez."""
+    with conn.cursor() as cur:
+        cur.execute("update uploads_pendentes set status = 'limpo' where id = %s", (upload_id,))
     conn.commit()
 
 

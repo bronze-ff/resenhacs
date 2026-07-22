@@ -51,13 +51,15 @@ describe('GET /api/granadas', () => {
       id: 'g1', videoUrl: 'https://youtu.be/abcdefghijk', arremessoX: 0.2, alvoY: 0.3,
       passos: ['mire no pixel', 'jumpthrow'], tecnica: 'jumpthrow',
     })
-    expect(db.query.mock.calls[0][1]).toEqual(['de_mirage', 'T', 'smoke'])
+    const chamada = db.query.mock.calls.find(([sql]) => sql.includes('from lineups_curados'))
+    expect(chamada[1]).toEqual(['de_mirage', 'T', 'smoke'])
   })
 
   it('filtro invalido e ignorado (nao vira SQL)', async () => {
     const { app, db } = appWith([['from lineups_curados', []]])
     await request(app).get("/api/granadas?map=x';drop&lado=Z&tipo=nuke").set('Cookie', cookieAdmin)
-    expect(db.query.mock.calls[0][1]).toEqual([])
+    const chamada = db.query.mock.calls.find(([sql]) => sql.includes('from lineups_curados'))
+    expect(chamada[1]).toEqual([])
   })
 })
 
@@ -148,9 +150,12 @@ describe('PATCH /api/granadas/:id', () => {
       .send({ map: 'de_mirage', lado: 'CT', tipo: 'flash', titulo: 'x', tecnica: 'normal',
         botao: 'direito', passos: [], arremessoX: 0.1, arremessoY: 0.1, alvoX: 0.2, alvoY: 0.2 })
     expect(res.status).toBe(404)
-    // Além do recheck de admin (requireSuperAdmin agora reconsulta o banco), nenhuma query
-    // do handler rodou — id malformado é rejeitado antes de qualquer trabalho de banco.
-    expect(db.query.mock.calls.filter((c) => !c[0].includes('is_super_admin from players'))).toHaveLength(0)
+    // Além do recheck de admin (requireSuperAdmin) e da checagem de revogação de sessão
+    // (requireAuth), nenhuma query do handler rodou — id malformado é rejeitado antes de
+    // qualquer trabalho de banco.
+    expect(db.query.mock.calls.filter((c) =>
+      !c[0].includes('is_super_admin from players') && !c[0].includes('tokens_validos_apos from players'),
+    )).toHaveLength(0)
   })
 })
 
@@ -172,9 +177,12 @@ describe('DELETE /api/granadas/:id', () => {
     const { app, db } = appWith([])
     const res = await request(app).delete('/api/granadas/abc').set('Cookie', cookieAdmin)
     expect(res.status).toBe(404)
-    // Além do recheck de admin (requireSuperAdmin agora reconsulta o banco), nenhuma query
-    // do handler rodou — id malformado é rejeitado antes de qualquer trabalho de banco.
-    expect(db.query.mock.calls.filter((c) => !c[0].includes('is_super_admin from players'))).toHaveLength(0)
+    // Além do recheck de admin (requireSuperAdmin) e da checagem de revogação de sessão
+    // (requireAuth), nenhuma query do handler rodou — id malformado é rejeitado antes de
+    // qualquer trabalho de banco.
+    expect(db.query.mock.calls.filter((c) =>
+      !c[0].includes('is_super_admin from players') && !c[0].includes('tokens_validos_apos from players'),
+    )).toHaveLength(0)
   })
 })
 

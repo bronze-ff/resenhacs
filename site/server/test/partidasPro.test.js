@@ -70,6 +70,36 @@ describe('POST /api/partidas-pro-fila', () => {
     const res = await request(app).post('/api/partidas-pro-fila').set('Cookie', cookieAdmin).send({})
     expect(res.status).toBe(400)
   })
+
+  // ---- finding #16 da auditoria: allowlist real de hltv.org (antes aceitava qualquer https://) ----
+
+  it('url fora do hltv.org (SSRF): 400', async () => {
+    const { app } = appWith([])
+    const res = await request(app)
+      .post('/api/partidas-pro-fila')
+      .set('Cookie', cookieAdmin)
+      .send({ hltvUrl: 'https://evil.example.com/download/demo/999' })
+    expect(res.status).toBe(400)
+    expect(res.body.erro).toMatch(/hltv\.org/i)
+  })
+
+  it('www.hltv.org tambem e aceito', async () => {
+    const { app } = appWith([['insert into partidas_pro_fila', [{ id: 'f3' }]]])
+    const res = await request(app)
+      .post('/api/partidas-pro-fila')
+      .set('Cookie', cookieAdmin)
+      .send({ hltvUrl: 'https://www.hltv.org/download/demo/999' })
+    expect(res.status).toBe(201)
+  })
+
+  it('dominio parecido mas nao hltv.org de verdade: 400', async () => {
+    const { app } = appWith([])
+    const res = await request(app)
+      .post('/api/partidas-pro-fila')
+      .set('Cookie', cookieAdmin)
+      .send({ hltvUrl: 'https://hltv.org.evil.com/download/demo/999' })
+    expect(res.status).toBe(400)
+  })
 })
 
 describe('POST /api/partidas-pro-fila/upload-url', () => {

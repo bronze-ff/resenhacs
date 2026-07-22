@@ -53,6 +53,8 @@ describe('GET /api/ranking', () => {
   it('forma recente: sobe, cai, estável e amostra insuficiente', async () => {
     const db = { query: vi.fn() }
     db.query
+      // requireAuth reconsulta tokens_validos_apos antes de qualquer query da própria rota.
+      .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [
         { steam_id64: '1', recente: '1.40', geral: '1.10', total: 8 }, // subindo
         { steam_id64: '2', recente: '0.80', geral: '1.10', total: 8 }, // caindo

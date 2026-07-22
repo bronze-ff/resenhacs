@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { createRequireSuperAdmin } from '../auth/middleware.js'
+import { partidaVisivelExpr } from '../friendships.js'
 
 export function createTaticasRouter({ db, requireAuth }) {
   const router = Router()
@@ -48,6 +49,14 @@ export function createTaticasRouter({ db, requireAuth }) {
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(matchId)) {
       return res.status(400).json({ erro: 'matchId inválido' })
     }
+    // A Partida referenciada precisa existir E ser visível ao viewer (jogou ou é amigo
+    // accepted de quem jogou) — igual ao clips.js. Sem isso, qualquer conta logada linkava
+    // uma tática à partida de outra pessoa (broken access control / OWASP A01).
+    const visivel = await db.query(
+      `select 1 from matches m where m.id = $1 and ${partidaVisivelExpr('m', '$2')}`,
+      [matchId, req.player.steamId],
+    )
+    if (visivel.rows.length === 0) return res.status(404).json({ erro: 'Partida não encontrada' })
     if (nome.length > 120) return res.status(400).json({ erro: 'nome muito longo' })
     const descricao = String(req.body?.descricao ?? '').trim().slice(0, 2000)
     const { rows } = await db.query(

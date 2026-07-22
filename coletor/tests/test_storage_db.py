@@ -1,6 +1,8 @@
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from coletor import storage_r2, db
@@ -21,6 +23,7 @@ class FakeS3:
         self.puts = []
         self.deletes = []
         self.gets = []
+        self.heads = []
         self.objetos = {}  # key -> bytes, pro get_object devolver de volta
         self.cors = []
 
@@ -34,6 +37,10 @@ class FakeS3:
     def get_object(self, **kw):
         self.gets.append(kw)
         return {"Body": FakeBody(self.objetos[kw["Key"]])}
+
+    def head_object(self, **kw):
+        self.heads.append(kw)
+        return {"ContentLength": len(self.objetos[kw["Key"]])}
 
     def put_bucket_cors(self, **kw):
         self.cors.append(kw)
@@ -62,6 +69,39 @@ def test_download_bytes_devolve_o_que_foi_upado():
     s3 = FakeS3()
     storage_r2.upload_bytes(s3, "bucket", "demos/1.dem.bz2", b"conteudo-da-demo")
     assert storage_r2.download_bytes(s3, "bucket", "demos/1.dem.bz2") == b"conteudo-da-demo"
+
+
+# ---- finding #2 da auditoria: teto de tamanho via HEAD antes do download ----
+
+def test_content_length_faz_head_sem_baixar_o_corpo():
+    s3 = FakeS3()
+    storage_r2.upload_bytes(s3, "bucket", "demos/1.dem.bz2", b"12345")
+    assert storage_r2.content_length(s3, "bucket", "demos/1.dem.bz2") == 5
+    assert s3.heads == [{"Bucket": "bucket", "Key": "demos/1.dem.bz2"}]
+    assert s3.gets == []  # HEAD não deve ter baixado o corpo
+
+
+def test_download_bytes_sem_max_bytes_nao_chama_head():
+    s3 = FakeS3()
+    storage_r2.upload_bytes(s3, "bucket", "demos/1.dem.bz2", b"conteudo")
+    storage_r2.download_bytes(s3, "bucket", "demos/1.dem.bz2")
+    assert s3.heads == []
+
+
+def test_download_bytes_dentro_do_teto_baixa_normalmente():
+    s3 = FakeS3()
+    storage_r2.upload_bytes(s3, "bucket", "demos/1.dem.bz2", b"conteudo-pequeno")
+    dados = storage_r2.download_bytes(s3, "bucket", "demos/1.dem.bz2", max_bytes=1000)
+    assert dados == b"conteudo-pequeno"
+    assert len(s3.heads) == 1
+
+
+def test_download_bytes_acima_do_teto_lanca_erro_sem_baixar_o_corpo():
+    s3 = FakeS3()
+    storage_r2.upload_bytes(s3, "bucket", "demos/1.dem.bz2", b"x" * 1000)
+    with pytest.raises(storage_r2.ArquivoGrandeDemaisError):
+        storage_r2.download_bytes(s3, "bucket", "demos/1.dem.bz2", max_bytes=500)
+    assert s3.gets == []  # abortou antes de baixar o corpo
 
 
 def test_configurar_cors_manda_regra_pro_bucket():
@@ -111,6 +151,8 @@ class FakeCursor:
             return self.conn.fila_rows
         if self._last.startswith("select id, adicionado_por, arquivo_r2_key, share_code, played_at, plataforma_manual from uploads_pendentes"):
             return self.conn.uploads_rows
+        if self._last.startswith("select id, arquivo_r2_key from uploads_pendentes"):
+            return self.conn.uploads_falhos_rows
         if self._last.startswith("select steam_id64 from steam_avatares"):
             return [(s,) for s in self.conn.avatares_frescos]
         if "distinct mp.steam_id64" in self._last:
@@ -125,6 +167,7 @@ class FakeConn:
         self.fingerprint_row = fingerprint_row
         self.fila_rows = []
         self.uploads_rows = []
+        self.uploads_falhos_rows = []
         self.avatares_frescos = []
         self.match_players_sem_avatar = []
 
@@ -415,6 +458,52 @@ def test_atualizar_upload_pendente_grava_status_match_id_e_erro():
     db.atualizar_upload_pendente(conn, "u1", "concluido", match_id="m1")
     update = next(c for c in conn.calls if c[0].startswith("update uploads_pendentes"))
     assert update[1] == ("concluido", "m1", None, "u1")
+    assert "processando_desde" not in update[0]
+    assert conn.commits == 1
+
+
+# ---- finding #8 da auditoria: upload travado em 'processando' nunca revertia sozinho ----
+
+def test_atualizar_upload_pendente_para_processando_carimba_processando_desde():
+    conn = FakeConn()
+    db.atualizar_upload_pendente(conn, "u1", "processando")
+    update = next(c for c in conn.calls if c[0].startswith("update uploads_pendentes"))
+    assert "processando_desde = now()" in update[0]
+    assert update[1] == ("processando", None, None, "u1")
+    assert conn.commits == 1
+
+
+def test_reverter_uploads_travados_gera_sql_com_teto_de_tempo_e_tentativas():
+    conn = FakeConn()
+    ids = db.reverter_uploads_travados(conn, minutos=30, max_tentativas=3)
+    sql, params = conn.calls[-1]
+    assert "status = 'processando'" in sql
+    assert "processando_desde < now()" in sql
+    assert "tentativas = tentativas + 1" in sql
+    assert "processando_desde = null" in sql
+    assert params == (3, 3, "travado em 'processando' por mais de 30 min — provável processo morto no meio", 30)
+    assert conn.commits == 1
+    assert ids == []  # FakeCursor.fetchall() não reconhece essa query -> []
+
+
+# ---- finding #17 da auditoria: limpeza de upload órfão no R2 ----
+
+def test_listar_uploads_falhos_antigos_devolve_id_e_key():
+    conn = FakeConn()
+    conn.uploads_falhos_rows = [("u1", "uploads-pendentes/abc.dem")]
+    resultado = db.listar_uploads_falhos_antigos(conn, dias=30)
+    assert resultado == [("u1", "uploads-pendentes/abc.dem")]
+    select = next(c for c in conn.calls if c[0].startswith("select id, arquivo_r2_key from uploads_pendentes"))
+    assert "status = 'falhou'" in select[0]
+    assert select[1] == (30,)
+
+
+def test_marcar_upload_limpo_atualiza_status():
+    conn = FakeConn()
+    db.marcar_upload_limpo(conn, "u1")
+    update = next(c for c in conn.calls if c[0].startswith("update uploads_pendentes"))
+    assert "status = 'limpo'" in update[0]
+    assert update[1] == ("u1",)
     assert conn.commits == 1
 
 
