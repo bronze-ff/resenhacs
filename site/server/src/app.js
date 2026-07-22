@@ -9,6 +9,7 @@ import { createMatchesRouter } from './routes/matches.js'
 import { createProfileRouter } from './routes/profile.js'
 import { createClipsRouter } from './routes/clips.js'
 import { createClipesRouter } from './routes/clipes.js'
+import { createCompeticoesRouter } from './routes/competicoes.js'
 import { createRankingRouter } from './routes/ranking.js'
 import { createSessionsRouter } from './routes/sessions.js'
 import { createRecordesRouter } from './routes/recordes.js'
@@ -22,8 +23,8 @@ import { createPartidasProRouter } from './routes/partidasPro.js'
 import { createGranadasRouter } from './routes/granadas.js'
 import { createCursoRouter } from './routes/curso.js'
 import { createRequireAuth } from './auth/middleware.js'
-import { createR2Client } from './r2.js'
 import { limiteGeral } from './rateLimit.js'
+import { createR2Client } from './r2.js'
 
 // Express 4 NÃO encaminha rejections de handler async pro error middleware: uma query
 // que lance (ex.: cast de uuid inválido em /api/matches/abc) viraria unhandled rejection
@@ -73,13 +74,13 @@ export function createApp({
   app.set('trust proxy', 1)
   app.use(express.json())
   app.use(cookieParser())
+  app.use(limiteGeral)
   app.use((req, res, next) => {
     res.set('X-Content-Type-Options', 'nosniff')
     res.set('X-Frame-Options', 'DENY')
     res.set('Referrer-Policy', 'same-origin')
     next()
   })
-  app.use(limiteGeral)
 
   patchRouterAsync()
 
@@ -95,6 +96,7 @@ export function createApp({
   app.use('/api/profile', createProfileRouter({ db, requireAuth }))
   app.use('/api/clips', createClipsRouter({ db, requireAuth }))
   app.use('/api/clipes', createClipesRouter({ db, requireAuth }))
+  app.use('/api/competicoes', createCompeticoesRouter({ db, requireAuth }))
   app.use('/api/ranking', createRankingRouter({ db, requireAuth }))
   app.use('/api/sessions', createSessionsRouter({ db, requireAuth }))
   app.use('/api/recordes', createRecordesRouter({ db, requireAuth }))

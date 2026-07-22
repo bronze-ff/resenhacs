@@ -1,5 +1,6 @@
+// site/client/src/pages/Clipes.jsx
 import { useEffect, useState } from 'react'
-import { Card, SectionHeader, DataTable, Badge } from '../components/ui'
+import { Card, SectionHeader, Badge } from '../components/ui'
 import { useAuth } from '../auth/AuthContext.jsx'
 
 const PERIODOS = [
@@ -15,15 +16,13 @@ const NOME_KIND = {
 }
 
 // kind vem null quando o round que a Allstar escolheu (gerar clipe por JOGADOR, não
-// mais por highlight — ver allstarClip.js) não bate com nenhum highlight nosso pra
-// esse jogador/round: a Allstar viu uma jogada boa que a gente não tinha detectado.
+// mais por highlight) não bate com nenhum highlight nosso pra esse jogador/round — só
+// afeta o rótulo exibido, a pontuação (Task 2, clipesScore.js) não depende de kind.
 function nomeDoKind(kind) {
   if (!kind) return 'MOMENTO'
   return NOME_KIND[kind] ?? kind
 }
 
-// Ícone genérico pro card sem snapshot ainda (Allstar às vezes demora a gerar a
-// miniatura) — mantém a mesma proporção aspect-video do snapshot real, sem "buraco".
 function SnapshotPlaceholder() {
   return (
     <div className="mt-3 flex aspect-video w-full items-center justify-center border border-borda bg-superficie-alta text-texto-fraco">
@@ -35,10 +34,6 @@ function SnapshotPlaceholder() {
   )
 }
 
-// Player embutido do Allstar — mesmo padrão usado na aba Clipes de Partida.jsx
-// (site/client/src/pages/Partida.jsx), reaproveitado aqui pro modo "assistir" do card.
-// `viewerSteamId` vai no ?UID= igual lá — é o parâmetro que a Allstar usa pra saber
-// quem tá assistindo, não quem fez a jogada.
 function PlayerClipe({ clipUrl, viewerSteamId, titulo }) {
   return (
     <div className="mt-3 aspect-video w-full">
@@ -53,6 +48,16 @@ function PlayerClipe({ clipUrl, viewerSteamId, titulo }) {
   )
 }
 
+// Tooltip explica o calculo — mesma logica de transparencia da spec (Competicoes
+// tambem mostra o detalhamento, Task 12/13), aqui e so leitura sobre o clipe.
+function tituloPontuacao(p) {
+  const partes = [`${p.kills} kills (${p.pontosKills})`]
+  if (p.headshots > 0) partes.push(`${p.headshots} headshots (+${p.pontosHeadshots})`)
+  if (p.clutch) partes.push(`clutch ${p.clutch} (+${p.pontosClutch})`)
+  if (p.armas > 0) partes.push(`${p.armas} armas distintas (+${p.pontosArmas})`)
+  return `${partes.join(' + ')} = ${p.total}`
+}
+
 function CardClipe({ clipe, aberto, onAbrir, viewerSteamId }) {
   const { pontuacao } = clipe
   return (
@@ -63,20 +68,14 @@ function CardClipe({ clipe, aberto, onAbrir, viewerSteamId }) {
             <img src={clipe.avatarUrl} alt="" className="panel-cut-sm h-8 w-8 shrink-0 border border-borda object-cover" />
           )}
           <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <Badge tom="destaque">{nomeDoKind(clipe.kind)}</Badge>
-              {pontuacao.bonusHeadshot > 0 && <Badge tom="sucesso">ALL HEADSHOTS</Badge>}
-            </div>
+            <Badge tom="destaque">{nomeDoKind(clipe.kind)}</Badge>
             <p className="mt-1 truncate font-mono text-sm text-texto">
-              {clipe.nick} · round {clipe.roundNumber} · {clipe.map}
+              <span>{clipe.nick}</span> · round {clipe.roundNumber} · {clipe.map}
             </p>
           </div>
         </div>
         <div className="shrink-0 text-right">
-          <div
-            className="font-display text-lg font-bold text-destaque"
-            title={`${pontuacao.kind ?? 'momento'} (${pontuacao.base})${pontuacao.bonusHeadshot ? ` + All Headshots (+${pontuacao.bonusHeadshot})` : ''} = ${pontuacao.total}`}
-          >
+          <div className="font-display text-lg font-bold text-destaque" title={tituloPontuacao(pontuacao)}>
             {pontuacao.total}
           </div>
         </div>
@@ -111,9 +110,9 @@ export default function Clipes() {
   useEffect(() => {
     setDados(null)
     fetch(`/api/clipes?periodo=${periodo}`)
-      .then((res) => (res.ok ? res.json() : { clipes: [], leaderboard: [] }))
+      .then((res) => (res.ok ? res.json() : { clipes: [] }))
       .then(setDados)
-      .catch(() => setDados({ clipes: [], leaderboard: [] }))
+      .catch(() => setDados({ clipes: [] }))
   }, [periodo])
 
   return (
@@ -138,7 +137,7 @@ export default function Clipes() {
         }
       />
       <p className="font-mono text-xs text-texto-fraco">
-        Pontuação calculada pelo Resenha (tipo de jogada + bônus de headshot) — não é a fórmula da Allstar.
+        Pontuação: kills (curva não-linear) + headshots + clutch + variedade de armas — passe o mouse no número pra ver o cálculo.
       </p>
 
       {dados === null ? (
@@ -146,40 +145,11 @@ export default function Clipes() {
       ) : dados.clipes.length === 0 ? (
         <p className="font-mono text-sm text-texto-fraco">Nenhum clipe nesse período ainda.</p>
       ) : (
-        <>
-          {dados.leaderboard.length > 0 && (
-            <section>
-              <h3 className="mb-2 font-display text-sm font-semibold uppercase tracking-wide text-texto-fraco">
-                Leaderboard
-              </h3>
-              <div className="panel-cut border border-borda">
-                <DataTable
-                  head={<tr><th className="px-3 py-2">#</th><th className="px-3 py-2">Jogador</th><th className="px-2 py-2 text-right">Clipes</th><th className="px-3 py-2 text-right">Melhor pontuação</th></tr>}
-                >
-                  {dados.leaderboard.map((l, i) => (
-                    <tr key={l.steamId}>
-                      <td className="px-3 py-2 font-mono text-texto-fraco">{i + 1}º</td>
-                      <td className="px-3 py-2">
-                        <span className="flex items-center gap-2 font-mono text-texto">
-                          {l.avatarUrl && <img src={l.avatarUrl} alt="" className="panel-cut-sm h-6 w-6 border border-borda object-cover" />}
-                          {l.nick}
-                        </span>
-                      </td>
-                      <td className="px-2 py-2 text-right tabular-nums">{l.clipes}</td>
-                      <td className="px-3 py-2 text-right font-display font-bold text-destaque tabular-nums">{l.melhorPontuacao}</td>
-                    </tr>
-                  ))}
-                </DataTable>
-              </div>
-            </section>
-          )}
-
-          <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {dados.clipes.map((c) => (
-              <CardClipe key={c.id} clipe={c} aberto={clipeAberto === c.id} onAbrir={setClipeAberto} viewerSteamId={jogador?.steamId} />
-            ))}
-          </section>
-        </>
+        <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {dados.clipes.map((c) => (
+            <CardClipe key={c.id} clipe={c} aberto={clipeAberto === c.id} onAbrir={setClipeAberto} viewerSteamId={jogador?.steamId} />
+          ))}
+        </section>
       )}
     </div>
   )

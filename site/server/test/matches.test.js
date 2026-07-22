@@ -154,7 +154,7 @@ describe('GET /api/matches/:id', () => {
       ['from matches mt', [{ id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9, source: 'valve_mm', status: 'parsed', demo_url: null }]],
       ['from match_players mp', [{ steam_id64: '765', nick: 'fih', team: 'A', kills: 25, team_kills: 1, deaths: 10, assists: 5, headshot_kills: 12, damage: 2500, rounds_played: 22, rating: '1.35', kast_pct: '72.5', premier_rating_before: 15420, premier_rating_after: 15480, faceit_elo_before: 1400, faceit_elo_after: 1425, won: true, is_tracked: true, avatar_url: 'https://avatars.steamstatic.com/fih.jpg' }]],
       ['from rounds where match_id', [{ round_number: 1, winner_team: 'A', win_reason: 'elim' }]],
-      ['from highlights h', [{ id: 'h1', steam_id64: '765', round_number: 5, kind: 'ace', description: 'ACE', frame: 12, nick: 'fih' }]],
+      ['from highlights h', [{ id: 'h1', steam_id64: '765', round_number: 5, kind: 'ace', description: 'ACE', frame: 12, nick: 'fih', allstar_clip_id: 'ac1', allstar_status: 'Processed', allstar_clip_url: 'https://allstar.gg/iframe?clip=x' }]],
       ['from clips where match_id', [{ id: 'c1', steam_id64: '765', url: 'https://allstar.gg/x', provider: 'allstar', title: 'meu ace', highlight_id: 'h1' }]],
       ['from match_player_weapons', [
         { steam_id64: '765', weapon: 'deagle', kills: 22, hs_kills: 10, shots_fired: 60, shots_hit: 25, damage: 2200 },
@@ -169,10 +169,15 @@ describe('GET /api/matches/:id', () => {
       { weapon: 'knife', kills: 3, hsKills: 0, shotsFired: 0, shotsHit: 0, damage: 150 },
     ])
     expect(res.body.rounds[0]).toMatchObject({ roundNumber: 1, winnerTeam: 'A' })
-    expect(res.body.highlights[0]).toMatchObject({ kind: 'ace', nick: 'fih', frame: 12 })
+    expect(res.body.highlights[0]).toMatchObject({
+      kind: 'ace', nick: 'fih', frame: 12,
+      // Task 14 (adaptado ao modelo por-highlight real deste branch — ver nota em
+      // matches.js): allstarClipId expõe o allstar_clips.id do highlight, necessário
+      // pro atalho "Enviar pra competição →" de Partida.jsx.
+      allstarClipId: 'ac1',
+    })
     expect(res.body.clips[0]).toMatchObject({ provider: 'allstar', url: 'https://allstar.gg/x' })
     expect(res.body.demoUrl).toBeNull() // sem demo_url no fixture
-    expect(res.body.highlights[0]).not.toHaveProperty('allstarStatus')
     expect(res.body.players[0].allstarClip).toBeNull() // sem allstar_clips no fixture
   })
 

@@ -12,6 +12,7 @@ const ITENS_BASE = [
   { to: '/ranking', label: 'Ranking', icone: 'ranking' },
   { to: '/enviar-demo', label: 'Enviar demo', icone: 'enviarDemo' },
   { to: '/clipes', label: 'Clipes', icone: 'clipes' },
+  { to: '/competicoes', label: 'Competições', icone: 'competicoes' },
   { to: '/jogadores', label: 'Amigos', icone: 'jogadores' },
   { to: '/comparar', label: 'Comparar', icone: 'comparar' },
   // Granadas/Táticas são públicos pra visualização (só criar/editar é admin — cada
@@ -23,6 +24,21 @@ const ITENS_BASE = [
   { to: '/curso', label: 'Curso de mira', icone: 'curso' },
 ]
 const ITENS = ITENS_BASE.map((item, i) => ({ ...item, num: String(i + 1).padStart(2, '0') }))
+
+// Itens admin-only, numerados em sequência aos de ITENS (ver numerarItem abaixo) —
+// ficam num array separado só porque exigem o gate isSuperAdmin na renderização.
+const ITENS_ADMIN = [
+  { to: '/admin', label: 'Admin', icone: 'admin' },
+  { to: '/partidas-pro', label: 'Partidas pro', icone: 'partidasPro' },
+]
+
+// Deriva o número (2 dígitos) do índice do item na lista combinada, em vez de
+// hardcodear — assim a numeração nunca mais dessincroniza quando um item é
+// adicionado/removido (ex.: a remoção de Grupos/Ranking Público/Times deixou um
+// gap de "09" pra "12" que só existia porque os números eram fixos no JSX).
+function numerarItem(indice) {
+  return String(indice + 1).padStart(2, '0')
+}
 
 // Itens da barra inferior mobile (estilo app da FACEIT): 4 rotas principais
 // + "Mais" que abre o drawer completo (mesmo menu do hambúrguer, agora removido
@@ -74,6 +90,15 @@ const NAV_ICONES = {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
       <rect x="3" y="5" width="18" height="14" rx="1" />
       <path d="M9 9L15 12L9 15V9Z" fill="currentColor" stroke="none" />
+    </svg>
+  ),
+  competicoes: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
+      <path d="M8 21H16" />
+      <path d="M12 17V21" />
+      <path d="M7 4H17V9C17 12.3137 14.7614 15 12 15C9.23858 15 7 12.3137 7 9V4Z" />
+      <path d="M17 5H19.5C19.5 7 18.5 8.5 17 8.5" />
+      <path d="M7 5H4.5C4.5 7 5.5 8.5 7 8.5" />
     </svg>
   ),
   jogadores: (
@@ -216,7 +241,7 @@ export default function Shell({ children }) {
           </p>
         </div>
         <nav className="flex-1 overflow-y-auto py-3">
-          {ITENS.map((item) => (
+          {ITENS.map((item, indice) => (
             <NavLink
               key={item.to}
               to={item.to}
@@ -228,44 +253,38 @@ export default function Shell({ children }) {
             >
               <span className="shrink-0">{NAV_ICONES[item.icone]}</span>
               <span className={`font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque ${colapsada ? 'lg:hidden' : ''}`}>
-                {item.num}
+                {numerarItem(indice)}
               </span>
               <span className={colapsada ? 'lg:hidden' : ''}>{item.label}</span>
             </NavLink>
           ))}
           {jogador?.isSuperAdmin && (
             <>
-              <div className={`mx-3 mt-2 flex items-center gap-2 border-t border-borda pt-2 ${colapsada ? 'lg:mx-0 lg:justify-center' : ''}`}>
-                <span className={`font-mono text-[9px] uppercase tracking-[0.15em] text-texto-fraco/60 ${colapsada ? 'lg:hidden' : ''}`}>
+              {/* Separador visual dos itens admin-only, no mesmo estilo dos outros
+                  rótulos micro do app (font-mono uppercase tracking largo) — a linha
+                  (border-t) fica mesmo com a sidebar colapsada, só o rótulo "Admin"
+                  some (como os demais textos nesse estado). */}
+              <div className={`mx-3 mt-3 border-t border-borda pt-2 ${colapsada ? 'lg:mx-2' : ''}`}>
+                <span className={`block pb-1 font-mono text-[10px] uppercase tracking-[0.2em] text-texto-fraco/60 ${colapsada ? 'lg:hidden' : ''}`}>
                   Admin
                 </span>
               </div>
-              <NavLink
-                to="/admin"
-                className={classeItem}
-                onClick={fecharMenu}
-                title={colapsada ? 'Admin' : undefined}
-                aria-label={colapsada ? 'Admin' : undefined}
-              >
-                <span className="shrink-0">{NAV_ICONES.admin}</span>
-                <span className={`font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque ${colapsada ? 'lg:hidden' : ''}`}>
-                  {String(ITENS.length + 1).padStart(2, '0')}
-                </span>
-                <span className={colapsada ? 'lg:hidden' : ''}>Admin</span>
-              </NavLink>
-              <NavLink
-                to="/partidas-pro"
-                className={classeItem}
-                onClick={fecharMenu}
-                title={colapsada ? 'Partidas pro' : undefined}
-                aria-label={colapsada ? 'Partidas pro' : undefined}
-              >
-                <span className="shrink-0">{NAV_ICONES.partidasPro}</span>
-                <span className={`font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque ${colapsada ? 'lg:hidden' : ''}`}>
-                  {String(ITENS.length + 2).padStart(2, '0')}
-                </span>
-                <span className={colapsada ? 'lg:hidden' : ''}>Partidas pro</span>
-              </NavLink>
+              {ITENS_ADMIN.map((item, indice) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  className={classeItem}
+                  onClick={fecharMenu}
+                  title={colapsada ? item.label : undefined}
+                  aria-label={colapsada ? item.label : undefined}
+                >
+                  <span className="shrink-0">{NAV_ICONES[item.icone]}</span>
+                  <span className={`font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque ${colapsada ? 'lg:hidden' : ''}`}>
+                    {numerarItem(ITENS.length + indice)}
+                  </span>
+                  <span className={colapsada ? 'lg:hidden' : ''}>{item.label}</span>
+                </NavLink>
+              ))}
             </>
           )}
         </nav>

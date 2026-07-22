@@ -5,6 +5,7 @@ import { orientarPlacar } from '../lib/resultado.js'
 import { Avatar, MapIcon, SectionHeader, Select, ResultChip, PlataformaBadge, SteamIcon, Badge } from '../components/ui'
 import ReplayViewer from '../components/ReplayViewer.jsx'
 import MapaCalor from '../components/MapaCalor.jsx'
+import SeletorClipesCompeticao from '../components/SeletorClipesCompeticao.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { useTransicaoModal } from '../lib/useTransicaoModal.js'
 
@@ -960,7 +961,7 @@ function BotaoJogadorClipe({ p, selecionado, onClick }) {
 // Painel do jogador selecionado na aba Clipes: sem clipe ainda -> botão "gerar";
 // Submitted -> "gerando…"; Error -> permite tentar de novo; Processed -> player
 // embutido do Allstar, mesmo layout (vídeo + info ao lado) do resto do sistema.
-function PainelClipeJogador({ jogador, clip, pedindo, erro, aberto, onAbrir, onGerar, viewerSteamId, m, placar }) {
+function PainelClipeJogador({ jogador, clip, pedindo, erro, aberto, onAbrir, onGerar, viewerSteamId, m, placar, podeEnviarCompeticao, onAbrirSeletorCompeticao }) {
   if (!clip) {
     return (
       <div className="mt-4 panel-cut-sm border border-borda bg-superficie p-4">
@@ -1005,12 +1006,22 @@ function PainelClipeJogador({ jogador, clip, pedindo, erro, aberto, onAbrir, onG
     <div className="mt-4 panel-cut-sm border border-borda bg-superficie p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="font-mono text-sm text-texto">{jogador.nick || jogador.steamId}{clip.roundNumber ? ` · round ${clip.roundNumber}` : ''}</span>
-        <button
-          onClick={onAbrir}
-          className="panel-cut-sm border border-destaque/60 bg-destaque/10 px-2 py-1 font-mono text-xs uppercase text-destaque transition-colors hover:bg-destaque/20"
-        >
-          {aberto ? 'fechar' : '▶ assistir'}
-        </button>
+        <span className="flex items-center gap-3">
+          <button
+            onClick={onAbrir}
+            className="panel-cut-sm border border-destaque/60 bg-destaque/10 px-2 py-1 font-mono text-xs uppercase text-destaque transition-colors hover:bg-destaque/20"
+          >
+            {aberto ? 'fechar' : '▶ assistir'}
+          </button>
+          {podeEnviarCompeticao && (
+            <button
+              onClick={onAbrirSeletorCompeticao}
+              className="font-mono text-xs uppercase text-texto-fraco underline hover:text-destaque"
+            >
+              Enviar pra competição →
+            </button>
+          )}
+        </span>
       </div>
       {aberto && (
         <div className="mt-3 flex flex-col gap-4 lg:flex-row">
@@ -1156,6 +1167,10 @@ export default function Partida() {
   const [clipeAbertoId, setClipeAbertoId] = useState(null) // steamId cujo player está expandido
   const [pedindoClipeJogador, setPedindoClipeJogador] = useState(null) // steamId com pedido em voo
   const [erroClipeJogador, setErroClipeJogador] = useState(null)
+  // Atalho "Enviar pra competição →" na aba Clipes: só aparece quando existe uma
+  // competição ativa e a partida caiu dentro do período dela (ver JSX da aba Clipes).
+  const [competicaoAtiva, setCompeticaoAtiva] = useState(null)
+  const [seletorCompeticaoAberto, setSeletorCompeticaoAberto] = useState(false)
 
   // SOB DEMANDA: só chama o Allstar quando o jogador clica — nada automático. Qualquer
   // Jogador pode gerar o PRÓPRIO clipe; gerar o de outro é restrito ao dono do sistema
@@ -1234,6 +1249,15 @@ export default function Partida() {
     carregar()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
+
+  // Busca uma vez (independe da partida) só pra saber se há competição ativa e qual o
+  // período dela — decide se o atalho "Enviar pra competição →" aparece na aba Clipes.
+  useEffect(() => {
+    fetch('/api/competicoes')
+      .then((res) => (res.ok ? res.json() : { ativa: null }))
+      .then((d) => setCompeticaoAtiva(d.ativa))
+      .catch(() => setCompeticaoAtiva(null))
+  }, [])
 
   useEffect(() => {
     if (ladoFiltro === 'all') { setStatsLado(null); return }
@@ -1505,6 +1529,16 @@ export default function Partida() {
                   viewerSteamId={jogador?.steamId}
                   m={m}
                   placar={placar}
+                  // Atalho "Enviar pra competição →": só quando existe competição ativa e
+                  // essa partida caiu dentro do período dela (mesma checagem que o servidor
+                  // faz em GET /api/competicoes/:id/elegiveis — aqui é só pra decidir se o
+                  // botão aparece).
+                  podeEnviarCompeticao={Boolean(
+                    competicaoAtiva && m.playedAt &&
+                    new Date(m.playedAt) >= new Date(competicaoAtiva.dataInicio) &&
+                    new Date(m.playedAt) <= new Date(competicaoAtiva.dataFim),
+                  )}
+                  onAbrirSeletorCompeticao={() => setSeletorCompeticaoAberto(true)}
                 />
               )
             })()}
@@ -1529,6 +1563,13 @@ export default function Partida() {
             <FormClipe matchId={m.id} jogadores={m.players} onAdicionado={carregar} />
           </div>
         </section>
+      )}
+      {seletorCompeticaoAberto && competicaoAtiva && (
+        <SeletorClipesCompeticao
+          competicaoId={competicaoAtiva.id}
+          onFechar={() => setSeletorCompeticaoAberto(false)}
+          onEnviado={() => setSeletorCompeticaoAberto(false)}
+        />
       )}
     </div>
   )

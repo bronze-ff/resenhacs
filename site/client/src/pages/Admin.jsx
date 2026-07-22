@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Card, SectionHeader } from '../components/ui'
+import FormCompeticao from '../components/FormCompeticao.jsx'
 
 // Pedaços de 100 MiB: um PUT único do arquivo inteiro estoura a memória da aba (um vídeo de
 // 2 GB matava o processo do Chrome com STATUS_BREAKPOINT).
@@ -34,6 +35,19 @@ export default function Admin() {
   const [taticasPendentes, setTaticasPendentes] = useState(null)
   const [statusUpload, setStatusUpload] = useState({})
   const [videosCurso, setVideosCurso] = useState(null)
+  const [competicoes, setCompeticoes] = useState(null)
+  const [formCompeticaoAberto, setFormCompeticaoAberto] = useState(false)
+  const [competicaoEditando, setCompeticaoEditando] = useState(null)
+
+  function carregarCompeticoes() {
+    fetch('/api/competicoes')
+      .then((r) => r.json())
+      // Achado do review final: sem `agendadas`, uma competicao criada pro futuro
+      // sumia da tela do admin assim que ele fechava o formulario - inclusive pra ele
+      // mesmo editar ou confirmar o que acabou de criar.
+      .then((d) => setCompeticoes([d.ativa, ...d.agendadas, ...d.encerradas].filter(Boolean)))
+      .catch(() => setCompeticoes([]))
+  }
 
   async function enviarVideoCurso(slug, arquivo) {
     const partes = Math.ceil(arquivo.size / TAMANHO_PARTE)
@@ -99,6 +113,7 @@ export default function Admin() {
       .then((r) => r.json())
       .then(setVideosCurso)
       .catch(() => setVideosCurso([]))
+    carregarCompeticoes()
   }, [])
 
   async function revisar(id, status) {
@@ -187,6 +202,44 @@ export default function Admin() {
             </Card>
           ))}
         </div>
+      </div>
+
+      <div className="mt-8 space-y-3">
+        <div className="flex items-center justify-between">
+          <SectionHeader titulo="Competições" />
+          <button
+            onClick={() => { setCompeticaoEditando(null); setFormCompeticaoAberto(true) }}
+            className="panel-cut-sm min-h-10 border border-destaque px-3 font-mono text-xs uppercase text-destaque lg:min-h-0"
+          >
+            Nova competição
+          </button>
+        </div>
+        {competicoes?.length === 0 && (
+          <p className="font-mono text-sm text-texto-fraco">Nenhuma competição cadastrada.</p>
+        )}
+        {competicoes?.map((c) => (
+          <Card key={c.id} className="flex items-center justify-between gap-3 px-3 py-2">
+            <div className="min-w-0">
+              <p className="truncate font-display text-sm font-semibold uppercase text-texto">{c.nome}</p>
+              <p className="font-mono text-[10px] uppercase text-texto-fraco/70">
+                {new Date(c.dataInicio).toLocaleDateString('pt-BR')} – {new Date(c.dataFim).toLocaleDateString('pt-BR')}
+              </p>
+            </div>
+            <button
+              onClick={() => { setCompeticaoEditando(c); setFormCompeticaoAberto(true) }}
+              className="panel-cut-sm min-h-10 shrink-0 border border-borda px-3 py-1 font-mono text-xs uppercase tracking-wide text-texto-fraco hover:border-destaque/50 hover:text-destaque lg:min-h-0"
+            >
+              Editar
+            </button>
+          </Card>
+        ))}
+        {formCompeticaoAberto && (
+          <FormCompeticao
+            inicial={competicaoEditando}
+            onSalvo={() => { setFormCompeticaoAberto(false); carregarCompeticoes() }}
+            onCancelar={() => setFormCompeticaoAberto(false)}
+          />
+        )}
       </div>
     </div>
   )

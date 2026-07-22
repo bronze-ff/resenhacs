@@ -1,0 +1,43 @@
+// site/server/src/backfillPontuacao.js
+// Rodado UMA VEZ pelo controller direto em produção depois da migração 0047 — clipes
+// gerados antes da fórmula por componente (Task 2) ficariam com pontuacao_total null
+// pra sempre, senão. Não é um cron, não roda sozinho. Ver
+// docs/superpowers/specs/2026-07-22-competicoes-clipes-design.md.
+import { calcularPontuacao } from './clipesScore.js'
+
+export async function backfillPontuacao(db) {
+  // allstar_clips guarda match_id/steam_id64/round_number direto (migração 0042) —
+  // nunca usar join (inner) com highlights aqui, ou clipes do fluxo por-jogador
+  // (highlight_id nulo) ficariam pra sempre sem pontuação.
+  const { rows: pendentes } = await db.query(
+    `select id, match_id, steam_id64, round_number
+     from allstar_clips
+     where status = 'Processed' and pontuacao_total is null`,
+  )
+  let atualizados = 0
+  let falhas = 0
+  for (const clipe of pendentes) {
+    try {
+      const { rows: kills } = await db.query(
+        'select weapon, headshot from kill_positions where match_id = $1 and round_number = $2 and killer = $3',
+        [clipe.match_id, clipe.round_number, clipe.steam_id64],
+      )
+      const { rows: highlightRows } = await db.query(
+        "select kind from highlights where match_id = $1 and steam_id64 = $2 and round_number = $3 and kind like 'clutch_%' limit 1",
+        [clipe.match_id, clipe.steam_id64, clipe.round_number],
+      )
+      const clutchKind = highlightRows[0]?.kind ? highlightRows[0].kind.replace('clutch_', '') : null
+      const armasDistintas = new Set(kills.map((k) => k.weapon)).size
+      const headshots = kills.filter((k) => k.headshot).length
+      const resultado = calcularPontuacao({ kills: kills.length, headshots, clutchKind, armasDistintas })
+      await db.query(
+        'update allstar_clips set pontuacao_total = $1, pontuacao_detalhe = $2 where id = $3',
+        [resultado.total, JSON.stringify(resultado), clipe.id],
+      )
+      atualizados += 1
+    } catch {
+      falhas += 1
+    }
+  }
+  return { atualizados, falhas }
+}
