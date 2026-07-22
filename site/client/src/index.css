@@ -24,6 +24,13 @@
   --color-time-b: #4fb6ff;
   --color-sucesso: #24d17e;
   --color-perigo: #ff3b4e;
+
+  /* Medalhas do ranking (posições 1/2/3) — mesmos tons já usados no Ranking, agora nomeados. */
+  --color-ouro: #facc15;
+  --color-prata: #cbd5e1;
+  --color-bronze: #d97706;
+  /* Aviso (ex.: mapa sem calibração de radar) — mesmo tom já usado nos 3 componentes de replay/mapa. */
+  --color-aviso: #fbbf24;
 }
 
 body {
@@ -95,4 +102,25 @@ h1, h2, h3, .font-display {
 }
 .animate-surgir {
   animation: surgir 0.45s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+/* Respeita a preferência do SO por menos movimento — anula qualquer animação/transição/scroll suave do site. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Foco visível por teclado — cobre a maioria dos interativos sem precisar tocar em cada componente. */
+button:not(:disabled):focus-visible,
+a:focus-visible,
+[tabindex]:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--color-destaque);
+  outline-offset: 2px;
+  border-radius: 2px;
 }

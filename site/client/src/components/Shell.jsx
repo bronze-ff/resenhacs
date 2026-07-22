@@ -1,23 +1,38 @@
 import { useEffect, useState } from 'react'
-import { NavLink, useLocation } from 'react-router-dom'
+import { NavLink, useLocation, Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext.jsx'
 
 const CHAVE_SIDEBAR_COLAPSADA = 'resenha_sidebar_colapsada'
 
 const ITENS = [
-  { to: '/', end: true, label: 'Partidas', num: '01', icone: 'partidas' },
-  { to: '/ranking', label: 'Ranking', num: '02', icone: 'ranking' },
-  { to: '/enviar-demo', label: 'Enviar demo', num: '03', icone: 'enviarDemo' },
-  { to: '/jogadores', label: 'Amigos', num: '04', icone: 'jogadores' },
-  { to: '/comparar', label: 'Comparar', num: '05', icone: 'comparar' },
+  { to: '/', end: true, label: 'Partidas', icone: 'partidas' },
+  { to: '/ranking', label: 'Ranking', icone: 'ranking' },
+  { to: '/enviar-demo', label: 'Enviar demo', icone: 'enviarDemo' },
+  { to: '/jogadores', label: 'Amigos', icone: 'jogadores' },
+  { to: '/comparar', label: 'Comparar', icone: 'comparar' },
   // Granadas/Táticas são públicos pra visualização (só criar/editar é admin — cada
   // página já esconde os controles de edição sozinha via isSuperAdmin) — por isso
   // ficam aqui, fora do bloco condicional a isSuperAdmin logo abaixo.
-  { to: '/granadas', label: 'Granadas', num: '06', icone: 'granadas' },
-  { to: '/taticas', label: 'Táticas', num: '07', icone: 'taticas' },
-  { to: '/conta', label: 'Minha conta', num: '08', icone: 'perfil' },
-  { to: '/curso', label: 'Curso de mira', num: '09', icone: 'curso' },
+  { to: '/granadas', label: 'Granadas', icone: 'granadas' },
+  { to: '/taticas', label: 'Táticas', icone: 'taticas' },
+  { to: '/conta', label: 'Minha conta', icone: 'perfil' },
+  { to: '/curso', label: 'Curso de mira', icone: 'curso' },
 ]
+
+// Itens admin-only, numerados em sequência aos de ITENS (ver numerarItem abaixo) —
+// ficam num array separado só porque exigem o gate isSuperAdmin na renderização.
+const ITENS_ADMIN = [
+  { to: '/admin', label: 'Admin', icone: 'admin' },
+  { to: '/partidas-pro', label: 'Partidas pro', icone: 'partidasPro' },
+]
+
+// Deriva o número (2 dígitos) do índice do item na lista combinada, em vez de
+// hardcodear — assim a numeração nunca mais dessincroniza quando um item é
+// adicionado/removido (ex.: a remoção de Grupos/Ranking Público/Times deixou um
+// gap de "09" pra "12" que só existia porque os números eram fixos no JSX).
+function numerarItem(indice) {
+  return String(indice + 1).padStart(2, '0')
+}
 
 // Itens da barra inferior mobile (estilo app da FACEIT): 4 rotas principais
 // + "Mais" que abre o drawer completo (mesmo menu do hambúrguer, agora removido
@@ -176,13 +191,16 @@ export default function Shell({ children }) {
 
   return (
     <div className="flex min-h-screen">
-      {menuAberto && (
-        <div
-          className="fixed inset-0 z-30 bg-fundo/70 lg:hidden"
-          onClick={fecharMenu}
-          aria-hidden="true"
-        />
-      )}
+      {/* Sempre montado (em vez de condicional) pra poder ter transição de saída também —
+          um `menuAberto && (...)` desmonta na hora e o fade fica instantâneo enquanto o
+          painel ao lado desliza suave. duration-200 casa com o duration-200 do <aside>. */}
+      <div
+        className={`fixed inset-0 z-30 bg-fundo/70 transition-opacity duration-200 lg:hidden ${
+          menuAberto ? 'opacity-100' : 'pointer-events-none opacity-0'
+        }`}
+        onClick={fecharMenu}
+        aria-hidden="true"
+      />
       {/* lg:sticky + h-screen: no desktop a sidebar vira uma coluna fixa de altura total,
           então o botão de recolher (no rodapé dela) fica SEMPRE visível sem rolar a página. */}
       <aside
@@ -201,7 +219,7 @@ export default function Shell({ children }) {
           </p>
         </div>
         <nav className="flex-1 overflow-y-auto py-3">
-          {ITENS.map((item) => (
+          {ITENS.map((item, indice) => (
             <NavLink
               key={item.to}
               to={item.to}
@@ -213,35 +231,38 @@ export default function Shell({ children }) {
             >
               <span className="shrink-0">{NAV_ICONES[item.icone]}</span>
               <span className={`font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque ${colapsada ? 'lg:hidden' : ''}`}>
-                {item.num}
+                {numerarItem(indice)}
               </span>
               <span className={colapsada ? 'lg:hidden' : ''}>{item.label}</span>
             </NavLink>
           ))}
           {jogador?.isSuperAdmin && (
             <>
-              <NavLink
-                to="/admin"
-                className={classeItem}
-                onClick={fecharMenu}
-                title={colapsada ? 'Admin' : undefined}
-                aria-label={colapsada ? 'Admin' : undefined}
-              >
-                <span className="shrink-0">{NAV_ICONES.admin}</span>
-                <span className={`font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque ${colapsada ? 'lg:hidden' : ''}`}>12</span>
-                <span className={colapsada ? 'lg:hidden' : ''}>Admin</span>
-              </NavLink>
-              <NavLink
-                to="/partidas-pro"
-                className={classeItem}
-                onClick={fecharMenu}
-                title={colapsada ? 'Partidas pro' : undefined}
-                aria-label={colapsada ? 'Partidas pro' : undefined}
-              >
-                <span className="shrink-0">{NAV_ICONES.partidasPro}</span>
-                <span className={`font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque ${colapsada ? 'lg:hidden' : ''}`}>13</span>
-                <span className={colapsada ? 'lg:hidden' : ''}>Partidas pro</span>
-              </NavLink>
+              {/* Separador visual dos itens admin-only, no mesmo estilo dos outros
+                  rótulos micro do app (font-mono uppercase tracking largo) — a linha
+                  (border-t) fica mesmo com a sidebar colapsada, só o rótulo "Admin"
+                  some (como os demais textos nesse estado). */}
+              <div className={`mx-3 mt-3 border-t border-borda pt-2 ${colapsada ? 'lg:mx-2' : ''}`}>
+                <span className={`block pb-1 font-mono text-[10px] uppercase tracking-[0.2em] text-texto-fraco/60 ${colapsada ? 'lg:hidden' : ''}`}>
+                  Admin
+                </span>
+              </div>
+              {ITENS_ADMIN.map((item, indice) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  className={classeItem}
+                  onClick={fecharMenu}
+                  title={colapsada ? item.label : undefined}
+                  aria-label={colapsada ? item.label : undefined}
+                >
+                  <span className="shrink-0">{NAV_ICONES[item.icone]}</span>
+                  <span className={`font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque ${colapsada ? 'lg:hidden' : ''}`}>
+                    {numerarItem(ITENS.length + indice)}
+                  </span>
+                  <span className={colapsada ? 'lg:hidden' : ''}>{item.label}</span>
+                </NavLink>
+              ))}
             </>
           )}
         </nav>
@@ -272,7 +293,7 @@ export default function Shell({ children }) {
             </h1>
           </div>
           <div className="flex min-w-0 items-center gap-1.5 lg:gap-3">
-            <a href={`/jogador/${jogador?.steamId}`} title="Meu perfil" className="group flex min-w-0 shrink-0 items-center gap-2">
+            <Link to={`/jogador/${jogador?.steamId}`} title="Meu perfil" className="group flex min-w-0 shrink-0 items-center gap-2">
               {jogador?.avatarUrl && (
                 <img
                   src={jogador.avatarUrl}
@@ -281,22 +302,22 @@ export default function Shell({ children }) {
                 />
               )}
               <span className="max-w-[64px] truncate font-mono text-sm text-texto transition-colors group-hover:text-destaque sm:max-w-none">{jogador?.nick}</span>
-            </a>
-            <a
-              href="/apoie"
+            </Link>
+            <Link
+              to="/apoie"
               title="Apoie o Resenha"
               className="panel-cut-sm flex min-h-10 shrink-0 items-center gap-1.5 border border-destaque px-2 py-1 text-xs uppercase tracking-wide text-destaque transition-colors hover:bg-destaque/10 lg:min-h-0 lg:px-2.5"
             >
               <span className="shrink-0 [&>svg]:h-5 [&>svg]:w-5 lg:[&>svg]:h-6 lg:[&>svg]:w-6">{NAV_ICONES.apoie}</span>
               <span className="hidden lg:inline">Apoie</span>
-            </a>
-            <a
-              href="/tour"
+            </Link>
+            <Link
+              to="/tour"
               title="Como usar o Resenha"
               className="panel-cut-sm flex min-h-10 shrink-0 items-center border border-borda px-2 py-1 text-xs uppercase tracking-wide text-texto-fraco transition-colors hover:border-destaque/50 hover:text-destaque lg:min-h-0 lg:px-2.5"
             >
               Ajuda
-            </a>
+            </Link>
             <button
               onClick={sair}
               className="panel-cut-sm min-h-10 shrink-0 border border-borda px-2 py-1 text-xs uppercase tracking-wide text-texto-fraco transition-colors hover:border-perigo/50 hover:text-perigo lg:min-h-0 lg:px-2.5"

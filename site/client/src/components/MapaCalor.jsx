@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { nomeMapa } from '../lib/format.js'
+import { CORES } from '../lib/colors.js'
 import { Select } from './ui'
 
 const TAM = 640
 const RAIO_CLIQUE = 14 // px — distância máxima do clique até um ponto pra considerar "acertou"
+const RAIO_CLIQUE_NORM = RAIO_CLIQUE / TAM // mesmo raio, em coordenadas normalizadas (0..1) — usado pelo cursor de teclado
+const PASSO_TECLADO = 0.02 // ~13px em 640 — avanço por tecla, perto do próprio raio de clique
 
 // Reaproveita as mesmas posições já normalizadas (0..1) que o Replay 2D usa —
 // nenhum dado novo do demo é necessário, só uma leitura diferente do mesmo JSON.
@@ -52,12 +55,12 @@ const COR_GRANADA = { smoke: 'rgba(210,210,215,0.5)', fire: 'rgba(255,110,30,0.5
 const TIPOS_GRANADA = [['', 'Todas'], ['flash', 'Flash'], ['smoke', 'Smoke'], ['he', 'HE'], ['fire', 'Molotov']]
 const LADOS = [['', 'Ambos'], ['CT', 'CT'], ['T', 'T']]
 
-function desenhar(ctx, radar, pontos, cor, modo) {
+function desenhar(ctx, radar, pontos, cor, modo, cursorTeclado) {
   ctx.clearRect(0, 0, TAM, TAM)
   if (radar && radar.complete && radar.naturalWidth > 0) {
     ctx.drawImage(radar, 0, 0, TAM, TAM)
   } else {
-    ctx.fillStyle = '#0a0a0c'
+    ctx.fillStyle = CORES.fundo
     ctx.fillRect(0, 0, TAM, TAM)
   }
   ctx.globalCompositeOperation = 'lighter'
@@ -69,6 +72,16 @@ function desenhar(ctx, radar, pontos, cor, modo) {
     ctx.fill()
   }
   ctx.globalCompositeOperation = 'source-over'
+  // Cursor virtual do teclado — só existe (não-null) depois que o usuário navega com
+  // as setas; some pra quem usa mouse. Anel bem visível, cor de destaque pra não se
+  // confundir com os pontos de dado.
+  if (cursorTeclado) {
+    ctx.strokeStyle = CORES.ouro
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.arc(cursorTeclado.x * TAM, cursorTeclado.y * TAM, RAIO_CLIQUE_NORM * TAM, 0, Math.PI * 2)
+    ctx.stroke()
+  }
 }
 
 export default function MapaCalor({ replay, onSelecionarPonto }) {
@@ -79,6 +92,10 @@ export default function MapaCalor({ replay, onSelecionarPonto }) {
   const [jogadorFiltro, setJogadorFiltro] = useState('')
   const [ladoFiltro, setLadoFiltro] = useState('') // '' | CT | T — só se aplica a mortes/kills
   const [tipoGranadaFiltro, setTipoGranadaFiltro] = useState('') // '' | flash | smoke | he | fire
+  // Cursor virtual de teclado (coords normalizadas 0..1) — null até a 1ª tecla de seta,
+  // pra não aparecer pra quem só usa mouse. Alternativa a11y ao clique no canvas, que
+  // antes só dava pra operar com mouse (achado de acessibilidade "Mapa de Calor 100% mouse").
+  const [cursorTeclado, setCursorTeclado] = useState(null)
 
   const jogadoresIds = useMemo(() => Object.keys(replay.names || {}), [replay])
 
@@ -105,24 +122,55 @@ export default function MapaCalor({ replay, onSelecionarPonto }) {
     const ctx = canvasRef.current?.getContext('2d')
     if (!ctx) return
     const cor = modo === 'mortes' ? 'rgba(229,72,77,0.35)' : 'rgba(255,154,31,0.35)'
-    desenhar(ctx, radarRef.current, pontos, cor, modo)
-  }, [pontos, modo, radarPronto])
+    desenhar(ctx, radarRef.current, pontos, cor, modo, cursorTeclado)
+  }, [pontos, modo, radarPronto, cursorTeclado])
+
+  // Ponto mais próximo de (x, y) — coords normalizadas 0..1 — dentro do raio de clique.
+  // Compartilhado pelo clique de mouse e pela confirmação (Enter) do cursor de teclado,
+  // pra não duplicar a mesma busca por distância duas vezes.
+  function selecionarPontoProximo(x, y) {
+    if (!onSelecionarPonto) return
+    let maisPerto = null
+    let menorDist = RAIO_CLIQUE_NORM
+    for (const p of pontos) {
+      const dist = Math.hypot(p.x - x, p.y - y)
+      if (dist < menorDist) {
+        menorDist = dist
+        maisPerto = p
+      }
+    }
+    if (maisPerto) onSelecionarPonto({ round: maisPerto.round, frame: maisPerto.frame })
+  }
 
   function aoClicarCanvas(e) {
     if (!interativo || !onSelecionarPonto) return
     const rect = canvasRef.current.getBoundingClientRect()
-    const cx = ((e.clientX - rect.left) / rect.width) * TAM
-    const cy = ((e.clientY - rect.top) / rect.height) * TAM
-    let mais_perto = null
-    let menor_dist = RAIO_CLIQUE
-    for (const p of pontos) {
-      const dist = Math.hypot(p.x * TAM - cx, p.y * TAM - cy)
-      if (dist < menor_dist) {
-        menor_dist = dist
-        mais_perto = p
-      }
+    selecionarPontoProximo((e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height)
+  }
+
+  // Setas movem um cursor virtual pelo canvas (surge no centro na 1ª tecla); Enter/Espaço
+  // confirma o ponto mais próximo, igual ao clique de mouse. Home recentraliza rápido
+  // caso o cursor "se perca" fora da área visível.
+  function aoTeclarCanvas(e) {
+    if (!interativo || !onSelecionarPonto) return
+    const atual = cursorTeclado ?? { x: 0.5, y: 0.5 }
+    switch (e.key) {
+      case 'ArrowLeft':
+        e.preventDefault(); setCursorTeclado({ x: Math.max(0, atual.x - PASSO_TECLADO), y: atual.y }); break
+      case 'ArrowRight':
+        e.preventDefault(); setCursorTeclado({ x: Math.min(1, atual.x + PASSO_TECLADO), y: atual.y }); break
+      case 'ArrowUp':
+        e.preventDefault(); setCursorTeclado({ x: atual.x, y: Math.max(0, atual.y - PASSO_TECLADO) }); break
+      case 'ArrowDown':
+        e.preventDefault(); setCursorTeclado({ x: atual.x, y: Math.min(1, atual.y + PASSO_TECLADO) }); break
+      case 'Home':
+        e.preventDefault(); setCursorTeclado({ x: 0.5, y: 0.5 }); break
+      case 'Enter':
+      case ' ':
+        e.preventDefault(); selecionarPontoProximo(atual.x, atual.y); break
+      default:
+        break
     }
-    if (mais_perto) onSelecionarPonto({ round: mais_perto.round, frame: mais_perto.frame })
   }
 
   return (
@@ -173,10 +221,14 @@ export default function MapaCalor({ replay, onSelecionarPonto }) {
           </div>
         )}
         <span className="font-mono text-xs text-texto-fraco">{pontos.length} pontos</span>
-        {interativo && <span className="font-mono text-xs text-texto-fraco">· clique num ponto pra assistir no Replay 2D</span>}
+        {interativo && (
+          <span className="font-mono text-xs text-texto-fraco">
+            · clique num ponto (ou navegue com as setas do teclado + Enter) pra assistir no Replay 2D
+          </span>
+        )}
       </div>
       {!replay.calibrated && (
-        <p className="font-mono text-xs uppercase tracking-wide text-amber-400">
+        <p className="font-mono text-xs uppercase tracking-wide" style={{ color: CORES.aviso }}>
           Mapa sem calibração de radar — posições em coordenadas cruas.
         </p>
       )}
@@ -184,9 +236,11 @@ export default function MapaCalor({ replay, onSelecionarPonto }) {
         ref={canvasRef}
         width={TAM}
         height={TAM}
+        tabIndex={interativo && onSelecionarPonto ? 0 : undefined}
         onClick={aoClicarCanvas}
+        onKeyDown={aoTeclarCanvas}
         className={`panel-cut mx-auto block w-full max-w-[640px] border border-borda ${interativo ? 'cursor-pointer' : ''}`}
-        aria-label={`Mapa de calor de ${nomeMapa(replay.map)}`}
+        aria-label={`Mapa de calor de ${nomeMapa(replay.map)}. Use as setas do teclado pra mover o cursor e Enter pra selecionar o ponto mais próximo.`}
       />
     </div>
   )

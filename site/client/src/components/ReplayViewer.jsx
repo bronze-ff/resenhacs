@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { frameIndexAt, duracaoSegundos } from '../lib/replayEngine.js'
 import { nomeMapa, nomeArma, categoriaArma } from '../lib/format.js'
+import { CORES } from '../lib/colors.js'
 import { Select } from './ui'
 
 const TAM = 640 // lado do canvas em px
@@ -8,7 +9,7 @@ const TAM = 640 // lado do canvas em px
 // verdade CT é sempre azul e T sempre laranja, trocando no intervalo; usar o time fixo
 // (como Economia/Scoreboard fazem, de propósito, pra somar stats da partida inteira)
 // deixava o radar tático "errado" aos olhos de quem tá acostumado com o HUD do CS2.
-const COR_LADO = { CT: '#4fb6ff', T: '#f5a524' }
+const COR_LADO = { CT: CORES.timeB, T: CORES.timeA }
 
 // Lado (CT/T) de um jogador num tick específico do round — usado pro kill feed, que só
 // tem o id do killer/vítima e o tick do kill, não o objeto do frame já resolvido.
@@ -142,7 +143,7 @@ function desenharFrame(ctx, round, f, radar, replay, aoCarregarIcone) {
   if (radar && radar.complete && radar.naturalWidth > 0) {
     ctx.drawImage(radar, 0, 0, TAM, TAM)
   } else {
-    ctx.fillStyle = '#0a0a0c'
+    ctx.fillStyle = CORES.fundo
     ctx.fillRect(0, 0, TAM, TAM)
     ctx.strokeStyle = '#262f3d'
     ctx.lineWidth = 1
@@ -201,7 +202,7 @@ function desenharFrame(ctx, round, f, radar, replay, aoCarregarIcone) {
 
     // clutcher: anel dourado
     if (p.id === clutcher && p.alive) {
-      ctx.strokeStyle = '#facc15'; ctx.lineWidth = 2.5
+      ctx.strokeStyle = CORES.ouro; ctx.lineWidth = 2.5
       ctx.beginPath(); ctx.arc(cx, cy, 10, 0, Math.PI * 2); ctx.stroke()
     }
     // cego: anel branco
@@ -226,7 +227,7 @@ function desenharFrame(ctx, round, f, radar, replay, aoCarregarIcone) {
     }
     // portador da bomba: quadradinho laranja ao lado
     if (p.id === carrier && p.alive) {
-      ctx.fillStyle = '#f5a524'
+      ctx.fillStyle = CORES.timeA
       ctx.fillRect(cx + 6, cy - 3, 6, 6)
     }
     // nick (+ estrela se clutcher, + hp se baixo)
@@ -346,7 +347,7 @@ export default function ReplayViewer({ replay, seek }) {
   return (
     <div className="space-y-3">
       {!replay.calibrated && (
-        <p className="font-mono text-xs uppercase tracking-wide text-amber-400">
+        <p className="font-mono text-xs uppercase tracking-wide" style={{ color: CORES.aviso }}>
           Mapa sem calibração de radar — posições em coordenadas cruas (adicione a calibração no Coletor).
         </p>
       )}

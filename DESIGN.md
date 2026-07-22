@@ -8,6 +8,10 @@ colors:
   time-b-azul: "#4fb6ff"
   sucesso-verde: "#24d17e"
   perigo-vermelho: "#ff3b4e"
+  ranking-ouro: "#facc15"
+  ranking-prata: "#cbd5e1"
+  ranking-bronze: "#d97706"
+  aviso-ambar: "#fbbf24"
   fundo-quase-preto: "#0a0a0c"
   superficie: "#141419"
   superficie-alta: "#1d1d24"
@@ -99,6 +103,12 @@ e dois semânticos (sucesso/perigo) reservados só pra julgamento de performance
 - **Verde de Sucesso** (`#24d17e`) / **Vermelho de Perigo** (`#ff3b4e`): julgamento de bom/ruim — rating acima/
   abaixo de 1.0, vitória/derrota, fogo amigo. Reservados exclusivamente pra esse julgamento; nunca usados como
   decoração ou pra identificar time.
+
+### Quaternary
+- **Ouro / Prata / Bronze** (`#facc15` / `#cbd5e1` / `#d97706`): identificam as 3 primeiras posições do ranking —
+  mesmos tons já usados no componente de Ranking, agora nomeados como token em vez de classe Tailwind solta.
+- **Aviso** (`#fbbf24`): aviso não-crítico (ex.: mapa sem calibração de radar) — mesmo tom já usado nos textos de
+  aviso do Replay 2D/Posicionamento Agregado/Mapa de Calor, agora nomeado como token.
 
 ### Neutral
 - **Fundo** (`#0a0a0c`): quase preto, fundo de página inteira.
@@ -234,3 +244,49 @@ explícito (modal fullscreen mobile, onde o corte exporia o backdrop).
   tipo de estado; hairline é a escolha já feita.
 - **Don't** deixar um dado de julgamento (bom/ruim) depender só da cor — sempre par com ícone/seta/peso.
 - **Don't** parecer "projeto de fim de semana" — é a única anti-referência explícita do produto (PRODUCT.md).
+
+## 7. Motion
+
+Não existia seção de motion até agora — e essa lacuna é a causa raiz provável da inconsistência de duração/
+easing encontrada em outras partes desta auditoria: sem um padrão documentado, cada componente escolheu (ou
+não escolheu) um valor por conta própria. Motion aqui é reforço de interação, não linguagem própria — controlado,
+funcional, quase invisível quando bem feito.
+
+### Duration
+- **Padrão: `duration-200` (200ms)** pra qualquer transição de interação — hover, foco, abertura/fechamento de
+  painel. Já é o valor explícito usado no hover do Card (`Card.jsx`), no drawer mobile do Shell
+  (`transition-opacity duration-200` / `transition-[transform,width] duration-200`), e nas linhas clicáveis de
+  Ranking, Comparar e JogadorPerfil. **A Regra dos 200ms**: toda transição nova declara `duration-200`
+  explicitamente — nunca depender do default implícito do Tailwind (150ms) nem inventar um terceiro valor.
+- **Exceção — entrada de flutuantes** (ver abaixo): usa uma duração mais curta, porque é aparição pontual, não
+  uma transição hover contínua.
+
+### Easing
+- **Padrão: a curva default do Tailwind** (`cubic-bezier(0.4, 0, 0.2, 1)`), já embutida em toda classe
+  `transition-*` sem precisar de `ease-*` explícito — nenhum componente do site hoje sobrescreve isso, então é,
+  na prática, a única curva usada no produto. **Não** adicionar `ease-linear`/`ease-in`/`ease-out` a menos que
+  exista um motivo documentado; o default já é o padrão.
+
+### prefers-reduced-motion
+Já implementado globalmente em `index.css` (`@media (prefers-reduced-motion: reduce)` zera `animation-duration`,
+`transition-duration` e `scroll-behavior` pra `*`, `*::before`, `*::after`). Componente novo **não** precisa
+reimplementar isso individualmente — é regra de sistema aplicada uma vez, mesma lógica da Regra do Mono
+Automático em Typography (seção 3).
+
+### Entrada de flutuantes
+Todo elemento que carrega a sombra "Flutuante" (seção 4 — modal, popover, tooltip, dropdown aberto) precisa de
+uma transição de entrada: fade e, quando fizer sentido, um scale/translate pequeno (ver `animate-surgir` em
+`index.css` como referência de forma, ainda que a duração dele — 450ms — seja pensada pra revelar conteúdo de
+página, não pra um flutuante). Aparecer/desaparecer sem transição nenhuma quebra a mesma promessa da sombra:
+comunicar que aquilo está temporariamente por cima do resto da tela.
+- **Duração:** mais curta que o padrão de interação — 120-150ms, a mesma faixa já usada implicitamente no resto
+  do site pelo default do Tailwind — rápido o bastante pra não atrasar a interação, perceptível o bastante pra
+  não parecer instantâneo/quebrado.
+- **Saída:** se o elemento já sai do DOM ao fechar (padrão atual do site), não precisa de animação de saída, só
+  de entrada.
+- **Gap atual:** o painel de opções do Select (`Select.jsx`) hoje aparece sem transição nenhuma — é exatamente
+  o tipo de caso que essa regra deveria cobrir daqui pra frente.
+
+### Named Rules
+**A Regra do Movimento Funcional.** Se uma transição ou animação não comunica hover, foco, abertura, ou entrada
+de um flutuante, ela provavelmente não deveria existir — motion aqui é reforço de interação, não coreografia.
