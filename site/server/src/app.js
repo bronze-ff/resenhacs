@@ -8,6 +8,7 @@ import { createFaceitRouter } from './routes/faceit.js'
 import { createMatchesRouter } from './routes/matches.js'
 import { createProfileRouter } from './routes/profile.js'
 import { createClipsRouter } from './routes/clips.js'
+import { createClipesRouter } from './routes/clipes.js'
 import { createRankingRouter } from './routes/ranking.js'
 import { createSessionsRouter } from './routes/sessions.js'
 import { createRecordesRouter } from './routes/recordes.js'
@@ -85,6 +86,7 @@ export function createApp({
   app.use('/api/matches', createMatchesRouter({ db, requireAuth, r2Client, r2Bucket: config.r2Bucket, config }))
   app.use('/api/profile', createProfileRouter({ db, requireAuth }))
   app.use('/api/clips', createClipsRouter({ db, requireAuth }))
+  app.use('/api/clipes', createClipesRouter({ db, requireAuth }))
   app.use('/api/ranking', createRankingRouter({ db, requireAuth }))
   app.use('/api/sessions', createSessionsRouter({ db, requireAuth }))
   app.use('/api/recordes', createRecordesRouter({ db, requireAuth }))
