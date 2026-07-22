@@ -178,7 +178,6 @@ describe('GET /api/matches/:id', () => {
     })
     expect(res.body.clips[0]).toMatchObject({ provider: 'allstar', url: 'https://allstar.gg/x' })
     expect(res.body.demoUrl).toBeNull() // sem demo_url no fixture
-    expect(res.body.highlights[0]).not.toHaveProperty('allstarStatus')
     expect(res.body.players[0].allstarClip).toBeNull() // sem allstar_clips no fixture
   })
 

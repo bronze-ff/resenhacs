@@ -7,9 +7,8 @@ describe('backfillPontuacao', () => {
     const gravados = []
     const db = {
       query: vi.fn().mockImplementation((sql, params) => {
-        // allstar_clips não guarda match_id/steam_id64/round_number direto (só
-        // highlight_id) — a query real junta com highlights pra pegar esses campos.
-        if (sql.includes('from allstar_clips ac') && sql.includes('join highlights h')) {
+        // allstar_clips guarda match_id/steam_id64/round_number direto (migração 0042).
+        if (sql.includes('from allstar_clips') && sql.includes('pontuacao_total is null')) {
           return Promise.resolve({ rows: [
             { id: 'c1', match_id: 'm1', steam_id64: '765', round_number: 5 },
           ] })
@@ -40,7 +39,7 @@ describe('backfillPontuacao', () => {
   it('erro num clipe nao derruba os outros', async () => {
     const db = {
       query: vi.fn().mockImplementation((sql, params) => {
-        if (sql.includes('from allstar_clips ac') && sql.includes('join highlights h')) {
+        if (sql.includes('from allstar_clips') && sql.includes('pontuacao_total is null')) {
           return Promise.resolve({ rows: [
             { id: 'c1', match_id: 'm1', steam_id64: '765', round_number: 5 },
             { id: 'c2', match_id: 'm2', steam_id64: '999', round_number: 3 },

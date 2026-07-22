@@ -29,17 +29,17 @@ function mapCompeticao(c) {
 
 // Leaderboard isolado por competição (Global Constraint do plano: nunca agregado entre
 // competições nem na aba Clipes) — soma pontuacao_total das submissões só daquela
-// competicao_id. `allstar_clips` não guarda match_id/steam_id64 direto (só
-// highlight_id), então o join com match_players precisa passar por `highlights`
-// primeiro, mesmo padrão já usado em routes/clipes.js e routes/allstar.js.
+// competicao_id. allstar_clips guarda match_id/steam_id64 direto (migração 0042 —
+// clipe virou "por jogador+partida"); highlight_id fica nullable pros clipes desse
+// fluxo novo, então NUNCA usar join (inner) com highlights aqui, ou todo clipe novo
+// desapareceria do leaderboard.
 async function buscarLeaderboard(db, competicaoId, minimoParaRankear) {
   const { rows } = await db.query(
     `select cs.steam_id64, coalesce(p.nick, mp.nick) as nick, coalesce(p.avatar_url, sa.avatar_url) as avatar_url,
             sum(ac.pontuacao_total) as total, count(*) as qtd, max(cs.enviado_em) as ultimo_envio
      from competicao_submissoes cs join allstar_clips ac on ac.id = cs.allstar_clip_id
-     join highlights h on h.id = ac.highlight_id
      left join players p on p.steam_id64 = cs.steam_id64
-     left join match_players mp on mp.match_id = h.match_id and mp.steam_id64 = cs.steam_id64
+     left join match_players mp on mp.match_id = ac.match_id and mp.steam_id64 = cs.steam_id64
      left join steam_avatares sa on sa.steam_id64 = cs.steam_id64
      where cs.competicao_id = $1
      group by cs.steam_id64, p.nick, mp.nick, p.avatar_url, sa.avatar_url`,
@@ -73,8 +73,8 @@ async function calcularOuLerVencedor(db, comp) {
 // Clipes enviados recentemente pra competição (Task 12) — separado do leaderboard
 // porque mostra a atividade recente independente de qualificação, sem agregar nada
 // entre competições (mesma regra global: leaderboard/atividade sempre por competicao_id).
-// `allstar_clips` não guarda match_id direto (só highlight_id) — junta com `highlights`,
-// mesmo padrão já usado em buscarLeaderboard acima e em routes/clipes.js.
+// allstar_clips guarda match_id direto (migração 0042) — nunca usar join (inner) com
+// highlights aqui, mesma razão de buscarLeaderboard acima.
 async function buscarClipesRecentes(db, competicaoId) {
   const { rows } = await db.query(
     `select ac.id, ac.clip_url, ac.clip_snapshot_url, ac.pontuacao_total, ac.pontuacao_detalhe,
@@ -82,9 +82,8 @@ async function buscarClipesRecentes(db, competicaoId) {
             cs.enviado_em
      from competicao_submissoes cs
      join allstar_clips ac on ac.id = cs.allstar_clip_id
-     join highlights h on h.id = ac.highlight_id
      left join players p on p.steam_id64 = cs.steam_id64
-     left join match_players mp on mp.match_id = h.match_id and mp.steam_id64 = cs.steam_id64
+     left join match_players mp on mp.match_id = ac.match_id and mp.steam_id64 = cs.steam_id64
      left join steam_avatares sa on sa.steam_id64 = cs.steam_id64
      where cs.competicao_id = $1
      order by cs.enviado_em desc
@@ -208,17 +207,16 @@ export function createCompeticoesRouter({ db, requireAuth }) {
     )
     if (!compRows.length) return res.status(404).json({ erro: 'competição não encontrada' })
     const comp = compRows[0]
-    // allstar_clips não guarda match_id/steam_id64/round_number direto (só
-    // highlight_id) — junta com highlights e matches, mesmo padrão já usado em
-    // routes/allstar.js, routes/clipes.js e backfillPontuacao.js.
+    // allstar_clips guarda match_id/steam_id64/round_number direto (migração 0042) —
+    // nunca usar join (inner) com highlights aqui, ou clipes gerados pelo fluxo novo
+    // (highlight_id nulo) sumiriam da lista de elegíveis.
     const { rows } = await db.query(
-      `select ac.id, h.match_id, h.round_number, ac.pontuacao_total, ac.pontuacao_detalhe,
+      `select ac.id, ac.match_id, ac.round_number, ac.pontuacao_total, ac.pontuacao_detalhe,
               m.map,
               exists (select 1 from competicao_submissoes cs where cs.competicao_id = $1 and cs.allstar_clip_id = ac.id) as ja_enviado
        from allstar_clips ac
-       join highlights h on h.id = ac.highlight_id
-       join matches m on m.id = h.match_id
-       where h.steam_id64 = $2 and ac.status = 'Processed'
+       join matches m on m.id = ac.match_id
+       where ac.steam_id64 = $2 and ac.status = 'Processed'
          and m.played_at >= $3 and m.played_at <= $4
        order by m.played_at desc`,
       [comp.id, req.player.steamId, comp.data_inicio, comp.data_fim],
@@ -243,15 +241,15 @@ export function createCompeticoesRouter({ db, requireAuth }) {
     const comp = compRows[0]
     if (new Date() > new Date(comp.data_fim)) return res.status(400).json({ erro: 'essa competição já encerrou' })
 
-    // #5 da auditoria (IDOR): só aceita clipe cujo steam_id64 (via highlights —
-    // allstar_clips não guarda direto) é o do próprio req.player — nunca confia num
-    // allstarClipId de outro jogador só porque o body mandou o id.
+    // #5 da auditoria (IDOR): só aceita clipe cujo steam_id64 (direto em allstar_clips,
+    // migração 0042 — nunca via join inner com highlights, que excluiria clipes do
+    // fluxo novo) é o do próprio req.player — nunca confia num allstarClipId de outro
+    // jogador só porque o body mandou o id.
     const { rows: clipRows } = await db.query(
-      `select ac.id, h.steam_id64, ac.status, m.played_at
+      `select ac.id, ac.steam_id64, ac.status, m.played_at
        from allstar_clips ac
-       join highlights h on h.id = ac.highlight_id
-       join matches m on m.id = h.match_id
-       where ac.id = $1 and h.steam_id64 = $2 and ac.status = 'Processed'`,
+       join matches m on m.id = ac.match_id
+       where ac.id = $1 and ac.steam_id64 = $2 and ac.status = 'Processed'`,
       [allstarClipId, req.player.steamId],
     )
     if (!clipRows.length) return res.status(404).json({ erro: 'clipe não encontrado' })

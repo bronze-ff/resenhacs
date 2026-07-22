@@ -200,6 +200,24 @@ describe('GET /api/competicoes/:id/elegiveis', () => {
     const [sql, params] = db.query.mock.calls.find(([s]) => s.includes('from allstar_clips ac'))
     expect(params).toContain('765') // steamId do cookie, nunca outro
   })
+
+  it('nao faz join (inner) com highlights - clipe do fluxo por-jogador (highlight_id nulo) nao pode sumir', async () => {
+    // Regressao: allstar_clips guarda match_id/steam_id64/round_number direto desde a
+    // migracao 0042 (clipe virou "por jogador+partida"). Um `join highlights h on h.id
+    // = ac.highlight_id` excluiria silenciosamente todo clipe gerado por esse fluxo
+    // (highlight_id fica nulo pra eles) - ja foi um bug real aqui.
+    const { app, db } = appWith([
+      ['from competicoes where id', [{ id: 'comp1', data_inicio: '2026-07-23T00:00:00Z', data_fim: '2026-07-30T00:00:00Z' }]],
+      ['from allstar_clips ac', [
+        { id: 'clip1', match_id: 'm1', round_number: null, map: 'de_dust2', pontuacao_total: 100, ja_enviado: false },
+      ]],
+    ])
+    const res = await request(app).get(`/api/competicoes/${'a'.repeat(8)}-${'a'.repeat(4)}-${'a'.repeat(4)}-${'a'.repeat(4)}-${'a'.repeat(12)}/elegiveis`).set('Cookie', cookieJogador)
+    expect(res.status).toBe(200)
+    expect(res.body[0].allstarClipId).toBe('clip1')
+    const [sql] = db.query.mock.calls.find(([s]) => s.includes('from allstar_clips ac'))
+    expect(sql).not.toContain('join highlights')
+  })
 })
 
 describe('POST /api/competicoes/:id/submissoes', () => {
@@ -239,6 +257,11 @@ describe('POST /api/competicoes/:id/submissoes', () => {
     const res = await request(app).post(`/api/competicoes/${COMP_ID}/submissoes`).set('Cookie', cookieJogador).send({ allstarClipId: CLIP_ID })
     expect(res.status).toBe(200)
     expect(gravados).toHaveLength(1)
+    // Regressao: allstar_clips.steam_id64 e verificado direto (migracao 0042) - um
+    // join (inner) com highlights aqui rejeitaria/404 clipes legitimos do fluxo
+    // por-jogador (highlight_id nulo), quebrando o check de ownership pra eles.
+    const [sql] = db.query.mock.calls.find(([s]) => s.includes('from allstar_clips ac'))
+    expect(sql).not.toContain('join highlights')
   })
 
   it('limite diario ja atingido: 400', async () => {

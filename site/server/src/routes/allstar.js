@@ -57,16 +57,15 @@ export function createAllstarRouter({ db, config }) {
     // Pontuação nova (docs/superpowers/specs/2026-07-22-competicoes-clipes-design.md)
     // calculada UMA VEZ aqui, quando o clipe vira Processed, e gravada em
     // allstar_clips — nem `clipes.js` nem `competicoes.js` recalculam depois.
-    // `allstar_clips` não guarda match_id/steam_id64/round_number direto (só
-    // highlight_id) — busca via highlights, mesmo join já usado em matches.js.
+    // allstar_clips guarda match_id/steam_id64/round_number direto (migração 0042 —
+    // clipe virou "por jogador+partida", ver allstarClip.js) — highlight_id fica
+    // nullable pros clipes gerados por esse fluxo novo, então NUNCA usar join (inner)
+    // com highlights pra achar esses campos, ou todo clipe novo sumiria da pontuação.
     let pontuacaoTotal = null
     let pontuacaoDetalhe = null
     if (status === 'Processed') {
       const { rows: clipRows } = await db.query(
-        `select h.match_id, h.steam_id64, h.round_number
-         from allstar_clips ac
-         join highlights h on h.id = ac.highlight_id
-         where ac.request_id = $1`,
+        'select match_id, steam_id64, round_number from allstar_clips where request_id = $1',
         [requestId],
       )
       const clip = clipRows[0]
