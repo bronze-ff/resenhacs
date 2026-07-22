@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import { nomeMapa } from '../lib/format.js'
-import { CORES } from '../lib/colors.js'
 import { Select } from './ui'
 
 const TAM = 480
@@ -10,7 +9,7 @@ function desenhar(ctx, radar, pontos, cor) {
   if (radar && radar.complete && radar.naturalWidth > 0) {
     ctx.drawImage(radar, 0, 0, TAM, TAM)
   } else {
-    ctx.fillStyle = CORES.fundo
+    ctx.fillStyle = '#0a0a0c'
     ctx.fillRect(0, 0, TAM, TAM)
   }
   ctx.globalCompositeOperation = 'lighter'
@@ -92,7 +91,7 @@ export default function PosicionamentoAgregado({ steamId }) {
         {dados && <span className="font-mono text-xs text-texto-fraco">{dados.pontos.length} pontos</span>}
       </div>
       {dados && !dados.calibrated && (
-        <p className="font-mono text-xs uppercase tracking-wide" style={{ color: CORES.aviso }}>
+        <p className="font-mono text-xs uppercase tracking-wide text-amber-400">
           Mapa sem calibração de radar — sem preview visual ainda.
         </p>
       )}
