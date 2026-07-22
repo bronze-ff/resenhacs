@@ -8,6 +8,7 @@ const ITENS = [
   { to: '/', end: true, label: 'Partidas', icone: 'partidas' },
   { to: '/ranking', label: 'Ranking', icone: 'ranking' },
   { to: '/enviar-demo', label: 'Enviar demo', icone: 'enviarDemo' },
+  { to: '/clipes', label: 'Clipes', icone: 'clipes' },
   { to: '/competicoes', label: 'Competições', icone: 'competicoes' },
   { to: '/jogadores', label: 'Amigos', icone: 'jogadores' },
   { to: '/comparar', label: 'Comparar', icone: 'comparar' },
@@ -79,6 +80,12 @@ const NAV_ICONES = {
       <path d="M12 3v12" />
       <path d="M7 8L12 3L17 8" />
       <path d="M4 15V19C4 20.1046 4.89543 21 6 21H18C19.1046 21 20 20.1046 20 19V15" />
+    </svg>
+  ),
+  clipes: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
+      <rect x="3" y="5" width="18" height="14" rx="1" />
+      <path d="M9 9L15 12L9 15V9Z" fill="currentColor" stroke="none" />
     </svg>
   ),
   competicoes: (
