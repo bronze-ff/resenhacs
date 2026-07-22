@@ -5,6 +5,7 @@ import { orientarPlacar } from '../lib/resultado.js'
 import { Avatar, MapIcon, SectionHeader, Select, ResultChip, PlataformaBadge, SteamIcon } from '../components/ui'
 import ReplayViewer from '../components/ReplayViewer.jsx'
 import MapaCalor from '../components/MapaCalor.jsx'
+import SeletorClipesCompeticao from '../components/SeletorClipesCompeticao.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
 
 // Placeholder de um round ainda não baixado (streaming por round — FIL-54b): mesmo
@@ -1033,6 +1034,10 @@ export default function Partida() {
   const [clipeAllstarAberto, setClipeAllstarAberto] = useState(null)
   const [pedindoClipe, setPedindoClipe] = useState(null) // id do highlight com pedido em voo
   const [erroClipe, setErroClipe] = useState(null)
+  // Atalho "Enviar pra competição →" na aba Clipes: só aparece quando existe uma
+  // competição ativa e a partida caiu dentro do período dela (ver JSX da aba Clipes).
+  const [competicaoAtiva, setCompeticaoAtiva] = useState(null)
+  const [seletorCompeticaoAberto, setSeletorCompeticaoAberto] = useState(false)
 
   // SOB DEMANDA: só chama o Allstar quando o jogador clica — nada automático. Restrito
   // a uma allowlist do lado do servidor; 403 pra quem não tá nela vira mensagem de erro.
@@ -1107,6 +1112,15 @@ export default function Partida() {
     carregar()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
+
+  // Busca uma vez (independe da partida) só pra saber se há competição ativa e qual o
+  // período dela — decide se o atalho "Enviar pra competição →" aparece na aba Clipes.
+  useEffect(() => {
+    fetch('/api/competicoes')
+      .then((res) => (res.ok ? res.json() : { ativa: null }))
+      .then((d) => setCompeticaoAtiva(d.ativa))
+      .catch(() => setCompeticaoAtiva(null))
+  }, [])
 
   useEffect(() => {
     if (ladoFiltro === 'all') { setStatsLado(null); return }
@@ -1350,6 +1364,14 @@ export default function Partida() {
           {(() => {
             const comAllstar = m.highlights.filter((h) => h.allstarClipUrl || h.allstarStatus)
             if (comAllstar.length === 0) return null
+            // Atalho "Enviar pra competição →": só quando existe competição ativa e essa
+            // partida caiu dentro do período dela (mesma checagem que o servidor faz em
+            // GET /api/competicoes/:id/elegiveis — aqui é só pra decidir se o botão aparece).
+            const podeEnviarParaCompeticao = Boolean(
+              competicaoAtiva && m.playedAt &&
+              new Date(m.playedAt) >= new Date(competicaoAtiva.dataInicio) &&
+              new Date(m.playedAt) <= new Date(competicaoAtiva.dataFim),
+            )
             return (
               <div>
                 <SectionHeader titulo="Clipes reais (Allstar)" className="mb-2" />
@@ -1363,12 +1385,22 @@ export default function Partida() {
                           <span className="text-texto-fraco">round {h.roundNumber}</span>
                         </span>
                         {h.allstarClipUrl ? (
-                          <button
-                            onClick={() => setClipeAllstarAberto(clipeAllstarAberto === h.id ? null : h.id)}
-                            className="panel-cut-sm border border-destaque/60 bg-destaque/10 px-2 py-1 font-mono text-xs uppercase text-destaque transition-colors hover:bg-destaque/20"
-                          >
-                            {clipeAllstarAberto === h.id ? 'fechar' : '▶ assistir'}
-                          </button>
+                          <span className="flex items-center gap-3">
+                            <button
+                              onClick={() => setClipeAllstarAberto(clipeAllstarAberto === h.id ? null : h.id)}
+                              className="panel-cut-sm border border-destaque/60 bg-destaque/10 px-2 py-1 font-mono text-xs uppercase text-destaque transition-colors hover:bg-destaque/20"
+                            >
+                              {clipeAllstarAberto === h.id ? 'fechar' : '▶ assistir'}
+                            </button>
+                            {podeEnviarParaCompeticao && (
+                              <button
+                                onClick={() => setSeletorCompeticaoAberto(true)}
+                                className="font-mono text-xs uppercase text-texto-fraco underline hover:text-destaque"
+                              >
+                                Enviar pra competição →
+                              </button>
+                            )}
+                          </span>
                         ) : (
                           <span className="font-mono text-xs text-texto-fraco">gerando…</span>
                         )}
@@ -1409,6 +1441,13 @@ export default function Partida() {
             <FormClipe matchId={m.id} jogadores={m.players} onAdicionado={carregar} />
           </div>
         </section>
+      )}
+      {seletorCompeticaoAberto && competicaoAtiva && (
+        <SeletorClipesCompeticao
+          competicaoId={competicaoAtiva.id}
+          onFechar={() => setSeletorCompeticaoAberto(false)}
+          onEnviado={() => setSeletorCompeticaoAberto(false)}
+        />
       )}
     </div>
   )

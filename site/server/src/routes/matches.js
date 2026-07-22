@@ -174,7 +174,7 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
       ),
       db.query(
         `select h.id, h.steam_id64, h.round_number, h.kind, h.description, h.frame, mp.nick,
-                ac.status as allstar_status, ac.clip_url as allstar_clip_url
+                ac.id as allstar_clip_id, ac.status as allstar_status, ac.clip_url as allstar_clip_url
          from highlights h
          left join match_players mp on mp.match_id = h.match_id and mp.steam_id64 = h.steam_id64
          left join allstar_clips ac on ac.highlight_id = h.id
@@ -284,6 +284,10 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
         // confirmou "Processed"; "Submitted" mostra "gerando" na UI, sem link ainda.
         allstarStatus: h.allstar_status,
         allstarClipUrl: h.allstar_status === 'Processed' ? h.allstar_clip_url : null,
+        // allstar_clips.id (não confundir com o id do highlight acima) — usado pelo
+        // atalho "Enviar pra competição →" da aba Clipes de Partida.jsx pra saber qual
+        // allstarClipId mandar pro POST /api/competicoes/:id/submissoes.
+        allstarClipId: h.allstar_status === 'Processed' ? h.allstar_clip_id : null,
       })),
       clips: clips.rows.map((c) => ({
         id: c.id,
