@@ -113,7 +113,7 @@ export default function Admin() {
   }
 
   return (
-    <div className="max-w-md">
+    <div className="max-w-md space-y-6">
       <SectionHeader titulo="Admin" />
       <form onSubmit={adicionar} className="space-y-3">
         <label className="block font-mono text-xs uppercase tracking-wide text-texto-fraco" htmlFor="steamId">
@@ -133,9 +133,9 @@ export default function Admin() {
           Adicionar à whitelist
         </button>
       </form>
-      {mensagem && <p className="mt-3 font-mono text-sm text-texto-fraco">{mensagem}</p>}
+      {mensagem && <p className="font-mono text-sm text-texto-fraco">{mensagem}</p>}
 
-      <div className="mt-8 space-y-3">
+      <div className="space-y-3">
         <SectionHeader titulo="Táticas pendentes" />
         {taticasPendentes?.length === 0 && (
           <p className="font-mono text-sm text-texto-fraco">Nenhuma tática aguardando revisão.</p>
@@ -163,7 +163,7 @@ export default function Admin() {
         ))}
       </div>
 
-      <div className="mt-8 space-y-3">
+      <div className="space-y-3">
         <SectionHeader titulo="Curso de mira — upload dos vídeos" />
         <div className="space-y-2">
           {videosCurso?.map((v) => (

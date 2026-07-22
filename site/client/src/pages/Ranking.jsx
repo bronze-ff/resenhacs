@@ -7,7 +7,9 @@ import { nomeMapa, dataHora } from '../lib/format.js'
 import { Card, SectionHeader, RatingBadge, DataTable } from '../components/ui'
 
 function Medalha({ posicao }) {
-  const cores = { 0: 'text-yellow-400', 1: 'text-slate-300', 2: 'text-amber-600' }
+  // Tokens de medalha (--color-ouro/prata/bronze em index.css) em vez de cores hardcoded
+  // da paleta padrão do Tailwind — mesmo esquema de token usado pro resto da paleta do app.
+  const cores = { 0: 'text-ouro', 1: 'text-prata', 2: 'text-bronze' }
   if (!(posicao in cores)) return <span className="font-mono text-texto-fraco">{posicao + 1}</span>
   return <span className={`font-display font-bold ${cores[posicao]}`}>{posicao + 1}º</span>
 }
@@ -264,7 +266,8 @@ export default function Ranking() {
     <div className="space-y-6">
       <SectionHeader
         titulo="Ranking do grupo"
-        className="mb-0 flex-wrap"
+        margem="nenhuma"
+        className="flex-wrap"
         acao={<FiltroPeriodo de={de} ate={ate} onDe={setDe} onAte={setAte} />}
       />
 
@@ -321,7 +324,7 @@ export default function Ranking() {
       )}
 
       {comPartida.length > 0 && (
-        <div className="space-y-3 lg:hidden">
+        <div className="space-y-2 lg:hidden">
           {comPartida.map((r, i) => (
             <CardJogador key={r.steamId} r={r} posicao={i} souEu={r.steamId === jogador?.steamId} />
           ))}

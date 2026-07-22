@@ -47,7 +47,7 @@ export default function EnviarDemo() {
       const resUrl = await fetch('/api/upload/upload-url', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename: arquivo.name, shareCode, playedAt, plataformaManual: plataforma }),
+        body: JSON.stringify({ filename: arquivo.name, tamanho: arquivo.size, shareCode, playedAt, plataformaManual: plataforma }),
       })
       const bodyUrl = await resUrl.json().catch(() => ({}))
       if (!resUrl.ok) {
@@ -80,11 +80,10 @@ export default function EnviarDemo() {
 
   return (
     <div className="max-w-3xl space-y-4">
-      <SectionHeader titulo="Enviar demo" />
-      <p className="font-mono text-sm leading-relaxed text-texto-fraco">
-        Baixe o .dem em CS2 → Assistir → Suas Partidas (ou do Faceit/GC) e envie aqui.
-        O processamento roda a cada ~30 minutos — a Partida aparece no Feed quando terminar.
-      </p>
+      <SectionHeader
+        titulo="Enviar demo"
+        subtitulo="Baixe o .dem em CS2 → Assistir → Suas Partidas (ou do Faceit/GC) e envie aqui. O processamento roda a cada ~30 minutos — a Partida aparece no Feed quando terminar."
+      />
 
       <div className="grid gap-4 lg:grid-cols-[1fr_auto]">
       <Card className="p-4 sm:p-5">

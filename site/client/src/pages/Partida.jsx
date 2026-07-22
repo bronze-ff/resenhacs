@@ -6,6 +6,7 @@ import { Avatar, MapIcon, SectionHeader, Select, ResultChip, PlataformaBadge, St
 import ReplayViewer from '../components/ReplayViewer.jsx'
 import MapaCalor from '../components/MapaCalor.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
+import { useTransicaoModal } from '../lib/useTransicaoModal.js'
 
 // Placeholder de um round ainda não baixado (streaming por round — FIL-54b): mesmo
 // shape de um round completo, só que sem frames/eventos. O ReplayViewer já trata os
@@ -268,10 +269,11 @@ function AbaHeadToHead({ matchId, jogadores, jogadorLogado }) {
         const categorias = CATEGORIAS_ARMA_ORDEM.filter((c) => o.killsPorCategoria[c] || o.killsPorCategoriaRecebido[c])
         const semFlash = o.flashes.porMim.vezes === 0 && o.flashes.porEle.vezes === 0
         return (
-          <div key={o.steamId} className="panel-cut-sm border border-borda bg-superficie">
+          <div key={o.steamId} className="panel-cut-sm overflow-x-auto border border-borda bg-superficie">
             <button
               onClick={() => setExpandido(aberto ? null : o.steamId)}
-              className="flex w-full flex-nowrap items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-superficie-alta"
+              aria-expanded={aberto}
+              className="flex min-w-full flex-nowrap items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-superficie-alta"
             >
               <span className="flex min-w-0 items-center gap-2 font-mono text-sm">
                 <Avatar p={referencia} />
@@ -331,6 +333,8 @@ function AbaHeadToHead({ matchId, jogadores, jogadorLogado }) {
 function ModalDetalhePartida({ matchId, jogador, onFechar }) {
   const [dados, setDados] = useState(null)
   const [erro, setErro] = useState(false)
+  const { visivel, iniciarSaida } = useTransicaoModal()
+  const fechar = () => iniciarSaida(onFechar)
 
   useEffect(() => {
     setDados(null)
@@ -342,9 +346,12 @@ function ModalDetalhePartida({ matchId, jogador, onFechar }) {
   }, [matchId, jogador.steamId])
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-fundo/80 p-0 lg:p-4" onClick={onFechar}>
+    <div
+      className={`fixed inset-0 z-50 flex items-center justify-center bg-fundo/80 p-0 transition-opacity duration-200 lg:p-4 ${visivel ? 'opacity-100' : 'opacity-0'}`}
+      onClick={fechar}
+    >
       <div
-        className="flex h-full w-full flex-col overflow-y-hidden border border-borda bg-superficie lg:panel-cut lg:h-auto lg:max-h-[90vh] lg:w-full lg:max-w-2xl lg:overflow-y-auto lg:p-5"
+        className={`flex h-full w-full flex-col overflow-y-hidden border border-borda bg-superficie transition-all duration-200 lg:panel-cut lg:h-auto lg:max-h-[90vh] lg:w-full lg:max-w-2xl lg:overflow-y-auto lg:p-5 ${visivel ? 'opacity-100 lg:scale-100' : 'opacity-0 lg:scale-95'}`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-borda bg-superficie px-4 py-3 lg:static lg:border-0 lg:bg-transparent lg:px-0 lg:py-0">
@@ -359,7 +366,7 @@ function ModalDetalhePartida({ matchId, jogador, onFechar }) {
               )}
             </div>
           </div>
-          <button onClick={onFechar} className="flex min-h-10 min-w-10 shrink-0 items-center justify-center font-mono text-sm uppercase text-texto-fraco hover:text-texto">
+          <button onClick={fechar} className="flex min-h-10 min-w-10 shrink-0 items-center justify-center font-mono text-sm uppercase text-texto-fraco hover:text-texto">
             fechar
           </button>
         </div>
@@ -431,7 +438,7 @@ function ComEstrela({ valor, melhor, children }) {
   return (
     <>
       {children}
-      {melhor > 0 && valor === melhor && <span className="ml-1 text-amber-400" title="Melhor da partida">★</span>}
+      {melhor > 0 && valor === melhor && <span className="ml-1 text-ouro" title="Melhor da partida">★</span>}
     </>
   )
 }
@@ -478,6 +485,7 @@ export function Scoreboard({ time, jogadores, matchId, podePromover, onPromover,
                       <button
                         onClick={() => setExpandido(aberto ? null : p.steamId)}
                         title="Ver kills por arma nessa partida"
+                        aria-expanded={aberto}
                         className="-m-2 p-2 text-texto-fraco transition-colors hover:text-destaque lg:m-0 lg:p-0"
                       >
                         <SetaExpandir aberto={aberto} />
@@ -1330,7 +1338,7 @@ export default function Partida() {
           </div>
           <p className="font-mono text-sm text-texto-fraco">{dataHora(m.playedAt)}</p>
         </div>
-        <ResultChip resultado={resultadoGrupo} a={placar.a} b={placar.b} size="lg" />
+        <ResultChip resultado={resultadoGrupo} a={placar.a} b={placar.b} size="normal" />
       </div>
 
       {m.endedEarly && (
@@ -1455,7 +1463,7 @@ export default function Partida() {
       {abaAtiva === 'clipes' && (
         <section className="space-y-6">
           <div>
-            <SectionHeader titulo="Melhor clipe do jogador (Allstar)" className="mb-2" />
+            <SectionHeader titulo="Melhor clipe do jogador (Allstar)" margem="pequena" />
             <p className="mb-3 font-mono text-xs text-texto-fraco">
               A Allstar escolhe sozinha o melhor momento do jogador na partida inteira — não dá
               pra escolher um round específico. Selecione um jogador:

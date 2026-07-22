@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { nomeAutomatico } from '../../lib/calloutsUtil.js'
 import { detectar, montarTatica } from '../../lib/deteccaoTaticas.js'
 import { ROTULO_TIPO_TATICA } from './CardTatica.jsx'
+import { useTransicaoModal } from '../../lib/useTransicaoModal.js'
 import MiniRadarTatica from './MiniRadarTatica.jsx'
 
 // Duas granadas do mesmo tipo/lado com alvo a menos de 0.03 (posições 0..1)
@@ -66,6 +67,8 @@ export default function DetectarTaticas({ mapa, callouts, onFechar, onCriada }) 
   const [progresso, setProgresso] = useState(null)       // {atual, total}
   const [erroCriacao, setErroCriacao] = useState(null)
   const [criadas, setCriadas] = useState(() => new Set())
+  const { visivel, iniciarSaida } = useTransicaoModal()
+  const fechar = () => iniciarSaida(onFechar)
 
   useEffect(() => {
     let cancelado = false
@@ -140,16 +143,19 @@ export default function DetectarTaticas({ mapa, callouts, onFechar, onCriada }) 
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-fundo/80 p-0 lg:p-4" onClick={onFechar}>
+    <div
+      className={`fixed inset-0 z-50 flex items-center justify-center bg-fundo/80 p-0 transition-opacity duration-200 lg:p-4 ${visivel ? 'opacity-100' : 'opacity-0'}`}
+      onClick={fechar}
+    >
       <button
         type="button"
-        onClick={(e) => { e.stopPropagation(); onFechar() }}
+        onClick={(e) => { e.stopPropagation(); fechar() }}
         aria-label="Fechar"
         className="panel-cut-sm fixed right-3 top-3 z-[60] flex min-h-10 min-w-10 items-center justify-center border border-borda bg-superficie font-mono text-sm text-texto-fraco hover:text-texto lg:hidden"
       >✕</button>
       <div
         onClick={(e) => e.stopPropagation()}
-        className="h-full w-full space-y-3 overflow-y-auto border border-borda bg-superficie p-5 lg:panel-cut lg:h-auto lg:max-h-[90vh] lg:w-full lg:max-w-4xl"
+        className={`h-full w-full space-y-3 overflow-y-auto border border-borda bg-superficie p-5 transition-all duration-200 lg:panel-cut lg:h-auto lg:max-h-[90vh] lg:w-full lg:max-w-4xl ${visivel ? 'opacity-100 lg:scale-100' : 'opacity-0 lg:scale-95'}`}
       >
         <div className="flex items-center justify-between gap-2">
           <div>
@@ -160,7 +166,7 @@ export default function DetectarTaticas({ mapa, callouts, onFechar, onCriada }) 
           </div>
           <button
             type="button"
-            onClick={onFechar}
+            onClick={fechar}
             className="hidden min-h-10 px-3 py-1.5 font-mono text-xs uppercase text-texto-fraco hover:text-texto lg:block lg:min-h-0"
           >Fechar</button>
         </div>

@@ -1,4 +1,5 @@
 import { SteamIcon, FaceitIcon } from './icones.jsx'
+import Chip from './Chip.jsx'
 
 // Badge de plataforma com logo: PREMIER (matchmaking da Valve, logo Steam) vs FACEIT
 // (logo próprio). null pra upload/pro, que já têm suas próprias tags (MANUAL/AUTO e
@@ -23,11 +24,12 @@ export default function PlataformaBadge({ source, plataformaManual, className = 
   if (!cfg) return null
   const { Icone, label, cor } = cfg
   return (
-    <span
-      className={`panel-cut-sm inline-flex items-center gap-1 border px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wide ${cor} ${className}`.trim()}
+    <Chip
+      toneClassName={cor}
+      icon={Icone && <Icone className="h-3 w-3 shrink-0" />}
+      className={`text-[10px] uppercase tracking-wide ${className}`.trim()}
     >
-      {Icone && <Icone className="h-3 w-3 shrink-0" />}
       {label}
-    </span>
+    </Chip>
   )
 }

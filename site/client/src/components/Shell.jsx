@@ -1,24 +1,28 @@
 import { useEffect, useState } from 'react'
-import { NavLink, useLocation } from 'react-router-dom'
+import { Link, NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext.jsx'
 
 const CHAVE_SIDEBAR_COLAPSADA = 'resenha_sidebar_colapsada'
 
-const ITENS = [
-  { to: '/', end: true, label: 'Partidas', num: '01', icone: 'partidas' },
-  { to: '/ranking', label: 'Ranking', num: '02', icone: 'ranking' },
-  { to: '/enviar-demo', label: 'Enviar demo', num: '03', icone: 'enviarDemo' },
-  { to: '/clipes', label: 'Clipes', num: '04', icone: 'clipes' },
-  { to: '/jogadores', label: 'Amigos', num: '05', icone: 'jogadores' },
-  { to: '/comparar', label: 'Comparar', num: '06', icone: 'comparar' },
+// `num` é derivado do índice (abaixo), nunca hardcoded — a numeração já dessincronizou
+// uma vez no passado (remoção de Grupos/Ranking Público/Times deixou um "09 → 12" sem
+// os itens 10/11 existirem mais em lugar nenhum) por causa de números fixos por item.
+const ITENS_BASE = [
+  { to: '/', end: true, label: 'Partidas', icone: 'partidas' },
+  { to: '/ranking', label: 'Ranking', icone: 'ranking' },
+  { to: '/enviar-demo', label: 'Enviar demo', icone: 'enviarDemo' },
+  { to: '/clipes', label: 'Clipes', icone: 'clipes' },
+  { to: '/jogadores', label: 'Amigos', icone: 'jogadores' },
+  { to: '/comparar', label: 'Comparar', icone: 'comparar' },
   // Granadas/Táticas são públicos pra visualização (só criar/editar é admin — cada
   // página já esconde os controles de edição sozinha via isSuperAdmin) — por isso
   // ficam aqui, fora do bloco condicional a isSuperAdmin logo abaixo.
-  { to: '/granadas', label: 'Granadas', num: '07', icone: 'granadas' },
-  { to: '/taticas', label: 'Táticas', num: '08', icone: 'taticas' },
-  { to: '/conta', label: 'Minha conta', num: '09', icone: 'perfil' },
-  { to: '/curso', label: 'Curso de mira', num: '10', icone: 'curso' },
+  { to: '/granadas', label: 'Granadas', icone: 'granadas' },
+  { to: '/taticas', label: 'Táticas', icone: 'taticas' },
+  { to: '/conta', label: 'Minha conta', icone: 'perfil' },
+  { to: '/curso', label: 'Curso de mira', icone: 'curso' },
 ]
+const ITENS = ITENS_BASE.map((item, i) => ({ ...item, num: String(i + 1).padStart(2, '0') }))
 
 // Itens da barra inferior mobile (estilo app da FACEIT): 4 rotas principais
 // + "Mais" que abre o drawer completo (mesmo menu do hambúrguer, agora removido
@@ -183,13 +187,17 @@ export default function Shell({ children }) {
 
   return (
     <div className="flex min-h-screen">
-      {menuAberto && (
-        <div
-          className="fixed inset-0 z-30 bg-fundo/70 lg:hidden"
-          onClick={fecharMenu}
-          aria-hidden="true"
-        />
-      )}
+      {/* Sempre montado (não condicional): opacidade + pointer-events fazem a transição de
+          entrada/saída na MESMA duração do painel (duration-200) — antes sumia/aparecia
+          instantâneo enquanto o painel deslizava suavemente, duas velocidades pra uma
+          única ação. */}
+      <div
+        className={`fixed inset-0 z-30 bg-fundo/70 transition-opacity duration-200 lg:hidden ${
+          menuAberto ? 'opacity-100' : 'pointer-events-none opacity-0'
+        }`}
+        onClick={fecharMenu}
+        aria-hidden="true"
+      />
       {/* lg:sticky + h-screen: no desktop a sidebar vira uma coluna fixa de altura total,
           então o botão de recolher (no rodapé dela) fica SEMPRE visível sem rolar a página. */}
       <aside
@@ -227,6 +235,11 @@ export default function Shell({ children }) {
           ))}
           {jogador?.isSuperAdmin && (
             <>
+              <div className={`mx-3 mt-2 flex items-center gap-2 border-t border-borda pt-2 ${colapsada ? 'lg:mx-0 lg:justify-center' : ''}`}>
+                <span className={`font-mono text-[9px] uppercase tracking-[0.15em] text-texto-fraco/60 ${colapsada ? 'lg:hidden' : ''}`}>
+                  Admin
+                </span>
+              </div>
               <NavLink
                 to="/admin"
                 className={classeItem}
@@ -235,7 +248,9 @@ export default function Shell({ children }) {
                 aria-label={colapsada ? 'Admin' : undefined}
               >
                 <span className="shrink-0">{NAV_ICONES.admin}</span>
-                <span className={`font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque ${colapsada ? 'lg:hidden' : ''}`}>11</span>
+                <span className={`font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque ${colapsada ? 'lg:hidden' : ''}`}>
+                  {String(ITENS.length + 1).padStart(2, '0')}
+                </span>
                 <span className={colapsada ? 'lg:hidden' : ''}>Admin</span>
               </NavLink>
               <NavLink
@@ -246,7 +261,9 @@ export default function Shell({ children }) {
                 aria-label={colapsada ? 'Partidas pro' : undefined}
               >
                 <span className="shrink-0">{NAV_ICONES.partidasPro}</span>
-                <span className={`font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque ${colapsada ? 'lg:hidden' : ''}`}>12</span>
+                <span className={`font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque ${colapsada ? 'lg:hidden' : ''}`}>
+                  {String(ITENS.length + 2).padStart(2, '0')}
+                </span>
                 <span className={colapsada ? 'lg:hidden' : ''}>Partidas pro</span>
               </NavLink>
             </>
@@ -279,7 +296,7 @@ export default function Shell({ children }) {
             </h1>
           </div>
           <div className="flex min-w-0 items-center gap-1.5 lg:gap-3">
-            <a href={`/jogador/${jogador?.steamId}`} title="Meu perfil" className="group flex min-w-0 shrink-0 items-center gap-2">
+            <Link to={`/jogador/${jogador?.steamId}`} title="Meu perfil" className="group flex min-w-0 shrink-0 items-center gap-2">
               {jogador?.avatarUrl && (
                 <img
                   src={jogador.avatarUrl}
@@ -288,22 +305,22 @@ export default function Shell({ children }) {
                 />
               )}
               <span className="max-w-[64px] truncate font-mono text-sm text-texto transition-colors group-hover:text-destaque sm:max-w-none">{jogador?.nick}</span>
-            </a>
-            <a
-              href="/apoie"
+            </Link>
+            <Link
+              to="/apoie"
               title="Apoie o Resenha"
               className="panel-cut-sm flex min-h-10 shrink-0 items-center gap-1.5 border border-destaque px-2 py-1 text-xs uppercase tracking-wide text-destaque transition-colors hover:bg-destaque/10 lg:min-h-0 lg:px-2.5"
             >
               <span className="shrink-0 [&>svg]:h-5 [&>svg]:w-5 lg:[&>svg]:h-6 lg:[&>svg]:w-6">{NAV_ICONES.apoie}</span>
               <span className="hidden lg:inline">Apoie</span>
-            </a>
-            <a
-              href="/tour"
+            </Link>
+            <Link
+              to="/tour"
               title="Como usar o Resenha"
               className="panel-cut-sm flex min-h-10 shrink-0 items-center border border-borda px-2 py-1 text-xs uppercase tracking-wide text-texto-fraco transition-colors hover:border-destaque/50 hover:text-destaque lg:min-h-0 lg:px-2.5"
             >
               Ajuda
-            </a>
+            </Link>
             <button
               onClick={sair}
               className="panel-cut-sm min-h-10 shrink-0 border border-borda px-2 py-1 text-xs uppercase tracking-wide text-texto-fraco transition-colors hover:border-perigo/50 hover:text-perigo lg:min-h-0 lg:px-2.5"

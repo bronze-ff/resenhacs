@@ -207,7 +207,7 @@ export default function JogadorPerfil() {
                 {jogador.nick || jogador.steamId}
               </h2>
               <TagEstilo estilo={estilo} />
-              <PremierBadge valor={premierAtual} />
+              <PremierBadge valor={premierAtual} size="normal" />
               <FaceitEloBadge elo={jogador.faceitElo} level={jogador.faceitSkillLevel} />
             </div>
             <p className="font-mono text-sm text-texto-fraco">{stats.partidas} partidas · {stats.winrate}% de vitória</p>

@@ -115,7 +115,11 @@ export default function Select({ value, onChange, children, className = '', sele
         onKeyDown={aoTeclarTrigger}
         aria-haspopup="listbox"
         aria-expanded={aberto}
-        className={`peer panel-cut-sm flex min-h-10 w-full items-center gap-2 border bg-superficie py-2 pl-3 pr-9 text-left font-mono text-sm text-texto transition-colors hover:border-destaque/60 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 lg:min-h-0 ${aberto ? 'border-destaque' : 'border-borda'} ${selectClassName}`}
+        // focus:outline-none só tira o outline nativo — precisa do substituto em
+        // focus-visible (não em `aberto`, que é o estado de dropdown aberto e não
+        // reflete navegação por teclado) senão quem navega via Tab perde a referência
+        // visual de onde está o foco.
+        className={`peer panel-cut-sm flex min-h-10 w-full items-center gap-2 border bg-superficie py-2 pl-3 pr-9 text-left font-mono text-sm text-texto transition-colors hover:border-destaque/60 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-destaque)] disabled:cursor-not-allowed disabled:opacity-50 lg:min-h-0 ${aberto ? 'border-destaque' : 'border-borda'} ${selectClassName}`}
       >
         <span className="truncate">{selecionada?.label ?? ' '}</span>
       </button>
@@ -140,7 +144,10 @@ export default function Select({ value, onChange, children, className = '', sele
             tabIndex={-1}
             onKeyDown={aoTeclarPainel}
             style={{ position: 'fixed', top: posicao.top, left: posicao.left, minWidth: posicao.width, maxWidth: 'calc(100vw - 1rem)', zIndex: 60 }}
-            className="panel-cut-sm max-h-60 overflow-y-auto border border-borda bg-superficie py-1 font-mono text-sm shadow-[0_8px_32px_rgba(0,0,0,0.45)] focus:outline-none"
+            // animate-surgir-painel só roda na entrada (o painel some do DOM direto ao
+            // fechar, sem saída animada) — @keyframes e o guard de prefers-reduced-motion
+            // ficam em index.css junto do resto das animações do projeto.
+            className="panel-cut-sm max-h-60 origin-top animate-surgir-painel overflow-y-auto border border-borda bg-superficie py-1 font-mono text-sm shadow-[0_8px_32px_rgba(0,0,0,0.45)] focus:outline-none"
           >
             {opcoes.map((o, i) => (
               <li

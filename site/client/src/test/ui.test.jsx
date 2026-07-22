@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { render } from '@testing-library/react'
-import { Card, SectionHeader, StatTile, Badge, RatingBadge, DataTable, PremierBadge, PlataformaBadge, FaceitEloBadge } from '../components/ui/index.js'
+import { Card, SectionHeader, StatTile, Badge, RatingBadge, DataTable, PremierBadge, PlataformaBadge, FaceitEloBadge, Chip } from '../components/ui/index.js'
 
 // Teste de fumaça: cada primitivo renderiza sem crashar e mostra seu conteúdo essencial.
 describe('primitivos de UI', () => {
@@ -20,6 +20,18 @@ describe('primitivos de UI', () => {
     expect(getByText('Rating')).toBeInTheDocument()
     expect(getByText('1.14')).toBeInTheDocument()
     expect(getByText('acima')).toBeInTheDocument()
+  })
+
+  it('Chip (primitivo compartilhado) renderiza ícone + conteúdo e sempre tem borda', () => {
+    const { getByText, container } = render(
+      <Chip toneClassName="border-sucesso/40 text-sucesso" icon={<svg data-testid="icone" />}>
+        1.50
+      </Chip>,
+    )
+    expect(getByText('1.50')).toBeInTheDocument()
+    const span = container.querySelector('span')
+    expect(span.className).toContain('border')
+    expect(container.querySelector('svg')).not.toBeNull()
   })
 
   it('Badge renderiza cada tom', () => {
@@ -48,6 +60,19 @@ describe('primitivos de UI', () => {
     expect(getByText('–')).toBeInTheDocument()
   })
 
+  it('RatingBadge sempre tem borda (regressão do drift: era o único badge sem border)', () => {
+    const { getByText } = render(
+      <>
+        <RatingBadge valor={1.2} />
+        <RatingBadge valor={0.85} />
+        <RatingBadge valor={null} />
+      </>,
+    )
+    expect(getByText('1.20').className).toContain('border')
+    expect(getByText('0.85').className).toContain('border')
+    expect(getByText('–').className).toContain('border')
+  })
+
   it('DataTable renderiza thead e linhas', () => {
     const { getByText } = render(
       <DataTable head={<tr><th>Nick</th></tr>}>
@@ -73,6 +98,13 @@ describe('primitivos de UI', () => {
     expect(getByText('5200')).toBeInTheDocument()
     const { container: vazio } = render(<PremierBadge valor={null} />)
     expect(vazio.firstChild).toBeNull()
+  })
+
+  it('PremierBadge: vocabulário de size padronizado (default compacto, "normal" é o destaque)', () => {
+    const { container: compacto } = render(<PremierBadge valor={5200} />)
+    expect(compacto.querySelector('span').className).toContain('text-xs')
+    const { container: normal } = render(<PremierBadge valor={5200} size="normal" />)
+    expect(normal.querySelector('span').className).toContain('text-sm')
   })
 
   it('FaceitEloBadge mostra elo+level e não renderiza nada quando null', () => {

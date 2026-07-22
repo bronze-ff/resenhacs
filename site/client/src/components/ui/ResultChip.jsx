@@ -9,11 +9,13 @@ const RESULTADOS = {
 }
 
 // Chip de resultado preenchido (não side-stripe): ícone + rótulo + placar juntos, um
-// único bloco de leitura em vez de badge-texto e placar separados. `size="lg"` pro
-// cabeçalho de uma Partida (hero, mais peso); default compacto pra linha de lista (Feed).
-export default function ResultChip({ resultado, a, b, size = 'md' }) {
+// único bloco de leitura em vez de badge-texto e placar separados. `size="normal"` pro
+// cabeçalho de uma Partida (hero, mais peso); default "compacto" pra linha de lista
+// (Feed). Mesmo vocabulário do PremierBadge (default sempre compacto, 'normal' pra
+// destaque) — ver PremierBadge.jsx.
+export default function ResultChip({ resultado, a, b, size = 'compacto' }) {
   const r = RESULTADOS[resultado]
-  const grande = size === 'lg'
+  const grande = size === 'normal'
   return (
     <div
       title={r?.title}
