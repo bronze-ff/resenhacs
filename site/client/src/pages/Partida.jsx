@@ -1148,8 +1148,9 @@ export default function Partida() {
   const [pedindoClipeJogador, setPedindoClipeJogador] = useState(null) // steamId com pedido em voo
   const [erroClipeJogador, setErroClipeJogador] = useState(null)
 
-  // SOB DEMANDA: só chama o Allstar quando o jogador clica — nada automático. Restrito
-  // a uma allowlist do lado do servidor; 403 pra quem não tá nela vira mensagem de erro.
+  // SOB DEMANDA: só chama o Allstar quando o jogador clica — nada automático. Qualquer
+  // Jogador pode gerar o PRÓPRIO clipe; gerar o de outro é restrito ao dono do sistema
+  // do lado do servidor — 403 pra quem não pode vira mensagem de erro aqui.
   async function pedirClipeAllstar(steamId) {
     setPedindoClipeJogador(steamId)
     setErroClipeJogador(null)

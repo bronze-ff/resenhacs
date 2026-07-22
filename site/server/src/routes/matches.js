@@ -549,11 +549,10 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
   })
 
   // Pedido SOB DEMANDA do melhor clipe da partida pra um JOGADOR (ADR-0004) — o
-  // jogador clica "gerar melhor clipe" na aba Clipes, nada é automático. Restrito a
-  // uma allowlist de QUEM PODE PEDIR (config.allstarSteamIds, checado contra
-  // req.player.steamId — quem tá logado, não o steamId alvo do clipe) até o preço
-  // por clipe ser confirmado com o suporte deles. Quem está na allowlist pode pedir
-  // clipe de QUALQUER jogador da partida, não só do próprio.
+  // jogador clica "gerar melhor clipe" na aba Clipes, nada é automático. Qualquer
+  // Jogador autenticado pode gerar o PRÓPRIO clipe; gerar o clipe de OUTRO jogador da
+  // partida é restrito a config.allstarSteamIds (o dono do sistema) — checado contra
+  // req.player.steamId, quem tá logado, não o steamId alvo do clipe.
   //
   // Por que "por jogador" e não mais "por highlight": só POTG e BP estão habilitados
   // na nossa conta (dashboard Allstar + sondagem real, 2026-07-21) — nenhum dos dois
@@ -576,8 +575,9 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
     )
     const jogador = rows[0]
     if (!jogador) return res.status(404).json({ erro: 'Jogador não encontrado nessa partida' })
-    if (!config.allstarSteamIds.has(req.player.steamId)) {
-      return res.status(403).json({ erro: 'Clipe Allstar ainda restrito a um grupo de teste' })
+    const ehDono = config.allstarSteamIds.has(req.player.steamId)
+    if (!ehDono && req.player.steamId !== steamId) {
+      return res.status(403).json({ erro: 'Você só pode gerar o clipe do seu próprio jogador' })
     }
     if (!jogador.demo_url) return res.status(404).json({ erro: 'Demo não arquivada pra essa partida' })
 
