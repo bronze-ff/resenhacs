@@ -9,6 +9,15 @@ import { limiteEstrito } from '../rateLimit.js'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
+// limiteDiario/limiteTotal/minimoParaRankear precisam ser inteiro positivo (ou omitido,
+// pra manter o default/valor atual) — sem isso um admin (mal-intencionado ou por engano)
+// grava negativo/fracionário e quebra silenciosamente a regra de negócio de elegibilidade
+// de submissão em Task 8. `undefined` passa (campo não enviado); qualquer outra coisa que
+// não seja inteiro >= 1 é rejeitada.
+function inteiroPositivoOuIndefinido(v) {
+  return v === undefined || (Number.isInteger(v) && v > 0)
+}
+
 function mapCompeticao(c) {
   return {
     id: c.id, nome: c.nome, descricao: c.descricao, premioDescricao: c.premio_descricao,
@@ -45,6 +54,9 @@ export function createCompeticoesRouter({ db, requireAuth }) {
     const { nome, descricao, premioDescricao, dataInicio, dataFim, limiteDiario, limiteTotal, minimoParaRankear } = req.body ?? {}
     if (!nome || !dataInicio || !dataFim) return res.status(400).json({ erro: 'nome, dataInicio e dataFim são obrigatórios' })
     if (new Date(dataFim) <= new Date(dataInicio)) return res.status(400).json({ erro: 'dataFim precisa ser depois de dataInicio' })
+    if (!inteiroPositivoOuIndefinido(limiteDiario) || !inteiroPositivoOuIndefinido(limiteTotal) || !inteiroPositivoOuIndefinido(minimoParaRankear)) {
+      return res.status(400).json({ erro: 'limiteDiario, limiteTotal e minimoParaRankear precisam ser inteiros positivos' })
+    }
     const { rows } = await db.query(
       `insert into competicoes
          (nome, descricao, premio_descricao, data_inicio, data_fim, limite_diario, limite_total, minimo_para_rankear, criado_por)
@@ -59,8 +71,28 @@ export function createCompeticoesRouter({ db, requireAuth }) {
   router.put('/admin/:id', limiteEstrito, requireAuth, requireSuperAdmin, async (req, res) => {
     if (!UUID_RE.test(req.params.id)) return res.status(404).json({ erro: 'competição não encontrada' })
     const { nome, descricao, premioDescricao, dataInicio, dataFim, limiteDiario, limiteTotal, minimoParaRankear } = req.body ?? {}
-    if (dataInicio && dataFim && new Date(dataFim) <= new Date(dataInicio)) {
-      return res.status(400).json({ erro: 'dataFim precisa ser depois de dataInicio' })
+    if (!inteiroPositivoOuIndefinido(limiteDiario) || !inteiroPositivoOuIndefinido(limiteTotal) || !inteiroPositivoOuIndefinido(minimoParaRankear)) {
+      return res.status(400).json({ erro: 'limiteDiario, limiteTotal e minimoParaRankear precisam ser inteiros positivos' })
+    }
+    // Update parcial: quando só dataInicio OU só dataFim vem no body, precisa validar
+    // contra a data já gravada. Sem isso, um PUT que move só dataFim pra antes do
+    // data_inicio existente pulava a checagem de app inteira e só era barrado pelo CHECK
+    // `periodo_valido` da migration 0047 lá no banco — 500 cru em vez de 400 limpo.
+    if (dataInicio || dataFim) {
+      let inicioEfetivo = dataInicio
+      let fimEfetivo = dataFim
+      if (!dataInicio || !dataFim) {
+        const { rows: atuais } = await db.query(
+          `select data_inicio, data_fim from competicoes where id = $1`,
+          [req.params.id],
+        )
+        if (!atuais.length) return res.status(404).json({ erro: 'competição não encontrada' })
+        inicioEfetivo = dataInicio ?? atuais[0].data_inicio
+        fimEfetivo = dataFim ?? atuais[0].data_fim
+      }
+      if (new Date(fimEfetivo) <= new Date(inicioEfetivo)) {
+        return res.status(400).json({ erro: 'dataFim precisa ser depois de dataInicio' })
+      }
     }
     const { rows } = await db.query(
       `update competicoes set

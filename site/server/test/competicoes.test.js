@@ -73,4 +73,87 @@ describe('POST /api/competicoes/admin', () => {
     })
     expect(res.status).toBe(400)
   })
+
+  it('limiteDiario negativo: 400', async () => {
+    const { app } = appWith([])
+    const res = await request(app).post('/api/competicoes/admin').set('Cookie', cookieAdmin).send({
+      nome: 'X', dataInicio: '2026-08-01T00:00:00Z', dataFim: '2026-08-08T00:00:00Z', limiteDiario: -1,
+    })
+    expect(res.status).toBe(400)
+  })
+
+  it('limiteTotal fracionario: 400', async () => {
+    const { app } = appWith([])
+    const res = await request(app).post('/api/competicoes/admin').set('Cookie', cookieAdmin).send({
+      nome: 'X', dataInicio: '2026-08-01T00:00:00Z', dataFim: '2026-08-08T00:00:00Z', limiteTotal: 2.5,
+    })
+    expect(res.status).toBe(400)
+  })
+})
+
+describe('PUT /api/competicoes/admin/:id', () => {
+  const COMP_ID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+
+  it('jogador comum: 403', async () => {
+    const { app } = appWith([])
+    const res = await request(app).put(`/api/competicoes/admin/${COMP_ID}`).set('Cookie', cookieJogador).send({ nome: 'Y' })
+    expect(res.status).toBe(403)
+  })
+
+  it('id nao-uuid: 404', async () => {
+    const { app } = appWith([])
+    const res = await request(app).put('/api/competicoes/admin/abc').set('Cookie', cookieAdmin).send({ nome: 'Y' })
+    expect(res.status).toBe(404)
+  })
+
+  it('limiteTotal negativo: 400', async () => {
+    const { app } = appWith([])
+    const res = await request(app).put(`/api/competicoes/admin/${COMP_ID}`).set('Cookie', cookieAdmin).send({ limiteTotal: -5 })
+    expect(res.status).toBe(400)
+  })
+
+  it('so dataFim, movendo pra antes do data_inicio ja gravado: 400 (nao 500)', async () => {
+    const { app, db } = appWith([
+      ['data_inicio, data_fim from competicoes where id', [
+        { data_inicio: '2026-08-01T00:00:00Z', data_fim: '2026-08-08T00:00:00Z' },
+      ]],
+    ])
+    const res = await request(app).put(`/api/competicoes/admin/${COMP_ID}`).set('Cookie', cookieAdmin)
+      .send({ dataFim: '2026-07-31T00:00:00Z' })
+    expect(res.status).toBe(400)
+    const update = db.query.mock.calls.find(([sql]) => sql.includes('update competicoes set'))
+    expect(update).toBeFalsy()
+  })
+
+  it('so dataInicio, movendo pra depois do data_fim ja gravado: 400 (nao 500)', async () => {
+    const { app } = appWith([
+      ['data_inicio, data_fim from competicoes where id', [
+        { data_inicio: '2026-08-01T00:00:00Z', data_fim: '2026-08-08T00:00:00Z' },
+      ]],
+    ])
+    const res = await request(app).put(`/api/competicoes/admin/${COMP_ID}`).set('Cookie', cookieAdmin)
+      .send({ dataInicio: '2026-08-09T00:00:00Z' })
+    expect(res.status).toBe(400)
+  })
+
+  it('so dataFim, dentro do periodo ja gravado: atualiza com sucesso', async () => {
+    const { app } = appWith([
+      ['data_inicio, data_fim from competicoes where id', [
+        { data_inicio: '2026-08-01T00:00:00Z', data_fim: '2026-08-08T00:00:00Z' },
+      ]],
+      ['update competicoes set', [{ id: COMP_ID }]],
+    ])
+    const res = await request(app).put(`/api/competicoes/admin/${COMP_ID}`).set('Cookie', cookieAdmin)
+      .send({ dataFim: '2026-08-10T00:00:00Z' })
+    expect(res.status).toBe(200)
+  })
+
+  it('id nao encontrado ao validar so uma data: 404', async () => {
+    const { app } = appWith([
+      ['data_inicio, data_fim from competicoes where id', []],
+    ])
+    const res = await request(app).put(`/api/competicoes/admin/${COMP_ID}`).set('Cookie', cookieAdmin)
+      .send({ dataFim: '2026-08-10T00:00:00Z' })
+    expect(res.status).toBe(404)
+  })
 })
