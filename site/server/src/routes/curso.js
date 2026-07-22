@@ -53,6 +53,11 @@ export function createCursoRouter({ db, requireAuth, r2Client, r2Bucket }) {
   const router = Router()
   const requireSuperAdmin = createRequireSuperAdmin(db)
 
+  // Leitura aberta a qualquer conta logada (sem gate de amizade), decisão CONSCIENTE
+  // revisitada na auditoria de segurança de 2026-07-22 (finding #4) e confirmada pelo
+  // dono: o curso continua público por ora, mas é candidato natural a virar feature paga
+  // quando o freemium do site existir — nesse momento, é aqui (e em GET /:slug/url
+  // abaixo, que dá a URL real de streaming) que entra a checagem de plano/assinatura.
   router.get('/', requireAuth, async (req, res) => {
     const { rows } = await db.query(
       'select video_slug, concluido, posicao_segundos from curso_progresso where steam_id64 = $1',
