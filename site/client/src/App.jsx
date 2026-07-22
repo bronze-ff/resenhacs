@@ -10,6 +10,7 @@ import Amigos from './pages/Amigos.jsx'
 import JogadorPerfil from './pages/JogadorPerfil.jsx'
 import Comparar from './pages/Comparar.jsx'
 import Clipes from './pages/Clipes.jsx'
+import Competicoes from './pages/Competicoes.jsx'
 import Granadas from './pages/Granadas.jsx'
 import Taticas from './pages/Taticas.jsx'
 import Ranking from './pages/Ranking.jsx'
@@ -57,6 +58,7 @@ export default function App() {
           <Route path="/jogador/:steamId" element={<RotaProtegida><JogadorPerfil /></RotaProtegida>} />
           <Route path="/comparar" element={<RotaProtegida><Comparar /></RotaProtegida>} />
           <Route path="/clipes" element={<RotaProtegida><Clipes /></RotaProtegida>} />
+          <Route path="/competicoes" element={<RotaProtegida><Competicoes /></RotaProtegida>} />
           <Route path="/granadas" element={<RotaProtegida><Granadas /></RotaProtegida>} />
           <Route path="/taticas" element={<RotaProtegida><Taticas /></RotaProtegida>} />
           <Route path="/conta" element={<RotaProtegida><Perfil /></RotaProtegida>} />
