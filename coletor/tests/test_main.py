@@ -189,6 +189,7 @@ def test_cmd_reprocess_sem_since_reprocessa_tudo():
     main.cmd_reprocess(_config_com_r2(), conn)
     assert "played_at >=" not in conn.ultima_query
     assert conn.ultimos_params is None
+    assert "order by reprocessed_at nulls first, id" in conn.ultima_query
 
 
 def test_cmd_reprocess_com_since_filtra_por_played_at():
@@ -196,6 +197,7 @@ def test_cmd_reprocess_com_since_filtra_por_played_at():
     main.cmd_reprocess(_config_com_r2(), conn, since="2026-07-16")
     assert "played_at >=" in conn.ultima_query
     assert conn.ultimos_params == ("2026-07-16",)
+    assert "order by reprocessed_at nulls first, id" in conn.ultima_query
 
 
 def test_cmd_reprocess_match_id_ignora_since():
@@ -203,6 +205,77 @@ def test_cmd_reprocess_match_id_ignora_since():
     main.cmd_reprocess(_config_com_r2(), conn, match_id="m1", since="2026-07-16")
     assert "id = %s" in conn.ultima_query
     assert conn.ultimos_params == ("m1",)
+
+
+class _ReprocessCursor:
+    def __init__(self, conn):
+        self.conn = conn
+        self._last = ""
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def execute(self, sql, params=None):
+        self._last = " ".join(sql.split())
+        self.conn.calls.append((self._last, params))
+
+    def fetchall(self):
+        if self._last.startswith("select id, share_code, source, demo_url, replay_url, played_at from matches"):
+            return self.conn.rows
+        return []
+
+
+class _ReprocessConn:
+    def __init__(self, rows):
+        self.calls = []
+        self.commits = 0
+        self.rollbacks = 0
+        self.rows = rows
+
+    def cursor(self):
+        return _ReprocessCursor(self)
+
+    def commit(self):
+        self.commits += 1
+
+    def rollback(self):
+        self.rollbacks += 1
+
+
+def test_cmd_reprocess_marca_reprocessed_at_apos_sucesso(monkeypatch):
+    # Uma Partida reprocessada com sucesso precisa ficar marcada — é o que permite a
+    # PRÓXIMA rodada (ordenada por reprocessed_at nulls first) avançar em vez de
+    # repetir a mesma Partida de novo (ver docstring de cmd_reprocess).
+    conn = _ReprocessConn([
+        ("m1", "SC1", "valve_mm", "https://r2/demos/m1.dem.bz2", "https://r2/replays/m1.json", None),
+    ])
+    config = _config_com_r2()
+
+    monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
+    monkeypatch.setattr(main.storage_r2, "key_from_url", lambda url, bucket: url.rsplit("/", 1)[-1])
+    monkeypatch.setattr(main.storage_r2, "download_bytes", lambda client, bucket, key: b"dem-bytes")
+    monkeypatch.setattr(main, "_descomprimir_dem_arquivado", lambda dados: b"dem-real")
+    monkeypatch.setattr(
+        main.parsemod, "parse_demo",
+        lambda path: {"players": [], "kills": [], "rounds": [], "map": "de_dust2", "highlights": []},
+    )
+    monkeypatch.setattr(main.transform, "fill_kd_from_kills", lambda players, kills: players)
+    monkeypatch.setattr(main.transform, "enrich", lambda parsed: parsed)
+    monkeypatch.setattr(main.parsemod, "extract_replay", lambda path: {"ticks": [], "kills": [], "rounds": []})
+    monkeypatch.setattr(main.replaymod, "build_replay", lambda *a, **kw: {"rounds": []})
+    monkeypatch.setattr(main.transform, "attach_replay_frames", lambda highlights, rounds: highlights)
+    monkeypatch.setattr(main, "_montar_lineups", lambda *a, **kw: [])
+    monkeypatch.setattr(main, "_upload_replay", lambda *a, **kw: None)
+    monkeypatch.setattr(main.dbmod, "store_parsed", lambda *a, **kw: "m1")
+
+    total = main.cmd_reprocess(config, conn)
+
+    assert total == 1
+    update = next(c for c in conn.calls if c[0].startswith("update matches set reprocessed_at"))
+    assert update[1] == ("m1",)
 
 
 # ---- streaming por round do Replay 2D (FIL-54b) ----

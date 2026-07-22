@@ -451,6 +451,12 @@ def cmd_reprocess(config, conn, match_id=None, since=None):
     `since` (opcional, "YYYY-MM-DD"): só Partidas jogadas nessa data em diante — reprocess
     completo pode levar horas (cada Partida baixa+reparseia o .dem inteiro); útil pra
     aplicar um fix novo só nas Partidas recentes sem esperar o histórico inteiro.
+
+    Sem `match_id`/`since`, a query ordena por `reprocessed_at nulls first, id`: nunca
+    reprocessadas primeiro, depois as mais antigas. Cada Partida processada com sucesso
+    é marcada (`reprocessed_at = now()`) — se o job estourar o timeout do workflow antes
+    de cobrir tudo (visto na prática: 300min só deu pra ~93 de 266), a PRÓXIMA rodada
+    continua exatamente de onde parou em vez de repetir as mesmas do início.
     """
     import tempfile
     from pathlib import Path
@@ -465,13 +471,15 @@ def cmd_reprocess(config, conn, match_id=None, since=None):
         elif since:
             cur.execute(
                 "select id, share_code, source, demo_url, replay_url, played_at from matches "
-                "where status = 'parsed' and demo_url is not null and played_at >= %s",
+                "where status = 'parsed' and demo_url is not null and played_at >= %s "
+                "order by reprocessed_at nulls first, id",
                 (since,),
             )
         else:
             cur.execute(
                 "select id, share_code, source, demo_url, replay_url, played_at from matches "
-                "where status = 'parsed' and demo_url is not null"
+                "where status = 'parsed' and demo_url is not null "
+                "order by reprocessed_at nulls first, id"
             )
         rows = cur.fetchall()
     if not rows:
@@ -515,6 +523,9 @@ def cmd_reprocess(config, conn, match_id=None, since=None):
                     conn, parsed, share_code=share_code, source=source or "valve_mm",
                     demo_url=demo_url, replay_url=replay_url, prefer_new_played_at=False,
                 )
+                with conn.cursor() as cur2:
+                    cur2.execute("update matches set reprocessed_at = now() where id = %s", (mid,))
+                conn.commit()
                 print(f"  {mid}: reprocessada")
                 total += 1
         except Exception as e:  # noqa: BLE001

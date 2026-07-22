@@ -1,6 +1,8 @@
 name = "resenha-coletor-trigger"
 main = "src/index.js"
 compatibility_date = "2026-07-21"
+# Só tem `scheduled` (cron), nenhum `fetch` — não precisa de URL pública nenhuma.
+workers_dev = false
 
 # Dispara o workflow "Coletor" (.github/workflows/coletor.yml) via workflow_dispatch a
 # cada 5 min — o gatilho `schedule` nativo do GitHub Actions é "melhor esforço" e, na
