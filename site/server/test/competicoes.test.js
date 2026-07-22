@@ -157,3 +157,107 @@ describe('PUT /api/competicoes/admin/:id', () => {
     expect(res.status).toBe(404)
   })
 })
+
+describe('GET /api/competicoes/:id/elegiveis', () => {
+  it('sem login: 401', async () => {
+    const { app } = appWith([])
+    expect((await request(app).get('/api/competicoes/comp1/elegiveis')).status).toBe(401)
+  })
+
+  it('id nao-uuid: 404', async () => {
+    const { app } = appWith([])
+    const res = await request(app).get('/api/competicoes/abc/elegiveis').set('Cookie', cookieJogador)
+    expect(res.status).toBe(404)
+  })
+
+  it('lista so os clipes PROPRIOS, Processed, com partida dentro do periodo', async () => {
+    const { app, db } = appWith([
+      ['from competicoes where id', [{ id: 'comp1', data_inicio: '2026-07-23T00:00:00Z', data_fim: '2026-07-30T00:00:00Z' }]],
+      ['from allstar_clips ac', [
+        { id: 'clip1', match_id: 'm1', round_number: 9, map: 'de_dust2', pontuacao_total: 100, ja_enviado: false },
+      ]],
+    ])
+    const res = await request(app).get(`/api/competicoes/${'a'.repeat(8)}-${'a'.repeat(4)}-${'a'.repeat(4)}-${'a'.repeat(4)}-${'a'.repeat(12)}/elegiveis`).set('Cookie', cookieJogador)
+    expect(res.status).toBe(200)
+    expect(res.body[0].allstarClipId).toBe('clip1')
+    const [sql, params] = db.query.mock.calls.find(([s]) => s.includes('from allstar_clips ac'))
+    expect(params).toContain('765') // steamId do cookie, nunca outro
+  })
+})
+
+describe('POST /api/competicoes/:id/submissoes', () => {
+  const COMP_ID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+  const CLIP_ID = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
+
+  it('sem login: 401', async () => {
+    const { app } = appWith([])
+    expect((await request(app).post(`/api/competicoes/${COMP_ID}/submissoes`)).status).toBe(401)
+  })
+
+  it('clipe nao existe ou nao e do proprio jogador: 404', async () => {
+    const { app } = appWith([
+      ['from competicoes where id', [{ id: COMP_ID, data_inicio: '2026-07-01', data_fim: '2026-08-01', limite_diario: 2, limite_total: 10 }]],
+      ['from allstar_clips ac', []], // clipe nao encontrado (ou de outro steamId — mesma query já filtra)
+    ])
+    const res = await request(app).post(`/api/competicoes/${COMP_ID}/submissoes`).set('Cookie', cookieJogador).send({ allstarClipId: CLIP_ID })
+    expect(res.status).toBe(404)
+  })
+
+  it('clipe valido dentro do periodo e dos limites: envia com sucesso', async () => {
+    const gravados = []
+    const db = {
+      query: vi.fn().mockImplementation((sql, params) => {
+        if (sql.includes('from competicoes where id')) {
+          return Promise.resolve({ rows: [{ id: COMP_ID, data_inicio: '2026-07-01', data_fim: '2026-08-01', limite_diario: 2, limite_total: 10 }] })
+        }
+        if (sql.includes('from allstar_clips ac')) {
+          return Promise.resolve({ rows: [{ id: CLIP_ID, steam_id64: '765', status: 'Processed', played_at: '2026-07-22T10:00:00Z' }] })
+        }
+        if (sql.includes('count(*) filter')) return Promise.resolve({ rows: [{ hoje: 0, total: 0 }] })
+        if (sql.includes('insert into competicao_submissoes')) { gravados.push(params); return Promise.resolve({ rows: [] }) }
+        return Promise.resolve({ rows: [] })
+      }),
+    }
+    const app = createApp({ config, db })
+    const res = await request(app).post(`/api/competicoes/${COMP_ID}/submissoes`).set('Cookie', cookieJogador).send({ allstarClipId: CLIP_ID })
+    expect(res.status).toBe(200)
+    expect(gravados).toHaveLength(1)
+  })
+
+  it('limite diario ja atingido: 400', async () => {
+    const db = {
+      query: vi.fn().mockImplementation((sql) => {
+        if (sql.includes('from competicoes where id')) {
+          return Promise.resolve({ rows: [{ id: COMP_ID, data_inicio: '2026-07-01', data_fim: '2026-08-01', limite_diario: 2, limite_total: 10 }] })
+        }
+        if (sql.includes('from allstar_clips ac')) {
+          return Promise.resolve({ rows: [{ id: CLIP_ID, steam_id64: '765', status: 'Processed', played_at: '2026-07-22T10:00:00Z' }] })
+        }
+        if (sql.includes('count(*) filter')) return Promise.resolve({ rows: [{ hoje: 2, total: 5 }] })
+        return Promise.resolve({ rows: [] })
+      }),
+    }
+    const app = createApp({ config, db })
+    const res = await request(app).post(`/api/competicoes/${COMP_ID}/submissoes`).set('Cookie', cookieJogador).send({ allstarClipId: CLIP_ID })
+    expect(res.status).toBe(400)
+    expect(res.body.erro).toMatch(/limite di[áa]rio/i)
+  })
+
+  it('partida fora do periodo da competicao: 400', async () => {
+    const db = {
+      query: vi.fn().mockImplementation((sql) => {
+        if (sql.includes('from competicoes where id')) {
+          return Promise.resolve({ rows: [{ id: COMP_ID, data_inicio: '2026-07-23', data_fim: '2026-07-30', limite_diario: 2, limite_total: 10 }] })
+        }
+        if (sql.includes('from allstar_clips ac')) {
+          return Promise.resolve({ rows: [{ id: CLIP_ID, steam_id64: '765', status: 'Processed', played_at: '2026-07-01T10:00:00Z' }] })
+        }
+        return Promise.resolve({ rows: [] })
+      }),
+    }
+    const app = createApp({ config, db })
+    const res = await request(app).post(`/api/competicoes/${COMP_ID}/submissoes`).set('Cookie', cookieJogador).send({ allstarClipId: CLIP_ID })
+    expect(res.status).toBe(400)
+    expect(res.body.erro).toMatch(/per[íi]odo/i)
+  })
+})

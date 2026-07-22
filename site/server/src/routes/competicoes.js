@@ -109,5 +109,84 @@ export function createCompeticoesRouter({ db, requireAuth }) {
     res.json({ ok: true })
   })
 
+  router.get('/:id/elegiveis', requireAuth, async (req, res) => {
+    if (!UUID_RE.test(req.params.id)) return res.status(404).json({ erro: 'competição não encontrada' })
+    const { rows: compRows } = await db.query(
+      'select id, data_inicio, data_fim from competicoes where id = $1',
+      [req.params.id],
+    )
+    if (!compRows.length) return res.status(404).json({ erro: 'competição não encontrada' })
+    const comp = compRows[0]
+    // allstar_clips não guarda match_id/steam_id64/round_number direto (só
+    // highlight_id) — junta com highlights e matches, mesmo padrão já usado em
+    // routes/allstar.js, routes/clipes.js e backfillPontuacao.js.
+    const { rows } = await db.query(
+      `select ac.id, h.match_id, h.round_number, ac.pontuacao_total, ac.pontuacao_detalhe,
+              m.map,
+              exists (select 1 from competicao_submissoes cs where cs.competicao_id = $1 and cs.allstar_clip_id = ac.id) as ja_enviado
+       from allstar_clips ac
+       join highlights h on h.id = ac.highlight_id
+       join matches m on m.id = h.match_id
+       where h.steam_id64 = $2 and ac.status = 'Processed'
+         and m.played_at >= $3 and m.played_at <= $4
+       order by m.played_at desc`,
+      [comp.id, req.player.steamId, comp.data_inicio, comp.data_fim],
+    )
+    res.json(rows.map((r) => ({
+      allstarClipId: r.id, matchId: r.match_id, roundNumber: r.round_number,
+      map: r.map, pontuacao: r.pontuacao_detalhe ?? { total: r.pontuacao_total ?? 0 },
+      jaEnviado: r.ja_enviado,
+    })))
+  })
+
+  router.post('/:id/submissoes', requireAuth, async (req, res) => {
+    if (!UUID_RE.test(req.params.id)) return res.status(404).json({ erro: 'competição não encontrada' })
+    const allstarClipId = String(req.body?.allstarClipId ?? '')
+    if (!UUID_RE.test(allstarClipId)) return res.status(400).json({ erro: 'allstarClipId inválido' })
+
+    const { rows: compRows } = await db.query(
+      'select id, data_inicio, data_fim, limite_diario, limite_total from competicoes where id = $1',
+      [req.params.id],
+    )
+    if (!compRows.length) return res.status(404).json({ erro: 'competição não encontrada' })
+    const comp = compRows[0]
+    if (new Date() > new Date(comp.data_fim)) return res.status(400).json({ erro: 'essa competição já encerrou' })
+
+    // #5 da auditoria (IDOR): só aceita clipe cujo steam_id64 (via highlights —
+    // allstar_clips não guarda direto) é o do próprio req.player — nunca confia num
+    // allstarClipId de outro jogador só porque o body mandou o id.
+    const { rows: clipRows } = await db.query(
+      `select ac.id, h.steam_id64, ac.status, m.played_at
+       from allstar_clips ac
+       join highlights h on h.id = ac.highlight_id
+       join matches m on m.id = h.match_id
+       where ac.id = $1 and h.steam_id64 = $2 and ac.status = 'Processed'`,
+      [allstarClipId, req.player.steamId],
+    )
+    if (!clipRows.length) return res.status(404).json({ erro: 'clipe não encontrado' })
+    const clip = clipRows[0]
+    if (new Date(clip.played_at) < new Date(comp.data_inicio) || new Date(clip.played_at) > new Date(comp.data_fim)) {
+      return res.status(400).json({ erro: 'a partida desse clipe está fora do período da competição' })
+    }
+
+    const { rows: contagemRows } = await db.query(
+      `select
+         count(*) filter (where enviado_em::date = now()::date) as hoje,
+         count(*) as total
+       from competicao_submissoes
+       where competicao_id = $1 and steam_id64 = $2`,
+      [comp.id, req.player.steamId],
+    )
+    const { hoje, total } = contagemRows[0]
+    if (Number(hoje) >= comp.limite_diario) return res.status(400).json({ erro: `limite diário de ${comp.limite_diario} clipes atingido` })
+    if (Number(total) >= comp.limite_total) return res.status(400).json({ erro: `limite total de ${comp.limite_total} clipes atingido` })
+
+    await db.query(
+      'insert into competicao_submissoes (competicao_id, allstar_clip_id, steam_id64) values ($1, $2, $3) on conflict do nothing',
+      [comp.id, allstarClipId, req.player.steamId],
+    )
+    res.json({ ok: true })
+  })
+
   return router
 }
