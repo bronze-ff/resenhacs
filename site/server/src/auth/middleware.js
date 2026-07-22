@@ -1,9 +1,26 @@
 import { verifyToken } from './jwt.js'
 
-export function createRequireAuth(jwtSecret) {
-  return function requireAuth(req, res, next) {
+// `db` é usado pra checar revogação de sessão (finding #3 da auditoria de segurança):
+// logout só limpava o cookie no navegador, o JWT em si continuava válido no servidor até
+// expirar (7 dias) — se vazasse por qualquer via fora do navegador da vítima, continuava
+// autenticado mesmo após o "logout". tokens_validos_apos (players) marca o instante do
+// último logout; qualquer token com `iat` anterior a isso é rejeitado.
+export function createRequireAuth(jwtSecret, db) {
+  return async function requireAuth(req, res, next) {
     const payload = verifyToken(req.cookies?.resenha_token, jwtSecret)
     if (!payload) return res.status(401).json({ erro: 'Não autenticado' })
+    try {
+      const { rows } = await db.query(
+        'select tokens_validos_apos from players where steam_id64 = $1',
+        [payload.steamId],
+      )
+      const tokensValidosApos = rows[0]?.tokens_validos_apos
+      if (tokensValidosApos && payload.iat && payload.iat * 1000 < new Date(tokensValidosApos).getTime()) {
+        return res.status(401).json({ erro: 'Sessão expirada, faça login novamente' })
+      }
+    } catch {
+      return res.status(500).json({ erro: 'Erro interno' })
+    }
     req.player = { steamId: payload.steamId, isSuperAdmin: Boolean(payload.isSuperAdmin) }
     next()
   }

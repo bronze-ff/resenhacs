@@ -189,4 +189,46 @@ describe('POST /api/auth/logout', () => {
     expect(res.status).toBe(200)
     expect(res.headers['set-cookie'][0]).toContain('resenha_token=;')
   })
+
+  it('com cookie válido: marca tokens_validos_apos no banco pro steamId do token', async () => {
+    const { app, db } = appWith()
+    const res = await request(app).post('/api/auth/logout').set('Cookie', cookieFor())
+    expect(res.status).toBe(200)
+    const update = db.query.mock.calls.find(([sql]) => sql.includes('tokens_validos_apos = now()'))
+    expect(update).toBeTruthy()
+    expect(update[1]).toEqual([JOGADOR.steam_id64])
+  })
+
+  it('sem cookie (ou já inválido): não tenta gravar nada no banco', async () => {
+    const { app, db } = appWith()
+    await request(app).post('/api/auth/logout')
+    const update = db.query.mock.calls.find(([sql]) => sql.includes('tokens_validos_apos'))
+    expect(update).toBeUndefined()
+  })
+})
+
+// Finding #3 da auditoria: logout só limpava o cookie no navegador, o JWT em si
+// continuava válido no servidor até expirar (7 dias) — requireAuth agora reconsulta
+// tokens_validos_apos e rejeita qualquer token emitido antes do último logout.
+describe('requireAuth: revogação de sessão', () => {
+  it('token emitido ANTES do último logout (tokens_validos_apos no futuro relativo ao iat): 401', async () => {
+    const cookie = cookieFor() // iat = agora
+    const tokensValidosApos = new Date(Date.now() + 60_000).toISOString()
+    const { app } = appWith({ rows: [{ ...JOGADOR, tokens_validos_apos: tokensValidosApos }] })
+    const res = await request(app).get('/api/auth/me').set('Cookie', cookie)
+    expect(res.status).toBe(401)
+  })
+
+  it('token emitido DEPOIS do último logout: continua válido', async () => {
+    const tokensValidosApos = new Date(Date.now() - 60_000).toISOString()
+    const { app } = appWith({ rows: [{ ...JOGADOR, tokens_validos_apos: tokensValidosApos }] })
+    const res = await request(app).get('/api/auth/me').set('Cookie', cookieFor())
+    expect(res.status).toBe(200)
+  })
+
+  it('jogador nunca deslogou (tokens_validos_apos null): token continua válido', async () => {
+    const { app } = appWith({ rows: [{ ...JOGADOR, tokens_validos_apos: null }] })
+    const res = await request(app).get('/api/auth/me').set('Cookie', cookieFor())
+    expect(res.status).toBe(200)
+  })
 })

@@ -6,10 +6,21 @@ function formatarTamanho(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
+// Plataformas sem integração oficial — rótulo informativo escolhido no upload, vira
+// badge na Partida/Feed (matches.plataforma_manual). Lista fixa, igual à do servidor
+// (PLATAFORMAS_MANUAIS em site/server/src/routes/upload.js).
+const PLATAFORMAS = [
+  { valor: '', label: 'Nenhuma / não sei' },
+  { valor: 'faceit', label: 'FACEIT' },
+  { valor: 'gamers_club', label: 'Gamers Club' },
+  { valor: 'xplay_gg', label: 'XPLAY.GG' },
+]
+
 export default function EnviarDemo() {
   const [arquivo, setArquivo] = useState(null)
   const [shareCode, setShareCode] = useState('')
   const [playedAt, setPlayedAt] = useState('')
+  const [plataforma, setPlataforma] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [resultado, setResultado] = useState(null)
   const [erro, setErro] = useState(null)
@@ -36,7 +47,7 @@ export default function EnviarDemo() {
       const resUrl = await fetch('/api/upload/upload-url', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename: arquivo.name, shareCode, playedAt }),
+        body: JSON.stringify({ filename: arquivo.name, tamanho: arquivo.size, shareCode, playedAt, plataformaManual: plataforma }),
       })
       const bodyUrl = await resUrl.json().catch(() => ({}))
       if (!resUrl.ok) {
@@ -69,11 +80,10 @@ export default function EnviarDemo() {
 
   return (
     <div className="max-w-3xl space-y-4">
-      <SectionHeader titulo="Enviar demo" />
-      <p className="font-mono text-sm leading-relaxed text-texto-fraco">
-        Baixe o .dem em CS2 → Assistir → Suas Partidas (ou do Faceit/GC) e envie aqui.
-        O processamento roda a cada ~30 minutos — a Partida aparece no Feed quando terminar.
-      </p>
+      <SectionHeader
+        titulo="Enviar demo"
+        subtitulo="Baixe o .dem em CS2 → Assistir → Suas Partidas (ou do Faceit/GC) e envie aqui. O processamento roda a cada ~30 minutos — a Partida aparece no Feed quando terminar."
+      />
 
       <div className="grid gap-4 lg:grid-cols-[1fr_auto]">
       <Card className="p-4 sm:p-5">
@@ -125,6 +135,21 @@ export default function EnviarDemo() {
               onChange={(e) => setPlayedAt(e.target.value)}
               className="panel-cut-sm min-h-10 w-full border border-borda bg-superficie px-3 py-2 font-mono text-sm lg:min-h-0"
             />
+          </div>
+          <div>
+            <label className="block font-mono text-xs uppercase tracking-wide text-texto-fraco" htmlFor="plataforma">
+              Onde foi jogada (opcional — vira o badge da plataforma na Partida)
+            </label>
+            <select
+              id="plataforma"
+              value={plataforma}
+              onChange={(e) => setPlataforma(e.target.value)}
+              className="panel-cut-sm min-h-10 w-full border border-borda bg-superficie px-3 py-2 font-mono text-sm lg:min-h-0"
+            >
+              {PLATAFORMAS.map((p) => (
+                <option key={p.valor} value={p.valor}>{p.label}</option>
+              ))}
+            </select>
           </div>
           <button
             type="submit"

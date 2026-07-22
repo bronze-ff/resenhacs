@@ -70,7 +70,7 @@ function CardPartida({ m }) {
             {nomeMapa(m.map)}
           </span>
           {m.source === 'pro' && <Badge tom="destaque" className="shrink-0">PRO</Badge>}
-          <PlataformaBadge source={m.source} className="shrink-0" />
+          <PlataformaBadge source={m.source} plataformaManual={m.plataformaManual} className="shrink-0" />
           <Badge tom="neutro" title={origem.title} className="shrink-0">{origem.label}</Badge>
         </div>
         <div className="ml-auto">
@@ -108,7 +108,7 @@ function SincStatus() {
 
   if (!status || (status.pending === 0 && status.failed === 0)) return null
   return (
-    <div className="panel-cut-sm mb-4 flex flex-wrap items-center gap-2 border border-borda bg-superficie px-3 py-2 font-mono text-xs text-texto-fraco">
+    <div className="panel-cut-sm flex flex-wrap items-center gap-2 border border-borda bg-superficie px-3 py-2 font-mono text-xs text-texto-fraco">
       <span className="inline-block h-1.5 w-1.5 animate-pulso-sinal rounded-full bg-destaque" />
       {status.pending > 0 && (
         <span>
@@ -177,7 +177,7 @@ function Resenhas({ sessaoAtiva, onEscolher }) {
   if (!sessoes || sessoes.length === 0) return null
 
   return (
-    <section className="mb-6">
+    <section>
       <h3 className="mb-2 font-display text-sm font-semibold uppercase tracking-wide text-texto-fraco">
         Resenhas recentes
       </h3>
@@ -288,13 +288,13 @@ export default function Feed() {
   }, [partidas, resultado])
 
   return (
-    <div>
-      <SectionHeader titulo="Partidas" className="mb-4" />
+    <div className="space-y-6">
+      <SectionHeader titulo="Partidas" margem="grande" />
       <SincStatus />
       <Resenhas sessaoAtiva={sessaoAtiva} onEscolher={setSessaoAtiva} />
 
       {sessaoAtiva && (
-        <div className="panel-cut-sm mb-4 flex items-center gap-3 border border-destaque/60 bg-superficie px-3 py-2 font-mono text-xs">
+        <div className="panel-cut-sm flex items-center gap-3 border border-destaque/60 bg-superficie px-3 py-2 font-mono text-xs">
           <span className="text-texto-fraco">
             Mostrando a Resenha de <span className="text-texto">{dataHora(sessaoAtiva.inicio)}</span> ({sessaoAtiva.partidas} partida{sessaoAtiva.partidas === 1 ? '' : 's'})
           </span>
@@ -304,7 +304,7 @@ export default function Feed() {
         </div>
       )}
 
-      <div className={`panel-cut-sm mb-4 flex flex-col gap-3 border border-borda bg-superficie p-3 lg:flex-row lg:flex-wrap lg:items-center lg:gap-x-5 lg:gap-y-3 ${sessaoAtiva ? 'hidden' : ''}`}>
+      <div className={`panel-cut-sm flex flex-col gap-3 border border-borda bg-superficie p-3 lg:flex-row lg:flex-wrap lg:items-center lg:gap-x-5 lg:gap-y-3 ${sessaoAtiva ? 'hidden' : ''}`}>
         <div className="flex flex-wrap items-center gap-3">
           <FiltroPeriodo de={de} ate={ate} onDe={setDe} onAte={setAte} />
           <Select value={mapa} onChange={(e) => setMapa(e.target.value)} className="w-auto" selectClassName="py-1.5 text-xs">
@@ -353,7 +353,7 @@ export default function Feed() {
       </div>
 
       {temMais && (
-        <div className="mt-4 flex justify-center">
+        <div className="flex justify-center">
           <button
             onClick={carregarMais}
             disabled={carregandoMais}

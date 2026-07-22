@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react'
-import { NavLink, useLocation, Link } from 'react-router-dom'
+import { Link, NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext.jsx'
 
 const CHAVE_SIDEBAR_COLAPSADA = 'resenha_sidebar_colapsada'
 
-const ITENS = [
+// `num` é derivado do índice (abaixo), nunca hardcoded — a numeração já dessincronizou
+// uma vez no passado (remoção de Grupos/Ranking Público/Times deixou um "09 → 12" sem
+// os itens 10/11 existirem mais em lugar nenhum) por causa de números fixos por item.
+const ITENS_BASE = [
   { to: '/', end: true, label: 'Partidas', icone: 'partidas' },
   { to: '/ranking', label: 'Ranking', icone: 'ranking' },
   { to: '/enviar-demo', label: 'Enviar demo', icone: 'enviarDemo' },
@@ -20,6 +23,7 @@ const ITENS = [
   { to: '/conta', label: 'Minha conta', icone: 'perfil' },
   { to: '/curso', label: 'Curso de mira', icone: 'curso' },
 ]
+const ITENS = ITENS_BASE.map((item, i) => ({ ...item, num: String(i + 1).padStart(2, '0') }))
 
 // Itens admin-only, numerados em sequência aos de ITENS (ver numerarItem abaixo) —
 // ficam num array separado só porque exigem o gate isSuperAdmin na renderização.
@@ -208,9 +212,10 @@ export default function Shell({ children }) {
 
   return (
     <div className="flex min-h-screen">
-      {/* Sempre montado (em vez de condicional) pra poder ter transição de saída também —
-          um `menuAberto && (...)` desmonta na hora e o fade fica instantâneo enquanto o
-          painel ao lado desliza suave. duration-200 casa com o duration-200 do <aside>. */}
+      {/* Sempre montado (não condicional): opacidade + pointer-events fazem a transição de
+          entrada/saída na MESMA duração do painel (duration-200) — antes sumia/aparecia
+          instantâneo enquanto o painel deslizava suavemente, duas velocidades pra uma
+          única ação. */}
       <div
         className={`fixed inset-0 z-30 bg-fundo/70 transition-opacity duration-200 lg:hidden ${
           menuAberto ? 'opacity-100' : 'pointer-events-none opacity-0'

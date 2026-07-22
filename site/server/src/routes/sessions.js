@@ -24,9 +24,18 @@ export function createSessionsRouter({ db, requireAuth }) {
   // numa requisição (login é aberto).
   router.get('/', requireAuth, async (req, res) => {
     const eu = req.player.steamId
+    // Sem LIMIT aqui a query varria TODO o histórico de Partidas visíveis (e os dois
+    // joins abaixo, um por Jogador) a cada request — caro e sem teto conforme o círculo
+    // de amigos cresce/joga mais, e um vetor de DoS barato. 750 Partidas é bem folgado
+    // pras ~15 sessões recentes que a rota devolve por padrão (Feed.jsx só pede limit=5).
+    // "id desc" desempata o "order by played_at" (podem repetir) garantindo que as três
+    // queries abaixo recortem exatamente o mesmo conjunto de Partidas.
+    const recentes = `order by played_at desc nulls last, id desc limit 750`
     const matchesQ = await db.query(
-      `select id, map, played_at, score_a, score_b
-       from matches m where status = 'parsed' and ${partidaVisivelExpr('m', '$1')} order by played_at asc nulls last`,
+      `select id, map, played_at, score_a, score_b from (
+         select id, map, played_at, score_a, score_b
+         from matches m where status = 'parsed' and ${partidaVisivelExpr('m', '$1')} ${recentes}
+       ) recentes order by played_at asc nulls last`,
       [eu],
     )
     const playersQ = await db.query(
@@ -36,13 +45,19 @@ export function createSessionsRouter({ db, requireAuth }) {
        from match_players mp
        join players p on p.steam_id64 = mp.steam_id64
        left join steam_avatares sa on sa.steam_id64 = mp.steam_id64
-       where mp.match_id in (select id from matches m where status = 'parsed' and ${partidaVisivelExpr('m', '$1')})`,
+       where mp.match_id in (
+         select id from matches m where status = 'parsed' and ${partidaVisivelExpr('m', '$1')} ${recentes}
+       )`,
       [eu],
     )
     const acesQ = await db.query(
       `select h.match_id, h.steam_id64, count(*)::int as aces
        from highlights h join matches m on m.id = h.match_id
-       where h.kind = 'ace' and ${partidaVisivelExpr('m', '$1')} group by h.match_id, h.steam_id64`,
+       where h.kind = 'ace' and ${partidaVisivelExpr('m', '$1')}
+         and m.id in (
+           select id from matches m2 where status = 'parsed' and ${partidaVisivelExpr('m2', '$1')} ${recentes}
+         )
+       group by h.match_id, h.steam_id64`,
       [eu],
     )
 

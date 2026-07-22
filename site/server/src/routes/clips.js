@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { partidaVisivelExpr } from '../friendships.js'
+import { parseHttpUrl, hostMatchesDomain } from './urlValidation.js'
 
 const PROVIDERS = [
   { host: 'allstar.gg', nome: 'allstar' },
@@ -9,17 +10,9 @@ const PROVIDERS = [
 ]
 
 export function detectProvider(url) {
-  let parsed
-  try {
-    parsed = new URL(url)
-  } catch {
-    return null
-  }
-  // Só http(s): uma URL javascript:/data: parseia sem erro e cairia no 'other' — o
-  // client renderiza href direto, então isso seria XSS armazenado clicável.
-  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return null
-  const host = parsed.hostname.replace(/^www\./, '')
-  const achado = PROVIDERS.find((p) => host === p.host || host.endsWith(`.${p.host}`))
+  const parsed = parseHttpUrl(url)
+  if (!parsed) return null
+  const achado = PROVIDERS.find((p) => hostMatchesDomain(parsed.hostname, p.host))
   return achado ? achado.nome : 'other'
 }
 
@@ -47,6 +40,33 @@ export function createClipsRouter({ db, requireAuth }) {
       [matchId, req.player.steamId],
     )
     if (dono.rows.length === 0) return res.status(404).json({ erro: 'Partida não encontrada' })
+
+    // steamId (de quem é a jogada) precisa ter participado dessa Partida — sem isso, dava
+    // pra anexar um clipe atribuído a qualquer jogador (mesmo alguém que nunca jogou essa
+    // partida) só porque ela é visível ao viewer.
+    const participou = await db.query(
+      'select 1 from match_players where match_id = $1 and steam_id64 = $2',
+      [matchId, steamId],
+    )
+    if (participou.rows.length === 0) {
+      return res.status(400).json({ erro: 'steamId não participou dessa partida' })
+    }
+
+    // highlightId, se informado, precisa pertencer à mesma Partida — senão dava pra
+    // anexar um clipe referenciando o highlight de uma partida diferente (inclusive uma
+    // que o viewer não teria acesso).
+    if (highlightId != null) {
+      if (!UUID_RE.test(String(highlightId))) {
+        return res.status(400).json({ erro: 'highlightId inválido' })
+      }
+      const highlight = await db.query(
+        'select 1 from highlights where id = $1 and match_id = $2',
+        [highlightId, matchId],
+      )
+      if (highlight.rows.length === 0) {
+        return res.status(400).json({ erro: 'highlightId não pertence a essa partida' })
+      }
+    }
 
     const { rows } = await db.query(
       `insert into clips (match_id, highlight_id, steam_id64, url, provider, title, added_by)

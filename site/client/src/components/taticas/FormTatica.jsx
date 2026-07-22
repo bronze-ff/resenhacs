@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import RadarGranadas from '../granadas/RadarGranadas.jsx'
 import { ROTULO_TIPO_TATICA, ROTULO_ARMAS } from './CardTatica.jsx'
+import { useTransicaoModal } from '../../lib/useTransicaoModal.js'
 import { Card, Select } from '../ui'
 
 const TIPOS = Object.entries(ROTULO_TIPO_TATICA)
@@ -48,6 +49,8 @@ export default function FormTatica({ mapa, lado: ladoInicial, inicial = null, on
   const [erro, setErro] = useState(null)
   const [salvando, setSalvando] = useState(false)
   const primeiraRenderLado = useRef(true)
+  const { visivel, iniciarSaida } = useTransicaoModal()
+  const fechar = () => iniciarSaida(onCancelar)
 
   useEffect(() => {
     setGranadas(null)
@@ -139,25 +142,28 @@ export default function FormTatica({ mapa, lado: ladoInicial, inicial = null, on
       body: JSON.stringify(corpo),
     }).catch(() => null)
     setSalvando(false)
-    if (res?.ok) return onSalvo()
+    if (res?.ok) return iniciarSaida(onSalvo)
     const body = await res?.json().catch(() => ({}))
     setErro(body?.erro ?? 'Erro ao salvar.')
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-fundo/80 p-0 lg:p-4" onClick={onCancelar}>
+    <div
+      className={`fixed inset-0 z-50 flex items-center justify-center bg-fundo/80 p-0 transition-opacity duration-200 lg:p-4 ${visivel ? 'opacity-100' : 'opacity-0'}`}
+      onClick={fechar}
+    >
       {/* Mobile: form ocupa a tela inteira, então o backdrop clicável some; esse
           X fixo é o único jeito de fechar sem rolar até o fim. */}
       <button
         type="button"
-        onClick={(e) => { e.stopPropagation(); onCancelar() }}
+        onClick={(e) => { e.stopPropagation(); fechar() }}
         aria-label="Fechar"
         className="panel-cut-sm fixed right-3 top-3 z-[60] flex min-h-10 min-w-10 items-center justify-center border border-borda bg-superficie font-mono text-sm text-texto-fraco hover:text-texto lg:hidden"
       >✕</button>
       <form
         onSubmit={salvar}
         onClick={(e) => e.stopPropagation()}
-        className="flex h-full w-full flex-col overflow-y-auto border border-borda bg-superficie lg:panel-cut lg:h-auto lg:max-h-[90vh] lg:w-full lg:max-w-6xl lg:flex-row lg:overflow-hidden"
+        className={`flex h-full w-full flex-col overflow-y-auto border border-borda bg-superficie transition-all duration-200 lg:panel-cut lg:h-auto lg:max-h-[90vh] lg:w-full lg:max-w-6xl lg:flex-row lg:overflow-hidden ${visivel ? 'opacity-100 lg:scale-100' : 'opacity-0 lg:scale-95'}`}
       >
         {/* Coluna do radar: sempre visível, mostra TODAS as granadas curadas do
             mapa+lado atual. É aqui que a tática é montada de fato. */}
@@ -336,7 +342,7 @@ export default function FormTatica({ mapa, lado: ladoInicial, inicial = null, on
           {erro && <p className="font-mono text-sm text-perigo">{erro}</p>}
 
           <div className="flex justify-end gap-2 pb-1">
-            <button type="button" onClick={onCancelar} className="min-h-10 px-4 py-2 font-mono text-xs uppercase text-texto-fraco hover:text-texto lg:min-h-0">Cancelar</button>
+            <button type="button" onClick={fechar} className="min-h-10 px-4 py-2 font-mono text-xs uppercase text-texto-fraco hover:text-texto lg:min-h-0">Cancelar</button>
             <button type="submit" disabled={salvando}
               className="panel-cut-sm min-h-10 border border-destaque bg-destaque px-4 py-2 font-display text-sm font-semibold uppercase text-fundo disabled:opacity-50 lg:min-h-0">
               {salvando ? 'Salvando…' : 'Salvar'}

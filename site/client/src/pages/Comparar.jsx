@@ -97,10 +97,10 @@ export default function Comparar() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="font-display text-2xl font-bold uppercase tracking-wide text-texto">Comparar Jogadores</h2>
-        <p className="font-mono text-sm text-texto-fraco">Rating, stats e confronto direto entre dois Jogadores do grupo.</p>
-      </div>
+      <SectionHeader
+        titulo="Comparar Jogadores"
+        subtitulo="Rating, stats e confronto direto entre dois Jogadores do grupo."
+      />
 
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -170,7 +170,7 @@ export default function Comparar() {
             {dados.confronto.partidasJuntos === 0 ? (
               <p className="font-mono text-sm text-texto-fraco">Esses dois nunca jogaram a mesma Partida ainda.</p>
             ) : (
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <StatTile rotulo="Partidas juntos" valor={dados.confronto.partidasJuntos} />
                 <StatTile rotulo="Mesmo time" valor={`${dados.confronto.mesmoTimeVitorias}/${dados.confronto.mesmoTime}`} sub="vitórias" />
                 <StatTile rotulo={`${dados.a.nick || 'A'} venceu`} valor={dados.confronto.aVenceu} sub="times opostos" />

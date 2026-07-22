@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { buildSteamRedirectUrl } from '../steam/openid.js'
-import { signToken } from '../auth/jwt.js'
+import { signToken, verifyToken } from '../auth/jwt.js'
 import { parCanonico } from '../friendships.js'
 
 export function createAuthRouter({ config, db, verifySteamLogin, fetchPersona, fetchFriendList, requireAuth }) {
@@ -105,7 +105,15 @@ export function createAuthRouter({ config, db, verifySteamLogin, fetchPersona, f
     })
   })
 
-  router.post('/logout', (req, res) => {
+  router.post('/logout', async (req, res) => {
+    // Marca tokens_validos_apos = now(): qualquer JWT emitido antes disso (inclusive o que
+    // acabou de ser limpo do cookie, se vazou por qualquer outra via) para de ser aceito
+    // por requireAuth — sem isso, logout só limpava o cookie no navegador, o token em si
+    // continuava válido no servidor até expirar (finding #3 da auditoria de segurança).
+    const payload = verifyToken(req.cookies?.resenha_token, config.jwtSecret)
+    if (payload?.steamId) {
+      await db.query('update players set tokens_validos_apos = now() where steam_id64 = $1', [payload.steamId])
+    }
     res.clearCookie('resenha_token')
     res.json({ ok: true })
   })

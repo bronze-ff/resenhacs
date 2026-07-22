@@ -27,6 +27,37 @@ describe('loadConfig', () => {
     expect(config.appUrl).toBe('http://localhost:5173')
     expect(config.isProduction).toBe(false)
   })
+
+  it('JWT_SECRET curto fora de produção: não barra (não pode quebrar dev/teste)', () => {
+    expect(() =>
+      loadConfig({
+        DATABASE_URL: 'postgres://x',
+        JWT_SECRET: 's',
+        STEAM_API_KEY: 'k',
+      }),
+    ).not.toThrow()
+  })
+
+  it('JWT_SECRET curto em produção: lança erro', () => {
+    expect(() =>
+      loadConfig({
+        DATABASE_URL: 'postgres://x',
+        JWT_SECRET: 's',
+        STEAM_API_KEY: 'k',
+        NODE_ENV: 'production',
+      }),
+    ).toThrow(/JWT_SECRET fraco/)
+  })
+
+  it('JWT_SECRET com 32+ caracteres em produção: passa', () => {
+    const config = loadConfig({
+      DATABASE_URL: 'postgres://x',
+      JWT_SECRET: 'a'.repeat(32),
+      STEAM_API_KEY: 'k',
+      NODE_ENV: 'production',
+    })
+    expect(config.isProduction).toBe(true)
+  })
 })
 
 describe('GET /api/health', () => {

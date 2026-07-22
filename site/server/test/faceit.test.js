@@ -32,7 +32,7 @@ describe('GET /api/faceit/login', () => {
   })
 
   it('sem FACEIT_CLIENT_ID configurado: 503', async () => {
-    const db = { query: vi.fn() }
+    const db = { query: vi.fn().mockResolvedValue({ rows: [] }) }
     const app = createApp({ config: { ...config, faceitClientId: null }, db })
     const res = await request(app).get('/api/faceit/login').set('Cookie', cookie)
     expect(res.status).toBe(503)
@@ -63,7 +63,8 @@ describe('GET /api/faceit/callback', () => {
       .set('Cookie', [cookie, stateCookie, verifierCookie].join('; '))
     expect(res.status).toBe(302)
     expect(res.headers.location).toContain('faceit=vinculado')
-    expect(db.query.mock.calls[0][1]).toEqual(['111', 'abc-123', 'ProPlayer'])
+    const gravaFaceitId = db.query.mock.calls.find(([, params]) => params?.[0] === '111' && params?.[1] === 'abc-123')
+    expect(gravaFaceitId[1]).toEqual(['111', 'abc-123', 'ProPlayer'])
   })
 
   it('com FACEIT_CLIENT_SECRET configurado: manda Authorization Basic na troca de token', async () => {

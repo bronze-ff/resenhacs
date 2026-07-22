@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { keyFromR2Url, streamObject, presignDownload } from '../r2.js'
 import { partidaVisivelExpr } from '../friendships.js'
 import { calcularStatsPorLado } from '../statsLado.js'
-import { pedirClipe } from '../allstarClip.js'
+import { pedirMelhorClipeDoJogador } from '../allstarClip.js'
 
 // Categoria de arma pro Head to Head (estilo Leetify: agrupa kills por família de
 // arma em vez de listar cada uma). Faca/granadas caem em "Outras".
@@ -76,7 +76,7 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
     }
     const { rows } = await db.query(
       `select m.id, m.map, m.played_at, m.score_a, m.score_b, m.status, m.source,
-         m.team_a_name, m.team_b_name,
+         m.team_a_name, m.team_b_name, m.plataforma_manual,
          coalesce(json_agg(json_build_object('steamId', mp.steam_id64, 'nick', mp.nick, 'won', mp.won))
            filter (where mp.is_tracked), '[]') as tracked,
          mvp.mvp
@@ -111,6 +111,7 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
         scoreA: m.score_a,
         scoreB: m.score_b,
         source: m.source,
+        plataformaManual: m.plataforma_manual,
         teamAName: m.team_a_name,
         teamBName: m.team_b_name,
         tracked: m.tracked,
@@ -122,19 +123,25 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
   // Status da sincronização: quantas Partidas descobertas ainda esperam download/parse.
   // (Precisa vir antes de '/:id' — senão o Express casaria "sync-status" como um id.)
   router.get('/sync-status', requireAuth, async (req, res) => {
-    // Nota: 'pending'/'failed' ainda não têm match_players (a partida não foi parseada
-    // ainda, então não dá pra saber quem jogou) — sem uma chave pra atribuir o "time" de
-    // upload a um steamId, esses dois contadores zeram pra todo viewer até o Coletor ganhar
-    // algum jeito de atribuir a descoberta a um steamId. 'parsed'/last_played_at continuam
-    // corretos, filtrados por participação/amizade como o resto do arquivo.
+    // 'pending'/'failed' ainda não têm match_players (a partida não foi parseada ainda),
+    // então partidaVisivelExpr (que checa participação via match_players) nunca dá match
+    // pra elas — usamos discovered_by (steamId de quem descobriu, ver matches.discovered_by
+    // e coletor/src/coletor/main.py:cmd_discover) escopado por "eu ou um amigo meu"
+    // em vez disso. 'parsed'/last_played_at seguem por participação/amizade como o resto.
+    const eu = req.player.steamId
+    const descobertoPorMimOuAmigo = `(m.discovered_by = $1 or exists (
+      select 1 from friendships f
+      where f.status = 'accepted'
+        and ((f.player_a = $1 and f.player_b = m.discovered_by) or (f.player_b = $1 and f.player_a = m.discovered_by))
+    ))`
     const { rows } = await db.query(
       `select
-         count(*) filter (where status = 'pending')::int as pending,
-         count(*) filter (where status = 'failed')::int as failed,
-         count(*) filter (where status = 'parsed')::int as parsed,
-         max(played_at) filter (where status = 'parsed') as last_played_at
-       from matches where ${partidaVisivelExpr('matches', '$1')}`,
-      [req.player.steamId],
+         count(*) filter (where status = 'pending' and ${descobertoPorMimOuAmigo})::int as pending,
+         count(*) filter (where status = 'failed' and ${descobertoPorMimOuAmigo})::int as failed,
+         count(*) filter (where status = 'parsed' and ${partidaVisivelExpr('m', '$1')})::int as parsed,
+         max(played_at) filter (where status = 'parsed' and ${partidaVisivelExpr('m', '$1')}) as last_played_at
+       from matches m`,
+      [eu],
     )
     const r = rows[0]
     res.json({ pending: r.pending, failed: r.failed, parsed: r.parsed, lastPlayedAt: r.last_played_at })
@@ -144,13 +151,19 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
   router.get('/:id', requireAuth, async (req, res) => {
     const { id } = req.params
     const matchQ = await db.query(
-      `select id, map, played_at, score_a, score_b, source, status, demo_url, replay_url from matches where id = $1 and ${partidaVisivelExpr('matches', '$2')}`,
+      `select mt.id, mt.map, mt.played_at, mt.score_a, mt.score_b, mt.source, mt.status, mt.demo_url, mt.replay_url,
+              mt.ended_early, mt.abandoned_by_steam_id64, mt.plataforma_manual,
+              coalesce(ap.nick, amp.nick) as abandoned_by_nick
+       from matches mt
+       left join players ap on ap.steam_id64 = mt.abandoned_by_steam_id64
+       left join match_players amp on amp.match_id = mt.id and amp.steam_id64 = mt.abandoned_by_steam_id64
+       where mt.id = $1 and ${partidaVisivelExpr('mt', '$2')}`,
       [id, req.player.steamId],
     )
     if (matchQ.rows.length === 0) return res.status(404).json({ erro: 'Partida não encontrada' })
     const m = matchQ.rows[0]
 
-    const [players, rounds, highlights, clips, econ, weapons] = await Promise.all([
+    const [players, rounds, highlights, clips, econ, weapons, allstarClips] = await Promise.all([
       db.query(
         `select mp.steam_id64, mp.nick, mp.team, mp.kills, mp.deaths, mp.assists, mp.headshot_kills,
                 mp.damage, mp.rounds_played, mp.rating, mp.kast_pct, mp.won, mp.is_tracked, mp.team_kills,
@@ -177,7 +190,6 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
                 ac.id as allstar_clip_id, ac.status as allstar_status, ac.clip_url as allstar_clip_url
          from highlights h
          left join match_players mp on mp.match_id = h.match_id and mp.steam_id64 = h.steam_id64
-         left join allstar_clips ac on ac.highlight_id = h.id
          where h.match_id = $1 order by h.round_number`,
         [id],
       ),
@@ -198,6 +210,13 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
          from match_player_weapons where match_id = $1 order by steam_id64, kills desc`,
         [id],
       ),
+      // Clipe real do Allstar por JOGADOR (não mais por highlight — ver allstarClip.js):
+      // no máximo 1 por (match, steamId), gerado sob demanda na aba Clipes.
+      db.query(
+        `select steam_id64, status, clip_url, clip_snapshot_url, round_number
+         from allstar_clips where match_id = $1`,
+        [id],
+      ),
     ])
     const armasPorJogador = new Map()
     for (const w of weapons.rows) {
@@ -211,6 +230,17 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
         damage: w.damage,
       })
     }
+    const allstarClipPorJogador = new Map(
+      allstarClips.rows.map((c) => [
+        c.steam_id64,
+        {
+          status: c.status,
+          clipUrl: c.status === 'Processed' ? c.clip_url : null,
+          clipSnapshotUrl: c.clip_snapshot_url,
+          roundNumber: c.round_number,
+        },
+      ]),
+    )
 
     res.json({
       id: m.id,
@@ -219,12 +249,20 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
       scoreA: m.score_a,
       scoreB: m.score_b,
       source: m.source,
+      plataformaManual: m.plataforma_manual,
       status: m.status,
       // O R2 é privado de propósito (dados reais dos participantes) — nunca expor a
       // URL bruta do bucket. O client busca via esses paths, autenticados e
       // proxiados pelo próprio servidor (ver rotas /:id/demo e /:id/replay abaixo).
       demoUrl: m.demo_url ? `/api/matches/${m.id}/demo` : null,
       replayUrl: m.replay_url ? `/api/matches/${m.id}/replay` : null,
+      // Placar sem nenhum time batendo 13 (MR12) só é possível por abandono/forfeit
+      // técnico — ver coletor/src/coletor/parse.py:_detectar_abandono. abandonedBy é
+      // best-effort (só quando dá pra atribuir a exatamente 1 jogador).
+      endedEarly: m.ended_early,
+      abandonedBy: m.abandoned_by_steam_id64
+        ? { steamId: m.abandoned_by_steam_id64, nick: m.abandoned_by_nick }
+        : null,
       players: players.rows.map((p) => ({
         steamId: p.steam_id64,
         nick: p.nick,
@@ -246,6 +284,8 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
         won: p.won,
         isTracked: p.is_tracked,
         weapons: armasPorJogador.get(p.steam_id64) ?? [],
+        // Clipe real do Allstar (ADR-0004) — ver allstarClip.js. null = nunca pedido.
+        allstarClip: allstarClipPorJogador.get(p.steam_id64) ?? null,
         // Taxa de duelo: de todo confronto que terminou em morte envolvendo esse
         // Jogador (matou OU morreu), quanto % ele venceu. Não identifica "quase matou"
         // (precisaria de dado de engajamento que não temos) — só confrontos concluídos.
@@ -518,40 +558,51 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
     )
   })
 
-  // Pedido SOB DEMANDA de clipe de vídeo real ao Allstar (ADR-0004) — o jogador clica
-  // "gerar clipe" na tela da Partida, nada é automático. Restrito a uma allowlist de
-  // steamId64 (config.allstarSteamIds) até o preço por clipe ser confirmado com o
-  // suporte deles.
-  router.post('/:id/highlight/:highlightId/allstar-clip', requireAuth, async (req, res) => {
+  // Pedido SOB DEMANDA do melhor clipe da partida pra um JOGADOR (ADR-0004) — o
+  // jogador clica "gerar melhor clipe" na aba Clipes, nada é automático. Qualquer
+  // Jogador autenticado pode gerar o PRÓPRIO clipe; gerar o clipe de OUTRO jogador da
+  // partida é restrito a config.allstarSteamIds (o dono do sistema) — checado contra
+  // req.player.steamId, quem tá logado, não o steamId alvo do clipe.
+  //
+  // Por que "por jogador" e não mais "por highlight": só POTG e BP estão habilitados
+  // na nossa conta (dashboard Allstar + sondagem real, 2026-07-21) — nenhum dos dois
+  // aceita mirar um round específico. POTG nem aceita steamId (podia devolver o
+  // clipe de OUTRO jogador — bug real reportado pelo usuário); BP aceita steamId,
+  // então garante que o clipe é sempre daquele jogador, mas ainda é "a melhor jogada
+  // DELE na partida inteira", não um round escolhido. Ver allstarClip.js.
+  router.post('/:id/jogador/:steamId/clipe', requireAuth, async (req, res) => {
     if (!config.allstarApiKey || !r2Client) {
       return res.status(503).json({ erro: 'Integração com o Allstar não configurada' })
     }
-    const { id, highlightId } = req.params
+    const { id, steamId } = req.params
     const { rows } = await db.query(
-      `select h.id, h.kind, h.steam_id64, h.round_number, mp.nick, m.demo_url
-       from highlights h
-       join matches m on m.id = h.match_id
-       left join match_players mp on mp.match_id = h.match_id and mp.steam_id64 = h.steam_id64
-       where h.id = $1 and h.match_id = $2
+      `select mp.steam_id64, mp.nick, m.demo_url
+       from match_players mp
+       join matches m on m.id = mp.match_id
+       where mp.match_id = $1 and mp.steam_id64 = $2
          and ${partidaVisivelExpr('m', '$3')}`,
-      [highlightId, id, req.player.steamId],
+      [id, steamId, req.player.steamId],
     )
-    const h = rows[0]
-    if (!h) return res.status(404).json({ erro: 'Highlight não encontrado' })
-    if (!config.allstarSteamIds.has(h.steam_id64)) {
-      return res.status(403).json({ erro: 'Clipe Allstar ainda restrito a um grupo de teste' })
+    const jogador = rows[0]
+    if (!jogador) return res.status(404).json({ erro: 'Jogador não encontrado nessa partida' })
+    const ehDono = config.allstarSteamIds.has(req.player.steamId)
+    if (!ehDono && req.player.steamId !== steamId) {
+      return res.status(403).json({ erro: 'Você só pode gerar o clipe do seu próprio jogador' })
     }
-    if (!h.demo_url) return res.status(404).json({ erro: 'Demo não arquivada pra essa partida' })
+    if (!jogador.demo_url) return res.status(404).json({ erro: 'Demo não arquivada pra essa partida' })
 
-    const existente = await db.query('select status, clip_url from allstar_clips where highlight_id = $1', [highlightId])
+    const existente = await db.query(
+      'select status, clip_url from allstar_clips where match_id = $1 and steam_id64 = $2',
+      [id, steamId],
+    )
     if (existente.rows.length > 0 && existente.rows[0].status !== 'Error') {
       // Já pedido antes (ex.: clique duplo) — devolve o que já existe em vez de pedir
-      // outro clipe do mesmo momento. Status 'Error' passa direto: o jogador pode
+      // outro clipe do mesmo jogador. Status 'Error' passa direto: o jogador pode
       // tentar de novo (a linha antiga é substituída pelo pedido novo logo abaixo).
       return res.json({ status: existente.rows[0].status })
     }
 
-    const demoKey = keyFromR2Url(h.demo_url, r2Bucket)
+    const demoKey = keyFromR2Url(jogador.demo_url, r2Bucket)
     if (!demoKey) return res.status(404).json({ erro: 'Demo fora do bucket configurado' })
     try {
       // URL assinada temporária — o bucket é privado, o Allstar busca o .dem sozinho
@@ -559,19 +610,20 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
       // validade (não o default de 2h): a fila de render deles pode demorar horas pra
       // pegar o job, e uma URL expirada no meio da fila viraria erro de download.
       const demoUrlAssinada = await presignDownload(r2Client, r2Bucket, demoKey, 86400)
-      const requestId = await pedirClipe({
-        apiKey: config.allstarApiKey, steamId: h.steam_id64, nick: h.nick,
-        demoUrl: demoUrlAssinada, roundNumber: h.round_number,
+      const requestId = await pedirMelhorClipeDoJogador({
+        apiKey: config.allstarApiKey, steamId, nick: jogador.nick,
+        demoUrl: demoUrlAssinada,
         webhookUrl: `${config.appUrl}/api/allstar/webhook`,
-        metadata: [{ key: 'highlightId', value: highlightId }],
+        metadata: [{ key: 'matchId', value: id }, { key: 'steamId', value: steamId }],
       })
       // Retry depois de Error: remove a tentativa falhada antes de gravar a nova —
-      // sem isso o join do GET /:id devolveria duas linhas pro mesmo highlight.
-      await db.query("delete from allstar_clips where highlight_id = $1 and status = 'Error'", [highlightId])
-      await db.query('insert into allstar_clips (highlight_id, request_id) values ($1, $2)', [highlightId, requestId])
+      // sem isso o GET /:id devolveria duas linhas pro mesmo jogador (o unique
+      // constraint em (match_id, steam_id64) rejeitaria o insert de qualquer forma).
+      await db.query("delete from allstar_clips where match_id = $1 and steam_id64 = $2 and status = 'Error'", [id, steamId])
+      await db.query('insert into allstar_clips (match_id, steam_id64, request_id) values ($1, $2, $3)', [id, steamId, requestId])
       res.json({ status: 'Submitted' })
     } catch (e) {
-      console.error(`allstar: falha ao pedir clipe do highlight ${highlightId}:`, e)
+      console.error(`allstar: falha ao pedir clipe do jogador ${steamId} na partida ${id}:`, e)
       res.status(502).json({ erro: `Falha ao pedir o clipe ao Allstar: ${e.message}` })
     }
   })

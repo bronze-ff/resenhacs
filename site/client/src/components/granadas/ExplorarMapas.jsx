@@ -18,10 +18,7 @@ export default function ExplorarMapas({ contagens, onEscolher, badges, subtitulo
 
   return (
     <div className="space-y-4">
-      <div>
-        <SectionHeader titulo="Explorar por mapa" className="mb-1" />
-        <p className="font-mono text-sm text-texto-fraco">{subtitulo ?? 'Escolha um mapa pra ver os lineups do grupo.'}</p>
-      </div>
+      <SectionHeader titulo="Explorar por mapa" subtitulo={subtitulo ?? 'Escolha um mapa pra ver os lineups do grupo.'} />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {MAPAS_POOL.map((m) => {
           const tipos = porMapa[m] ?? {}

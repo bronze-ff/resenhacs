@@ -72,8 +72,10 @@ describe('GET /api/taticas-curadas', () => {
     expect(res.body[0].papeis[0].granadas[0]).toMatchObject({
       id: 'g1', ordem: 0, videoUrl: 'https://youtu.be/abcdefghijk', arremessoX: 0.2, alvoY: 0.3,
     })
-    expect(db.query.mock.calls).toHaveLength(3)
-    expect(db.query.mock.calls[0][1]).toEqual(['de_mirage', 'T'])
+    // +1 pela checagem de revogação de sessão do requireAuth (tokens_validos_apos).
+    expect(db.query.mock.calls).toHaveLength(4)
+    const chamada = db.query.mock.calls.find(([sql]) => sql.includes('from taticas_curadas'))
+    expect(chamada[1]).toEqual(['de_mirage', 'T'])
   })
 
   it('filtro invalido e ignorado (nao vira SQL)', async () => {
@@ -81,7 +83,8 @@ describe('GET /api/taticas-curadas', () => {
     await request(app)
       .get("/api/taticas-curadas?map=x';drop&lado=Z&tipo=nuke&local=C&armas=x")
       .set('Cookie', cookieJogador)
-    expect(db.query.mock.calls[0][1]).toEqual([])
+    const chamada = db.query.mock.calls.find(([sql]) => sql.includes('from taticas_curadas'))
+    expect(chamada[1]).toEqual([])
   })
 })
 
@@ -161,9 +164,12 @@ describe('PUT /api/taticas-curadas/:id', () => {
     const { app, db } = appWith([])
     const res = await request(app).put('/api/taticas-curadas/abc').set('Cookie', cookieAdmin).send(PAYLOAD_VALIDO)
     expect(res.status).toBe(404)
-    // Além do recheck de admin (requireSuperAdmin agora reconsulta o banco), nenhuma query
-    // do handler rodou — id malformado é rejeitado antes de qualquer trabalho de banco.
-    expect(db.query.mock.calls.filter((c) => !c[0].includes('is_super_admin from players'))).toHaveLength(0)
+    // Além do recheck de admin (requireSuperAdmin) e da checagem de revogação de sessão
+    // (requireAuth), nenhuma query do handler rodou — id malformado é rejeitado antes de
+    // qualquer trabalho de banco.
+    expect(db.query.mock.calls.filter((c) =>
+      !c[0].includes('is_super_admin from players') && !c[0].includes('tokens_validos_apos from players'),
+    )).toHaveLength(0)
   })
 })
 
@@ -191,8 +197,11 @@ describe('DELETE /api/taticas-curadas/:id', () => {
     const { app, db } = appWith([])
     const res = await request(app).delete('/api/taticas-curadas/abc').set('Cookie', cookieAdmin)
     expect(res.status).toBe(404)
-    // Além do recheck de admin (requireSuperAdmin agora reconsulta o banco), nenhuma query
-    // do handler rodou — id malformado é rejeitado antes de qualquer trabalho de banco.
-    expect(db.query.mock.calls.filter((c) => !c[0].includes('is_super_admin from players'))).toHaveLength(0)
+    // Além do recheck de admin (requireSuperAdmin) e da checagem de revogação de sessão
+    // (requireAuth), nenhuma query do handler rodou — id malformado é rejeitado antes de
+    // qualquer trabalho de banco.
+    expect(db.query.mock.calls.filter((c) =>
+      !c[0].includes('is_super_admin from players') && !c[0].includes('tokens_validos_apos from players'),
+    )).toHaveLength(0)
   })
 })

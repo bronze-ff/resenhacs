@@ -29,7 +29,7 @@ describe('GET /api/lado-mapa', () => {
       { map: 'de_mirage', lado: 'T', rounds: 12, vitorias: 3, winrate: 25 },
     ])
     // Visibilidade por amizade (friendships.js), não mais group_id.
-    const [sql, params] = db.query.mock.calls[0]
+    const [sql, params] = db.query.mock.calls.find(([s]) => s.includes('from friendships f'))
     expect(sql).toContain('from friendships f')
     expect(sql).not.toContain('group_id')
     expect(params).toEqual(['76561198000000009'])

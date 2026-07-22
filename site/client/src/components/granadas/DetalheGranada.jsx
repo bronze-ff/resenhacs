@@ -2,26 +2,32 @@ import { useState } from 'react'
 import { embedYoutube, linkBuscaYoutube } from '../../lib/youtube.js'
 import { nomeMapa } from '../../lib/format.js'
 import { ROTULO_TECNICA, ROTULO_BOTAO } from '../../lib/rotulos.js'
+import { useTransicaoModal } from '../../lib/useTransicaoModal.js'
 import { Card, Badge } from '../ui'
 
 export default function DetalheGranada({ granada, onFechar, acoesAdmin = null }) {
   const [aba, setAba] = useState('video')
   const embed = embedYoutube(granada.videoUrl)
   const temPassos = (granada.passos ?? []).length > 0
+  const { visivel, iniciarSaida } = useTransicaoModal()
+  const fechar = () => iniciarSaida(onFechar)
 
   return (
     // z-[60]: precisa abrir POR CIMA de outros modais (ex.: DetalheTatica, z-50,
     // que linka granadas da biblioteca e abre este componente sobreposto).
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-fundo/80 p-0 lg:p-4" onClick={onFechar}>
+    <div
+      className={`fixed inset-0 z-[60] flex items-center justify-center bg-fundo/80 p-0 transition-opacity duration-200 lg:p-4 ${visivel ? 'opacity-100' : 'opacity-0'}`}
+      onClick={fechar}
+    >
       <Card
         corte={false}
-        className="flex h-full w-full flex-col overflow-y-hidden lg:panel-cut lg:block lg:h-auto lg:max-h-[90vh] lg:w-full lg:max-w-2xl lg:overflow-y-auto lg:p-5"
+        className={`flex h-full w-full flex-col overflow-y-hidden transition-all duration-200 lg:panel-cut lg:block lg:h-auto lg:max-h-[90vh] lg:w-full lg:max-w-2xl lg:overflow-y-auto lg:p-5 ${visivel ? 'opacity-100 lg:scale-100' : 'opacity-0 lg:scale-95'}`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-borda bg-superficie px-4 py-3 lg:static lg:border-0 lg:bg-transparent lg:px-0 lg:py-0">
           <h3 className="font-display text-xl font-bold text-texto">{granada.titulo}</h3>
           <button
-            onClick={onFechar}
+            onClick={fechar}
             className="flex min-h-10 min-w-10 items-center justify-center font-mono text-sm uppercase text-texto-fraco hover:text-texto lg:inline-block lg:min-h-0 lg:min-w-0"
           >fechar</button>
         </div>

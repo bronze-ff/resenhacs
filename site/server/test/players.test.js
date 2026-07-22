@@ -36,7 +36,23 @@ describe('GET /api/players', () => {
     ])
     const res = await request(app).get('/api/players').set('Cookie', memberCookie)
     expect(res.status).toBe(200)
-    expect(res.body).toEqual([{ steamId: '765', nick: 'fih', avatarUrl: null, isSuperAdmin: true }])
+    // is_super_admin de OUTRO jogador não pode vazar pro amigo logado (reconhecimento de
+    // alvo de maior privilégio) — só sai isSuperAdmin no próprio registro do logado.
+    expect(res.body).toEqual([{ steamId: '765', nick: 'fih', avatarUrl: null }])
+  })
+
+  it('logado: vê o próprio isSuperAdmin, mas não o de outro jogador da lista', async () => {
+    const eu = '76561198000000002'
+    const { app } = appWith([
+      { steam_id64: eu, nick: 'eu-mesmo', avatar_url: null, is_super_admin: false },
+      { steam_id64: '76561198000000009', nick: 'amigo', avatar_url: null, is_super_admin: true },
+    ])
+    const res = await request(app).get('/api/players').set('Cookie', memberCookie)
+    expect(res.status).toBe(200)
+    expect(res.body).toEqual([
+      { steamId: eu, nick: 'eu-mesmo', avatarUrl: null, isSuperAdmin: false },
+      { steamId: '76561198000000009', nick: 'amigo', avatarUrl: null },
+    ])
   })
 
   it('escopo populacional: eu + meus amigos accepted (friendships), não group_members', async () => {
@@ -44,7 +60,7 @@ describe('GET /api/players', () => {
     const app = createApp({ config, db })
     const res = await request(app).get('/api/players').set('Cookie', memberCookie)
     expect(res.status).toBe(200)
-    const [sql, params] = db.query.mock.calls[0]
+    const [sql, params] = db.query.mock.calls.find(([s]) => s.includes('from friendships f'))
     expect(sql).toContain('from friendships f')
     expect(sql).toContain("f.status = 'accepted'")
     expect(sql).not.toContain('group_members')
@@ -85,7 +101,7 @@ describe('GET /api/players/bans', () => {
     const app = createApp({ config, db, fetchBans })
     const res = await request(app).get('/api/players/bans').set('Cookie', memberCookie)
     expect(res.status).toBe(200)
-    const [sql, params] = db.query.mock.calls[0]
+    const [sql, params] = db.query.mock.calls.find(([s]) => s.includes('from friendships f'))
     expect(sql).toContain('from friendships f')
     expect(sql).toContain("f.status = 'accepted'")
     expect(sql).not.toContain('group_members')
@@ -214,7 +230,8 @@ describe('PUT /api/players/me (onboarding)', () => {
       .set('Cookie', memberCookie)
       .send({ matchAuthCode: 'ABCD-12345-EFGH', lastShareCode: shareCode })
     expect(res.status).toBe(200)
-    expect(db.query.mock.calls[0][1]).toEqual([
+    const chamada = db.query.mock.calls.find(([, params]) => params?.[1] === 'ABCD-12345-EFGH')
+    expect(chamada[1]).toEqual([
       '76561198000000002',
       'ABCD-12345-EFGH',
       shareCode,
@@ -233,7 +250,8 @@ describe('PUT /api/players/me/tour-concluido', () => {
     const res = await request(app).put('/api/players/me/tour-concluido').set('Cookie', memberCookie)
     expect(res.status).toBe(200)
     expect(res.body).toEqual({ ok: true })
-    expect(db.query.mock.calls[0][0]).toContain('update players set tour_concluido = true')
-    expect(db.query.mock.calls[0][1]).toEqual(['76561198000000002'])
+    const chamada = db.query.mock.calls.find(([sql]) => sql.includes('update players set tour_concluido = true'))
+    expect(chamada[0]).toContain('update players set tour_concluido = true')
+    expect(chamada[1]).toEqual(['76561198000000002'])
   })
 })

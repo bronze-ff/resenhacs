@@ -119,16 +119,39 @@ describe('GET /api/matches', () => {
   })
 })
 
+describe('GET /api/matches/sync-status', () => {
+  it('sem login: 401', async () => {
+    const { app } = appWith([])
+    expect((await request(app).get('/api/matches/sync-status')).status).toBe(401)
+  })
+
+  it('escopa pending/failed por discovered_by (eu ou amigo), parsed por participação/amizade', async () => {
+    const { app, db } = appWith([
+      ['count(*) filter', [{ pending: 2, failed: 1, parsed: 10, last_played_at: '2026-07-01T00:00:00.000Z' }]],
+    ])
+    const res = await request(app).get('/api/matches/sync-status').set('Cookie', cookie)
+    expect(res.status).toBe(200)
+    expect(res.body).toEqual({ pending: 2, failed: 1, parsed: 10, lastPlayedAt: '2026-07-01T00:00:00.000Z' })
+    const [sql, params] = db.query.mock.calls.find(([s]) => s.includes('count(*) filter'))
+    expect(sql).toContain('m.discovered_by = $1')
+    expect(sql).toContain("status = 'pending'")
+    expect(sql).toContain("status = 'failed'")
+    expect(sql).toContain('mv.steam_id64 = $1')
+    expect(sql).toContain('from friendships f')
+    expect(params).toEqual([STEAM_ID])
+  })
+})
+
 describe('GET /api/matches/:id', () => {
   it('404 quando não existe', async () => {
-    const { app } = appWith([['from matches where id', []]])
+    const { app } = appWith([['from matches mt', []]])
     const res = await request(app).get('/api/matches/xxx').set('Cookie', cookie)
     expect(res.status).toBe(404)
   })
 
   it('devolve placar, rounds, highlights, clipes e armas por jogador', async () => {
     const { app } = appWith([
-      ['from matches where id', [{ id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9, source: 'valve_mm', status: 'parsed', demo_url: null }]],
+      ['from matches mt', [{ id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9, source: 'valve_mm', status: 'parsed', demo_url: null }]],
       ['from match_players mp', [{ steam_id64: '765', nick: 'fih', team: 'A', kills: 25, team_kills: 1, deaths: 10, assists: 5, headshot_kills: 12, damage: 2500, rounds_played: 22, rating: '1.35', kast_pct: '72.5', premier_rating_before: 15420, premier_rating_after: 15480, faceit_elo_before: 1400, faceit_elo_after: 1425, won: true, is_tracked: true, avatar_url: 'https://avatars.steamstatic.com/fih.jpg' }]],
       ['from rounds where match_id', [{ round_number: 1, winner_team: 'A', win_reason: 'elim' }]],
       ['from highlights h', [{ id: 'h1', steam_id64: '765', round_number: 5, kind: 'ace', description: 'ACE', frame: 12, nick: 'fih', allstar_clip_id: 'ac1', allstar_status: 'Processed', allstar_clip_url: 'https://allstar.gg/iframe?clip=x' }]],
@@ -155,11 +178,29 @@ describe('GET /api/matches/:id', () => {
     })
     expect(res.body.clips[0]).toMatchObject({ provider: 'allstar', url: 'https://allstar.gg/x' })
     expect(res.body.demoUrl).toBeNull() // sem demo_url no fixture
+    expect(res.body.highlights[0]).not.toHaveProperty('allstarStatus')
+    expect(res.body.players[0].allstarClip).toBeNull() // sem allstar_clips no fixture
+  })
+
+  it('clipe do Allstar de um jogador aparece em players[].allstarClip (por jogador+partida, não mais por highlight)', async () => {
+    const { app } = appWith([
+      ['from matches mt', [{ id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9, source: 'valve_mm', status: 'parsed', demo_url: null }]],
+      ['from match_players mp', [{ steam_id64: '765', nick: 'fih', team: 'A', kills: 25, deaths: 10, assists: 5, headshot_kills: 12, damage: 2500, rounds_played: 22, rating: '1.35', won: true, is_tracked: true }]],
+      [
+        'from allstar_clips where match_id',
+        [{ steam_id64: '765', status: 'Processed', clip_url: 'https://allstar.gg/iframe?clip=abc', clip_snapshot_url: 'https://media/abc.jpg', round_number: 13 }],
+      ],
+    ])
+    const res = await request(app).get('/api/matches/m1').set('Cookie', cookie)
+    expect(res.body.players[0].allstarClip).toEqual({
+      status: 'Processed', clipUrl: 'https://allstar.gg/iframe?clip=abc',
+      clipSnapshotUrl: 'https://media/abc.jpg', roundNumber: 13,
+    })
   })
 
   it('jogador sem kills registrados: weapons vem vazio', async () => {
     const { app } = appWith([
-      ['from matches where id', [{ id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9, source: 'valve_mm', status: 'parsed', demo_url: null }]],
+      ['from matches mt', [{ id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9, source: 'valve_mm', status: 'parsed', demo_url: null }]],
       ['from match_players mp', [{ steam_id64: '999', nick: 'zerado', team: 'B', kills: 0, team_kills: 0, deaths: 20, assists: 0, headshot_kills: 0, damage: 0, rounds_played: 22, rating: '0.2', won: false, is_tracked: false, avatar_url: null }]],
     ])
     const res = await request(app).get('/api/matches/m1').set('Cookie', cookie)
@@ -173,7 +214,7 @@ describe('GET /api/matches/:id', () => {
 
   it('jogador sem cadastro no grupo usa o avatar em cache da steam_avatares (fallback)', async () => {
     const { app } = appWith([
-      ['from matches where id', [{ id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9, source: 'valve_mm', status: 'parsed', demo_url: null }]],
+      ['from matches mt', [{ id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9, source: 'valve_mm', status: 'parsed', demo_url: null }]],
       ['from match_players mp', [{ steam_id64: '999', nick: 'adversario', team: 'B', kills: 10, team_kills: 0, deaths: 15, assists: 2, headshot_kills: 3, damage: 1200, rounds_played: 22, rating: '0.85', won: false, is_tracked: false, avatar_url: 'https://avatars.steamstatic.com/cache.jpg' }]],
       ['from rounds where match_id', []],
       ['from highlights h', []],
@@ -184,9 +225,35 @@ describe('GET /api/matches/:id', () => {
     expect(res.body.players[0]).toMatchObject({ nick: 'adversario', isTracked: false, avatarUrl: 'https://avatars.steamstatic.com/cache.jpg' })
   })
 
+  it('partida encerrada por abandono devolve endedEarly e abandonedBy com nick', async () => {
+    const { app } = appWith([
+      ['from matches mt', [{
+        id: 'm1', map: 'de_mirage', played_at: null, score_a: 1, score_b: 4,
+        source: 'valve_mm', status: 'parsed', demo_url: null,
+        ended_early: true, abandoned_by_steam_id64: '765', abandoned_by_nick: 'krn',
+      }]],
+    ])
+    const res = await request(app).get('/api/matches/m1').set('Cookie', cookie)
+    expect(res.body.endedEarly).toBe(true)
+    expect(res.body.abandonedBy).toEqual({ steamId: '765', nick: 'krn' })
+  })
+
+  it('partida normal devolve endedEarly false e abandonedBy null', async () => {
+    const { app } = appWith([
+      ['from matches mt', [{
+        id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9,
+        source: 'valve_mm', status: 'parsed', demo_url: null,
+        ended_early: false, abandoned_by_steam_id64: null, abandoned_by_nick: null,
+      }]],
+    ])
+    const res = await request(app).get('/api/matches/m1').set('Cookie', cookie)
+    expect(res.body.endedEarly).toBe(false)
+    expect(res.body.abandonedBy).toBeNull()
+  })
+
   it('replayUrl aponta pro proxy do servidor, nunca pra URL crua do R2', async () => {
     const { app } = appWith([
-      ['from matches where id', [{
+      ['from matches mt', [{
         id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9,
         source: 'valve_mm', status: 'parsed',
         demo_url: 'https://acc.r2.cloudflarestorage.com/resenha-demos/demos/1.dem.bz2',
@@ -243,50 +310,108 @@ describe('GET /api/matches/:id/lado/:filtro', () => {
   })
 })
 
-describe('POST /api/matches/:id/highlight/:highlightId/allstar-clip', () => {
-  const configComAllstar = { ...config, allstarApiKey: 'api-key', allstarSteamIds: new Set(['765']) }
+describe('POST /api/matches/:id/jogador/:steamId/clipe', () => {
+  // A allowlist (config.allstarSteamIds) é do DONO do sistema — quem tá nela pode
+  // gerar clipe de QUALQUER jogador. Quem não tá só pode gerar o PRÓPRIO clipe (ver
+  // testes abaixo). Checa req.player.steamId (o cookie), não o alvo do clipe.
+  const configComAllstar = { ...config, allstarApiKey: 'api-key', allstarSteamIds: new Set([STEAM_ID]) }
 
   it('sem login: 401', async () => {
     const { app } = appWith([])
-    expect((await request(app).post('/api/matches/m1/highlight/h1/allstar-clip')).status).toBe(401)
+    expect((await request(app).post('/api/matches/m1/jogador/765/clipe')).status).toBe(401)
   })
 
   it('sem allstarApiKey configurado: 503', async () => {
     const { app } = appWith([], { config: { ...config, allstarApiKey: null }, r2Client: {} })
-    const res = await request(app).post('/api/matches/m1/highlight/h1/allstar-clip').set('Cookie', cookie)
+    const res = await request(app).post('/api/matches/m1/jogador/765/clipe').set('Cookie', cookie)
     expect(res.status).toBe(503)
   })
 
   it('sem r2Client: 503', async () => {
     const { app } = appWith([], { config: configComAllstar, r2Client: null })
-    const res = await request(app).post('/api/matches/m1/highlight/h1/allstar-clip').set('Cookie', cookie)
+    const res = await request(app).post('/api/matches/m1/jogador/765/clipe').set('Cookie', cookie)
     expect(res.status).toBe(503)
   })
 
-  it('highlight nao encontrado: 404', async () => {
-    const { app } = appWith([['from highlights h', []]], { config: configComAllstar, r2Client: {} })
-    const res = await request(app).post('/api/matches/m1/highlight/h1/allstar-clip').set('Cookie', cookie)
+  it('jogador nao encontrado nessa partida: 404', async () => {
+    const { app } = appWith([['from match_players mp', []]], { config: configComAllstar, r2Client: {} })
+    const res = await request(app).post('/api/matches/m1/jogador/765/clipe').set('Cookie', cookie)
     expect(res.status).toBe(404)
   })
 
-  it('jogador fora da allowlist: 403', async () => {
+  it('jogador comum (fora da allowlist) pode gerar o PRÓPRIO clipe', async () => {
+    // Qualquer Jogador autenticado pode gerar o clipe dele mesmo — a allowlist só
+    // restringe pedir clipe de OUTRO jogador. Cookie = STEAM_ID, alvo = STEAM_ID.
+    const gravados = []
+    const configSemAcesso = { ...config, allstarApiKey: 'api-key', allstarSteamIds: new Set(['999']) }
+    const db = {
+      query: vi.fn().mockImplementation((sql, params) => {
+        if (sql.includes('from match_players mp')) {
+          return Promise.resolve({ rows: [{ steam_id64: STEAM_ID, nick: 'bronze', demo_url: 'https://acc.r2.cloudflarestorage.com/resenha-demos/demos/x.dem.bz2' }] })
+        }
+        if (sql.includes('from allstar_clips where match_id')) return Promise.resolve({ rows: [] })
+        if (sql.includes('insert into allstar_clips')) { gravados.push(params); return Promise.resolve({ rows: [] }) }
+        return Promise.resolve({ rows: [] })
+      }),
+    }
+    const app = createApp({ config: configSemAcesso, db, r2Client: {} })
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ requestId: 'req-proprio' }) })
+    try {
+      const res = await request(app).post(`/api/matches/m1/jogador/${STEAM_ID}/clipe`).set('Cookie', cookie)
+      expect(res.status).toBe(200)
+      expect(res.body).toEqual({ status: 'Submitted' })
+      expect(gravados).toEqual([['m1', STEAM_ID, 'req-proprio']])
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  it('jogador comum (fora da allowlist) NAO pode gerar clipe de OUTRO jogador: 403', async () => {
+    const configSemAcesso = { ...config, allstarApiKey: 'api-key', allstarSteamIds: new Set(['999']) }
     const { app } = appWith(
-      [['from highlights h', [{ id: 'h1', kind: 'ace', steam_id64: '999', round_number: 1, nick: 'outro', demo_url: 'https://r2/demos/x.dem.bz2' }]]],
-      { config: configComAllstar, r2Client: {} },
+      [['from match_players mp', [{ steam_id64: '765', nick: 'outro', demo_url: 'https://r2/demos/x.dem.bz2' }]]],
+      { config: configSemAcesso, r2Client: {} },
     )
-    const res = await request(app).post('/api/matches/m1/highlight/h1/allstar-clip').set('Cookie', cookie)
+    const res = await request(app).post('/api/matches/m1/jogador/765/clipe').set('Cookie', cookie)
     expect(res.status).toBe(403)
+  })
+
+  it('quem pede na allowlist pode gerar clipe de OUTRO jogador da partida, não só do próprio', async () => {
+    const gravados = []
+    const db = {
+      query: vi.fn().mockImplementation((sql, params) => {
+        if (sql.includes('from match_players mp')) {
+          return Promise.resolve({ rows: [{ steam_id64: '999', nick: 'outro', demo_url: 'https://acc.r2.cloudflarestorage.com/resenha-demos/demos/x.dem.bz2' }] })
+        }
+        if (sql.includes('from allstar_clips where match_id')) return Promise.resolve({ rows: [] })
+        if (sql.includes('insert into allstar_clips')) { gravados.push(params); return Promise.resolve({ rows: [] }) }
+        return Promise.resolve({ rows: [] })
+      }),
+    }
+    // allowlist só tem '765' (o cookie/requester) — '999' (o alvo) nem precisa estar nela.
+    const app = createApp({ config: configComAllstar, db, r2Client: {} })
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ requestId: 'req-outro' }) })
+    try {
+      const res = await request(app).post('/api/matches/m1/jogador/999/clipe').set('Cookie', cookie)
+      expect(res.status).toBe(200)
+      expect(res.body).toEqual({ status: 'Submitted' })
+      expect(gravados).toEqual([['m1', '999', 'req-outro']])
+    } finally {
+      globalThis.fetch = originalFetch
+    }
   })
 
   it('ja tem clipe pedido: devolve o status existente sem pedir de novo', async () => {
     const { app } = appWith(
       [
-        ['from highlights h', [{ id: 'h1', kind: 'ace', steam_id64: '765', round_number: 1, nick: 'bronze', demo_url: 'https://r2/demos/x.dem.bz2' }]],
-        ['from allstar_clips where highlight_id', [{ status: 'Processed', clip_url: 'https://allstar.gg/iframe?clip=x' }]],
+        ['from match_players mp', [{ steam_id64: '765', nick: 'bronze', demo_url: 'https://r2/demos/x.dem.bz2' }]],
+        ['from allstar_clips where match_id', [{ status: 'Processed', clip_url: 'https://allstar.gg/iframe?clip=x' }]],
       ],
       { config: configComAllstar, r2Client: {} },
     )
-    const res = await request(app).post('/api/matches/m1/highlight/h1/allstar-clip').set('Cookie', cookie)
+    const res = await request(app).post('/api/matches/m1/jogador/765/clipe').set('Cookie', cookie)
     expect(res.status).toBe(200)
     expect(res.body).toEqual({ status: 'Processed' })
   })
@@ -296,12 +421,12 @@ describe('POST /api/matches/:id/highlight/:highlightId/allstar-clip', () => {
     const gravados = []
     const db = {
       query: vi.fn().mockImplementation((sql, params) => {
-        if (sql.includes('from highlights h')) {
-          return Promise.resolve({ rows: [{ id: 'h1', kind: 'ace', steam_id64: '765', round_number: 3, nick: 'bronze', demo_url: 'https://acc.r2.cloudflarestorage.com/resenha-demos/demos/x.dem.bz2' }] })
+        if (sql.includes('from match_players mp')) {
+          return Promise.resolve({ rows: [{ steam_id64: '765', nick: 'bronze', demo_url: 'https://acc.r2.cloudflarestorage.com/resenha-demos/demos/x.dem.bz2' }] })
         }
-        // O delete também contém "from allstar_clips where highlight_id" — checar antes do select.
+        // O delete também contém "from allstar_clips where match_id" — checar antes do select.
         if (sql.includes('delete from allstar_clips')) { deletados.push(params); return Promise.resolve({ rows: [] }) }
-        if (sql.includes('from allstar_clips where highlight_id')) return Promise.resolve({ rows: [{ status: 'Error', clip_url: null }] })
+        if (sql.includes('from allstar_clips where match_id')) return Promise.resolve({ rows: [{ status: 'Error', clip_url: null }] })
         if (sql.includes('insert into allstar_clips')) { gravados.push(params); return Promise.resolve({ rows: [] }) }
         return Promise.resolve({ rows: [] })
       }),
@@ -310,11 +435,11 @@ describe('POST /api/matches/:id/highlight/:highlightId/allstar-clip', () => {
     const originalFetch = globalThis.fetch
     globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, status: 201, json: async () => ({ requestId: 'req-2' }) })
     try {
-      const res = await request(app).post('/api/matches/m1/highlight/h1/allstar-clip').set('Cookie', cookie)
+      const res = await request(app).post('/api/matches/m1/jogador/765/clipe').set('Cookie', cookie)
       expect(res.status).toBe(200)
       expect(res.body).toEqual({ status: 'Submitted' })
-      expect(deletados).toEqual([['h1']])
-      expect(gravados).toEqual([['h1', 'req-2']])
+      expect(deletados).toEqual([['m1', '765']])
+      expect(gravados).toEqual([['m1', '765', 'req-2']])
     } finally {
       globalThis.fetch = originalFetch
     }
@@ -324,10 +449,10 @@ describe('POST /api/matches/:id/highlight/:highlightId/allstar-clip', () => {
     const gravados = []
     const db = {
       query: vi.fn().mockImplementation((sql, params) => {
-        if (sql.includes('from highlights h')) {
-          return Promise.resolve({ rows: [{ id: 'h1', kind: 'ace', steam_id64: '765', round_number: 14, nick: 'bronze', demo_url: 'https://acc.r2.cloudflarestorage.com/resenha-demos/demos/x.dem.bz2' }] })
+        if (sql.includes('from match_players mp')) {
+          return Promise.resolve({ rows: [{ steam_id64: '765', nick: 'bronze', demo_url: 'https://acc.r2.cloudflarestorage.com/resenha-demos/demos/x.dem.bz2' }] })
         }
-        if (sql.includes('from allstar_clips where highlight_id')) return Promise.resolve({ rows: [] })
+        if (sql.includes('from allstar_clips where match_id')) return Promise.resolve({ rows: [] })
         if (sql.includes('insert into allstar_clips')) { gravados.push(params); return Promise.resolve({ rows: [] }) }
         return Promise.resolve({ rows: [] })
       }),
@@ -336,13 +461,16 @@ describe('POST /api/matches/:id/highlight/:highlightId/allstar-clip', () => {
     const originalFetch = globalThis.fetch
     globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ requestId: 'req-1' }) })
     try {
-      const res = await request(app).post('/api/matches/m1/highlight/h1/allstar-clip').set('Cookie', cookie)
+      const res = await request(app).post('/api/matches/m1/jogador/765/clipe').set('Cookie', cookie)
       expect(res.status).toBe(200)
       expect(res.body).toEqual({ status: 'Submitted' })
-      expect(gravados).toEqual([['h1', 'req-1']])
+      expect(gravados).toEqual([['m1', '765', 'req-1']])
       expect(presignDownload).toHaveBeenCalledWith({}, 'resenha-demos', 'demos/x.dem.bz2', 86400)
+      // BP não aceita `rounds` (nem `round`) — a Allstar escolhe a melhor jogada do
+      // jogador na partida inteira, não um round específico.
       const [, opts] = globalThis.fetch.mock.calls[0]
-      expect(JSON.parse(opts.body).rounds).toEqual([14])
+      expect(JSON.parse(opts.body)).not.toHaveProperty('rounds')
+      expect(JSON.parse(opts.body).steamId).toBe('765')
     } finally {
       globalThis.fetch = originalFetch
     }

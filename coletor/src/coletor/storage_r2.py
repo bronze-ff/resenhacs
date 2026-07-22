@@ -20,9 +20,33 @@ def upload_bytes(client, bucket, key, data, content_type="application/octet-stre
     return key
 
 
-def download_bytes(client, bucket, key):
+class ArquivoGrandeDemaisError(RuntimeError):
+    """Objeto no R2 excede o teto de tamanho aceito pra baixar inteiro pra memória."""
+
+
+def content_length(client, bucket, key):
+    """HEAD no objeto — descobre o tamanho sem baixar o corpo. Usado ANTES de um
+    download_bytes(..., max_bytes=...) pra decidir se vale a pena baixar."""
+    return client.head_object(Bucket=bucket, Key=key)["ContentLength"]
+
+
+def download_bytes(client, bucket, key, max_bytes=None):
     """Baixa um objeto de volta (reprocessamento: pega o .dem já arquivado sem
-    precisar re-baixar da Valve, que expira o link em poucos minutos)."""
+    precisar re-baixar da Valve, que expira o link em poucos minutos).
+
+    `max_bytes` (opcional): auditoria finding #2 — nenhuma camada limitava o tamanho
+    do .dem antes do upload manual (o PUT pré-assinado simples, ver site/server/src/
+    routes/upload.js, não suporta uma condição real de Content-Length na assinatura).
+    Quando informado, faz um HEAD (content_length) ANTES de baixar e levanta
+    ArquivoGrandeDemaisError se o objeto for maior que o teto — evita carregar um
+    arquivo gigante inteiro pra memória do runner só pra descobrir depois que era
+    grande demais."""
+    if max_bytes is not None:
+        tamanho = content_length(client, bucket, key)
+        if tamanho > max_bytes:
+            raise ArquivoGrandeDemaisError(
+                f"objeto {key} tem {tamanho} bytes, acima do teto de {max_bytes} bytes"
+            )
     return client.get_object(Bucket=bucket, Key=key)["Body"].read()
 
 

@@ -4,6 +4,7 @@ import DetalheGranada from '../granadas/DetalheGranada.jsx'
 import { thumbYoutube } from '../../lib/youtube.js'
 import { ROTULO_TIPO_TATICA, ROTULO_ARMAS } from './CardTatica.jsx'
 import { ROTULO_TECNICA, ROTULO_BOTAO } from '../../lib/rotulos.js'
+import { useTransicaoModal } from '../../lib/useTransicaoModal.js'
 import { Card, Badge } from '../ui'
 
 // Bloco compacto de uma granada linkada a um papel: título + badges técnica/botão
@@ -42,6 +43,8 @@ export default function DetalheTatica({ tatica, onFechar, acoesAdmin = null }) {
   )
   const [aba, setAba] = useState('overview')
   const [granadaAberta, setGranadaAberta] = useState(null)
+  const { visivel, iniciarSaida } = useTransicaoModal()
+  const fechar = () => iniciarSaida(onFechar)
 
   useEffect(() => {
     setAba('overview')
@@ -54,9 +57,12 @@ export default function DetalheTatica({ tatica, onFechar, acoesAdmin = null }) {
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-fundo/80 p-0 lg:p-4" onClick={onFechar}>
+      <div
+        className={`fixed inset-0 z-50 flex items-center justify-center bg-fundo/80 p-0 transition-opacity duration-200 lg:p-4 ${visivel ? 'opacity-100' : 'opacity-0'}`}
+        onClick={fechar}
+      >
         <div
-          className="flex h-full w-full flex-col overflow-y-hidden border border-borda bg-superficie lg:panel-cut lg:h-auto lg:max-h-[90vh] lg:w-full lg:max-w-4xl lg:overflow-y-auto lg:p-5"
+          className={`flex h-full w-full flex-col overflow-y-hidden border border-borda bg-superficie transition-all duration-200 lg:panel-cut lg:h-auto lg:max-h-[90vh] lg:w-full lg:max-w-4xl lg:overflow-y-auto lg:p-5 ${visivel ? 'opacity-100 lg:scale-100' : 'opacity-0 lg:scale-95'}`}
           onClick={(e) => e.stopPropagation()}
         >
           <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-borda bg-superficie px-4 py-3 lg:static lg:border-0 lg:bg-transparent lg:px-0 lg:py-0">
@@ -70,7 +76,7 @@ export default function DetalheTatica({ tatica, onFechar, acoesAdmin = null }) {
               </div>
             </div>
             <button
-              onClick={onFechar}
+              onClick={fechar}
               className="flex min-h-10 min-w-10 shrink-0 items-center justify-center font-mono text-sm uppercase text-texto-fraco hover:text-texto"
             >fechar</button>
           </div>

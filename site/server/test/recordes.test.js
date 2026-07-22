@@ -63,6 +63,14 @@ describe('GET /api/recordes', () => {
     expect(playersSql).toContain('from friendships f')
     expect(playersSql).not.toContain('group_id')
     expect(playersParams).toEqual(['76561198000000009'])
+
+    // Finding S6: sem LIMIT essas duas queries varriam TODO o histórico de partidas
+    // visíveis a cada request (DoS barato). As duas precisam do MESMO recorte de
+    // partidas (senão jogador de uma partida "sobra" sem a partida correspondente).
+    for (const sql of [matchesSql, playersSql]) {
+      expect(sql).toContain('limit 750')
+      expect(sql).toContain('order by played_at desc nulls last, id desc')
+    }
   })
 
   it('grupo sem partidas: tudo null, sem quebrar', async () => {

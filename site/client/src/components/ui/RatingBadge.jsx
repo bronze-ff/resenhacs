@@ -1,20 +1,21 @@
+import Chip from './Chip.jsx'
+
 // Badge de rating estilo FACEIT: verde quando >= 1.0, vermelho quando < 1.0 (2 casas).
+// Usa o Chip compartilhado (ver Chip.jsx) — antes desenhava a casca na mão e acabou
+// sendo o único badge da família sem `border` (drift real, corrigido aqui).
 export default function RatingBadge({ valor, className = '', ...props }) {
   if (valor == null || Number.isNaN(Number(valor))) {
     return (
-      <span className={`panel-cut-sm inline-block px-1.5 py-0.5 font-mono text-xs font-bold tabular-nums text-texto-fraco ${className}`.trim()} {...props}>
+      <Chip toneClassName="border-borda text-texto-fraco" className={`text-xs font-bold tabular-nums ${className}`.trim()} {...props}>
         –
-      </span>
+      </Chip>
     )
   }
   const n = Number(valor)
-  const cor = n >= 1 ? 'bg-sucesso/15 text-sucesso' : 'bg-perigo/15 text-perigo'
+  const cor = n >= 1 ? 'border-sucesso/40 bg-sucesso/15 text-sucesso' : 'border-perigo/40 bg-perigo/15 text-perigo'
   return (
-    <span
-      className={`panel-cut-sm inline-block px-1.5 py-0.5 font-mono text-xs font-bold tabular-nums ${cor} ${className}`.trim()}
-      {...props}
-    >
+    <Chip toneClassName={cor} className={`text-xs font-bold tabular-nums ${className}`.trim()} {...props}>
       {n.toFixed(2)}
-    </span>
+    </Chip>
   )
 }

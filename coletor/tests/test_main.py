@@ -189,6 +189,7 @@ def test_cmd_reprocess_sem_since_reprocessa_tudo():
     main.cmd_reprocess(_config_com_r2(), conn)
     assert "played_at >=" not in conn.ultima_query
     assert conn.ultimos_params is None
+    assert "order by reprocessed_at nulls first, id" in conn.ultima_query
 
 
 def test_cmd_reprocess_com_since_filtra_por_played_at():
@@ -196,6 +197,7 @@ def test_cmd_reprocess_com_since_filtra_por_played_at():
     main.cmd_reprocess(_config_com_r2(), conn, since="2026-07-16")
     assert "played_at >=" in conn.ultima_query
     assert conn.ultimos_params == ("2026-07-16",)
+    assert "order by reprocessed_at nulls first, id" in conn.ultima_query
 
 
 def test_cmd_reprocess_match_id_ignora_since():
@@ -203,6 +205,77 @@ def test_cmd_reprocess_match_id_ignora_since():
     main.cmd_reprocess(_config_com_r2(), conn, match_id="m1", since="2026-07-16")
     assert "id = %s" in conn.ultima_query
     assert conn.ultimos_params == ("m1",)
+
+
+class _ReprocessCursor:
+    def __init__(self, conn):
+        self.conn = conn
+        self._last = ""
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def execute(self, sql, params=None):
+        self._last = " ".join(sql.split())
+        self.conn.calls.append((self._last, params))
+
+    def fetchall(self):
+        if self._last.startswith("select id, share_code, source, demo_url, replay_url, played_at from matches"):
+            return self.conn.rows
+        return []
+
+
+class _ReprocessConn:
+    def __init__(self, rows):
+        self.calls = []
+        self.commits = 0
+        self.rollbacks = 0
+        self.rows = rows
+
+    def cursor(self):
+        return _ReprocessCursor(self)
+
+    def commit(self):
+        self.commits += 1
+
+    def rollback(self):
+        self.rollbacks += 1
+
+
+def test_cmd_reprocess_marca_reprocessed_at_apos_sucesso(monkeypatch):
+    # Uma Partida reprocessada com sucesso precisa ficar marcada — é o que permite a
+    # PRÓXIMA rodada (ordenada por reprocessed_at nulls first) avançar em vez de
+    # repetir a mesma Partida de novo (ver docstring de cmd_reprocess).
+    conn = _ReprocessConn([
+        ("m1", "SC1", "valve_mm", "https://r2/demos/m1.dem.bz2", "https://r2/replays/m1.json", None),
+    ])
+    config = _config_com_r2()
+
+    monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
+    monkeypatch.setattr(main.storage_r2, "key_from_url", lambda url, bucket: url.rsplit("/", 1)[-1])
+    monkeypatch.setattr(main.storage_r2, "download_bytes", lambda client, bucket, key: b"dem-bytes")
+    monkeypatch.setattr(main, "_descomprimir_dem_arquivado", lambda dados: b"dem-real")
+    monkeypatch.setattr(
+        main.parsemod, "parse_demo",
+        lambda path: {"players": [], "kills": [], "rounds": [], "map": "de_dust2", "highlights": []},
+    )
+    monkeypatch.setattr(main.transform, "fill_kd_from_kills", lambda players, kills: players)
+    monkeypatch.setattr(main.transform, "enrich", lambda parsed: parsed)
+    monkeypatch.setattr(main.parsemod, "extract_replay", lambda path: {"ticks": [], "kills": [], "rounds": []})
+    monkeypatch.setattr(main.replaymod, "build_replay", lambda *a, **kw: {"rounds": []})
+    monkeypatch.setattr(main.transform, "attach_replay_frames", lambda highlights, rounds: highlights)
+    monkeypatch.setattr(main, "_montar_lineups", lambda *a, **kw: [])
+    monkeypatch.setattr(main, "_upload_replay", lambda *a, **kw: None)
+    monkeypatch.setattr(main.dbmod, "store_parsed", lambda *a, **kw: "m1")
+
+    total = main.cmd_reprocess(config, conn)
+
+    assert total == 1
+    update = next(c for c in conn.calls if c[0].startswith("update matches set reprocessed_at"))
+    assert update[1] == ("m1",)
 
 
 # ---- streaming por round do Replay 2D (FIL-54b) ----
@@ -373,20 +446,29 @@ def test_processar_fila_pro_ainda_suporta_hltv_url_via_urlopen(monkeypatch):
     monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
 
     class _FakeResp:
+        # read(n) chunked (a leitura real de _baixar_com_teto pede em pedaços de 1MB
+        # até vir vazio) — devolve o conteúdo inteiro na 1a chamada, depois b"" sempre.
+        def __init__(self, dados):
+            self._dados = dados
+            self._lido = False
+
         def __enter__(self):
             return self
 
         def __exit__(self, *a):
             return False
 
-        def read(self):
-            return b"rar-bytes"
+        def read(self, n=-1):
+            if self._lido:
+                return b""
+            self._lido = True
+            return self._dados
 
     urls_abertos = []
 
     def _urlopen_fake(url, timeout=None):
         urls_abertos.append(url)
-        return _FakeResp()
+        return _FakeResp(b"rar-bytes")
 
     monkeypatch.setattr("urllib.request.urlopen", _urlopen_fake)
 
@@ -422,16 +504,24 @@ def test_processar_fila_pro_funde_partes_adjacentes_do_mesmo_mapa_num_so_match_i
     monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
 
     class _FakeResp:
+        # read(n) chunked — ver comentário equivalente no teste anterior.
+        def __init__(self, dados):
+            self._dados = dados
+            self._lido = False
+
         def __enter__(self):
             return self
 
         def __exit__(self, *a):
             return False
 
-        def read(self):
-            return b"rar-bytes"
+        def read(self, n=-1):
+            if self._lido:
+                return b""
+            self._lido = True
+            return self._dados
 
-    monkeypatch.setattr("urllib.request.urlopen", lambda url, timeout=None: _FakeResp())
+    monkeypatch.setattr("urllib.request.urlopen", lambda url, timeout=None: _FakeResp(b"rar-bytes"))
 
     def _rar_extract_fake(rar_path, destino):
         destino.mkdir(parents=True, exist_ok=True)
@@ -501,7 +591,7 @@ class _UploadsCursor:
 
     def fetchall(self):
         if self._last.startswith(
-            "select id, adicionado_por, arquivo_r2_key, share_code, played_at from uploads_pendentes"
+            "select id, adicionado_por, arquivo_r2_key, share_code, played_at, plataforma_manual from uploads_pendentes"
         ):
             return self.conn.upload_rows
         return []
@@ -525,14 +615,14 @@ class _UploadsConn:
 
 
 def test_processar_uploads_pendentes_baixa_do_r2_e_apaga_em_sucesso(monkeypatch):
-    conn = _UploadsConn([("u1", "765", "uploads-pendentes/abc.dem", None, None)])
+    conn = _UploadsConn([("u1", "765", "uploads-pendentes/abc.dem", None, None, "gamers_club")])
     config = _config_com_r2()
 
     monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
     downloads = []
     monkeypatch.setattr(
         main.storage_r2, "download_bytes",
-        lambda client, bucket, key: (downloads.append((client, bucket, key)), b"dem-bytes")[1],
+        lambda client, bucket, key, **kw: (downloads.append((client, bucket, key, kw.get("max_bytes"))), b"dem-bytes")[1],
     )
     deletes = []
     monkeypatch.setattr(
@@ -541,8 +631,8 @@ def test_processar_uploads_pendentes_baixa_do_r2_e_apaga_em_sucesso(monkeypatch)
     )
     ingests = []
 
-    def _ingest_fake(cfg, cn, dem_path, share_code=None, source=None, upload=None, played_at=None):
-        ingests.append((dem_path.name, source, upload))
+    def _ingest_fake(cfg, cn, dem_path, share_code=None, source=None, upload=None, played_at=None, plataforma_manual=None):
+        ingests.append((dem_path.name, source, upload, plataforma_manual))
         return "m1"
 
     monkeypatch.setattr(main, "ingest_demo", _ingest_fake)
@@ -550,19 +640,20 @@ def test_processar_uploads_pendentes_baixa_do_r2_e_apaga_em_sucesso(monkeypatch)
     total = main.cmd_processar_uploads_pendentes(config, conn)
 
     assert total == 1
-    assert downloads == [("fake-client", "resenha-demos", "uploads-pendentes/abc.dem")]
-    assert ingests == [("demo.dem", "upload", True)]
+    # finding #2: o download passa o teto de tamanho (checado via HEAD antes de baixar).
+    assert downloads == [("fake-client", "resenha-demos", "uploads-pendentes/abc.dem", main._MAX_UPLOAD_BYTES)]
+    assert ingests == [("demo.dem", "upload", True, "gamers_club")]
     assert deletes == [("resenha-demos", "uploads-pendentes/abc.dem")]
     update = next(c for c in conn.calls if c[0].startswith("update uploads_pendentes") and c[1][0] == "concluido")
     assert update[1][1] == "m1"
 
 
 def test_processar_uploads_pendentes_mantem_staging_no_r2_quando_falha(monkeypatch):
-    conn = _UploadsConn([("u1", "765", "uploads-pendentes/abc.dem", None, None)])
+    conn = _UploadsConn([("u1", "765", "uploads-pendentes/abc.dem", None, None, None)])
     config = _config_com_r2()
 
     monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
-    monkeypatch.setattr(main.storage_r2, "download_bytes", lambda client, bucket, key: b"dem-bytes")
+    monkeypatch.setattr(main.storage_r2, "download_bytes", lambda client, bucket, key, **kw: b"dem-bytes")
     deletes = []
     monkeypatch.setattr(main.storage_r2, "delete_object", lambda client, bucket, key: deletes.append((bucket, key)))
     monkeypatch.setattr(main, "ingest_demo", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("parser explodiu")))
@@ -573,6 +664,62 @@ def test_processar_uploads_pendentes_mantem_staging_no_r2_quando_falha(monkeypat
     assert deletes == []
     update = next(c for c in conn.calls if c[0].startswith("update uploads_pendentes") and c[1][0] == "falhou")
     assert "parser explodiu" in update[1][2]
+
+
+# ---- finding #2 da auditoria: teto de tamanho barra download de upload gigante ----
+
+def test_processar_uploads_pendentes_marca_falhou_quando_objeto_excede_o_teto(monkeypatch):
+    conn = _UploadsConn([("u1", "765", "uploads-pendentes/abc.dem", None, None, None)])
+    config = _config_com_r2()
+
+    monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
+
+    def _download_grande_demais(client, bucket, key, **kw):
+        raise main.storage_r2.ArquivoGrandeDemaisError("objeto grande demais")
+
+    monkeypatch.setattr(main.storage_r2, "download_bytes", _download_grande_demais)
+    ingest_chamado = []
+    monkeypatch.setattr(main, "ingest_demo", lambda *a, **kw: ingest_chamado.append(1))
+
+    total = main.cmd_processar_uploads_pendentes(config, conn)
+
+    assert total == 0
+    assert ingest_chamado == []  # nem chegou a tentar parsear
+    update = next(c for c in conn.calls if c[0].startswith("update uploads_pendentes") and c[1][0] == "falhou")
+    assert "grande demais" in update[1][2]
+
+
+# ---- finding #8 da auditoria: reverte uploads travados em 'processando' antes de listar ----
+
+def test_processar_uploads_pendentes_reverte_travados_antes_de_listar(monkeypatch):
+    conn = _UploadsConn([])
+    config = _config_com_r2()
+    ordem = []
+    monkeypatch.setattr(
+        main.dbmod, "reverter_uploads_travados",
+        lambda c, **kw: ordem.append("reverter") or ["u-travado"],
+    )
+    monkeypatch.setattr(main.dbmod, "listar_uploads_pendentes", lambda c: ordem.append("listar") or [])
+
+    total = main.cmd_processar_uploads_pendentes(config, conn)
+
+    assert total == 0
+    assert ordem == ["reverter", "listar"]
+
+
+def test_processar_uploads_pendentes_passa_o_teto_de_tempo_configurado(monkeypatch):
+    conn = _UploadsConn([])
+    config = _config_com_r2()
+    chamadas = []
+    monkeypatch.setattr(
+        main.dbmod, "reverter_uploads_travados",
+        lambda c, **kw: chamadas.append(kw) or [],
+    )
+    monkeypatch.setattr(main.dbmod, "listar_uploads_pendentes", lambda c: [])
+
+    main.cmd_processar_uploads_pendentes(config, conn)
+
+    assert chamadas == [{"minutos": main._TIMEOUT_PROCESSANDO_MINUTOS}]
 
 
 # ---- cmd_sincronizar_faceit ----
@@ -842,3 +989,137 @@ def test_baixar_e_descomprimir_stream_bz2_incompleto_nunca_sucede_silenciosament
     # exceção do próprio decompressor) — nunca deve terminar "com sucesso" em silêncio.
     with pytest.raises(Exception):
         main._baixar_e_descomprimir("http://x", destino)
+
+
+# ---- finding #10 da auditoria: nunca logar a URL assinada de download do .dem ----
+
+def test_cmd_fetch_nao_loga_url_assinada_do_dem(monkeypatch, capsys):
+    config = Config(env={"DATABASE_URL": "x"})
+    conn = object()  # nenhum acesso real a banco: tudo abaixo é monkeypatchado
+    code = "CSGO-aaaaa-bbbbb-ccccc-ddddd-eeeee"
+    url_secreta = "https://valve.example/secret-signed-url?token=abc123"
+
+    monkeypatch.setattr(main.dbmod, "list_pending_share_codes", lambda c, limit=None: [code])
+    monkeypatch.setattr(main.dbmod, "contar_pendentes", lambda c: 1)
+    monkeypatch.setattr(
+        main, "_resolver_demo_urls",
+        lambda codes, bot_dir, node_bin: [{"shareCode": codes[0], "demoUrl": url_secreta, "matchTime": None}],
+    )
+    monkeypatch.setattr(main, "_baixar_e_descomprimir", lambda url, destino: destino.write_bytes(b"x"))
+    monkeypatch.setattr(main, "ingest_demo", lambda *a, **kw: "m1")
+
+    main.cmd_fetch(config, conn)
+
+    saida = capsys.readouterr().out
+    assert url_secreta not in saida
+    assert code in saida
+
+
+# ---- finding #16 da auditoria: download do hltvUrl em streaming, com teto de tamanho ----
+
+def test_baixar_com_teto_devolve_conteudo_dentro_do_teto(monkeypatch):
+    _patch_urlopen(monkeypatch, _FakeResp(b"conteudo pequeno"))
+    assert main._baixar_com_teto("http://x", max_bytes=1000) == b"conteudo pequeno"
+
+
+def test_baixar_com_teto_aborta_durante_o_streaming_sem_ler_indefinidamente(monkeypatch):
+    class _RespGigante:
+        """Simula uma resposta que continuaria mandando dados pra sempre — o teto tem
+        que cortar DURANTE o streaming, sem esperar a resposta terminar de vir (é
+        exatamente o que resp.read() completo, usado antes do fix, não conseguia)."""
+
+        def __init__(self):
+            self.chamadas = 0
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def read(self, n=-1):
+            self.chamadas += 1
+            if self.chamadas > 5:
+                raise AssertionError("deveria ter abortado bem antes de ler tanto")
+            return b"x" * (1 << 20)  # 1MB por chunk
+
+    resp = _RespGigante()
+    monkeypatch.setattr(main.urllib.request, "urlopen", lambda *a, **k: resp)
+
+    with pytest.raises(RuntimeError, match="teto"):
+        main._baixar_com_teto("http://x", max_bytes=2 << 20)  # teto de 2MB, chunks de 1MB
+
+    assert resp.chamadas <= 5
+
+
+def test_processar_fila_pro_hltv_url_que_excede_o_teto_marca_falhou(monkeypatch):
+    conn = _FilaConn([("f1", "https://hltv.org/download/demo/999", None)])
+    config = _config_com_r2()
+    monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
+
+    def _baixar_com_teto_falha(url, max_bytes, timeout=120):
+        raise RuntimeError(f"download de {url} excedeu o teto de {max_bytes} bytes")
+
+    monkeypatch.setattr(main, "_baixar_com_teto", _baixar_com_teto_falha)
+
+    total = main.cmd_processar_fila_pro(config, conn)
+
+    assert total == 0
+    update = next(c for c in conn.calls if c[0].startswith("update partidas_pro_fila") and c[1][0] == "falhou")
+    assert "excedeu o teto" in update[1][2]
+
+
+# ---- finding #17 da auditoria: limpeza de upload órfão no R2 ----
+
+def test_cmd_limpar_uploads_orfaos_apaga_do_r2_e_marca_limpo(monkeypatch):
+    config = _config_com_r2()
+    conn = object()
+    monkeypatch.setattr(main.dbmod, "listar_uploads_falhos_antigos", lambda c, dias=30: [("u1", "uploads-pendentes/abc.dem")])
+    monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
+    deletes = []
+    monkeypatch.setattr(main.storage_r2, "delete_object", lambda client, bucket, key: deletes.append((bucket, key)))
+    marcados = []
+    monkeypatch.setattr(main.dbmod, "marcar_upload_limpo", lambda c, upload_id: marcados.append(upload_id))
+
+    total = main.cmd_limpar_uploads_orfaos(config, conn, dias=30)
+
+    assert total == 1
+    assert deletes == [("resenha-demos", "uploads-pendentes/abc.dem")]
+    assert marcados == ["u1"]
+
+
+def test_cmd_limpar_uploads_orfaos_sem_candidatos_nao_toca_no_r2(monkeypatch):
+    config = _config_com_r2()
+    conn = object()
+    monkeypatch.setattr(main.dbmod, "listar_uploads_falhos_antigos", lambda c, dias=30: [])
+    chamado = []
+    monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: chamado.append(1))
+
+    total = main.cmd_limpar_uploads_orfaos(config, conn, dias=30)
+
+    assert total == 0
+    assert chamado == []  # nem chegou a criar cliente do R2
+
+
+def test_cmd_limpar_uploads_orfaos_erro_num_item_nao_derruba_os_outros(monkeypatch, capsys):
+    config = _config_com_r2()
+    conn = object()
+    monkeypatch.setattr(
+        main.dbmod, "listar_uploads_falhos_antigos",
+        lambda c, dias=30: [("u-ruim", "uploads-pendentes/ruim.dem"), ("u-bom", "uploads-pendentes/bom.dem")],
+    )
+    monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
+
+    def _delete_fake(client, bucket, key):
+        if "ruim" in key:
+            raise RuntimeError("R2 fora do ar")
+
+    monkeypatch.setattr(main.storage_r2, "delete_object", _delete_fake)
+    marcados = []
+    monkeypatch.setattr(main.dbmod, "marcar_upload_limpo", lambda c, upload_id: marcados.append(upload_id))
+
+    total = main.cmd_limpar_uploads_orfaos(config, conn, dias=30)
+
+    assert total == 1
+    assert marcados == ["u-bom"]
+    assert "R2 fora do ar" in capsys.readouterr().out

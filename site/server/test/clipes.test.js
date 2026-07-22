@@ -6,9 +6,9 @@ import { signToken } from '../src/auth/jwt.js'
 const config = { jwtSecret: 's', appUrl: 'http://localhost:5173', isProduction: false }
 const cookie = `resenha_token=${signToken({ steamId: '765', isSuperAdmin: false }, config.jwtSecret)}`
 
-// allstar_clips não guarda match_id/steam_id64/round_number direto (só highlight_id) —
-// a rota junta com `highlights` (mesmo padrão já usado em routes/allstar.js). Os mocks
-// abaixo respondem à query que faz esse join.
+// allstar_clips guarda match_id/steam_id64/round_number direto (migração 0042 — clipe
+// virou "por jogador+partida") — os mocks abaixo respondem à query que lê esses campos
+// direto da tabela (kind vem de uma subquery correlacionada em highlights, só pro rótulo).
 function fakeDbCom({ allstarClips = [] } = {}) {
   return {
     query: vi.fn().mockImplementation((sql) => {
@@ -101,5 +101,26 @@ describe('GET /api/clipes', () => {
     await request(app).get('/api/clipes?periodo=lixo').set('Cookie', cookie)
     const call = db.query.mock.calls.find(([sql]) => sql.includes('from allstar_clips ac'))
     expect(call[0]).not.toContain('interval')
+  })
+
+  it('clipe gerado por jogador (sem highlight nosso batendo o round) ainda aparece, com kind null e pontuacao gravada', async () => {
+    // Clipe gerado pelo fluxo por jogador (BP, ver allstarClip.js) — a Allstar escolheu
+    // um round que não bate com nenhum highlight nosso, então a subquery de kind não
+    // acha nada (null). O clipe não pode sumir da lista por isso (subquery correlacionada,
+    // nunca um join que excluiria a linha).
+    const db = fakeDbCom({
+      allstarClips: [{
+        id: 'c3', match_id: 'm3', steam_id64: '765', round_number: 9,
+        clip_url: 'https://allstar.gg/z', clip_snapshot_url: null, kind: null,
+        map: 'de_inferno', played_at: '2026-07-03T00:00:00Z', nick: 'Jogador', avatar_url: null,
+        pontuacao_total: 15,
+        pontuacao_detalhe: { kills: 1, pontosKills: 10, headshots: 0, pontosHeadshots: 0, clutch: null, pontosClutch: 0, armas: 1, pontosArmas: 5, total: 15 },
+      }],
+    })
+    const app = createApp({ config, db })
+    const res = await request(app).get('/api/clipes').set('Cookie', cookie)
+    expect(res.status).toBe(200)
+    expect(res.body.clipes).toHaveLength(1)
+    expect(res.body.clipes[0]).toMatchObject({ id: 'c3', kind: null, pontuacao: { total: 15 } })
   })
 })

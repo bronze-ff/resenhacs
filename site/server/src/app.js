@@ -66,11 +66,14 @@ export function createApp({
   faceitFetchImpl,
 } = {}) {
   const app = express()
+  // Em produção (Vercel) a função fica atrás de UM proxy (o edge deles), que sempre manda
+  // X-Forwarded-For; sem confiar nesse hop o express-rate-limit não consegue identificar o
+  // IP do cliente e lança erro de validação em TODA requisição (ERR_ERL_UNEXPECTED_X_FORWARDED_FOR),
+  // derrubando a API inteira. "1" confia só no primeiro hop — não em qualquer proxy (evita
+  // o outro erro deles, trust proxy permissivo, que abriria brecha pra spoofar IP e burlar o limite).
+  app.set('trust proxy', 1)
   app.use(express.json())
   app.use(cookieParser())
-  // Achado do review final: rateLimit.js documentava limiteGeral como "aplicado
-  // GLOBALMENTE em toda a API", mas nunca era importado aqui - dead code, sem limite
-  // nenhum de fato. Fiando de verdade, antes de qualquer rota.
   app.use(limiteGeral)
   app.use((req, res, next) => {
     res.set('X-Content-Type-Options', 'nosniff')
@@ -83,7 +86,7 @@ export function createApp({
 
   app.get('/api/health', (req, res) => res.json({ ok: true }))
 
-  const requireAuth = createRequireAuth(config.jwtSecret)
+  const requireAuth = createRequireAuth(config.jwtSecret, db)
   const r2Client = r2ClientOverride !== undefined ? r2ClientOverride : createR2Client(config)
   app.use('/api/auth', createAuthRouter({ config, db, verifySteamLogin, fetchPersona, fetchFriendList, requireAuth }))
   app.use('/api/amigos', createFriendshipsRouter({ db, requireAuth }))

@@ -70,6 +70,21 @@ proprietário, pra não ter restrição de licença no runner do GitHub Actions.
   porque `rarfile` sabe ler esse caso em Python puro, mas isso não é garantido pra
   `.rar` reais (comprimidos) do HLTV.
 
+## Manutenção: limpeza de uploads órfãos no R2
+
+Um upload manual (`/enviar-demo`) que falha definitivamente (`status = 'falhou'`) deixa
+o `.dem` de staging parado no bucket R2 pra sempre — diferente da fila de Partidas Pro,
+que reaproveita o staging no retry e tem `cleanup`/`reprocess` pro caminho de sucesso.
+
+```
+python -m coletor.main limpar-uploads-orfaos [--days N]
+```
+
+Apaga do R2 o objeto de todo upload `falhou` há mais de `N` dias (default: 30) e marca
+o item como `limpo` no banco (idempotente — não tenta apagar o mesmo objeto duas vezes).
+**Não roda automaticamente** (sem cron/schedule no GitHub Actions ainda) — rode manual
+quando quiser liberar espaço, ou adicione um schedule próprio se isso virar rotina.
+
 ## Testes
 
 ```
