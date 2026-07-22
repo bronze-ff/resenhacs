@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { SectionHeader, Card, Badge } from '../components/ui'
 import { useAuth } from '../auth/AuthContext.jsx'
+import SeletorClipesCompeticao from '../components/SeletorClipesCompeticao.jsx'
 
 function Leaderboard({ leaderboard, minimoParaRankear }) {
   const qualificados = leaderboard.filter((l) => l.qualificado)
@@ -30,6 +31,7 @@ function Leaderboard({ leaderboard, minimoParaRankear }) {
 function CardCompeticao({ comp, viewerSteamId, onTradelinkEnviado }) {
   const [tradelink, setTradelink] = useState('')
   const [enviando, setEnviando] = useState(false)
+  const [seletorAberto, setSeletorAberto] = useState(false)
   const encerrada = new Date(comp.dataFim) < new Date()
   const souVencedor = comp.vencedorSteamId === viewerSteamId
 
@@ -53,6 +55,22 @@ function CardCompeticao({ comp, viewerSteamId, onTradelinkEnviado }) {
       <p className="mt-1 font-mono text-xs text-texto-fraco">
         Limite: {comp.limiteDiario}/dia · {comp.limiteTotal} no total · mínimo {comp.minimoParaRankear} pra rankear
       </p>
+
+      {!encerrada && (
+        <button
+          onClick={() => setSeletorAberto(true)}
+          className="panel-cut-sm mt-3 min-h-10 border border-destaque bg-destaque/10 px-3 font-mono text-xs uppercase text-destaque hover:bg-destaque/20 lg:min-h-0"
+        >
+          Enviar clipe
+        </button>
+      )}
+      {seletorAberto && (
+        <SeletorClipesCompeticao
+          competicaoId={comp.id}
+          onFechar={() => setSeletorAberto(false)}
+          onEnviado={onTradelinkEnviado}
+        />
+      )}
 
       {souVencedor && encerrada && !comp.tradelinkVencedor && (
         <form onSubmit={enviarTradelink} className="mt-4 panel-cut-sm border border-destaque bg-destaque/10 p-3">
