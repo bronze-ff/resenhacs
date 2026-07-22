@@ -67,6 +67,34 @@ async function calcularOuLerVencedor(db, comp) {
   return vencedor
 }
 
+// Clipes enviados recentemente pra competição (Task 12) — separado do leaderboard
+// porque mostra a atividade recente independente de qualificação, sem agregar nada
+// entre competições (mesma regra global: leaderboard/atividade sempre por competicao_id).
+// `allstar_clips` não guarda match_id direto (só highlight_id) — junta com `highlights`,
+// mesmo padrão já usado em buscarLeaderboard acima e em routes/clipes.js.
+async function buscarClipesRecentes(db, competicaoId) {
+  const { rows } = await db.query(
+    `select ac.id, ac.clip_url, ac.clip_snapshot_url, ac.pontuacao_total, ac.pontuacao_detalhe,
+            cs.steam_id64, coalesce(p.nick, mp.nick) as nick, coalesce(p.avatar_url, sa.avatar_url) as avatar_url,
+            cs.enviado_em
+     from competicao_submissoes cs
+     join allstar_clips ac on ac.id = cs.allstar_clip_id
+     join highlights h on h.id = ac.highlight_id
+     left join players p on p.steam_id64 = cs.steam_id64
+     left join match_players mp on mp.match_id = h.match_id and mp.steam_id64 = cs.steam_id64
+     left join steam_avatares sa on sa.steam_id64 = cs.steam_id64
+     where cs.competicao_id = $1
+     order by cs.enviado_em desc
+     limit 20`,
+    [competicaoId],
+  )
+  return rows.map((r) => ({
+    id: r.id, clipUrl: r.clip_url, clipSnapshotUrl: r.clip_snapshot_url,
+    steamId: r.steam_id64, nick: r.nick, avatarUrl: r.avatar_url,
+    pontuacao: r.pontuacao_detalhe ?? { total: r.pontuacao_total ?? 0 },
+  }))
+}
+
 export function createCompeticoesRouter({ db, requireAuth }) {
   const router = Router()
   const requireSuperAdmin = createRequireSuperAdmin(db)
@@ -82,10 +110,12 @@ export function createCompeticoesRouter({ db, requireAuth }) {
     async function montar(c) {
       const vencedorSteamId = await calcularOuLerVencedor(db, c)
       const leaderboard = await buscarLeaderboard(db, c.id, c.minimo_para_rankear)
+      const clipesRecentes = await buscarClipesRecentes(db, c.id)
       const ehVencedorOuAdmin = req.player.steamId === vencedorSteamId || req.player.isSuperAdmin
       return {
         ...mapCompeticao({ ...c, vencedor_steam_id64: vencedorSteamId }),
         leaderboard,
+        clipesRecentes,
         // #6/#12 da auditoria: tradelink só aparece pro próprio vencedor ou admin —
         // omitido da resposta (não só escondido no client) pra qualquer outro jogador.
         ...(ehVencedorOuAdmin ? { tradelinkVencedor: c.tradelink_vencedor } : {}),

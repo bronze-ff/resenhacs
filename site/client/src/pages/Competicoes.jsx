@@ -1,16 +1,115 @@
 // site/client/src/pages/Competicoes.jsx
 import { useEffect, useState } from 'react'
-import { SectionHeader } from '../components/ui'
+import { SectionHeader, Card, Badge } from '../components/ui'
+import { useAuth } from '../auth/AuthContext.jsx'
+
+function Leaderboard({ leaderboard, minimoParaRankear }) {
+  const qualificados = leaderboard.filter((l) => l.qualificado)
+  const naoQualificados = leaderboard.filter((l) => !l.qualificado)
+  return (
+    <div className="space-y-3">
+      <div className="panel-cut border border-borda">
+        {qualificados.map((l, i) => (
+          <div key={l.steamId} className="flex items-center gap-3 border-b border-borda px-3 py-2 last:border-b-0">
+            <span className="font-mono text-texto-fraco">{i + 1}º</span>
+            {l.avatarUrl && <img src={l.avatarUrl} alt="" className="panel-cut-sm h-6 w-6 border border-borda object-cover" />}
+            <span className="flex-1 font-mono text-texto">{l.nick}</span>
+            <span className="font-display font-bold text-destaque tabular-nums">{l.total}</span>
+          </div>
+        ))}
+      </div>
+      {naoQualificados.length > 0 && (
+        <p className="font-mono text-xs text-texto-fraco">
+          Ainda não qualificado (mínimo {minimoParaRankear} clipes): {naoQualificados.map((l) => l.nick).join(', ')}
+        </p>
+      )}
+    </div>
+  )
+}
+
+function CardCompeticao({ comp, viewerSteamId, onTradelinkEnviado }) {
+  const [tradelink, setTradelink] = useState('')
+  const [enviando, setEnviando] = useState(false)
+  const encerrada = new Date(comp.dataFim) < new Date()
+  const souVencedor = comp.vencedorSteamId === viewerSteamId
+
+  async function enviarTradelink(e) {
+    e.preventDefault()
+    setEnviando(true)
+    const res = await fetch(`/api/competicoes/${comp.id}/tradelink`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tradelink }),
+    }).catch(() => null)
+    setEnviando(false)
+    if (res?.ok) onTradelinkEnviado()
+  }
+
+  return (
+    <Card className="p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="font-display text-xl font-bold text-texto">{comp.nome}</h2>
+        {comp.premioDescricao && <Badge tom="destaque">{comp.premioDescricao}</Badge>}
+      </div>
+      {comp.descricao && <p className="mt-2 font-mono text-sm text-texto-fraco">{comp.descricao}</p>}
+      <p className="mt-1 font-mono text-xs text-texto-fraco">
+        Limite: {comp.limiteDiario}/dia · {comp.limiteTotal} no total · mínimo {comp.minimoParaRankear} pra rankear
+      </p>
+
+      {souVencedor && encerrada && !comp.tradelinkVencedor && (
+        <form onSubmit={enviarTradelink} className="mt-4 panel-cut-sm border border-destaque bg-destaque/10 p-3">
+          <p className="font-mono text-sm text-destaque">🏆 Você venceu! Informe seu tradelink pra receber o prêmio.</p>
+          <div className="mt-2 flex gap-2">
+            <input
+              value={tradelink}
+              onChange={(e) => setTradelink(e.target.value)}
+              placeholder="Seu tradelink da Steam"
+              className="min-h-10 flex-1 border border-borda bg-superficie px-2 font-mono text-xs text-texto"
+            />
+            <button disabled={enviando} className="panel-cut-sm border border-destaque px-3 font-mono text-xs uppercase text-destaque">
+              {enviando ? '…' : 'Enviar'}
+            </button>
+          </div>
+        </form>
+      )}
+      {souVencedor && comp.tradelinkVencedor && (
+        <p className="mt-4 font-mono text-sm text-sucesso">Tradelink enviado — aguarde o contato pro envio do prêmio.</p>
+      )}
+
+      <div className="mt-4">
+        <h3 className="mb-2 font-display text-sm font-semibold uppercase tracking-wide text-texto-fraco">Leaderboard</h3>
+        <Leaderboard leaderboard={comp.leaderboard} minimoParaRankear={comp.minimoParaRankear} />
+      </div>
+
+      {comp.clipesRecentes?.length > 0 && (
+        <div className="mt-4">
+          <h3 className="mb-2 font-display text-sm font-semibold uppercase tracking-wide text-texto-fraco">Enviados recentemente</h3>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {comp.clipesRecentes.map((c) => (
+              <div key={c.id} className="panel-cut-sm border border-borda p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-mono text-xs text-texto">{c.nick}</span>
+                  <span className="font-display font-bold text-destaque">{c.pontuacao.total}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </Card>
+  )
+}
 
 export default function Competicoes() {
+  const { jogador } = useAuth()
   const [dados, setDados] = useState(null)
 
-  useEffect(() => {
+  function carregar() {
     fetch('/api/competicoes')
       .then((res) => (res.ok ? res.json() : { ativa: null, encerradas: [] }))
       .then(setDados)
       .catch(() => setDados({ ativa: null, encerradas: [] }))
-  }, [])
+  }
+
+  useEffect(carregar, [])
 
   if (dados === null) return <p className="font-mono text-sm text-texto-fraco">Carregando…</p>
 
@@ -20,12 +119,10 @@ export default function Competicoes() {
       {!dados.ativa && dados.encerradas.length === 0 && (
         <p className="font-mono text-sm text-texto-fraco">Nenhuma competição no momento.</p>
       )}
-      {dados.ativa && (
-        <div className="panel-cut border border-borda bg-superficie p-4">
-          <h2 className="font-display text-xl font-bold text-texto">{dados.ativa.nome}</h2>
-          <p className="mt-1 font-mono text-sm text-destaque">{dados.ativa.premioDescricao}</p>
-        </div>
-      )}
+      {dados.ativa && <CardCompeticao comp={dados.ativa} viewerSteamId={jogador?.steamId} onTradelinkEnviado={carregar} />}
+      {dados.encerradas.map((comp) => (
+        <CardCompeticao key={comp.id} comp={comp} viewerSteamId={jogador?.steamId} onTradelinkEnviado={carregar} />
+      ))}
     </div>
   )
 }
