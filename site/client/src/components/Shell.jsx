@@ -8,6 +8,7 @@ const ITENS = [
   { to: '/', end: true, label: 'Partidas', icone: 'partidas' },
   { to: '/ranking', label: 'Ranking', icone: 'ranking' },
   { to: '/enviar-demo', label: 'Enviar demo', icone: 'enviarDemo' },
+  { to: '/competicoes', label: 'Competições', icone: 'competicoes' },
   { to: '/jogadores', label: 'Amigos', icone: 'jogadores' },
   { to: '/comparar', label: 'Comparar', icone: 'comparar' },
   // Granadas/Táticas são públicos pra visualização (só criar/editar é admin — cada
@@ -78,6 +79,15 @@ const NAV_ICONES = {
       <path d="M12 3v12" />
       <path d="M7 8L12 3L17 8" />
       <path d="M4 15V19C4 20.1046 4.89543 21 6 21H18C19.1046 21 20 20.1046 20 19V15" />
+    </svg>
+  ),
+  competicoes: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
+      <path d="M8 21H16" />
+      <path d="M12 17V21" />
+      <path d="M7 4H17V9C17 12.3137 14.7614 15 12 15C9.23858 15 7 12.3137 7 9V4Z" />
+      <path d="M17 5H19.5C19.5 7 18.5 8.5 17 8.5" />
+      <path d="M7 5H4.5C4.5 7 5.5 8.5 7 8.5" />
     </svg>
   ),
   jogadores: (
