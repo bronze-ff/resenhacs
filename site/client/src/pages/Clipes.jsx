@@ -44,7 +44,8 @@ function PlayerClipe({ clipUrl, viewerSteamId, titulo }) {
     <div className="mt-3 aspect-video w-full">
       <iframe
         src={`${clipUrl}&UID=${viewerSteamId ?? ''}&location=melhoresClipes`}
-        allow="autoplay; encrypted-media; picture-in-picture; clipboard-write"
+        allow="autoplay; encrypted-media; picture-in-picture; clipboard-write; fullscreen"
+        allowFullScreen
         className="h-full w-full border border-borda"
         title={titulo ?? 'Clipe Allstar'}
       />

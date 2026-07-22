@@ -1009,7 +1009,8 @@ function PainelClipeJogador({ jogador, clip, pedindo, erro, aberto, onAbrir, onG
           <div className="aspect-video w-full lg:max-w-xl">
             <iframe
               src={`${clip.clipUrl}&UID=${viewerSteamId ?? ''}&location=matchResults`}
-              allow="autoplay; encrypted-media; picture-in-picture; clipboard-write"
+              allow="autoplay; encrypted-media; picture-in-picture; clipboard-write; fullscreen"
+              allowFullScreen
               className="h-full w-full border border-borda"
               title={`Melhor clipe de ${jogador.nick || jogador.steamId}`}
             />
