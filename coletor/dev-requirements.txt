@@ -1,4 +1,4 @@
 # Só o necessário para rodar os testes (as transformações são independentes do demoparser2).
-pytest>=8
+pytest>=9.1.1
 pandas>=2
 rarfile
