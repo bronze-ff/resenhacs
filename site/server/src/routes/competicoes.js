@@ -5,6 +5,7 @@
 // Ver docs/superpowers/specs/2026-07-22-competicoes-clipes-design.md.
 import { Router } from 'express'
 import { createRequireSuperAdmin } from '../auth/middleware.js'
+import { limiteEstrito } from '../rateLimit.js'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -37,14 +38,10 @@ export function createCompeticoesRouter({ db, requireAuth }) {
     })
   })
 
-  // NOTA (Task 7): a spec e o plano pedem `limiteEstrito` (rate limiter dedicado) aqui
-  // como defesa em profundidade — mas `site/server/src/rateLimit.js` só existe em
-  // `main` (commit 510ff47, correção da auditoria de segurança), branch que este
-  // worktree nunca recebeu, e `express-rate-limit` nem está nas dependências daqui.
-  // Fora do escopo de arquivos desta task (routes/competicoes.js, test, app.js) portar
-  // esse middleware. requireAuth + requireSuperAdmin (reconsulta is_super_admin no
-  // banco a cada request) seguem aplicados, mesmo padrão de granadas.js/taticasCuradas.js.
-  router.post('/admin', requireAuth, requireSuperAdmin, async (req, res) => {
+  // #9 da auditoria (rate limiting como defesa em profundidade, além da regra de
+  // negócio de limite diário/total): mesmo middleware já usado no webhook da Allstar
+  // e no upload de demo (site/server/src/rateLimit.js).
+  router.post('/admin', limiteEstrito, requireAuth, requireSuperAdmin, async (req, res) => {
     const { nome, descricao, premioDescricao, dataInicio, dataFim, limiteDiario, limiteTotal, minimoParaRankear } = req.body ?? {}
     if (!nome || !dataInicio || !dataFim) return res.status(400).json({ erro: 'nome, dataInicio e dataFim são obrigatórios' })
     if (new Date(dataFim) <= new Date(dataInicio)) return res.status(400).json({ erro: 'dataFim precisa ser depois de dataInicio' })
@@ -59,7 +56,7 @@ export function createCompeticoesRouter({ db, requireAuth }) {
     res.status(201).json({ id: rows[0].id })
   })
 
-  router.put('/admin/:id', requireAuth, requireSuperAdmin, async (req, res) => {
+  router.put('/admin/:id', limiteEstrito, requireAuth, requireSuperAdmin, async (req, res) => {
     if (!UUID_RE.test(req.params.id)) return res.status(404).json({ erro: 'competição não encontrada' })
     const { nome, descricao, premioDescricao, dataInicio, dataFim, limiteDiario, limiteTotal, minimoParaRankear } = req.body ?? {}
     if (dataInicio && dataFim && new Date(dataFim) <= new Date(dataInicio)) {

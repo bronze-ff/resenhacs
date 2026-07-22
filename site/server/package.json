@@ -16,6 +16,7 @@
     "@aws-sdk/s3-request-presigner": "^3.1086.0",
     "cookie-parser": "^1.4.7",
     "express": "^4.21.2",
+    "express-rate-limit": "^8.6.0",
     "jsonwebtoken": "^9.0.2",
     "pg": "^8.13.1"
   },
