@@ -84,3 +84,77 @@ describe('Admin — curso de mira', () => {
     expect(await screen.findByText(/erro, tentar de novo/i)).toBeInTheDocument()
   })
 })
+
+function mockFetchComCompeticoes(competicoesResposta) {
+  vi.stubGlobal('fetch', vi.fn().mockImplementation((url) => {
+    if (url === '/api/taticas?status=sugerida') return Promise.resolve({ ok: true, json: async () => [] })
+    if (url === '/api/curso') return Promise.resolve({ ok: true, json: async () => [] })
+    if (url === '/api/competicoes') return Promise.resolve({ ok: true, json: async () => competicoesResposta })
+    return Promise.resolve({ ok: true, json: async () => [] })
+  }))
+}
+
+describe('Admin — confirmação de vencedor', () => {
+  it('mostra o card de confirmação com os clipes do vencedor, destacando os de upload manual', async () => {
+    mockFetchComCompeticoes({
+      ativa: null, agendadas: [],
+      encerradas: [{
+        id: 'comp1', nome: 'Semana 1', dataInicio: '2026-07-01T00:00:00Z', dataFim: '2026-07-08T00:00:00Z',
+        vencedorSteamId: '999', vencedorConfirmado: false,
+        leaderboard: [{ steamId: '999', nick: 'troya', avatarUrl: null, total: 300, qualificado: true }],
+        vencedorSubmissoes: [
+          { id: 'clip1', clipUrl: 'https://x/clip1', pontuacao: { total: 300 }, origemNaoVerificada: true, plataformaManual: 'gamers_club' },
+        ],
+      }],
+    })
+    render(<Admin />)
+    expect(await screen.findByText(/vencedor: troya/i)).toBeInTheDocument()
+    expect(screen.getByText(/upload manual/i)).toBeInTheDocument()
+    expect(screen.getByText(/gamers_club/i)).toBeInTheDocument()
+  })
+
+  it('sem vencedor pendente: nao mostra nenhum card de confirmacao', async () => {
+    mockFetchComCompeticoes({
+      ativa: null, agendadas: [],
+      encerradas: [{
+        id: 'comp1', nome: 'Semana 1', dataInicio: '2026-07-01T00:00:00Z', dataFim: '2026-07-08T00:00:00Z',
+        vencedorSteamId: null, vencedorConfirmado: false,
+        leaderboard: [],
+      }],
+    })
+    render(<Admin />)
+    expect(await screen.findByText('Semana 1')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /confirmar vencedor/i })).not.toBeInTheDocument()
+  })
+
+  it('confirma o vencedor e o card some depois de recarregar', async () => {
+    let confirmado = false
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((url, opts) => {
+      if (url === '/api/taticas?status=sugerida') return Promise.resolve({ ok: true, json: async () => [] })
+      if (url === '/api/curso') return Promise.resolve({ ok: true, json: async () => [] })
+      if (url === '/api/competicoes') {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            ativa: null, agendadas: [],
+            encerradas: [{
+              id: 'comp1', nome: 'Semana 1', dataInicio: '2026-07-01T00:00:00Z', dataFim: '2026-07-08T00:00:00Z',
+              vencedorSteamId: '999', vencedorConfirmado: confirmado,
+              leaderboard: [{ steamId: '999', nick: 'troya', avatarUrl: null, total: 300, qualificado: true }],
+              ...(confirmado ? {} : { vencedorSubmissoes: [] }),
+            }],
+          }),
+        })
+      }
+      if (url === '/api/competicoes/comp1/confirmar-vencedor' && opts?.method === 'PUT') {
+        confirmado = true
+        return Promise.resolve({ ok: true, json: async () => ({ ok: true }) })
+      }
+      return Promise.resolve({ ok: true, json: async () => [] })
+    }))
+    render(<Admin />)
+    const botao = await screen.findByRole('button', { name: /confirmar vencedor/i })
+    fireEvent.click(botao)
+    await waitFor(() => expect(screen.queryByRole('button', { name: /confirmar vencedor/i })).not.toBeInTheDocument())
+  })
+})

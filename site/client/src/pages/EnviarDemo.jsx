@@ -6,6 +6,8 @@ function formatarTamanho(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
+const TOLERANCIA_DIAS = 3
+
 // Plataformas sem integração oficial — rótulo informativo escolhido no upload, vira
 // badge na Partida/Feed (matches.plataforma_manual). Lista fixa, igual à do servidor
 // (PLATAFORMAS_MANUAIS em site/server/src/routes/upload.js).
@@ -40,6 +42,15 @@ export default function EnviarDemo() {
   async function enviar(e) {
     e.preventDefault()
     if (!arquivo) return
+    if (playedAt) {
+      const dataInformada = new Date(playedAt)
+      const agora = new Date()
+      const limiteAntigo = new Date(agora.getTime() - TOLERANCIA_DIAS * 24 * 60 * 60 * 1000)
+      if (dataInformada > agora || dataInformada < limiteAntigo) {
+        setErro(`A data informada precisa estar entre ${TOLERANCIA_DIAS} dias atrás e agora.`)
+        return
+      }
+    }
     setEnviando(true)
     setErro(null)
     setResultado(null)
