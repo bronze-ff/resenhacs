@@ -3,10 +3,16 @@ import { useState } from 'react'
 
 // Mesmo padrão de modal já usado em granadas/FormGranada.jsx e
 // SeletorClipesCompeticao.jsx — fixed inset-0 com backdrop clicável fechando o form.
+
+const MERCADO_STEAM_PREFIXO = 'https://steamcommunity.com/market/'
+
 export default function FormCompeticao({ inicial = null, onSalvo, onCancelar }) {
   const [nome, setNome] = useState(inicial?.nome ?? '')
   const [descricao, setDescricao] = useState(inicial?.descricao ?? '')
   const [premioDescricao, setPremioDescricao] = useState(inicial?.premioDescricao ?? '')
+  const [premioImagemUrl, setPremioImagemUrl] = useState(inicial?.premioImagemUrl ?? '')
+  const [premioMercadoUrl, setPremioMercadoUrl] = useState(inicial?.premioMercadoUrl ?? '')
+  const [imagemComErro, setImagemComErro] = useState(false)
   const [dataInicio, setDataInicio] = useState(inicial?.dataInicio?.slice(0, 16) ?? '')
   const [dataFim, setDataFim] = useState(inicial?.dataFim?.slice(0, 16) ?? '')
   const [limiteDiario, setLimiteDiario] = useState(inicial?.limiteDiario ?? 2)
@@ -18,9 +24,17 @@ export default function FormCompeticao({ inicial = null, onSalvo, onCancelar }) 
   async function salvar(e) {
     e.preventDefault()
     setErro(null)
+    if (!premioImagemUrl.trim() || !premioMercadoUrl.trim()) {
+      setErro('Link da imagem e link do mercado da Steam são obrigatórios.')
+      return
+    }
+    if (!premioMercadoUrl.startsWith(MERCADO_STEAM_PREFIXO)) {
+      setErro(`O link do mercado precisa começar com ${MERCADO_STEAM_PREFIXO}`)
+      return
+    }
     setSalvando(true)
     const corpo = {
-      nome, descricao, premioDescricao,
+      nome, descricao, premioDescricao, premioImagemUrl, premioMercadoUrl,
       // datetime-local pode vir vazio (campo ainda não preenchido) — new Date('').toISOString()
       // lança RangeError, então só convertemos quando há valor; o servidor valida o resto.
       dataInicio: dataInicio ? new Date(dataInicio).toISOString() : dataInicio,
@@ -66,6 +80,35 @@ export default function FormCompeticao({ inicial = null, onSalvo, onCancelar }) 
         <label className="mt-3 block font-mono text-xs text-texto-fraco">
           Prêmio
           <input value={premioDescricao} onChange={(e) => setPremioDescricao(e.target.value)} className="mt-1 min-h-10 w-full border border-borda bg-fundo px-2 font-mono text-sm text-texto" />
+        </label>
+        <label className="mt-3 block font-mono text-xs text-texto-fraco">
+          Link da imagem da skin
+          <input
+            type="url"
+            value={premioImagemUrl}
+            onChange={(e) => { setPremioImagemUrl(e.target.value); setImagemComErro(false) }}
+            className="mt-1 min-h-10 w-full border border-borda bg-fundo px-2 font-mono text-sm text-texto"
+          />
+        </label>
+        {premioImagemUrl && !imagemComErro && (
+          <img
+            src={premioImagemUrl}
+            alt="Prévia da skin"
+            className="mt-2 h-20 w-20 border border-borda object-cover"
+            onError={() => setImagemComErro(true)}
+          />
+        )}
+        {premioImagemUrl && imagemComErro && (
+          <p className="mt-2 font-mono text-xs text-perigo">Não foi possível carregar essa imagem.</p>
+        )}
+        <label className="mt-3 block font-mono text-xs text-texto-fraco">
+          Link no mercado da Steam
+          <input
+            type="url"
+            value={premioMercadoUrl}
+            onChange={(e) => setPremioMercadoUrl(e.target.value)}
+            className="mt-1 min-h-10 w-full border border-borda bg-fundo px-2 font-mono text-sm text-texto"
+          />
         </label>
         <div className="mt-3 grid grid-cols-2 gap-3">
           <label className="block font-mono text-xs text-texto-fraco">
