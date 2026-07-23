@@ -80,6 +80,16 @@ describe('POST /api/upload/upload-url', () => {
     expect(res.body.erro).toMatch(/entre.*dias/i)
   })
 
+  it('data com formato valido mas invalida no calendario (mes/hora impossiveis): 400, nao 500', async () => {
+    const { app } = appWith([])
+    const res = await request(app)
+      .post('/api/upload/upload-url')
+      .set('Cookie', cookie)
+      .send({ filename: 'x.dem', playedAt: '2026-13-45T99:99' })
+    expect(res.status).toBe(400)
+    expect(res.body.erro).toMatch(/data.*hora inv[áa]lida/i)
+  })
+
   it('data mais de 3 dias no passado: 400', async () => {
     const { app } = appWith([])
     const antigo = new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString()

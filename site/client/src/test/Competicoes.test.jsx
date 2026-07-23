@@ -100,6 +100,34 @@ describe('Competicoes', () => {
     expect(screen.queryByPlaceholderText(/tradelink/i)).not.toBeInTheDocument()
   })
 
+  it('competicao antiga (pre-feature): tradelink ja enviado mas vencedorConfirmado false — so mensagem de sucesso, sem aguardando', async () => {
+    // Shape de dado histórico: a migração 0050 deixa vencedor_confirmado_em NULL pra
+    // toda linha existente, então uma competição que já pagou o vencedor antes dessa
+    // feature existir chega aqui com vencedorConfirmado: false e tradelinkVencedor
+    // preenchido. Não pode mostrar as duas mensagens contraditórias ao mesmo tempo.
+    global.fetch = vi.fn().mockImplementation((url) => {
+      if (typeof url === 'string' && url.includes('/api/auth/me')) {
+        return Promise.resolve({ ok: true, json: async () => ({ steamId: '765', nick: 'bronze', isSuperAdmin: false }) })
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          ativa: null,
+          encerradas: [{
+            id: 'comp1', nome: 'Semana 1', premioDescricao: 'Skin', dataFim: new Date(Date.now() - 86400000).toISOString(),
+            limiteDiario: 2, limiteTotal: 10, minimoParaRankear: 1,
+            vencedorSteamId: '765', vencedorConfirmado: false, tradelinkVencedor: 'tradelink-antigo-123',
+            leaderboard: [{ steamId: '765', nick: 'bronze', avatarUrl: null, total: 300, qualificado: true }],
+          }],
+        }),
+      })
+    })
+    render(<AuthProvider><Competicoes /></AuthProvider>)
+    await waitFor(() => expect(screen.getByText(/tradelink enviado/i)).toBeInTheDocument())
+    expect(screen.queryByText(/aguardando confirma[çc][ãa]o/i)).not.toBeInTheDocument()
+    expect(screen.queryByPlaceholderText(/tradelink/i)).not.toBeInTheDocument()
+  })
+
   it('mostra imagem do premio e link pro mercado quando presentes', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,

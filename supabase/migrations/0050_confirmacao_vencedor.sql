@@ -6,3 +6,9 @@
 -- (revisando os clipes, com destaque pros que vieram de upload manual) antes do jogador
 -- conseguir enviar o tradelink e receber o premio.
 alter table competicoes add column vencedor_confirmado_em timestamptz;
+
+-- Backfill: competições que já pagaram o vencedor antes desta feature existir não devem
+-- ficar retroativamente travadas esperando uma confirmação que nunca vai rolar na tela
+-- (o card de confirmação do admin também não deveria pedir pra "confirmar" algo que já
+-- foi resolvido faz tempo).
+update competicoes set vencedor_confirmado_em = now() where tradelink_vencedor is not null;

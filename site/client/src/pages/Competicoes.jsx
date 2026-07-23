@@ -109,7 +109,7 @@ function CardCompeticao({ comp, viewerSteamId, onTradelinkEnviado }) {
           </div>
         </form>
       )}
-      {souVencedor && encerrada && !comp.vencedorConfirmado && (
+      {souVencedor && encerrada && !comp.vencedorConfirmado && !comp.tradelinkVencedor && (
         <p className="mt-4 font-mono text-sm text-texto-fraco">
           Você está na liderança — aguardando confirmação do admin antes de liberar o envio do tradelink.
         </p>

@@ -66,6 +66,9 @@ export function createUploadRouter({ db, requireAuth, r2Client, r2Bucket }) {
     // agora). Não elimina o risco — só reduz a superfície de abuso.
     if (playedAt) {
       const dataInformada = new Date(playedAt)
+      if (Number.isNaN(dataInformada.getTime())) {
+        return res.status(400).json({ erro: 'Data/hora inválida' })
+      }
       const agora = new Date()
       const limiteAntigo = new Date(agora.getTime() - TOLERANCIA_DIAS * 24 * 60 * 60 * 1000)
       if (dataInformada > agora || dataInformada < limiteAntigo) {
