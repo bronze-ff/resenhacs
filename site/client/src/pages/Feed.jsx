@@ -182,7 +182,7 @@ function Resenhas({ sessaoAtiva, onEscolher }) {
         Resenhas recentes
       </h3>
       <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-1">
-        {sessoes.map((s) => (
+        {(sessoes ?? []).map((s) => (
           <CardResenha
             key={s.matchIds[0]}
             s={s}
