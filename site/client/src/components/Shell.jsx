@@ -184,6 +184,18 @@ function itemClasse(colapsada) {
     }`
 }
 
+// Ponto pulsante sobreposto ao ícone de Competições — mesmo padrão visual (bg-destaque +
+// animate-pulso-sinal) já usado no aviso de sincronização de Feed.jsx:112. O texto
+// sr-only garante leitura por leitor de tela sem depender só de cor/animação.
+function IndicadorCompeticaoAtiva() {
+  return (
+    <span className="absolute -right-0.5 -top-0.5 inline-flex h-2.5 w-2.5">
+      <span className="absolute inline-flex h-full w-full animate-pulso-sinal rounded-full bg-destaque shadow-[0_0_6px_var(--color-destaque)]" />
+      <span className="sr-only">Competição ativa</span>
+    </span>
+  )
+}
+
 export default function Shell({ children }) {
   const { jogador } = useAuth()
   const [menuAberto, setMenuAberto] = useState(false)
@@ -202,6 +214,25 @@ export default function Shell({ children }) {
       // ignora (ex.: storage indisponível)
     }
   }, [colapsada])
+
+  const [temCompeticaoAtiva, setTemCompeticaoAtiva] = useState(false)
+
+  // Descobre se existe competição ativa pra acender o indicador (sidebar + barra
+  // inferior mobile) — mesmo padrão de polling já usado em Feed.jsx pro aviso de
+  // sincronização, intervalo maior (60s) porque início/fim de competição não muda a
+  // cada segundo.
+  useEffect(() => {
+    let vivo = true
+    function carregar() {
+      fetch('/api/competicoes/status')
+        .then((res) => (res.ok ? res.json() : null))
+        .then((s) => { if (vivo && s) setTemCompeticaoAtiva(Boolean(s.temAtiva)) })
+        .catch(() => {})
+    }
+    carregar()
+    const t = setInterval(carregar, 60000)
+    return () => { vivo = false; clearInterval(t) }
+  }, [])
 
   async function sair() {
     await fetch('/api/auth/logout', { method: 'POST' })
@@ -255,7 +286,10 @@ export default function Shell({ children }) {
               title={colapsada ? item.label : undefined}
               aria-label={colapsada ? item.label : undefined}
             >
-              <span className="shrink-0">{NAV_ICONES[item.icone]}</span>
+              <span className="relative shrink-0">
+                {NAV_ICONES[item.icone]}
+                {item.to === '/competicoes' && temCompeticaoAtiva && <IndicadorCompeticaoAtiva />}
+              </span>
               <span className={`font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque ${colapsada ? 'lg:hidden' : ''}`}>
                 {numerarItem(indice)}
               </span>

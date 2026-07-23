@@ -44,3 +44,16 @@ describe('Shell — barra inferior mobile', () => {
     expect(within(barra).getByRole('link', { name: /comparar/i })).toBeInTheDocument()
   })
 })
+
+describe('Shell — indicador de competicao ativa (sidebar)', () => {
+  it('sem competicao ativa: sem indicador na sidebar', async () => {
+    renderShell({ temAtiva: false })
+    await waitFor(() => expect(screen.getByText('bronze')).toBeInTheDocument())
+    expect(screen.queryByText(/competi[çc][ãa]o ativa/i)).not.toBeInTheDocument()
+  })
+
+  it('com competicao ativa: mostra o indicador (texto acessivel) perto de Competicoes', async () => {
+    renderShell({ temAtiva: true })
+    await waitFor(() => expect(screen.getByText(/competi[çc][ãa]o ativa/i)).toBeInTheDocument())
+  })
+})
