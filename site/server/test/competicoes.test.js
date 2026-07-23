@@ -80,6 +80,56 @@ describe('GET /api/competicoes', () => {
     expect(sql).toContain('premio_imagem_url')
     expect(sql).toContain('premio_mercado_url')
   })
+
+  it('inclui vencedorSubmissoes pro admin quando ha vencedor nao confirmado, com origemNaoVerificada por source', async () => {
+    const agora = new Date()
+    const { app } = appWith([
+      ['from competicoes', [{
+        id: 'comp1', nome: 'Teste', descricao: '', premio_descricao: '',
+        data_inicio: new Date(agora.getTime() - 172800000), data_fim: new Date(agora.getTime() - 86400000),
+        limite_diario: 2, limite_total: 10, minimo_para_rankear: 1, vencedor_steam_id64: '999',
+        vencedor_confirmado_em: null,
+      }]],
+      ['m.plataforma_manual', [
+        { id: 'clip1', clip_url: 'https://x/clip1', clip_snapshot_url: null, pontuacao_total: 100, pontuacao_detalhe: null, enviado_em: agora, source: 'upload', plataforma_manual: 'gamers_club' },
+      ]],
+    ])
+    const res = await request(app).get('/api/competicoes').set('Cookie', cookieAdmin)
+    const comp = res.body.encerradas[0]
+    expect(comp.vencedorSubmissoes).toHaveLength(1)
+    expect(comp.vencedorSubmissoes[0].origemNaoVerificada).toBe(true)
+    expect(comp.vencedorSubmissoes[0].plataformaManual).toBe('gamers_club')
+  })
+
+  it('nao inclui vencedorSubmissoes depois que o vencedor ja foi confirmado', async () => {
+    const agora = new Date()
+    const { app } = appWith([
+      ['from competicoes', [{
+        id: 'comp1', nome: 'Teste', descricao: '', premio_descricao: '',
+        data_inicio: new Date(agora.getTime() - 172800000), data_fim: new Date(agora.getTime() - 86400000),
+        limite_diario: 2, limite_total: 10, minimo_para_rankear: 1, vencedor_steam_id64: '999',
+        vencedor_confirmado_em: agora,
+      }]],
+    ])
+    const res = await request(app).get('/api/competicoes').set('Cookie', cookieAdmin)
+    const comp = res.body.encerradas[0]
+    expect(comp.vencedorSubmissoes).toBeUndefined()
+  })
+
+  it('vencedorSubmissoes nao aparece pra jogador que nao e o vencedor nem admin', async () => {
+    const agora = new Date()
+    const { app } = appWith([
+      ['from competicoes', [{
+        id: 'comp1', nome: 'Teste', descricao: '', premio_descricao: '',
+        data_inicio: new Date(agora.getTime() - 172800000), data_fim: new Date(agora.getTime() - 86400000),
+        limite_diario: 2, limite_total: 10, minimo_para_rankear: 1, vencedor_steam_id64: '999',
+        vencedor_confirmado_em: null,
+      }]],
+    ])
+    const res = await request(app).get('/api/competicoes').set('Cookie', cookieJogador)
+    const comp = res.body.encerradas[0]
+    expect(comp.vencedorSubmissoes).toBeUndefined()
+  })
 })
 
 describe('POST /api/competicoes/admin', () => {

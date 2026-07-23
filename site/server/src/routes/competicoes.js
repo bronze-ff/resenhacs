@@ -98,6 +98,33 @@ async function buscarClipesRecentes(db, competicaoId) {
   }))
 }
 
+// Clipes do vencedor pendente de confirmação (Task de integridade de data) — usado só na
+// tela de admin pra revisar antes de liberar o tradelink. Diferente de buscarClipesRecentes
+// (últimos 20 da competição inteira, sem filtro de plataforma), aqui é só do vencedor,
+// sem limite (total já é limitado por competicoes.limite_total), com o join em matches
+// pra saber a origem — join (não left join) é seguro porque toda linha de
+// competicao_submissoes referencia um allstar_clip com match_id válido.
+async function buscarSubmissoesDoJogador(db, competicaoId, steamId64) {
+  const { rows } = await db.query(
+    `select ac.id, ac.clip_url, ac.clip_snapshot_url, ac.pontuacao_total, ac.pontuacao_detalhe,
+            cs.enviado_em, m.source, m.plataforma_manual
+     from competicao_submissoes cs
+     join allstar_clips ac on ac.id = cs.allstar_clip_id
+     join matches m on m.id = ac.match_id
+     where cs.competicao_id = $1 and cs.steam_id64 = $2
+     order by cs.enviado_em desc`,
+    [competicaoId, steamId64],
+  )
+  return rows.map((r) => ({
+    id: r.id, clipUrl: r.clip_url, clipSnapshotUrl: r.clip_snapshot_url,
+    pontuacao: r.pontuacao_detalhe ?? { total: r.pontuacao_total ?? 0 },
+    // source='upload' é o único caso onde played_at foi digitado pelo jogador (não
+    // verificado) — os outros (valve_mm/faceit/pro) vêm de fonte automática/oficial.
+    origemNaoVerificada: r.source === 'upload',
+    plataformaManual: r.plataforma_manual,
+  }))
+}
+
 export function createCompeticoesRouter({ db, requireAuth }) {
   const router = Router()
   const requireSuperAdmin = createRequireSuperAdmin(db)
@@ -118,6 +145,7 @@ export function createCompeticoesRouter({ db, requireAuth }) {
       const leaderboard = await buscarLeaderboard(db, c.id, c.minimo_para_rankear)
       const clipesRecentes = await buscarClipesRecentes(db, c.id)
       const ehVencedorOuAdmin = req.player.steamId === vencedorSteamId || req.player.isSuperAdmin
+      const vencedorNaoConfirmado = Boolean(vencedorSteamId) && !c.vencedor_confirmado_em
       return {
         ...mapCompeticao({ ...c, vencedor_steam_id64: vencedorSteamId }),
         leaderboard,
@@ -125,6 +153,9 @@ export function createCompeticoesRouter({ db, requireAuth }) {
         // #6/#12 da auditoria: tradelink só aparece pro próprio vencedor ou admin —
         // omitido da resposta (não só escondido no client) pra qualquer outro jogador.
         ...(ehVencedorOuAdmin ? { tradelinkVencedor: c.tradelink_vencedor } : {}),
+        ...(ehVencedorOuAdmin && vencedorNaoConfirmado
+          ? { vencedorSubmissoes: await buscarSubmissoesDoJogador(db, c.id, vencedorSteamId) }
+          : {}),
       }
     }
     const ativa = rows.find((c) => new Date(c.data_inicio) <= agora && agora <= new Date(c.data_fim))
