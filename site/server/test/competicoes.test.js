@@ -129,6 +129,8 @@ describe('POST /api/competicoes/admin', () => {
     const { app } = appWith([])
     const res = await request(app).post('/api/competicoes/admin').set('Cookie', cookieAdmin).send({
       nome: 'X', dataInicio: '2026-08-08T00:00:00Z', dataFim: '2026-08-01T00:00:00Z',
+      premioImagemUrl: 'https://exemplo.com/ak47.png',
+      premioMercadoUrl: 'https://steamcommunity.com/market/listings/730/AK-47',
     })
     expect(res.status).toBe(400)
   })
@@ -137,6 +139,8 @@ describe('POST /api/competicoes/admin', () => {
     const { app } = appWith([])
     const res = await request(app).post('/api/competicoes/admin').set('Cookie', cookieAdmin).send({
       nome: 'X', dataInicio: '2026-08-01T00:00:00Z', dataFim: '2026-08-08T00:00:00Z', limiteDiario: -1,
+      premioImagemUrl: 'https://exemplo.com/ak47.png',
+      premioMercadoUrl: 'https://steamcommunity.com/market/listings/730/AK-47',
     })
     expect(res.status).toBe(400)
   })
@@ -145,6 +149,8 @@ describe('POST /api/competicoes/admin', () => {
     const { app } = appWith([])
     const res = await request(app).post('/api/competicoes/admin').set('Cookie', cookieAdmin).send({
       nome: 'X', dataInicio: '2026-08-01T00:00:00Z', dataFim: '2026-08-08T00:00:00Z', limiteTotal: 2.5,
+      premioImagemUrl: 'https://exemplo.com/ak47.png',
+      premioMercadoUrl: 'https://steamcommunity.com/market/listings/730/AK-47',
     })
     expect(res.status).toBe(400)
   })
