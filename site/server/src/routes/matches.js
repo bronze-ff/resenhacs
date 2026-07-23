@@ -190,6 +190,7 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
                 ac.id as allstar_clip_id, ac.status as allstar_status, ac.clip_url as allstar_clip_url
          from highlights h
          left join match_players mp on mp.match_id = h.match_id and mp.steam_id64 = h.steam_id64
+         left join allstar_clips ac on ac.highlight_id = h.id
          where h.match_id = $1 order by h.round_number`,
         [id],
       ),
