@@ -24,7 +24,7 @@ function mapCompeticao(c) {
     premioImagemUrl: c.premio_imagem_url, premioMercadoUrl: c.premio_mercado_url,
     dataInicio: c.data_inicio, dataFim: c.data_fim,
     limiteDiario: c.limite_diario, limiteTotal: c.limite_total, minimoParaRankear: c.minimo_para_rankear,
-    vencedorSteamId: c.vencedor_steam_id64,
+    vencedorSteamId: c.vencedor_steam_id64, vencedorConfirmado: c.vencedor_confirmado_em != null,
   }
 }
 
@@ -107,7 +107,8 @@ export function createCompeticoesRouter({ db, requireAuth }) {
     const { rows } = await db.query(
       `select id, nome, descricao, premio_descricao, premio_imagem_url, premio_mercado_url,
               data_inicio, data_fim,
-              limite_diario, limite_total, minimo_para_rankear, vencedor_steam_id64, tradelink_vencedor
+              limite_diario, limite_total, minimo_para_rankear, vencedor_steam_id64, tradelink_vencedor,
+              vencedor_confirmado_em
        from competicoes
        order by data_inicio desc`,
     )
@@ -314,13 +315,32 @@ export function createCompeticoesRouter({ db, requireAuth }) {
     res.json({ ok: true })
   })
 
+  router.put('/:id/confirmar-vencedor', requireAuth, requireSuperAdmin, async (req, res) => {
+    if (!UUID_RE.test(req.params.id)) return res.status(404).json({ erro: 'competição não encontrada' })
+    const { rows } = await db.query(
+      'select id, data_fim, vencedor_steam_id64, minimo_para_rankear from competicoes where id = $1',
+      [req.params.id],
+    )
+    if (!rows.length) return res.status(404).json({ erro: 'competição não encontrada' })
+    const comp = rows[0]
+    if (new Date() <= new Date(comp.data_fim)) return res.status(400).json({ erro: 'a competição ainda não encerrou' })
+    const vencedorSteamId = await calcularOuLerVencedor(db, comp)
+    if (!vencedorSteamId) return res.status(400).json({ erro: 'essa competição não tem vencedor' })
+    await db.query(
+      'update competicoes set vencedor_confirmado_em = coalesce(vencedor_confirmado_em, now()) where id = $1',
+      [req.params.id],
+    )
+    res.json({ ok: true })
+  })
+
   router.put('/:id/tradelink', requireAuth, async (req, res) => {
     if (!UUID_RE.test(req.params.id)) return res.status(404).json({ erro: 'competição não encontrada' })
-    const { rows } = await db.query('select id, data_fim, vencedor_steam_id64 from competicoes where id = $1', [req.params.id])
+    const { rows } = await db.query('select id, data_fim, vencedor_steam_id64, vencedor_confirmado_em from competicoes where id = $1', [req.params.id])
     if (!rows.length) return res.status(404).json({ erro: 'competição não encontrada' })
     const comp = rows[0]
     if (new Date() <= new Date(comp.data_fim)) return res.status(400).json({ erro: 'a competição ainda não encerrou' })
     if (req.player.steamId !== comp.vencedor_steam_id64) return res.status(403).json({ erro: 'só o vencedor pode informar o tradelink' })
+    if (!comp.vencedor_confirmado_em) return res.status(400).json({ erro: 'aguardando confirmação do admin' })
     const tradelink = String(req.body?.tradelink ?? '').trim()
     if (!tradelink) return res.status(400).json({ erro: 'tradelink obrigatório' })
     await db.query('update competicoes set tradelink_vencedor = $1 where id = $2', [tradelink, req.params.id])

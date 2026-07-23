@@ -431,9 +431,18 @@ describe('PUT /api/competicoes/:id/tradelink', () => {
     expect(res.status).toBe(403)
   })
 
+  it('vencedor sem confirmacao do admin: 400', async () => {
+    const { app } = appWith([
+      ['from competicoes where id', [{ id: COMP_ID, data_fim: '2026-07-01', vencedor_steam_id64: '765', vencedor_confirmado_em: null }]],
+    ])
+    const res = await request(app).put(`/api/competicoes/${COMP_ID}/tradelink`).set('Cookie', cookieJogador).send({ tradelink: 'https://steamcommunity.com/tradeoffer/x' })
+    expect(res.status).toBe(400)
+    expect(res.body.erro).toMatch(/confirma[çc][ãa]o/i)
+  })
+
   it('o proprio vencedor consegue gravar', async () => {
     const { app, db } = appWith([
-      ['from competicoes where id', [{ id: COMP_ID, data_fim: '2026-07-01', vencedor_steam_id64: '765' }]],
+      ['from competicoes where id', [{ id: COMP_ID, data_fim: '2026-07-01', vencedor_steam_id64: '765', vencedor_confirmado_em: '2026-07-02T00:00:00Z' }]],
     ])
     const res = await request(app).put(`/api/competicoes/${COMP_ID}/tradelink`).set('Cookie', cookieJogador).send({ tradelink: 'https://steamcommunity.com/tradeoffer/x' })
     expect(res.status).toBe(200)
@@ -485,5 +494,64 @@ describe('GET /api/competicoes/status', () => {
     const res = await request(app).get('/api/competicoes/status').set('Cookie', cookieJogador)
     expect(res.status).toBe(200)
     expect(res.body).toEqual({ temAtiva: false })
+  })
+})
+
+describe('PUT /api/competicoes/:id/confirmar-vencedor', () => {
+  const COMP_ID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+
+  it('jogador comum: 403', async () => {
+    const { app } = appWith([])
+    const res = await request(app).put(`/api/competicoes/${COMP_ID}/confirmar-vencedor`).set('Cookie', cookieJogador)
+    expect(res.status).toBe(403)
+  })
+
+  it('id nao-uuid: 404', async () => {
+    const { app } = appWith([])
+    const res = await request(app).put('/api/competicoes/abc/confirmar-vencedor').set('Cookie', cookieAdmin)
+    expect(res.status).toBe(404)
+  })
+
+  it('competicao ainda ativa: 400', async () => {
+    const noFuturo = new Date(Date.now() + 86400000).toISOString()
+    const { app } = appWith([
+      ['from competicoes where id', [{ id: COMP_ID, data_fim: noFuturo, vencedor_steam_id64: null, minimo_para_rankear: 1 }]],
+    ])
+    const res = await request(app).put(`/api/competicoes/${COMP_ID}/confirmar-vencedor`).set('Cookie', cookieAdmin)
+    expect(res.status).toBe(400)
+  })
+
+  it('sem vencedor calculado: 400', async () => {
+    const noPassado = new Date(Date.now() - 86400000).toISOString()
+    const { app } = appWith([
+      ['from competicoes where id', [{ id: COMP_ID, data_fim: noPassado, vencedor_steam_id64: null, minimo_para_rankear: 1 }]],
+      ['from competicao_submissoes cs join', []],
+    ])
+    const res = await request(app).put(`/api/competicoes/${COMP_ID}/confirmar-vencedor`).set('Cookie', cookieAdmin)
+    expect(res.status).toBe(400)
+  })
+
+  it('vencedor calculado: confirma com sucesso', async () => {
+    const noPassado = new Date(Date.now() - 86400000).toISOString()
+    const { app, db } = appWith([
+      ['from competicoes where id', [{ id: COMP_ID, data_fim: noPassado, vencedor_steam_id64: '765', minimo_para_rankear: 1 }]],
+      ['update competicoes set vencedor_confirmado_em', [{ id: COMP_ID }]],
+    ])
+    const res = await request(app).put(`/api/competicoes/${COMP_ID}/confirmar-vencedor`).set('Cookie', cookieAdmin)
+    expect(res.status).toBe(200)
+    const update = db.query.mock.calls.find(([sql]) => sql.includes('update competicoes set vencedor_confirmado_em'))
+    expect(update).toBeTruthy()
+  })
+
+  it('confirmar duas vezes: idempotente, sempre 200', async () => {
+    const noPassado = new Date(Date.now() - 86400000).toISOString()
+    const { app } = appWith([
+      ['from competicoes where id', [{ id: COMP_ID, data_fim: noPassado, vencedor_steam_id64: '765', minimo_para_rankear: 1 }]],
+      ['update competicoes set vencedor_confirmado_em', [{ id: COMP_ID }]],
+    ])
+    const res1 = await request(app).put(`/api/competicoes/${COMP_ID}/confirmar-vencedor`).set('Cookie', cookieAdmin)
+    const res2 = await request(app).put(`/api/competicoes/${COMP_ID}/confirmar-vencedor`).set('Cookie', cookieAdmin)
+    expect(res1.status).toBe(200)
+    expect(res2.status).toBe(200)
   })
 })
