@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './auth/AuthContext.jsx'
 import Shell from './components/Shell.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import Entrar from './pages/Entrar.jsx'
+import Landing from './pages/Landing.jsx'
 import AcessoNegado from './pages/AcessoNegado.jsx'
 import Feed from './pages/Feed.jsx'
 import Partida from './pages/Partida.jsx'
@@ -31,6 +32,16 @@ function RotaProtegida({ children }) {
   return <Shell>{children}</Shell>
 }
 
+// Raiz pública: sem sessão mostra a landing (marketing), logado cai no Feed de sempre —
+// mesma lógica de RotaProtegida, só que "sem jogador" não é mais um redirect, é a landing.
+function RotaRaiz() {
+  const { carregando, jogador } = useAuth()
+  if (carregando) return <p className="p-8 text-texto-fraco">Carregando…</p>
+  if (!jogador) return <Landing />
+  if (!jogador.tourConcluido) return <Navigate to="/tour" replace />
+  return <Shell><Feed /></Shell>
+}
+
 function RotaAdmin({ children }) {
   const { carregando, jogador } = useAuth()
   if (carregando) return <p className="p-8 text-texto-fraco">Carregando…</p>
@@ -50,7 +61,7 @@ export default function App() {
           <Route path="/acesso-negado" element={<AcessoNegado />} />
           <Route path="/replay-demo" element={<ReplayDemo />} />
           <Route path="/tour" element={<RotaTour><Tour /></RotaTour>} />
-          <Route path="/" element={<RotaProtegida><Feed /></RotaProtegida>} />
+          <Route path="/" element={<RotaRaiz />} />
           <Route path="/partida/:id" element={<RotaProtegida><Partida /></RotaProtegida>} />
           <Route path="/ranking" element={<RotaProtegida><Ranking /></RotaProtegida>} />
           <Route path="/enviar-demo" element={<RotaProtegida><EnviarDemo /></RotaProtegida>} />
