@@ -2,7 +2,7 @@
 # 0.41.4 é a versão validada contra demos reais (e a mais nova no PyPI em 2026-07).
 demoparser2>=0.41,<1
 boto3>=1.43.53
-psycopg[binary]>=3.2
+psycopg[binary]>=3.3.4
 # Auditoria finding #6: versão travada (era solta, sem teto nem piso) — 4.3 é a
 # validada em dev (ver `pip show rarfile`); trava evita uma versão futura mudar
 # comportamento de extração (ex.: tool_setup) sem aviso.
