@@ -69,19 +69,52 @@ describe('POST /api/upload/upload-url', () => {
     expect(res.status).toBe(400)
   })
 
-  it('caminho feliz: insere na fila sem group_id e devolve a url assinada', async () => {
-    const { app, db } = appWith([['insert into uploads_pendentes', [{ id: 'u1' }]]])
+  it('data no futuro: 400', async () => {
+    const { app } = appWith([])
+    const futuro = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
     const res = await request(app)
       .post('/api/upload/upload-url')
       .set('Cookie', cookie)
-      .send({ filename: 'MinhaDemo.DEM', shareCode: 'CSGO-aaaaa-bbbbb-ccccc-ddddd-eeeee', playedAt: '2026-07-09T20:15' })
+      .send({ filename: 'x.dem', playedAt: futuro })
+    expect(res.status).toBe(400)
+    expect(res.body.erro).toMatch(/entre.*dias/i)
+  })
+
+  it('data mais de 3 dias no passado: 400', async () => {
+    const { app } = appWith([])
+    const antigo = new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString()
+    const res = await request(app)
+      .post('/api/upload/upload-url')
+      .set('Cookie', cookie)
+      .send({ filename: 'x.dem', playedAt: antigo })
+    expect(res.status).toBe(400)
+    expect(res.body.erro).toMatch(/entre.*dias/i)
+  })
+
+  it('data dentro da janela de 3 dias: aceita normalmente', async () => {
+    const { app } = appWith([['insert into uploads_pendentes', [{ id: 'u1' }]]])
+    const recente = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+    const res = await request(app)
+      .post('/api/upload/upload-url')
+      .set('Cookie', cookie)
+      .send({ filename: 'x.dem', playedAt: recente })
+    expect(res.status).toBe(200)
+  })
+
+  it('caminho feliz: insere na fila sem group_id e devolve a url assinada', async () => {
+    const { app, db } = appWith([['insert into uploads_pendentes', [{ id: 'u1' }]]])
+    const playedAt = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+    const res = await request(app)
+      .post('/api/upload/upload-url')
+      .set('Cookie', cookie)
+      .send({ filename: 'MinhaDemo.DEM', shareCode: 'CSGO-aaaaa-bbbbb-ccccc-ddddd-eeeee', playedAt })
     expect(res.status).toBe(200)
     expect(res.body.id).toBe('u1')
     expect(res.body.uploadUrl).toBe('https://r2.example/presigned-put')
     expect(res.body.key).toMatch(/^uploads-pendentes\/.+\.dem$/)
     const insert = db.query.mock.calls.find((c) => c[0].includes('insert into uploads_pendentes'))
     expect(insert[0]).not.toContain('group_id')
-    expect(insert[1]).toEqual(['765', res.body.key, 'CSGO-aaaaa-bbbbb-ccccc-ddddd-eeeee', '2026-07-09T20:15', null])
+    expect(insert[1]).toEqual(['765', res.body.key, 'CSGO-aaaaa-bbbbb-ccccc-ddddd-eeeee', playedAt, null])
     expect(presignUpload).toHaveBeenCalledWith(expect.anything(), 'resenha-demos', res.body.key, 'application/octet-stream')
   })
 

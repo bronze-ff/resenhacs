@@ -4,11 +4,12 @@ import { presignUpload } from '../r2.js'
 import { limiteEstrito } from '../rateLimit.js'
 
 const SHARE_CODE_RE = /^CSGO(-\S{5}){5}$/
-// aceita datetime-local do browser ("2026-07-09T20:15") ou ISO completo com timezone
-const PLAYED_AT_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?([+-]\d{2}:\d{2}|Z)?$/
+// aceita datetime-local do browser ("2026-07-09T20:15") ou ISO completo com timezone/milissegundos
+const PLAYED_AT_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?(\.\d+)?([+-]\d{2}:\d{2}|Z)?$/
 // Sem integração oficial com essas plataformas (diferente de valve_mm/faceit, que a
 // gente puxa automático) — é só um rótulo informativo que o próprio jogador escolhe.
 const PLATAFORMAS_MANUAIS = new Set(['faceit', 'gamers_club', 'xplay_gg'])
+const TOLERANCIA_DIAS = 3
 
 // Auditoria finding #2: nenhuma camada media o tamanho do .dem antes do upload. O PUT
 // presignado atual (PutObjectCommand simples) não dá pra travar com uma condição real de
@@ -57,6 +58,21 @@ export function createUploadRouter({ db, requireAuth, r2Client, r2Bucket }) {
     const playedAt = String(req.body?.playedAt ?? '').trim()
     if (playedAt && !PLAYED_AT_RE.test(playedAt)) {
       return res.status(400).json({ erro: 'Data/hora inválida' })
+    }
+    // O .dem não guarda data real em lugar nenhum (confirmado lendo o demo.proto oficial
+    // do CS2) — playedAt é sempre digitado pelo jogador. A janela de tolerância reduz a
+    // fraude "óbvia" (baixar demo antiga, declarar uma data dentro do período de uma
+    // competição em andamento) sem bloquear o caso legítimo (jogou há 1-2 dias, sobe
+    // agora). Não elimina o risco — só reduz a superfície de abuso.
+    if (playedAt) {
+      const dataInformada = new Date(playedAt)
+      const agora = new Date()
+      const limiteAntigo = new Date(agora.getTime() - TOLERANCIA_DIAS * 24 * 60 * 60 * 1000)
+      if (dataInformada > agora || dataInformada < limiteAntigo) {
+        return res.status(400).json({
+          erro: `A data informada precisa estar entre ${TOLERANCIA_DIAS} dias atrás e agora.`,
+        })
+      }
     }
     const plataformaManual = String(req.body?.plataformaManual ?? '').trim()
     if (plataformaManual && !PLATAFORMAS_MANUAIS.has(plataformaManual)) {
