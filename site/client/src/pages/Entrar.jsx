@@ -18,7 +18,7 @@ export default function Entrar() {
         className="pointer-events-none absolute inset-0 opacity-40"
         style={{
           background:
-            'conic-gradient(from 0deg at 50% 50%, transparent 0deg, rgba(255,154,31,0.05) 40deg, transparent 90deg)',
+            'conic-gradient(from 0deg at 50% 50%, transparent 0deg, rgba(255,46,67,0.05) 40deg, transparent 90deg)',
           animation: 'girar 14s linear infinite',
         }}
       />
@@ -33,10 +33,10 @@ export default function Entrar() {
           className="animate-surgir font-mono text-xs uppercase tracking-[0.35em] text-destaque"
           style={{ animationDelay: '0ms' }}
         >
-          Acesso restrito · grupo fechado
+          Stats de cs2 por grupo
         </p>
         <h1
-          className="animate-surgir mt-4 font-display text-6xl font-bold uppercase tracking-widest text-texto sm:text-7xl"
+          className="animate-surgir mt-4 font-display text-4xl font-bold uppercase tracking-widest text-texto sm:text-6xl lg:text-7xl"
           style={{ animationDelay: '90ms' }}
         >
           Resenha<span className="text-destaque">.</span>
@@ -50,7 +50,7 @@ export default function Entrar() {
 
         <a
           href="/api/auth/steam"
-          className="animate-surgir panel-cut mt-10 flex items-center gap-3 border border-destaque bg-destaque px-7 py-3.5 font-display text-sm font-semibold uppercase tracking-wider text-fundo shadow-[0_0_40px_-10px_rgba(255,154,31,0.65)] transition-shadow hover:shadow-[0_0_60px_-8px_rgba(255,154,31,0.85)]"
+          className="animate-surgir panel-cut mt-10 flex items-center gap-3 border border-destaque bg-destaque px-7 py-3.5 font-display text-sm font-semibold uppercase tracking-wider text-fundo shadow-[0_0_40px_-10px_rgba(255,46,67,0.6)] transition-shadow hover:shadow-[0_0_60px_-8px_rgba(255,46,67,0.8)]"
           style={{ animationDelay: '280ms' }}
         >
           <SteamIcon className="h-5 w-5" />
@@ -61,7 +61,7 @@ export default function Entrar() {
           className="animate-surgir mt-8 font-mono text-[11px] uppercase tracking-widest text-texto-fraco/60"
           style={{ animationDelay: '360ms' }}
         >
-          Whitelist necessária — pede pro admin do grupo
+          Depois de entrar, adicione seus amigos na aba Amigos — quem já é seu amigo na Steam entra automático
         </p>
       </div>
 

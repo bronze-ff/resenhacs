@@ -9,7 +9,7 @@ function mockMe(response) {
       // Feed busca /api/matches e /api/sessions; devolvemos lista vazia pros dois.
       // /api/auth/me devolve o jogador. Sem esses dois casos, cai no fallback abaixo
       // e o componente Resenhas recebe o objeto do jogador como "sessoes" e quebra.
-      if (typeof url === 'string' && (url.includes('/api/matches') || url.includes('/api/sessions'))) {
+      if (typeof url === 'string' && (url.includes('/api/matches') || url.includes('/api/sessions') || url.includes('/api/groups/meus'))) {
         return Promise.resolve({ ok: true, json: async () => [] })
       }
       return Promise.resolve({
@@ -37,11 +37,21 @@ describe('App', () => {
   })
 
   it('logado: mostra o shell com o nick do jogador', async () => {
-    mockMe({ steamId: '765', nick: 'fih', avatarUrl: null, isAdmin: false })
+    mockMe({ steamId: '765', nick: 'fih', avatarUrl: null, isSuperAdmin: false, tourConcluido: true })
     render(<App />)
     expect(await screen.findByText('fih')).toBeInTheDocument()
     // /api/matches é um fetch separado do /api/auth/me (que resolveu findByText acima);
     // precisa de findByText (assíncrono) aqui também, senão às vezes ainda não resolveu.
     expect(await screen.findByText(/nenhuma partida/i)).toBeInTheDocument()
+    expect(await screen.findByRole('link', { name: /ajuda/i })).toHaveAttribute('href', '/tour')
+    expect(await screen.findByRole('link', { name: /apoie/i })).toHaveAttribute('href', '/apoie')
+    expect(await screen.findByRole('link', { name: 'fih' })).toHaveAttribute('href', '/jogador/765')
+  })
+
+  it('logado com grupo mas tour nao concluido: redireciona pro tour', async () => {
+    mockMe({ steamId: '765', nick: 'fih', avatarUrl: null, isSuperAdmin: false, tourConcluido: false })
+    render(<App />)
+    expect(await screen.findByText('Bem-vindo ao Resenha')).toBeInTheDocument()
+    expect(await screen.findByText(/pular tour/i)).toBeInTheDocument()
   })
 })

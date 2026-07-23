@@ -1,0 +1,25 @@
+# Atualização automática de dependências (semanal) — cobre os 3 pacotes npm do
+# projeto (site/server, site/client, bot) e o pip do coletor. PRs abertos aqui só
+# atualizam versão; ainda passam pela suite de testes (job "tests" do coletor.yml e
+# os checks do site/bot) antes de merge.
+version: 2
+updates:
+  - package-ecosystem: 'npm'
+    directory: '/site/server'
+    schedule:
+      interval: 'weekly'
+
+  - package-ecosystem: 'npm'
+    directory: '/site/client'
+    schedule:
+      interval: 'weekly'
+
+  - package-ecosystem: 'npm'
+    directory: '/bot'
+    schedule:
+      interval: 'weekly'
+
+  - package-ecosystem: 'pip'
+    directory: '/coletor'
+    schedule:
+      interval: 'weekly'

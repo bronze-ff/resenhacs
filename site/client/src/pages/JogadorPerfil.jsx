@@ -1,14 +1,173 @@
-import { useEffect, useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { nomeMapa, dataHora, corRating, nomeArma, TIPO_COMPRA } from '../lib/format.js'
-import StatTile from '../components/StatTile.jsx'
+import { Card, SectionHeader, StatTile, RatingBadge, DataTable, MapIcon, Badge, Select, PremierBadge, PlataformaBadge, FaceitEloBadge, SteamIcon, FaceitIcon } from '../components/ui'
 import LinhaEvolucao from '../components/LinhaEvolucao.jsx'
 import FiltroPeriodo from '../components/FiltroPeriodo.jsx'
 import TagEstilo from '../components/TagEstilo.jsx'
 import PosicionamentoAgregado from '../components/PosicionamentoAgregado.jsx'
 
+// Stat compacto pro card mobile de partida (padrão do CardJogador em Ranking.jsx).
+// `rating` (se passado) desenha um badge verde/vermelho estilo FACEIT (>= 1.0 / < 1.0).
+function Stat({ rotulo, valor, cor, rating }) {
+  return (
+    <div className="min-w-0">
+      <div className="font-mono text-[10px] uppercase tracking-wide text-texto-fraco">{rotulo}</div>
+      {rating !== undefined ? (
+        <RatingBadge valor={rating} className="text-sm" />
+      ) : (
+        <div className={`truncate text-sm font-semibold tabular-nums ${cor ?? 'text-texto'}`}>{valor}</div>
+      )}
+    </div>
+  )
+}
+
+// Kinds de highlight que contam como "clutch" no resumo agrupado (CLUTCH_1V1, CLUTCH_1V2, CLUTCH_1V3...).
+const CLUTCH_PREFIX = 'CLUTCH_'
+const TOM_KIND = { ACE: 'destaque', QUAD: 'destaque', TRIPLE: 'sucesso' }
+function tomDoKind(kind) {
+  if (kind?.startsWith(CLUTCH_PREFIX)) return 'sucesso'
+  return TOM_KIND[kind] ?? 'neutro'
+}
+function grupoDoKind(kind) {
+  return kind?.startsWith(CLUTCH_PREFIX) ? 'Clutch' : kind
+}
+const LIMITE_INICIAL_DESTAQUES = 12
+
+// Seção de Highlights com resumo por tipo, filtro por tipo/mapa e "carregar mais" — tudo client-side,
+// já que o backend manda os destaques inteiros (já filtrados por período) num único payload.
+function SecaoHighlights({ destaques }) {
+  const [filtroTipo, setFiltroTipo] = useState(null) // null = todos; string = kind exato OU "Clutch"
+  const [filtroMapa, setFiltroMapa] = useState('')
+  const [limite, setLimite] = useState(LIMITE_INICIAL_DESTAQUES)
+
+  const ordenados = useMemo(
+    () => [...destaques].sort((a, b) => new Date(b.playedAt ?? 0) - new Date(a.playedAt ?? 0)),
+    [destaques],
+  )
+
+  const contagemPorGrupo = useMemo(() => {
+    const map = new Map()
+    for (const d of ordenados) {
+      const g = grupoDoKind(d.kind)
+      map.set(g, (map.get(g) ?? 0) + 1)
+    }
+    return map
+  }, [ordenados])
+
+  const mapasDisponiveis = useMemo(
+    () => [...new Set(ordenados.map((d) => d.map).filter(Boolean))].sort(),
+    [ordenados],
+  )
+
+  const filtrados = useMemo(
+    () =>
+      ordenados.filter(
+        (d) => (filtroTipo == null || grupoDoKind(d.kind) === filtroTipo) && (!filtroMapa || d.map === filtroMapa),
+      ),
+    [ordenados, filtroTipo, filtroMapa],
+  )
+
+  const visiveis = filtrados.slice(0, limite)
+  const temMais = filtrados.length > visiveis.length
+
+  function aplicarFiltroTipo(grupo) {
+    setFiltroTipo((atual) => (atual === grupo ? null : grupo))
+    setLimite(LIMITE_INICIAL_DESTAQUES)
+  }
+
+  return (
+    <section>
+      <SectionHeader titulo={<>Highlights <span className="text-texto-fraco">({destaques.length}) — "em qual partida foi esse mesmo?"</span></>} />
+
+      {/* Resumo por tipo — clicável, filtra a lista abaixo. */}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => aplicarFiltroTipo(null)}
+          className={`panel-cut-sm min-h-10 cursor-pointer border px-3 py-2 font-mono text-xs uppercase tracking-wide transition-colors duration-200 sm:min-h-0 ${
+            filtroTipo == null
+              ? 'border-destaque/60 bg-destaque/10 text-destaque'
+              : 'border-borda bg-superficie text-texto-fraco hover:border-destaque/40 hover:text-texto'
+          }`}
+        >
+          Todos ({ordenados.length})
+        </button>
+        {[...contagemPorGrupo.entries()].map(([grupo, qtd]) => (
+          <button
+            key={grupo}
+            type="button"
+            onClick={() => aplicarFiltroTipo(grupo)}
+            className={`panel-cut-sm min-h-10 cursor-pointer border px-3 py-2 font-mono text-xs uppercase tracking-wide transition-colors duration-200 sm:min-h-0 ${
+              filtroTipo === grupo
+                ? 'border-destaque/60 bg-destaque/10 text-destaque'
+                : 'border-borda bg-superficie text-texto-fraco hover:border-destaque/40 hover:text-texto'
+            }`}
+          >
+            {grupo} ({qtd})
+          </button>
+        ))}
+
+        {mapasDisponiveis.length > 1 && (
+          <Select
+            value={filtroMapa}
+            onChange={(e) => {
+              setFiltroMapa(e.target.value)
+              setLimite(LIMITE_INICIAL_DESTAQUES)
+            }}
+            selectClassName="text-xs uppercase tracking-wide"
+          >
+            <option value="">Todos os mapas</option>
+            {mapasDisponiveis.map((m) => (
+              <option key={m} value={m}>{nomeMapa(m)}</option>
+            ))}
+          </Select>
+        )}
+      </div>
+
+      {filtrados.length === 0 && <p className="font-mono text-sm text-texto-fraco">Nenhum highlight com esse filtro.</p>}
+
+      {filtrados.length > 0 && (
+        <>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {visiveis.map((d) => (
+              <Link
+                key={d.id}
+                to={`/partida/${d.matchId}?highlight=${d.id}`}
+                className="panel-cut-sm flex min-h-10 flex-wrap items-center gap-x-2 gap-y-1 border border-borda bg-superficie px-3 py-2 font-mono text-xs transition-colors duration-200 hover:border-destaque/60 hover:bg-superficie-alta"
+                title={`${nomeMapa(d.map)} · ${dataHora(d.playedAt)}`}
+              >
+                <Badge tom={tomDoKind(d.kind)}>{d.kind}</Badge>
+                <span className="text-texto-fraco">round {d.roundNumber}</span>
+                <span className="ml-auto flex items-center gap-1 text-texto">
+                  <MapIcon map={d.map} size={16} />
+                  {nomeMapa(d.map)}
+                </span>
+                <span className="w-full text-texto-fraco sm:w-auto">{dataHora(d.playedAt)}</span>
+              </Link>
+            ))}
+          </div>
+
+          {temMais && (
+            <div className="mt-3 flex justify-center">
+              <button
+                type="button"
+                onClick={() => setLimite((l) => l + LIMITE_INICIAL_DESTAQUES)}
+                className="panel-cut-sm min-h-10 cursor-pointer border border-borda px-4 py-2 font-mono text-xs uppercase tracking-wide text-texto-fraco transition-colors duration-200 hover:border-destaque/60 hover:text-destaque"
+              >
+                Carregar mais ({filtrados.length - visiveis.length})
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  )
+}
+
 export default function JogadorPerfil() {
   const { steamId } = useParams()
+  const navegar = useNavigate()
   const [data, setData] = useState(null)
   const [erro, setErro] = useState(false)
   const [de, setDe] = useState('')
@@ -32,38 +191,70 @@ export default function JogadorPerfil() {
   if (erro) return <p className="font-mono text-sm text-texto-fraco">Jogador não encontrado.</p>
   if (!data) return <p className="font-mono text-sm text-texto-fraco">Carregando…</p>
 
-  const { jogador, stats, porMapa, recentes, sinergia, evolucao, badges, estilo, destaques, armas, economia } = data
+  const { jogador, stats, porMapa, recentes, sinergia, evolucao, badges, estilo, destaques, armas, economia, premierAtual } = data
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
+      {/* 1. Header — avatar, nick, badges/estilo (pequenos, ficam aqui mesmo) e filtro de período. */}
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex min-w-0 items-center gap-4">
           {jogador.avatarUrl && (
-            <img src={jogador.avatarUrl} alt="" className="panel-cut h-16 w-16 border border-borda object-cover" />
+            <img src={jogador.avatarUrl} alt="" className="panel-cut h-16 w-16 shrink-0 border border-borda object-cover" />
           )}
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="font-display text-2xl font-bold uppercase tracking-wide text-texto">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="truncate font-display text-2xl font-bold uppercase tracking-wide text-texto">
                 {jogador.nick || jogador.steamId}
               </h2>
               <TagEstilo estilo={estilo} />
+              <PremierBadge valor={premierAtual} size="normal" />
+              <FaceitEloBadge elo={jogador.faceitElo} level={jogador.faceitSkillLevel} />
             </div>
             <p className="font-mono text-sm text-texto-fraco">{stats.partidas} partidas · {stats.winrate}% de vitória</p>
           </div>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-3 lg:gap-4">
           <FiltroPeriodo de={de} ate={ate} onDe={setDe} onAte={setAte} />
+          {/* Perfis externos: Steam sempre existe (o id é o steam_id64); FACEIT só pra
+              quem vinculou a conta — sem chip "sem dado" pra quem nunca vinculou. */}
+          <a
+            href={`https://steamcommunity.com/profiles/${jogador.steamId}`}
+            target="_blank"
+            rel="noreferrer"
+            title="Abrir perfil na Steam"
+            aria-label="Abrir perfil na Steam"
+            className="panel-cut-sm flex min-h-10 items-center border border-borda px-3 py-2 text-texto-fraco transition-colors hover:border-destaque/60 hover:text-destaque lg:min-h-0"
+          >
+            <SteamIcon className="h-4 w-4" />
+          </a>
+          {jogador.faceitNick && (
+            <a
+              href={`https://www.faceit.com/en/players/${encodeURIComponent(jogador.faceitNick)}`}
+              target="_blank"
+              rel="noreferrer"
+              title={`Abrir perfil na FACEIT (${jogador.faceitNick})`}
+              aria-label="Abrir perfil na FACEIT"
+              className="panel-cut-sm flex min-h-10 items-center border border-borda px-3 py-2 text-texto-fraco transition-colors hover:border-destaque/60 hover:text-destaque lg:min-h-0"
+            >
+              <FaceitIcon className="h-4 w-4" />
+            </a>
+          )}
           <Link
             to={`/comparar?a=${jogador.steamId}`}
-            className="panel-cut-sm border border-borda px-3 py-2 font-mono text-xs uppercase tracking-wide text-texto-fraco transition-colors hover:border-destaque/60 hover:text-destaque"
+            className="panel-cut-sm min-h-10 border border-borda px-3 py-2 font-mono text-xs uppercase tracking-wide text-texto-fraco transition-colors hover:border-destaque/60 hover:text-destaque lg:min-h-0"
           >
             Comparar com…
           </Link>
         </div>
       </div>
 
+      {/* 2. Tiles de stats principais — o que mais se consulta de cara. */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <StatTile rotulo="Rating" valor={stats.rating?.toFixed(2) ?? '–'} destaque={corRating(stats.rating)} />
+        <StatTile
+          rotulo="Rating"
+          valor={stats.rating?.toFixed(2) ?? '–'}
+          tom={stats.rating == null ? 'neutro' : stats.rating >= 1.15 ? 'sucesso' : stats.rating <= 0.85 ? 'perigo' : 'neutro'}
+        />
         <StatTile rotulo="K/D" valor={stats.kd} />
         <StatTile rotulo="ADR" valor={stats.adr} />
         <StatTile rotulo="HS%" valor={`${stats.hsPct}%`} />
@@ -73,9 +264,7 @@ export default function JogadorPerfil() {
 
       {badges.length > 0 && (
         <section>
-          <h3 className="mb-3 font-display text-lg font-semibold uppercase tracking-wide text-texto">
-            Conquistas <span className="text-texto-fraco">({badges.length})</span>
-          </h3>
+          <SectionHeader titulo={<>Conquistas <span className="text-texto-fraco">({badges.length})</span></>} />
           <div className="flex flex-wrap gap-2">
             {badges.map((b) => (
               <div
@@ -91,17 +280,216 @@ export default function JogadorPerfil() {
         </section>
       )}
 
+      {/* 3. Histórico de partidas — o que mais se consulta, logo depois dos tiles. */}
       <section>
-        <h3 className="mb-3 font-display text-lg font-semibold uppercase tracking-wide text-texto">
-          Evolução do rating <span className="text-texto-fraco">(últimas {evolucao.length} partidas)</span>
-        </h3>
-        <div className="panel-cut border border-borda bg-superficie p-4">
-          <LinhaEvolucao pontos={evolucao.map((e) => ({ label: dataHora(e.playedAt), valor: e.rating }))} />
+        <SectionHeader titulo={<>
+          Partidas recentes
+          {stats.rating != null && (
+            <span className="ml-2 font-mono text-xs font-normal normal-case text-texto-fraco">
+              (± vs média de {stats.rating.toFixed(2)} — consistência: acima ou abaixo do normal dele)
+            </span>
+          )}
+        </>} />
+        {recentes.length === 0 && <p className="font-mono text-sm text-texto-fraco">Nenhuma partida ainda.</p>}
+
+        {recentes.length > 0 && (
+          <>
+            {/* Mobile: cards no padrão do Ranking (badge V/D + grade de stats) */}
+            <div className="space-y-2 lg:hidden">
+              {recentes.map((r) => {
+                const kd = r.deaths > 0 ? (r.kills / r.deaths).toFixed(2) : r.kills.toFixed(2)
+                return (
+                  <Link
+                    key={r.id}
+                    to={`/partida/${r.id}`}
+                    className="panel-cut flex items-center gap-3 border border-borda bg-superficie p-3 transition-colors hover:bg-superficie-alta"
+                  >
+                    <div className="w-14 shrink-0 font-mono text-[11px] leading-tight text-texto-fraco">
+                      <div>{new Date(r.playedAt ?? '').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</div>
+                      <div>{new Date(r.playedAt ?? '').toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <span
+                          className={`panel-cut-sm px-1.5 py-0.5 font-display text-[10px] font-bold uppercase ${
+                            r.won === true ? 'bg-sucesso/15 text-sucesso' : r.won === false ? 'bg-perigo/15 text-perigo' : 'bg-superficie-alta text-texto-fraco'
+                          }`}
+                        >
+                          {r.won === true ? 'V' : r.won === false ? 'D' : '—'}
+                        </span>
+                        <span className="font-display text-lg font-bold tabular-nums text-texto">{r.scoreA} : {r.scoreB}</span>
+                        <MapIcon map={r.map} size={18} />
+                        <span className="min-w-0 truncate font-mono text-xs text-texto-fraco">{nomeMapa(r.map)}</span>
+                        <PlataformaBadge source={r.source} className="shrink-0" />
+                      </div>
+                      <div className="mt-2 grid grid-cols-4 gap-2">
+                        <Stat rotulo="Rating" valor={r.rating != null ? r.rating.toFixed(2) : '–'} rating={r.rating} />
+                        <Stat rotulo="K/D/A" valor={`${r.kills}/${r.deaths}/${r.assists}`} />
+                        <Stat rotulo="K/D" valor={kd} cor={Number(kd) >= 1 ? 'text-sucesso' : 'text-perigo'} />
+                        <Stat rotulo="ADR" valor={r.adr} />
+                      </div>
+                    </div>
+                  </Link>
+                )
+              })}
+            </div>
+
+            {/* Desktop: tabela densa estilo FACEIT */}
+            <div className="hidden lg:block">
+              <DataTable
+                head={
+                  <tr>
+                    <th className="px-3 py-2">Data</th>
+                    <th className="px-2 py-2">Placar</th>
+                    <th className="px-2 py-2 text-right">Rating</th>
+                    <th className="px-2 py-2 text-right">K/D/A</th>
+                    <th className="px-2 py-2 text-right">K/D</th>
+                    <th className="hidden px-2 py-2 text-right xl:table-cell">ADR</th>
+                    <th className="hidden px-2 py-2 text-right xl:table-cell">HS%</th>
+                    <th className="px-3 py-2">Mapa</th>
+                  </tr>
+                }
+              >
+                {recentes.map((r) => {
+                  const kd = r.deaths > 0 ? (r.kills / r.deaths).toFixed(2) : r.kills.toFixed(2)
+                  return (
+                    <tr
+                      key={r.id}
+                      className={`cursor-pointer border-l-4 ${
+                        r.won === true ? 'border-l-sucesso' : r.won === false ? 'border-l-perigo' : 'border-l-texto-fraco'
+                      }`}
+                      onClick={() => navegar(`/partida/${r.id}`)}
+                    >
+                      <td className="px-3 py-2">
+                        <div className="font-mono text-[11px] leading-tight text-texto-fraco">
+                          <div>{new Date(r.playedAt ?? '').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</div>
+                          <div>{new Date(r.playedAt ?? '').toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
+                        </div>
+                      </td>
+                      <td className="px-2 py-2">
+                        <span className="flex items-center gap-2">
+                          <span
+                            className={`panel-cut-sm px-1.5 py-0.5 font-display text-[10px] font-bold uppercase ${
+                              r.won === true ? 'bg-sucesso/15 text-sucesso' : r.won === false ? 'bg-perigo/15 text-perigo' : 'bg-superficie-alta text-texto-fraco'
+                            }`}
+                          >
+                            {r.won === true ? 'V' : r.won === false ? 'D' : '—'}
+                          </span>
+                          <span className="font-display font-bold tabular-nums text-texto">{r.scoreA} : {r.scoreB}</span>
+                        </span>
+                      </td>
+                      <td className="px-2 py-2 text-right"><RatingBadge valor={r.rating} /></td>
+                      <td className="px-2 py-2 text-right font-mono tabular-nums text-texto-fraco">{r.kills}/{r.deaths}/{r.assists}</td>
+                      <td className={`px-2 py-2 text-right font-mono tabular-nums ${Number(kd) >= 1 ? 'text-sucesso' : 'text-perigo'}`}>{kd}</td>
+                      <td className="hidden px-2 py-2 text-right font-mono tabular-nums text-texto-fraco xl:table-cell">{r.adr}</td>
+                      <td className="hidden px-2 py-2 text-right font-mono tabular-nums text-texto-fraco xl:table-cell">{r.hsPct}%</td>
+                      <td className="px-3 py-2 font-mono text-texto-fraco">
+                        <span className="flex items-center gap-2">
+                          <MapIcon map={r.map} size={20} />
+                          {nomeMapa(r.map)}
+                          <PlataformaBadge source={r.source} className="shrink-0" />
+                        </span>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </DataTable>
+            </div>
+          </>
+        )}
+      </section>
+
+      {/* 4. Highlights — aces/clutches com deep-link, resumo por tipo/mapa e carregar mais. */}
+      {destaques.length > 0 && <SecaoHighlights destaques={destaques} />}
+
+      {/* 5. Armas. */}
+      <section>
+        <SectionHeader titulo="Armas" />
+        {armas.length === 0 && <p className="font-mono text-sm text-texto-fraco">Sem dados de arma ainda.</p>}
+        <div className="space-y-2">
+          {armas.slice(0, 6).map((a) => {
+            const maiorKills = armas[0]?.kills || 1
+            return (
+              <Card key={a.weapon} className="p-3">
+                <div className="mb-1.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 font-mono text-sm">
+                  <span className="text-texto">{nomeArma(a.weapon)}</span>
+                  <span className="text-texto-fraco">
+                    <span className="text-texto">{a.kills}</span> kills · {a.hsPct}% HS
+                    {a.temAccuracyConfiavel && <> · {a.accuracy}% precisão</>}
+                  </span>
+                </div>
+                <div className="h-1.5 overflow-hidden rounded bg-fundo">
+                  <div className="h-full bg-destaque/70" style={{ width: `${(a.kills / maiorKills) * 100}%` }} />
+                </div>
+              </Card>
+            )
+          })}
         </div>
       </section>
 
+      {/* 6. Por mapa. */}
       <section>
-        <h3 className="mb-3 font-display text-lg font-semibold uppercase tracking-wide text-texto">Detalhado</h3>
+        <SectionHeader titulo="Por mapa" />
+        {porMapa.length === 0 && <p className="font-mono text-sm text-texto-fraco">Sem dados por mapa ainda.</p>}
+        <div className="space-y-2">
+          {porMapa.map((mp) => (
+            <Card key={mp.map} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 p-3">
+              <span className="flex items-center gap-2 font-mono text-texto">
+                <MapIcon map={mp.map} size={28} />
+                {nomeMapa(mp.map)}
+              </span>
+              <span className="font-mono text-sm text-texto-fraco">
+                <span className="tabular-nums text-texto">{mp.partidas}</span> jogos ·{' '}
+                <span className={`tabular-nums ${mp.winrate >= 50 ? 'text-sucesso' : 'text-perigo'}`}>{mp.winrate}%</span>
+                {mp.rating != null && (
+                  <span className={`ml-2 tabular-nums ${corRating(mp.rating)}`}>{mp.rating.toFixed(2)}</span>
+                )}
+              </span>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      {/* 7. Sinergia / com quem joga. */}
+      <section>
+        <SectionHeader titulo="Com quem mais joga" />
+        {sinergia.length === 0 && <p className="font-mono text-sm text-texto-fraco">Sem duplas registradas ainda.</p>}
+        <div className="space-y-2">
+          {sinergia.map((s) => (
+            <Card
+              as={Link}
+              interativo
+              key={s.steamId}
+              to={`/jogador/${s.steamId}`}
+              className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 p-3"
+            >
+              <span className="flex min-w-0 items-center gap-3 font-mono text-texto">
+                {s.avatarUrl && (
+                  <img src={s.avatarUrl} alt="" className="panel-cut-sm h-8 w-8 shrink-0 border border-borda object-cover" />
+                )}
+                <span className="truncate">{s.nick || s.steamId}</span>
+              </span>
+              <span className="shrink-0 font-mono text-sm text-texto-fraco">
+                <span className="tabular-nums text-texto">{s.partidas}</span> juntos ·{' '}
+                <span className={`tabular-nums ${s.winrate >= 50 ? 'text-sucesso' : 'text-perigo'}`}>
+                  {s.winrate}%
+                </span>
+              </span>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      {/* 8. Resto — evolução, stats avançadas/utilitária, economia e posicionamento. */}
+      <section>
+        <SectionHeader titulo={<>Evolução do rating <span className="text-texto-fraco">(últimas {evolucao.length} partidas)</span></>} />
+        <Card className="p-4">
+          <LinhaEvolucao pontos={evolucao.map((e) => ({ label: dataHora(e.playedAt), valor: e.rating }))} />
+        </Card>
+      </section>
+
+      <section>
+        <SectionHeader titulo="Detalhado" />
         {(() => {
           // Convenção do sistema inteiro: X/Y sempre = sucessos/total.
           const duelosEntry = stats.entryKills + stats.entryDeaths
@@ -151,7 +539,7 @@ export default function JogadorPerfil() {
       </section>
 
       <section>
-        <h3 className="mb-3 font-display text-lg font-semibold uppercase tracking-wide text-texto">Utilitária</h3>
+        <SectionHeader titulo="Utilitária" />
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-8">
           <StatTile
             rotulo="Smokes"
@@ -192,186 +580,41 @@ export default function JogadorPerfil() {
             rotulo="Cegou aliado"
             valor={stats.teammatesFlashed}
             sub={`${stats.teammateFlashDuration}s no total`}
-            destaque={stats.teammatesFlashed > 0 ? 'text-perigo' : undefined}
+            tom={stats.teammatesFlashed > 0 ? 'perigo' : 'neutro'}
             title="Flash de time (mais de 1.1s de cegueira) — auto-flash (cegar a si mesmo) CONTA aqui, é fogo amigo também."
           />
           <StatTile
             rotulo="Fogo amigo (HE+fogo)"
             valor={stats.heTeamDamage + stats.molotovTeamDamage}
-            destaque={(stats.heTeamDamage + stats.molotovTeamDamage) > 0 ? 'text-perigo' : undefined}
+            tom={(stats.heTeamDamage + stats.molotovTeamDamage) > 0 ? 'perigo' : 'neutro'}
             title="Dano de HE + molotov no PRÓPRIO time — não entra no 'Dano HE'/'Dano fogo' de cima, que é só inimigo."
           />
         </div>
       </section>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <section>
-          <h3 className="mb-3 font-display text-lg font-semibold uppercase tracking-wide text-texto">Armas</h3>
-          {armas.length === 0 && <p className="font-mono text-sm text-texto-fraco">Sem dados de arma ainda.</p>}
-          <div className="space-y-2">
-            {armas.slice(0, 6).map((a) => {
-              const maiorKills = armas[0]?.kills || 1
-              return (
-                <div key={a.weapon} className="panel-cut border border-borda bg-superficie p-3">
-                  <div className="mb-1.5 flex items-center justify-between font-mono text-sm">
-                    <span className="text-texto">{nomeArma(a.weapon)}</span>
-                    <span className="text-texto-fraco">
-                      <span className="text-texto">{a.kills}</span> kills · {a.hsPct}% HS
-                      {a.temAccuracyConfiavel && <> · {a.accuracy}% precisão</>}
-                    </span>
-                  </div>
-                  <div className="h-1.5 overflow-hidden rounded bg-fundo">
-                    <div className="h-full bg-destaque/70" style={{ width: `${(a.kills / maiorKills) * 100}%` }} />
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </section>
-
-        <section>
-          <h3 className="mb-3 font-display text-lg font-semibold uppercase tracking-wide text-texto">
-            Economia <span className="text-texto-fraco">— winrate por tipo de compra</span>
-          </h3>
-          <div className="grid grid-cols-2 gap-3">
-            {Object.entries(economia ?? {}).map(([tipo, e]) => (
-              <div key={tipo} className="panel-cut border border-borda bg-superficie p-3">
-                <div className={`font-mono text-xs uppercase tracking-wide ${TIPO_COMPRA[tipo]?.cor ?? 'text-texto-fraco'}`}>
-                  {TIPO_COMPRA[tipo]?.label ?? tipo}
-                </div>
-                <div className="mt-1 font-display text-xl font-bold text-texto">
-                  {e.rounds > 0 ? `${e.winPct}%` : '–'}
-                </div>
-                <div className="font-mono text-xs text-texto-fraco">{e.won}/{e.rounds} rounds</div>
-              </div>
-            ))}
-          </div>
-          <p className="mt-2 font-mono text-[11px] text-texto-fraco">
-            Classificação por valor de equipamento do TIME no fim do freezetime (padrão HLTV): eco &lt; $5k, forçado $5k-10k, meia-compra $10k-20k, cheia ≥ $20k.
-          </p>
-        </section>
-      </div>
-
       <section>
-        <h3 className="mb-3 font-display text-lg font-semibold uppercase tracking-wide text-texto">Posicionamento</h3>
-        <PosicionamentoAgregado steamId={jogador.steamId} />
+        <SectionHeader titulo={<>Economia <span className="text-texto-fraco">— winrate por tipo de compra</span></>} />
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          {Object.entries(economia ?? {}).map(([tipo, e]) => (
+            <Card key={tipo} className="p-3">
+              <div className={`font-mono text-xs uppercase tracking-wide ${TIPO_COMPRA[tipo]?.cor ?? 'text-texto-fraco'}`}>
+                {TIPO_COMPRA[tipo]?.label ?? tipo}
+              </div>
+              <div className="mt-1 font-display text-xl font-bold text-texto">
+                {e.rounds > 0 ? `${e.winPct}%` : '–'}
+              </div>
+              <div className="font-mono text-xs text-texto-fraco">{e.won}/{e.rounds} rounds</div>
+            </Card>
+          ))}
+        </div>
+        <p className="mt-2 font-mono text-[11px] text-texto-fraco">
+          Classificação por valor de equipamento do TIME no fim do freezetime (padrão HLTV): eco &lt; $5k, forçado $5k-10k, meia-compra $10k-20k, cheia ≥ $20k.
+        </p>
       </section>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <section>
-          <h3 className="mb-3 font-display text-lg font-semibold uppercase tracking-wide text-texto">Com quem mais joga</h3>
-          {sinergia.length === 0 && <p className="font-mono text-sm text-texto-fraco">Sem duplas registradas ainda.</p>}
-          <div className="space-y-2">
-            {sinergia.map((s) => (
-              <Link
-                key={s.steamId}
-                to={`/jogador/${s.steamId}`}
-                className="panel-cut flex items-center justify-between border border-borda bg-superficie p-3 transition-colors hover:border-destaque/60"
-              >
-                <span className="flex items-center gap-3 font-mono text-texto">
-                  {s.avatarUrl && (
-                    <img src={s.avatarUrl} alt="" className="panel-cut-sm h-8 w-8 border border-borda object-cover" />
-                  )}
-                  <span>{s.nick || s.steamId}</span>
-                </span>
-                <span className="font-mono text-sm text-texto-fraco">
-                  <span className="tabular-nums text-texto">{s.partidas}</span> juntos ·{' '}
-                  <span className={`tabular-nums ${s.winrate >= 50 ? 'text-sucesso' : 'text-perigo'}`}>
-                    {s.winrate}%
-                  </span>
-                </span>
-              </Link>
-            ))}
-          </div>
-        </section>
-
-        <section>
-          <h3 className="mb-3 font-display text-lg font-semibold uppercase tracking-wide text-texto">Por mapa</h3>
-          {porMapa.length === 0 && <p className="font-mono text-sm text-texto-fraco">Sem dados por mapa ainda.</p>}
-          <div className="space-y-2">
-            {porMapa.map((mp) => (
-              <div key={mp.map} className="panel-cut flex items-center justify-between border border-borda bg-superficie p-3">
-                <span className="font-mono text-texto">{nomeMapa(mp.map)}</span>
-                <span className="font-mono text-sm text-texto-fraco">
-                  <span className="tabular-nums text-texto">{mp.partidas}</span> jogos ·{' '}
-                  <span className={`tabular-nums ${mp.winrate >= 50 ? 'text-sucesso' : 'text-perigo'}`}>{mp.winrate}%</span>
-                  {mp.rating != null && (
-                    <span className={`ml-2 tabular-nums ${corRating(mp.rating)}`}>{mp.rating.toFixed(2)}</span>
-                  )}
-                </span>
-              </div>
-            ))}
-          </div>
-        </section>
-      </div>
-
-      {destaques.length > 0 && (
-        <section>
-          <h3 className="mb-3 font-display text-lg font-semibold uppercase tracking-wide text-texto">
-            Highlights <span className="text-texto-fraco">({destaques.length}) — "em qual partida foi esse mesmo?"</span>
-          </h3>
-          <div className="flex flex-wrap gap-2">
-            {destaques.map((d) => (
-              <Link
-                key={d.id}
-                to={`/partida/${d.matchId}?highlight=${d.id}`}
-                className="panel-cut-sm flex items-center gap-2 border border-borda bg-superficie px-3 py-2 font-mono text-xs transition-colors hover:border-destaque/60"
-                title={`${nomeMapa(d.map)} · ${dataHora(d.playedAt)}`}
-              >
-                <span className="font-display font-semibold uppercase text-destaque">{d.kind}</span>
-                <span className="text-texto-fraco">round {d.roundNumber}</span>
-                <span className="text-texto-fraco">·</span>
-                <span className="text-texto">{nomeMapa(d.map)}</span>
-                <span className="text-texto-fraco">{dataHora(d.playedAt)}</span>
-              </Link>
-            ))}
-          </div>
-        </section>
-      )}
-
       <section>
-        <h3 className="mb-3 font-display text-lg font-semibold uppercase tracking-wide text-texto">
-          Partidas recentes
-          {stats.rating != null && (
-            <span className="ml-2 font-mono text-xs font-normal normal-case text-texto-fraco">
-              (± vs média de {stats.rating.toFixed(2)} — consistência: acima ou abaixo do normal dele)
-            </span>
-          )}
-        </h3>
-        {recentes.length === 0 && <p className="font-mono text-sm text-texto-fraco">Nenhuma partida ainda.</p>}
-        <div className="space-y-2">
-          {recentes.map((r) => {
-            const delta = r.rating != null && stats.rating != null ? Math.round((r.rating - stats.rating) * 100) / 100 : null
-            return (
-            <Link
-              key={r.id}
-              to={`/partida/${r.id}`}
-              className="panel-cut flex items-center justify-between border border-borda bg-superficie p-3 transition-colors hover:border-destaque/60"
-            >
-              <span className="flex items-center gap-3 font-mono text-texto">
-                <span
-                  className={`inline-block h-2 w-2 rounded-full ${r.won === true ? 'bg-sucesso' : r.won === false ? 'bg-perigo' : 'bg-texto-fraco'}`}
-                  title={r.won === true ? 'Vitória' : r.won === false ? 'Derrota' : 'Empate'}
-                />
-                <span>{nomeMapa(r.map)}</span>
-                <span className="text-xs text-texto-fraco">{dataHora(r.playedAt)}</span>
-                {delta != null && (
-                  <span
-                    className={`text-xs ${delta >= 0.1 ? 'text-sucesso' : delta <= -0.1 ? 'text-perigo' : 'text-texto-fraco'}`}
-                    title="Diferença do rating dessa partida pra média dele no período"
-                  >
-                    {delta >= 0 ? '+' : ''}{delta.toFixed(2)}
-                  </span>
-                )}
-              </span>
-              <span className="font-mono text-sm tabular-nums text-texto-fraco">
-                {r.scoreA}:{r.scoreB} · {r.kills}/{r.deaths}
-                {r.rating != null && <span className={`ml-2 ${corRating(r.rating)}`}>{r.rating.toFixed(2)}</span>}
-              </span>
-            </Link>
-            )
-          })}
-        </div>
+        <SectionHeader titulo="Posicionamento" />
+        <PosicionamentoAgregado steamId={jogador.steamId} />
       </section>
     </div>
   )

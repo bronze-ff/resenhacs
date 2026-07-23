@@ -1,0 +1,176 @@
+[
+  {
+    "nome": "A",
+    "x": 0.5374,
+    "y": 0.5474,
+    "nivel": "noob"
+  },
+  {
+    "nome": "B",
+    "x": 0.5943,
+    "y": 0.4512,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Base CT",
+    "x": 0.7729,
+    "y": 0.483,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Base T",
+    "x": 0.3474,
+    "y": 0.5527,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Outside",
+    "x": 0.5366,
+    "y": 0.6001,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Heaven",
+    "x": 0.6544,
+    "y": 0.4586,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Hell",
+    "x": 0.6701,
+    "y": 0.4621,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Rampa",
+    "x": 0.5714,
+    "y": 0.4269,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Sala de Controle",
+    "x": 0.5061,
+    "y": 0.4115,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Secret",
+    "x": 0.6814,
+    "y": 0.7114,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Admin",
+    "x": 0.6282,
+    "y": 0.415,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Catwalk",
+    "x": 0.6666,
+    "y": 0.4603,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Decon",
+    "x": 0.5079,
+    "y": 0.5963,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Garagem",
+    "x": 0.6765,
+    "y": 0.6722,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Guindaste",
+    "x": 0.5707,
+    "y": 0.517,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Hut",
+    "x": 0.5428,
+    "y": 0.5179,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Lobby",
+    "x": 0.4516,
+    "y": 0.5173,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Maquina de Venda",
+    "x": 0.4643,
+    "y": 0.4812,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Mini",
+    "x": 0.5898,
+    "y": 0.633,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Observatorio",
+    "x": 0.6509,
+    "y": 0.4725,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Rafters",
+    "x": 0.6195,
+    "y": 0.5022,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Silo",
+    "x": 0.5027,
+    "y": 0.6155,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Squeaky",
+    "x": 0.5044,
+    "y": 0.5771,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Telhado",
+    "x": 0.4909,
+    "y": 0.5187,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Telhado do Hut",
+    "x": 0.5462,
+    "y": 0.5667,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Trophy",
+    "x": 0.4904,
+    "y": 0.4603,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Tuneis",
+    "x": 0.627,
+    "y": 0.6149,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Ventilacao",
+    "x": 0.555,
+    "y": 0.6033,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Vestiario",
+    "x": 0.6387,
+    "y": 0.5004,
+    "nivel": "pro"
+  }
+]

@@ -19,13 +19,16 @@ quando souber a data certa.
 import argparse
 import sys
 
+import bz2
 import json
+import urllib.request
 
 from . import db as dbmod
 from . import parse as parsemod
 from . import replay as replaymod
 from . import sharecode
 from . import steam_api
+from . import faceit
 from . import storage_r2
 from . import transform
 from .config import Config
@@ -44,7 +47,7 @@ def cmd_discover(config, conn):
             continue
         for code in novos:
             if sharecode.is_valid(code):
-                dbmod.record_pending_match(conn, code)
+                dbmod.record_pending_match(conn, code, discovered_by=steam_id64)
                 total += 1
         if novos:
             dbmod.set_last_share_code(conn, steam_id64, novos[-1])
@@ -88,17 +91,65 @@ def _resolver_demo_urls(codes, bot_dir, node_bin):
 
 
 def _baixar_e_descomprimir(url, destino_dem):
-    """Baixa um .dem.bz2 da Valve e descomprime em streaming pro caminho .dem indicado."""
-    import bz2
-    import urllib.request
+    """Baixa um .dem.bz2 da Valve e descomprime em streaming pro caminho .dem indicado.
 
+    Valida integridade em duas frentes — sem isso, um corte de conexão no meio do
+    download (comum na CDN da Valve) resultava num .dem parcial sendo parseado "com
+    sucesso" e gravando stats errados, em silêncio: (1) bytes recebidos batem com o
+    Content-Length declarado pela resposta HTTP, quando o header existe; (2) o
+    decompressor bz2 terminou o stream de verdade (dec.eof), não só parou de receber
+    bytes — cobre o caso de a CDN não mandar Content-Length.
+    """
     dec = bz2.BZ2Decompressor()
     with urllib.request.urlopen(url, timeout=120) as resp, open(destino_dem, "wb") as out:
+        content_length = resp.headers.get("Content-Length")
+        esperado = int(content_length) if content_length is not None else None
+        recebido = 0
         while True:
             chunk = resp.read(1 << 20)
             if not chunk:
                 break
+            recebido += len(chunk)
             out.write(dec.decompress(chunk))
+
+    if esperado is not None and recebido != esperado:
+        raise RuntimeError(f"download truncado: recebido {recebido} bytes, esperado {esperado}")
+    if not dec.eof:
+        raise RuntimeError("download truncado: stream bz2 incompleto (sem EOF)")
+
+
+# Auditoria finding #16: a fila de Partidas Pro (hltvUrl) lia a resposta inteira em
+# memória de uma vez (resp.read() sem teto). A validação de origem em si (allowlist
+# hltv.org) já vive em site/server/src/routes/partidasPro.js, ANTES de enfileirar — mas
+# mesmo restrito ao domínio certo, uma resposta inesperadamente enorme (ou um redirect
+# pra outro lugar que a validação de string não pega) não devia poder estourar a memória
+# do runner. 1GB cobre uma série Bo5 inteira num único .rar com folga.
+_MAX_HLTV_DOWNLOAD_BYTES = 1_000_000_000
+
+
+def _baixar_com_teto(url, max_bytes, timeout=120):
+    """Baixa `url` em streaming (chunks de 1MB), abortando assim que o total lido
+    ultrapassa `max_bytes` — em vez de só descobrir que era grande demais depois de
+    um resp.read() completo já ter consumido a memória inteira."""
+    with urllib.request.urlopen(url, timeout=timeout) as resp:
+        partes = []
+        total = 0
+        while True:
+            chunk = resp.read(1 << 20)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > max_bytes:
+                raise RuntimeError(f"download de {url} excedeu o teto de {max_bytes} bytes")
+            partes.append(chunk)
+        return b"".join(partes)
+
+
+# Erro transitório na CDN da Valve (502/503, timeout de rede — aconteceu de verdade em
+# 2026-07-22, share_code CSGO-t7Wnv-cjwub-UOS5t-iEfz2-ZLhnL) não pode marcar a Partida
+# como 'failed' de cara: dbmod.falhar_fetch_pendente dá algumas tentativas (mesma
+# semântica de _MAX_TENTATIVAS_DEMO_FACEIT) antes de desistir de vez.
+_MAX_TENTATIVAS_FETCH = 3
 
 
 def cmd_fetch(config, conn, since=None, bot_dir=None, node_bin="node"):
@@ -113,10 +164,18 @@ def cmd_fetch(config, conn, since=None, bot_dir=None, node_bin="node"):
     import tempfile
     from pathlib import Path
 
-    codes = dbmod.list_pending_share_codes(conn)
+    # Lote por run: baixar+parsear é serial (~1-2 min/demo) e o job do Actions tem 45 min.
+    # Com a fila grande (noite de jogatina), resolver/baixar tudo de uma vez estoura o timeout
+    # e o run é cancelado SEM commitar o lote inteiro. Limitando por run, cada execução termina
+    # e commita cada partida; os runs de 30 em 30 min drenam o resto (FIFO por played_at).
+    LIMITE_POR_RUN = 15
+    codes = dbmod.list_pending_share_codes(conn, limit=LIMITE_POR_RUN)
     if not codes:
         print("fetch: nenhuma Partida pendente")
         return 0
+    restantes = dbmod.contar_pendentes(conn)
+    if restantes > len(codes):
+        print(f"fetch: {restantes} pendentes na fila — processando as {len(codes)} mais antigas neste run")
 
     bot_dir = bot_dir or (Path(__file__).resolve().parents[3] / "bot")
     print(f"fetch: resolvendo {len(codes)} share code(s) via Game Coordinator…")
@@ -142,7 +201,10 @@ def cmd_fetch(config, conn, since=None, bot_dir=None, node_bin="node"):
         try:
             with tempfile.TemporaryDirectory() as tmp:
                 dem = Path(tmp) / "match.dem"
-                print(f"  {code}: baixando {url}")
+                # Auditoria finding #10: nunca logar a URL assinada de download — ela
+                # dá acesso direto ao .dem por tempo limitado, sem exigir autenticação
+                # nenhuma; o share code já identifica a Partida sem vazar isso.
+                print(f"  {code}: baixando demo")
                 _baixar_e_descomprimir(url, dem)
                 mid = ingest_demo(
                     config, conn, dem, share_code=code, source="valve_mm",
@@ -151,43 +213,510 @@ def cmd_fetch(config, conn, since=None, bot_dir=None, node_bin="node"):
                 print(f"  {code}: ingerida {mid} (played_at={played_at})")
                 total += 1
         except Exception as e:  # noqa: BLE001
-            # Uma partida com demo problemático não derruba o lote; marca failed pra
-            # não ficar re-baixando 200MB toda hora (dá pra re-tentar voltando pra
-            # pending na mão depois de corrigir o parser).
+            # Uma partida com demo problemático não derruba o lote; registra a tentativa
+            # (mesmo padrão de falhar_faceit_pendente) em vez de marcar 'failed' de cara —
+            # erro transitório da CDN da Valve (502/503, timeout) não deve custar a
+            # Partida inteira numa falha só. Só vira 'failed' de vez após esgotar as
+            # tentativas; até lá fica 'pending' e é re-baixada automaticamente no
+            # próximo ciclo do fetch.
             conn.rollback()
-            print(f"  {code}: FALHOU ({e}) — marcando como failed")
-            with conn.cursor() as cur:
-                cur.execute(
-                    "update matches set status = 'failed' where share_code = %s and status = 'pending'",
-                    (code,),
-                )
-            conn.commit()
+            print(f"  {code}: FALHOU ({e})")
+            dbmod.falhar_fetch_pendente(conn, code, e, max_tentativas=_MAX_TENTATIVAS_FETCH)
 
     print(f"fetch: {total} Partida(s) ingerida(s)")
     return total
 
 
-def ingest_demo(config, conn, path, share_code=None, source="upload", upload=True, played_at=None):
+def cmd_cleanup(config, conn, days=90):
+    """Apaga do R2 o .dem BRUTO (não o replay.json, que a UI usa pra sempre) de Partidas
+    já processadas há mais de `days` dias. Decisão do usuário: bug de parser corrigido
+    depois exige reprocessar a demo original (aconteceu 3x só nesta fase do projeto) —
+    por isso a janela de 90 dias, não deleção imediata. replay_url continua intacto;
+    só demo_url vira NULL (a rota /:id/demo já devolve 404 nesse caso, mesmo tratamento
+    de "sem demo" que já existia)."""
+    import datetime
+
+    limite = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=days)
+    with conn.cursor() as cur:
+        cur.execute(
+            "select id, demo_url from matches where status = 'parsed' and demo_url is not null and played_at < %s",
+            (limite,),
+        )
+        rows = cur.fetchall()
+    if not rows:
+        print(f"cleanup: nenhuma Partida com demo mais velha que {days} dias")
+        return 0
+
+    client = storage_r2.make_client(config)
+    total = 0
+    for match_id, demo_url in rows:
+        key = storage_r2.key_from_url(demo_url, config.r2_bucket)
+        if not key:
+            continue
+        try:
+            storage_r2.delete_object(client, config.r2_bucket, key)
+            with conn.cursor() as cur:
+                cur.execute("update matches set demo_url = null where id = %s", (match_id,))
+            conn.commit()
+            total += 1
+            print(f"  {match_id}: demo apagado ({key})")
+        except Exception as e:  # noqa: BLE001
+            conn.rollback()
+            print(f"  {match_id}: falha ao apagar ({e})")
+    print(f"cleanup: {total} demo(s) apagado(s)")
+    return total
+
+
+def _agrupar_dems_por_mapa(dem_paths):
+    """Agrupa `dem_paths` (ordem de extração do .rar = ordem real da série) por mapa,
+    só quando ADJACENTES — um reinício técnico no meio de um mapa faz o HLTV distribuir
+    esse mapa como 2+ .dem seguidos (ver docstring de ingest_demo_multiparte). O nome
+    do arquivo (-p1/-p2) é convenção, não garantia; o mapa vem do header de cada .dem
+    (parsemod.cabecalho_mapa, barato — não parseia o arquivo inteiro). Não agrupa mapas
+    iguais não-adjacentes: isso não deveria acontecer numa série real (repetir mapa).
+
+    Com 1 único .dem (caso comum) nem precisa abrir o arquivo pra descobrir o mapa —
+    não há nada pra comparar."""
+    if len(dem_paths) <= 1:
+        return [list(dem_paths)]
+    grupos = []
+    for path in dem_paths:
+        mapa = parsemod.cabecalho_mapa(path)
+        if grupos and grupos[-1][0] == mapa:
+            grupos[-1][1].append(path)
+        else:
+            grupos.append((mapa, [path]))
+    return [g[1] for g in grupos]
+
+
+def cmd_processar_fila_pro(config, conn):
+    """Processa a fila de partida profissional: baixa .rar/.dem (do HLTV ou de um
+    upload manual em staging no R2 — hltv.org bloqueia download automático atrás de
+    um desafio Cloudflare, então o caminho normal é o admin subir o arquivo pela UI),
+    extrai o .dem se necessário, ingere pelo mesmo pipeline de sempre (source='pro').
+    Roda no job agendado (não numa request HTTP do site — a Vercel não aguenta
+    baixar/parsear demo grande síncrono)."""
+    import tempfile
+    import urllib.request
+    from pathlib import Path
+
+    from . import rar_extract
+
+    pendentes = dbmod.listar_fila_pro_pendente(conn)
+    if not pendentes:
+        print("processar-fila-pro: nenhuma partida pendente")
+        return 0
+
+    client = storage_r2.make_client(config)
+    total = 0
+    for fila_id, hltv_url, arquivo_r2_key in pendentes:
+        dbmod.atualizar_fila_pro(conn, fila_id, "baixando")
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                tmp = Path(tmp)
+                if arquivo_r2_key:
+                    print(f"  {fila_id}: baixando do R2 ({arquivo_r2_key})")
+                    dados = storage_r2.download_bytes(client, config.r2_bucket, arquivo_r2_key)
+                    ext = Path(arquivo_r2_key).suffix.lower()
+                else:
+                    print(f"  {fila_id}: baixando {hltv_url}")
+                    dados = _baixar_com_teto(hltv_url, _MAX_HLTV_DOWNLOAD_BYTES)
+                    ext = ".rar"
+
+                dbmod.atualizar_fila_pro(conn, fila_id, "processando")
+                # Um .rar do HLTV pode trazer vários mapas de uma série Bo3/Bo5 — um
+                # .dem por mapa, exceto quando um reinício técnico no meio de um mapa
+                # faz o HLTV distribuir ESSE mapa em 2+ .dem seguidos (mesmo grupo,
+                # ver _agrupar_dems_por_mapa/ingest_demo_multiparte). Cada GRUPO
+                # processa (e falha) de forma isolada: um mapa com erro não deve
+                # derrubar os outros mapas da MESMA série. Upload manual de um .dem
+                # avulso pula a extração — já é o arquivo final, grupo de 1.
+                if ext == ".dem":
+                    dem_path = tmp / "demo.dem"
+                    dem_path.write_bytes(dados)
+                    grupos = [[dem_path]]
+                else:
+                    rar_path = tmp / "demo.rar"
+                    rar_path.write_bytes(dados)
+                    dem_paths = rar_extract.extrair_dems_de_rar(rar_path, tmp / "extraido")
+                    grupos = _agrupar_dems_por_mapa(dem_paths)
+
+                match_ids = []
+                erros_mapas = []
+                for grupo in grupos:
+                    try:
+                        if len(grupo) == 1:
+                            mid = ingest_demo(config, conn, grupo[0], source="pro", upload=True)
+                        else:
+                            mid = ingest_demo_multiparte(config, conn, grupo, source="pro", upload=True)
+                        match_ids.append(mid)
+                    except Exception as e:  # noqa: BLE001
+                        conn.rollback()
+                        erros_mapas.append(str(e))
+                        print(f"  {fila_id}: mapa {grupo[0].name} FALHOU ({e})")
+
+                if not match_ids:
+                    # Nenhum mapa processou — mesmo fluxo de erro que já existia.
+                    raise RuntimeError(erros_mapas[0] if erros_mapas else "nenhum mapa processado")
+
+                erro_nota = None
+                if erros_mapas:
+                    erro_nota = (
+                        f"{len(match_ids)}/{len(grupos)} mapas processados; "
+                        f"falhou: {erros_mapas[0]}"
+                    )[:500]
+
+                dbmod.atualizar_fila_pro(
+                    conn, fila_id, "concluida", match_id=match_ids[0], match_ids=match_ids, erro=erro_nota
+                )
+                print(f"  {fila_id}: concluida ({len(match_ids)}/{len(grupos)} mapa(s))")
+                total += 1
+
+                # Apaga o staging só em sucesso — numa falha o arquivo continua no R2
+                # pro botão de retry reaproveitar sem o admin subir de novo.
+                if arquivo_r2_key:
+                    storage_r2.delete_object(client, config.r2_bucket, arquivo_r2_key)
+        except Exception as e:  # noqa: BLE001
+            conn.rollback()
+            dbmod.atualizar_fila_pro(conn, fila_id, "falhou", erro=str(e)[:500])
+            print(f"  {fila_id}: FALHOU ({e})")
+
+    print(f"processar-fila-pro: {total} partida(s) processada(s)")
+    return total
+
+
+# Auditoria finding #2: teto de tamanho aplicado no HEAD do objeto antes do download
+# (ver storage_r2.download_bytes) — mesmo valor comunicado ao usuário no upload.js.
+_MAX_UPLOAD_BYTES = 400 * 1024 * 1024
+
+# Auditoria finding #8: quanto tempo um item pode ficar 'processando' antes de ser
+# considerado travado (processo morreu no meio — crash do runner, timeout do job).
+_TIMEOUT_PROCESSANDO_MINUTOS = 30
+
+
+def cmd_processar_uploads_pendentes(config, conn):
+    """Processa a fila de uploads manuais de demo (qualquer membro do grupo, via
+    'Enviar Demo' no site): baixa o .dem do R2 (staging de upload direto via URL
+    pré-assinada — a Vercel não aguenta receber o arquivo síncrono, ver
+    site/server/src/routes/upload.js)."""
+    import tempfile
+    from pathlib import Path
+
+    # Antes de listar: qualquer item preso em 'processando' há mais que o teto (o
+    # processo anterior morreu no meio, sem chance de marcar 'concluido'/'falhou')
+    # volta a ficar elegível — senão fica 'processando' pra sempre (achado #8).
+    revertidos = dbmod.reverter_uploads_travados(conn, minutos=_TIMEOUT_PROCESSANDO_MINUTOS)
+    if revertidos:
+        print(f"processar-uploads-pendentes: {len(revertidos)} upload(s) travado(s) em 'processando' revertido(s)")
+
+    pendentes = dbmod.listar_uploads_pendentes(conn)
+    if not pendentes:
+        print("processar-uploads-pendentes: nenhum upload pendente")
+        return 0
+
+    client = storage_r2.make_client(config)
+    total = 0
+    for upload_id, adicionado_por, arquivo_r2_key, share_code, played_at, plataforma_manual in pendentes:
+        dbmod.atualizar_upload_pendente(conn, upload_id, "processando")
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                tmp = Path(tmp)
+                print(f"  {upload_id}: baixando do R2 ({arquivo_r2_key})")
+                dados = storage_r2.download_bytes(
+                    client, config.r2_bucket, arquivo_r2_key, max_bytes=_MAX_UPLOAD_BYTES,
+                )
+                dem_path = tmp / "demo.dem"
+                dem_path.write_bytes(dados)
+
+                match_id = ingest_demo(
+                    config, conn, dem_path,
+                    share_code=share_code, source="upload", upload=True,
+                    played_at=played_at, plataforma_manual=plataforma_manual,
+                )
+                dbmod.atualizar_upload_pendente(conn, upload_id, "concluido", match_id=match_id)
+                print(f"  {upload_id}: concluido ({match_id})")
+                total += 1
+                # Apaga o staging só em sucesso — numa falha o arquivo continua no R2
+                # pro reprocessamento futuro reaproveitar sem o jogador subir de novo.
+                storage_r2.delete_object(client, config.r2_bucket, arquivo_r2_key)
+        except Exception as e:  # noqa: BLE001
+            conn.rollback()
+            dbmod.atualizar_upload_pendente(conn, upload_id, "falhou", erro=str(e)[:500])
+            print(f"  {upload_id}: FALHOU ({e})")
+
+    print(f"processar-uploads-pendentes: {total} partida(s) processada(s)")
+    return total
+
+
+def cmd_limpar_uploads_orfaos(config, conn, dias=30):
+    """Auditoria finding #17: apaga do R2 o `.dem` órfão de uploads manuais que
+    falharam definitivamente há mais de `dias` dias — sem isso, todo upload com erro
+    fica pra sempre ocupando espaço no bucket, ao contrário da fila de Partidas Pro
+    (que tem retry reaproveitando o staging, e cleanup/reprocess pro caminho de
+    sucesso). NÃO roda automaticamente ainda (sem cron/schedule): é um subcomando
+    manual (`python -m coletor.main limpar-uploads-orfaos [--days N]`), pra rodar sob
+    demanda — ver README (seção Manutenção) sobre quando/como usar."""
+    candidatos = dbmod.listar_uploads_falhos_antigos(conn, dias=dias)
+    if not candidatos:
+        print(f"limpar-uploads-orfaos: nenhum upload falho há mais de {dias} dias")
+        return 0
+
+    client = storage_r2.make_client(config)
+    total = 0
+    for upload_id, arquivo_r2_key in candidatos:
+        try:
+            storage_r2.delete_object(client, config.r2_bucket, arquivo_r2_key)
+            dbmod.marcar_upload_limpo(conn, upload_id)
+            total += 1
+            print(f"  {upload_id}: objeto órfão apagado ({arquivo_r2_key})")
+        except Exception as e:  # noqa: BLE001
+            print(f"  {upload_id}: falha ao apagar ({e})")
+    print(f"limpar-uploads-orfaos: {total} objeto(s) apagado(s)")
+    return total
+
+
+TIPO_POR_CHAVE = {"smokes": "smoke", "fires": "molotov", "flashes": "flash", "hes": "he"}
+
+
+def _montar_lineups(rdata, replay_json, mapa, source):
+    """Monta a lista de lineups de granada (Task 4/db._write_lineups) a partir do rdata
+    cru de extract_replay — usada tanto por ingest_demo quanto por cmd_reprocess, já que
+    _write_lineups sempre apaga os lineups existentes antes de inserir (reprocess sem
+    recriar a lista perderia tudo silenciosamente).
+
+    Só entra item com posição de arremesso conhecida (throwerX/Y — pode faltar quando não
+    há weapon_fire correlacionado, ver parse.py); checa a posição, não o thrower (que o
+    parser sempre preenche, mesmo sem posição). Normaliza thrower_x/y e target_x/y pra
+    0..1 (mesmo world_to_radar do Replay 2D) — sem calibração do mapa, mantém cru, mesma
+    postura defensiva que replay.build_replay já tem.
+    """
+    cal = replaymod.MAP_CALIBRATION.get(mapa)
+
+    def norm(x, y):
+        return replaymod.world_to_radar(x, y, cal) if cal else (x, y)
+
+    lineups = []
+    for chave, tipo in TIPO_POR_CHAVE.items():
+        for g in rdata.get(chave, []):
+            if g.get("throwerX") is None or g.get("throwerY") is None:
+                continue
+            tx, ty = norm(g["throwerX"], g["throwerY"])
+            ax, ay = norm(g["x"], g["y"])
+            lineups.append({
+                "round_number": g["round"], "map": mapa, "tipo": tipo,
+                "thrower_steam_id": g["thrower"],
+                "thrower_nick": replay_json["names"].get(g["thrower"], "") if replay_json else "",
+                "thrower_x": tx, "thrower_y": ty,
+                "thrower_yaw": g.get("throwerYaw", 0), "thrower_pitch": g.get("throwerPitch", 0),
+                "target_x": ax, "target_y": ay,
+                "tick": g.get("tickStart", g.get("tick")),
+                "origem": "pro" if source == "pro" else "grupo",
+                "lado": g.get("throwerLado"),
+            })
+    return lineups
+
+
+def cmd_reprocess(config, conn, match_id=None, since=None):
+    """Reprocessa Partida(s) já gravadas cujo .dem ainda está no R2 (janela de 90 dias
+    do cleanup) — baixa de novo, roda o parser ATUAL (com fixes já aplicados) e regrava
+    stats + replay.json no MESMO match_id (store_parsed é idempotente por fingerprint,
+    e aqui nem precisa disso: já sabemos o id). Não usa ingest_demo: aquele resolve a
+    key do R2 por share_code/hash de path, que pra upload manual sem share_code muda a
+    cada chamada — aqui reaproveita a key já gravada em demo_url/replay_url, garantindo
+    que sobrescreve o objeto certo em vez de deixar um novo órfão.
+
+    `match_id` (opcional, uuid): reprocessa só essa Partida; sem isso, todas que ainda
+    têm demo_url (pending/failed não têm o que reprocessar).
+    `since` (opcional, "YYYY-MM-DD"): só Partidas jogadas nessa data em diante — reprocess
+    completo pode levar horas (cada Partida baixa+reparseia o .dem inteiro); útil pra
+    aplicar um fix novo só nas Partidas recentes sem esperar o histórico inteiro.
+
+    Sem `match_id`/`since`, a query ordena por `reprocessed_at nulls first, id`: nunca
+    reprocessadas primeiro, depois as mais antigas. Cada Partida processada com sucesso
+    é marcada (`reprocessed_at = now()`) — se o job estourar o timeout do workflow antes
+    de cobrir tudo (visto na prática: 300min só deu pra ~93 de 266), a PRÓXIMA rodada
+    continua exatamente de onde parou em vez de repetir as mesmas do início.
+    """
+    import tempfile
+    from pathlib import Path
+
+    with conn.cursor() as cur:
+        if match_id:
+            cur.execute(
+                "select id, share_code, source, demo_url, replay_url, played_at from matches "
+                "where id = %s and demo_url is not null",
+                (match_id,),
+            )
+        elif since:
+            cur.execute(
+                "select id, share_code, source, demo_url, replay_url, played_at from matches "
+                "where status = 'parsed' and demo_url is not null and played_at >= %s "
+                "order by reprocessed_at nulls first, id",
+                (since,),
+            )
+        else:
+            cur.execute(
+                "select id, share_code, source, demo_url, replay_url, played_at from matches "
+                "where status = 'parsed' and demo_url is not null "
+                "order by reprocessed_at nulls first, id"
+            )
+        rows = cur.fetchall()
+    if not rows:
+        print("reprocess: nenhuma Partida com demo ainda arquivado")
+        return 0
+
+    client = storage_r2.make_client(config)
+    total = 0
+    for mid, share_code, source, demo_url, replay_url, played_at in rows:
+        demo_key = storage_r2.key_from_url(demo_url, config.r2_bucket)
+        if not demo_key:
+            print(f"  {mid}: demo_url fora do bucket configurado — pulando")
+            continue
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                dem = Path(tmp) / "match.dem"
+                dados = storage_r2.download_bytes(client, config.r2_bucket, demo_key)
+                dem.write_bytes(_descomprimir_dem_arquivado(dados))
+
+                parsed = parsemod.parse_demo(dem)
+                parsed["players"] = transform.fill_kd_from_kills(parsed["players"], parsed["kills"])
+                parsed = transform.enrich(parsed)
+                parsed["played_at"] = played_at.isoformat() if played_at else parsed.get("played_at")
+
+                rdata = parsemod.extract_replay(dem)
+                winner_by_round = {r["round_number"]: r.get("winner_team") for r in parsed.get("rounds", [])}
+                replay_json = replaymod.build_replay(
+                    parsed["map"], rdata["ticks"], kills=rdata["kills"], extras=rdata,
+                    winner_by_round=winner_by_round,
+                )
+                parsed["highlights"] = transform.attach_replay_frames(parsed["highlights"], replay_json["rounds"])
+                parsed["lineups"] = _montar_lineups(rdata, replay_json, parsed["map"], source or "valve_mm")
+
+                # Sobrescreve o MESMO objeto (key extraída do replay_url já gravado) —
+                # não recalcula um novo, senão o antigo fica órfão e o link salvo quebra.
+                replay_key = storage_r2.key_from_url(replay_url, config.r2_bucket) if replay_url else None
+                if replay_key:
+                    _upload_replay(client, config.r2_bucket, replay_key, replay_json)
+
+                dbmod.store_parsed(
+                    conn, parsed, share_code=share_code, source=source or "valve_mm",
+                    demo_url=demo_url, replay_url=replay_url, prefer_new_played_at=False,
+                )
+                with conn.cursor() as cur2:
+                    cur2.execute("update matches set reprocessed_at = now() where id = %s", (mid,))
+                conn.commit()
+                print(f"  {mid}: reprocessada")
+                total += 1
+        except Exception as e:  # noqa: BLE001
+            conn.rollback()
+            print(f"  {mid}: FALHOU ({e})")
+    print(f"reprocess: {total} Partida(s) reprocessada(s)")
+    return total
+
+
+def _descomprimir_dem_arquivado(dados):
+    """Descomprime bytes de .dem lidos do R2 (chave demos/{id}.dem.bz2). Compatível com
+    arquivos arquivados ANTES do fix de compressão do upload — esses estão gravados como
+    .dem cru apesar da chave dizer .bz2 (bug: a extensão sempre mentiu, nenhum caminho do
+    código realmente comprimia). Se não for um stream bz2 válido, assume que já é o .dem
+    descomprimido e devolve como está."""
+    try:
+        return bz2.decompress(dados)
+    except OSError:
+        return dados
+
+
+def _upload_replay(client, bucket, rkey, replay_json):
+    """Sobe o replay quebrado em índice (pequeno, sem frames) + um objeto por round —
+    streaming por round no client (FIL-54b): a Partida toca o round 1 sem esperar o
+    replay inteiro baixar; os demais rounds são buscados sob demanda. `rkey` é a
+    chave do índice (a mesma que `replay_url` sempre apontou — nenhuma mudança de
+    schema); os rounds vão pro mesmo prefixo, trocando ".json" por "/round-{n}.json"."""
+    index, rounds = replaymod.split_for_storage(replay_json)
+    storage_r2.upload_bytes(client, bucket, rkey, json.dumps(index).encode("utf-8"), content_type="application/json")
+    base = rkey[: -len(".json")] if rkey.endswith(".json") else rkey
+    for round_number, round_data in rounds.items():
+        storage_r2.upload_bytes(
+            client, bucket, f"{base}/round-{round_number}.json",
+            json.dumps(round_data).encode("utf-8"), content_type="application/json",
+        )
+
+
+def _finalizar_ingest(config, conn, parsed, replay_json, dem_path_upload, share_code, source, upload, played_at):
+    """Cauda comum de ingest_demo/ingest_demo_multiparte: arquiva demo+replay no R2 (se
+    configurado) e grava no banco. Devolve match_id. `dem_path_upload` é o .dem cujos
+    bytes brutos sobem pro R2 (partida de arquivo único: o próprio; partida fundida de
+    várias partes: ver escolha em ingest_demo_multiparte)."""
+    demo_url = replay_url = None
+    if upload and config.r2_endpoint:
+        client = storage_r2.make_client(config)
+        ids = sharecode.decode(share_code) if share_code else {"match_id": dem_path_upload.__hash__() & 0xFFFFFFFF}
+
+        key = storage_r2.demo_key(ids["match_id"])
+        with open(dem_path_upload, "rb") as fh:
+            # A chave sempre foi demos/{id}.dem.bz2 — comprime de verdade agora, antes o
+            # arquivo subia cru (dívida técnica: extensão mentia, custo de storage 3-5x
+            # maior que o necessário). Ler de volta: ver _descomprimir_dem_arquivado.
+            storage_r2.upload_bytes(client, config.r2_bucket, key, bz2.compress(fh.read()))
+        demo_url = f"{config.r2_endpoint}/{config.r2_bucket}/{key}"
+
+        if replay_json is not None:
+            rkey = storage_r2.replay_key(ids["match_id"])
+            _upload_replay(client, config.r2_bucket, rkey, replay_json)
+            replay_url = f"{config.r2_endpoint}/{config.r2_bucket}/{rkey}"
+
+    return dbmod.store_parsed(
+        conn, parsed, share_code=share_code, source=source,
+        demo_url=demo_url, replay_url=replay_url,
+        prefer_new_played_at=bool(played_at),
+    )
+
+
+def _atualizar_avatares(config, conn, steam_ids):
+    """Busca e grava o avatar Steam de `steam_ids` que ainda não têm cache fresco
+    (steam_avatares). Best-effort: TODOS os jogadores da demo (não só os do grupo)
+    ganham avatar no scoreboard, mas uma falha da Steam Web API não pode derrubar
+    o ingest — o resto da Partida já está gravado."""
+    if not config.steam_api_key:
+        return
+    try:
+        faltando = dbmod.listar_steam_ids_sem_avatar_fresco(conn, steam_ids)
+        if not faltando:
+            return
+        mapa = steam_api.buscar_avatares(config.steam_api_key, faltando)
+        dbmod.upsert_avatares(conn, mapa)
+    except Exception as e:  # noqa: BLE001
+        print(f"aviso: avatares Steam não atualizados ({e})")
+
+
+def ingest_demo(config, conn, path, share_code=None, source="upload", upload=True, played_at=None, plataforma_manual=None):
     """Parseia um .dem, arquiva no R2 (se configurado) e grava no banco. Devolve match_id.
 
     `played_at` (ISO 8601, opcional): quando o operador sabe a hora real da Partida,
     essa informação é mais confiável que a mtime do arquivo (que só reflete quando o
     .dem foi baixado/copiado — pode ser dias depois) e vence mesmo sobre um played_at
     já gravado por descoberta automática (prefer_new_played_at=True em store_parsed).
+
+    `plataforma_manual` (opcional, 'faceit'|'gamers_club'|'xplay_gg'): rótulo informativo
+    de qual plataforma sem integração oficial o jogador escolheu no upload manual (ver
+    site/server/src/routes/upload.js) — não vem da demo, só metadado do fluxo de envio.
     """
     parsed = parsemod.parse_demo(path)
     parsed["players"] = transform.fill_kd_from_kills(parsed["players"], parsed["kills"])
     parsed = transform.enrich(parsed)
     if played_at:
         parsed["played_at"] = played_at
+    parsed["plataforma_manual"] = plataforma_manual
 
     # Replay 2D + clutch (sempre computados; só ARQUIVADOS no R2 se configurado).
     # Falha aqui não derruba o ingest dos stats.
     replay_json = None
     try:
         rdata = parsemod.extract_replay(path)
+        winner_by_round = {r["round_number"]: r.get("winner_team") for r in parsed.get("rounds", [])}
         replay_json = replaymod.build_replay(
-            parsed["map"], rdata["ticks"], kills=rdata["kills"], extras=rdata
+            parsed["map"], rdata["ticks"], kills=rdata["kills"], extras=rdata,
+            winner_by_round=winner_by_round,
         )
         # Frame do Replay 2D pra cada highlight (deep link — Partida.jsx abre o replay
         # já no momento exato ao clicar), casando pela última kill do jogador no round.
@@ -196,32 +725,201 @@ def ingest_demo(config, conn, path, share_code=None, source="upload", upload=Tru
         # de replay.py aqui, que tinha critério mais permissivo (elimina todo mundo =
         # "clutch", mesmo perdendo o round por outro motivo — bomba explode depois).
         parsed["highlights"] = transform.attach_replay_frames(parsed["highlights"], replay_json["rounds"])
+        parsed["lineups"] = _montar_lineups(rdata, replay_json, parsed["map"], source)
     except Exception as e:  # noqa: BLE001
         print(f"aviso: replay 2D / clutch não gerado ({e})")
 
-    demo_url = replay_url = None
-    if upload and config.r2_endpoint:
-        client = storage_r2.make_client(config)
-        ids = sharecode.decode(share_code) if share_code else {"match_id": path.__hash__() & 0xFFFFFFFF}
+    match_id = _finalizar_ingest(config, conn, parsed, replay_json, path, share_code, source, upload, played_at)
+    _atualizar_avatares(config, conn, [p["steam_id64"] for p in parsed.get("players", [])])
+    return match_id
 
-        key = storage_r2.demo_key(ids["match_id"])
-        with open(path, "rb") as fh:
-            storage_r2.upload_bytes(client, config.r2_bucket, key, fh.read())
-        demo_url = f"{config.r2_endpoint}/{config.r2_bucket}/{key}"
 
-        if replay_json is not None:
-            rkey = storage_r2.replay_key(ids["match_id"])
-            storage_r2.upload_bytes(
-                client, config.r2_bucket, rkey,
-                json.dumps(replay_json).encode("utf-8"), content_type="application/json",
+def ingest_demo_multiparte(config, conn, dem_paths, share_code=None, source="pro", upload=True, played_at=None):
+    """Ingere um GRUPO de 2+ .dem que são o MESMO mapa dividido em pedaços por um
+    reinício técnico no meio da partida (queda de servidor etc.) — o HLTV distribui
+    esse único mapa como vários .dem separados dentro do mesmo .rar da série (ex.:
+    "...-m1-anubis-p1.dem" + "...-p2.dem"). Sem essa função, cada parte viraria uma
+    Partida INDEPENDENTE (2 entradas "de_anubis", cada uma com metade do placar) — o
+    que é enganoso: é 1 mapa só, incompleto nos dois. Aqui as partes são fundidas numa
+    ÚNICA Partida coerente (rounds contínuos, placar completo, stats somadas) antes de
+    rodar o resto do pipeline (fill_kd_from_kills/enrich/build_replay/lineups) UMA VEZ
+    só — evita ter que somar/recalcular campos derivados (rating, clutch etc.) que não
+    são simplesmente somáveis entre partes, reusando 100% do código de transform.py/
+    replay.py em cima dos dados crus já fundidos (ver parse.fundir_partes_mesmo_mapa).
+    Devolve UM match_id só.
+    """
+    partes = [parsemod.parse_demo(p) for p in dem_paths]
+
+    rdatas = []
+    try:
+        rdatas = [parsemod.extract_replay(p) for p in dem_paths]
+    except Exception as e:  # noqa: BLE001
+        print(f"aviso: replay 2D não gerado pro grupo ({e})")
+        rdatas = []
+
+    parsed, rdata = parsemod.fundir_partes_mesmo_mapa(partes, rdatas or None)
+
+    parsed["players"] = transform.fill_kd_from_kills(parsed["players"], parsed["kills"])
+    parsed = transform.enrich(parsed)
+    if played_at:
+        parsed["played_at"] = played_at
+
+    replay_json = None
+    if rdata is not None:
+        try:
+            winner_by_round = {r["round_number"]: r.get("winner_team") for r in parsed.get("rounds", [])}
+            replay_json = replaymod.build_replay(
+                parsed["map"], rdata["ticks"], kills=rdata["kills"], extras=rdata,
+                winner_by_round=winner_by_round,
             )
-            replay_url = f"{config.r2_endpoint}/{config.r2_bucket}/{rkey}"
+            parsed["highlights"] = transform.attach_replay_frames(parsed["highlights"], replay_json["rounds"])
+            parsed["lineups"] = _montar_lineups(rdata, replay_json, parsed["map"], source)
+        except Exception as e:  # noqa: BLE001
+            print(f"aviso: replay 2D / clutch não gerado ({e})")
 
-    return dbmod.store_parsed(
-        conn, parsed, share_code=share_code, source=source,
-        demo_url=demo_url, replay_url=replay_url,
-        prefer_new_played_at=bool(played_at),
+    # .dem BRUTO arquivado pro reprocessamento (cmd_reprocess baixa de volta um único
+    # .dem pra reparsear com parse_demo, que não sabe fundir partes): sobe a ÚLTIMA
+    # parte, a escolha mais simples — um reprocessamento futuro dessa Partida ficaria
+    # incompleto (só a última parte), mesma limitação que já existiria pra qualquer
+    # .dem cortado; documentado aqui de propósito pra não surpreender no futuro.
+    return _finalizar_ingest(
+        config, conn, parsed, replay_json, dem_paths[-1], share_code, source, upload, played_at
     )
+
+
+def cmd_avatares(config, conn):
+    """Backfill: busca o avatar de TODOS os steam_id64 já vistos em alguma Partida
+    (match_players) e que ainda não têm cache fresco em steam_avatares — cobre os
+    5+ jogadores por Partida que não são do grupo e nunca tiveram avatar."""
+    config.require("steam_api_key")
+    faltando = dbmod.listar_steam_ids_de_match_players_sem_avatar_fresco(conn)
+    if not faltando:
+        print("avatares: nenhum steam_id sem avatar fresco")
+        return 0
+    print(f"avatares: buscando {len(faltando)} avatar(es)…")
+    mapa = steam_api.buscar_avatares(config.steam_api_key, faltando)
+    dbmod.upsert_avatares(conn, mapa)
+    print(f"avatares: {len(mapa)} avatar(es) gravado(s)")
+    return len(mapa)
+
+
+_MAX_TENTATIVAS_DEMO_FACEIT = 3
+
+
+def cmd_sincronizar_faceit(config, conn, limite=10):
+    """FACEIT Fase B: descobre partidas 5v5 novas de cada membro vinculado (Fase A) e
+    processa até `limite` da fila por rodada — demo no pipeline completo quando existe,
+    stats-only da API quando não (partida nunca some). No fim, snapshot de ELO por
+    membro + carimbo before/after na partida nova mais recente (ver spec 2026-07-16)."""
+    import tempfile
+    from datetime import datetime, timezone
+    from pathlib import Path
+
+    if not config.faceit_api_key:
+        print("sincronizar-faceit: FACEIT_API_KEY ausente — pulando")
+        return 0
+    vinculados = dbmod.listar_vinculados_faceit(conn)
+    if not vinculados:
+        print("sincronizar-faceit: nenhum membro com FACEIT vinculada")
+        return 0
+
+    # 1. Descoberta — enfileira o que ainda não foi visto (histórico inteiro na 1ª vez)
+    conhecidas = dbmod.faceit_match_ids_conhecidos(conn)
+    for steam_id64, faceit_id in vinculados:
+        try:
+            primeira = not dbmod.membro_ja_sincronizou_faceit(conn, steam_id64)
+            novas = faceit.listar_historico_5v5(
+                config.faceit_api_key, faceit_id, conhecidas, andar_tudo=primeira,
+            )
+            for item in novas:
+                dbmod.enfileirar_faceit(conn, item["faceit_match_id"], steam_id64)
+                conhecidas.add(item["faceit_match_id"])
+            if novas:
+                print(f"  descoberta {steam_id64}: {len(novas)} partida(s) nova(s)")
+        except Exception as e:  # noqa: BLE001
+            conn.rollback()
+            print(f"  descoberta {steam_id64}: FALHOU ({e})")
+
+    # 2. Processamento — lote limitado; falha de um item não derruba os outros
+    vinculados_por_steam = {s: f for s, f in vinculados}
+    ingeridas_por_membro = {}
+    total = 0
+    for faceit_match_id, steam_id64, tentativas in dbmod.listar_faceit_pendentes(conn, limite):
+        try:
+            detalhes = faceit.detalhes_partida(config.faceit_api_key, faceit_match_id)
+            stats = faceit.stats_partida(config.faceit_api_key, faceit_match_id)
+            played_at = None
+            if detalhes.get("finished_at"):
+                played_at = datetime.fromtimestamp(
+                    int(detalhes["finished_at"]), tz=timezone.utc,
+                ).isoformat()
+
+            match_id = None
+            demo_urls = detalhes.get("demo_url") or []
+            if demo_urls:
+                try:
+                    dem_bytes = faceit.baixar_demo(config.faceit_api_key, demo_urls[0])
+                    with tempfile.TemporaryDirectory() as tmp:
+                        dem_path = Path(tmp) / "faceit.dem"
+                        dem_path.write_bytes(dem_bytes)
+                        match_id = ingest_demo(
+                            config, conn, dem_path,
+                            share_code=None, source="faceit", upload=True,
+                            played_at=played_at,
+                        )
+                except Exception as e:  # noqa: BLE001
+                    conn.rollback()
+                    if tentativas + 1 < _MAX_TENTATIVAS_DEMO_FACEIT:
+                        dbmod.falhar_faceit_pendente(
+                            conn, faceit_match_id, e, max_tentativas=_MAX_TENTATIVAS_DEMO_FACEIT,
+                        )
+                        print(
+                            f"  {faceit_match_id}: demo falhou ({e}) — tentativa "
+                            f"{tentativas + 1}/{_MAX_TENTATIVAS_DEMO_FACEIT}, retry na proxima rodada"
+                        )
+                        continue
+                    print(
+                        f"  {faceit_match_id}: demo falhou apos {_MAX_TENTATIVAS_DEMO_FACEIT} "
+                        f"tentativas ({e}) — caindo pro stats-only definitivo"
+                    )
+
+            if match_id is None:
+                parsed = faceit.montar_parsed_stats_only(detalhes, stats)
+                match_id = dbmod.store_parsed(
+                    conn, parsed, source="faceit",
+                    prefer_new_played_at=bool(parsed.get("played_at")),
+                )
+
+            dbmod.marcar_faceit_match(conn, match_id, faceit_match_id)
+            dbmod.concluir_faceit_pendente(conn, faceit_match_id)
+            dt = datetime.fromisoformat(played_at) if played_at else None
+            ingeridas_por_membro.setdefault(steam_id64, []).append((match_id, dt))
+            print(f"  {faceit_match_id}: ok ({match_id})")
+            total += 1
+        except Exception as e:  # noqa: BLE001
+            conn.rollback()
+            dbmod.falhar_faceit_pendente(conn, faceit_match_id, e)
+            print(f"  {faceit_match_id}: FALHOU ({e})")
+
+    # 3. ELO — snapshot por membro + carimbo na partida nova mais recente
+    for steam_id64, faceit_id in vinculados:
+        try:
+            elo, level = faceit.elo_atual(config.faceit_api_key, faceit_id)
+            if elo is None:
+                continue
+            antes, snapshot_em = dbmod.elo_snapshot(conn, steam_id64)
+            alvo = faceit.escolher_partida_para_elo(
+                ingeridas_por_membro.get(steam_id64, []), snapshot_em,
+            )
+            if alvo and antes is not None:
+                dbmod.gravar_elo_partida(conn, alvo, steam_id64, antes, elo)
+            dbmod.atualizar_elo(conn, steam_id64, elo, level)
+        except Exception as e:  # noqa: BLE001
+            conn.rollback()
+            print(f"  elo {steam_id64}: FALHOU ({e})")
+
+    print(f"sincronizar-faceit: {total} partida(s) processada(s)")
+    return total
 
 
 def main(argv=None):
@@ -246,6 +944,39 @@ def main(argv=None):
     )
     p_fetch.add_argument("--bot-dir", default=None, help="Caminho da pasta bot/ (default: ../bot ao lado de coletor/).")
     p_fetch.add_argument("--node", default="node", help="Executável do Node (default: node no PATH).")
+    p_cleanup = sub.add_parser("cleanup", help="Apaga do R2 o .dem bruto de Partidas processadas há mais de N dias (mantém o replay.json).")
+    p_cleanup.add_argument("--days", type=int, default=90, help="Idade mínima em dias (default: 90).")
+    p_reproc = sub.add_parser(
+        "reprocess",
+        help="Re-roda o parser atual em cima do .dem já arquivado no R2 (bug corrigido depois do ingest original) e regrava stats/replay.json.",
+    )
+    p_reproc.add_argument("--match-id", default=None, help="Reprocessa só essa Partida (uuid); sem isso, todas com demo ainda no R2.")
+    p_reproc.add_argument("--since", default=None, help="Só Partidas jogadas nessa data em diante (YYYY-MM-DD) — evita reprocessar o histórico inteiro.")
+    sub.add_parser(
+        "processar-fila-pro",
+        help="Processa a fila de partidas profissionais: baixa .rar do HLTV, extrai o .dem e ingere (source='pro').",
+    )
+    sub.add_parser(
+        "processar-uploads-pendentes",
+        help="Processa a fila de uploads manuais de demo (qualquer membro do grupo, via 'Enviar Demo').",
+    )
+    p_limpar = sub.add_parser(
+        "limpar-uploads-orfaos",
+        help="Apaga do R2 o .dem de uploads que falharam definitivamente há mais de N dias (default 30). Comando manual — não roda automaticamente ainda.",
+    )
+    p_limpar.add_argument("--days", type=int, default=30, help="Idade mínima em dias do status 'falhou' (default: 30).")
+    sub.add_parser(
+        "configurar-cors",
+        help="Configura CORS no bucket R2 (uma vez) pra aceitar upload direto do navegador.",
+    )
+    sub.add_parser(
+        "avatares",
+        help="Backfill: busca o avatar Steam de todos os jogadores já vistos em alguma Partida (inclusive fora do grupo).",
+    )
+    sub.add_parser(
+        "sincronizar-faceit",
+        help="FACEIT Fase B: descobre e ingere partidas 5v5 de membros vinculados + ELO.",
+    )
 
     args = ap.parse_args(argv)
     config = Config()
@@ -268,6 +999,32 @@ def main(argv=None):
 
             bot_dir = Path(args.bot_dir) if args.bot_dir else None
             cmd_fetch(config, conn, since=args.since, bot_dir=bot_dir, node_bin=args.node)
+        elif args.cmd == "cleanup":
+            cmd_cleanup(config, conn, days=args.days)
+        elif args.cmd == "reprocess":
+            cmd_reprocess(config, conn, match_id=args.match_id, since=args.since)
+        elif args.cmd == "processar-fila-pro":
+            cmd_processar_fila_pro(config, conn)
+        elif args.cmd == "processar-uploads-pendentes":
+            cmd_processar_uploads_pendentes(config, conn)
+        elif args.cmd == "limpar-uploads-orfaos":
+            cmd_limpar_uploads_orfaos(config, conn, dias=args.days)
+        elif args.cmd == "configurar-cors":
+            client = storage_r2.make_client(config)
+            storage_r2.configurar_cors(
+                client,
+                config.r2_bucket,
+                [
+                    "https://resenha-phi.vercel.app",
+                    "https://resenhacs.vercel.app",
+                    "http://localhost:5173",
+                ],
+            )
+            print(f"configurar-cors: regra aplicada no bucket {config.r2_bucket}")
+        elif args.cmd == "avatares":
+            cmd_avatares(config, conn)
+        elif args.cmd == "sincronizar-faceit":
+            cmd_sincronizar_faceit(config, conn)
     finally:
         conn.close()
 

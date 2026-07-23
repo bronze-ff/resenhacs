@@ -2,14 +2,28 @@ import path from 'node:path'
 import express from 'express'
 import cookieParser from 'cookie-parser'
 import { createAuthRouter } from './routes/auth.js'
+import { createFriendshipsRouter } from './routes/friendships.js'
 import { createPlayersRouter } from './routes/players.js'
+import { createFaceitRouter } from './routes/faceit.js'
 import { createMatchesRouter } from './routes/matches.js'
 import { createProfileRouter } from './routes/profile.js'
 import { createClipsRouter } from './routes/clips.js'
+import { createClipesRouter } from './routes/clipes.js'
+import { createCompeticoesRouter } from './routes/competicoes.js'
 import { createRankingRouter } from './routes/ranking.js'
 import { createSessionsRouter } from './routes/sessions.js'
+import { createRecordesRouter } from './routes/recordes.js'
+import { createLadoPorMapaRouter } from './routes/ladoPorMapa.js'
+import { createAllstarRouter } from './routes/allstar.js'
 import { createUploadRouter } from './routes/upload.js'
+import { createLineupsRouter } from './routes/lineups.js'
+import { createTaticasRouter } from './routes/taticas.js'
+import { createTaticasCuradasRouter } from './routes/taticasCuradas.js'
+import { createPartidasProRouter } from './routes/partidasPro.js'
+import { createGranadasRouter } from './routes/granadas.js'
+import { createCursoRouter } from './routes/curso.js'
 import { createRequireAuth } from './auth/middleware.js'
+import { limiteGeral } from './rateLimit.js'
 import { createR2Client } from './r2.js'
 
 // Express 4 NÃO encaminha rejections de handler async pro error middleware: uma query
@@ -40,10 +54,27 @@ function patchRouterAsync() {
   }
 }
 
-export function createApp({ config, db, verifySteamLogin, fetchPersona, fetchBans, staticDir, execFileImpl, r2Client: r2ClientOverride } = {}) {
+export function createApp({
+  config,
+  db,
+  verifySteamLogin,
+  fetchPersona,
+  fetchBans,
+  fetchFriendList = async () => [],
+  staticDir,
+  r2Client: r2ClientOverride,
+  faceitFetchImpl,
+} = {}) {
   const app = express()
+  // Em produção (Vercel) a função fica atrás de UM proxy (o edge deles), que sempre manda
+  // X-Forwarded-For; sem confiar nesse hop o express-rate-limit não consegue identificar o
+  // IP do cliente e lança erro de validação em TODA requisição (ERR_ERL_UNEXPECTED_X_FORWARDED_FOR),
+  // derrubando a API inteira. "1" confia só no primeiro hop — não em qualquer proxy (evita
+  // o outro erro deles, trust proxy permissivo, que abriria brecha pra spoofar IP e burlar o limite).
+  app.set('trust proxy', 1)
   app.use(express.json())
   app.use(cookieParser())
+  app.use(limiteGeral)
   app.use((req, res, next) => {
     res.set('X-Content-Type-Options', 'nosniff')
     res.set('X-Frame-Options', 'DENY')
@@ -55,30 +86,30 @@ export function createApp({ config, db, verifySteamLogin, fetchPersona, fetchBan
 
   app.get('/api/health', (req, res) => res.json({ ok: true }))
 
-  const requireAuth = createRequireAuth(config.jwtSecret)
+  const requireAuth = createRequireAuth(config.jwtSecret, db)
   const r2Client = r2ClientOverride !== undefined ? r2ClientOverride : createR2Client(config)
-  app.use('/api/auth', createAuthRouter({ config, db, verifySteamLogin, fetchPersona, requireAuth }))
+  app.use('/api/auth', createAuthRouter({ config, db, verifySteamLogin, fetchPersona, fetchFriendList, requireAuth }))
+  app.use('/api/amigos', createFriendshipsRouter({ db, requireAuth }))
   app.use('/api/players', createPlayersRouter({ db, requireAuth, fetchBans }))
-  app.use('/api/matches', createMatchesRouter({ db, requireAuth, r2Client, r2Bucket: config.r2Bucket }))
+  app.use('/api/faceit', requireAuth, createFaceitRouter({ config, db, ...(faceitFetchImpl ? { fetchImpl: faceitFetchImpl } : {}) }))
+  app.use('/api/matches', createMatchesRouter({ db, requireAuth, r2Client, r2Bucket: config.r2Bucket, config }))
   app.use('/api/profile', createProfileRouter({ db, requireAuth }))
   app.use('/api/clips', createClipsRouter({ db, requireAuth }))
+  app.use('/api/clipes', createClipesRouter({ db, requireAuth }))
+  app.use('/api/competicoes', createCompeticoesRouter({ db, requireAuth }))
   app.use('/api/ranking', createRankingRouter({ db, requireAuth }))
   app.use('/api/sessions', createSessionsRouter({ db, requireAuth }))
+  app.use('/api/recordes', createRecordesRouter({ db, requireAuth }))
+  app.use('/api/lado-mapa', createLadoPorMapaRouter({ db, requireAuth }))
+  app.use('/api/allstar', createAllstarRouter({ db, config }))
+  app.use('/api/lineups', createLineupsRouter({ db, requireAuth }))
+  app.use('/api/taticas', createTaticasRouter({ db, requireAuth }))
+  app.use('/api/taticas-curadas', createTaticasCuradasRouter({ db, requireAuth }))
+  app.use('/api/partidas-pro-fila', createPartidasProRouter({ db, requireAuth, r2Client, r2Bucket: config.r2Bucket }))
+  app.use('/api/granadas', createGranadasRouter({ db, requireAuth }))
+  app.use('/api/curso', createCursoRouter({ db, requireAuth, r2Client, r2Bucket: config.r2Bucket }))
 
-  // Upload manual via web só existe quando o Coletor Python está no mesmo host
-  // (dev/self-hosted). Na Vercel (serverless) config.coletorDir/pythonBin ficam
-  // indefinidos e a rota nem é montada — evita um 500 confuso em produção.
-  if (config.coletorDir && config.pythonBin) {
-    app.use(
-      '/api/upload',
-      createUploadRouter({
-        requireAuth,
-        coletorDir: config.coletorDir,
-        pythonBin: config.pythonBin,
-        ...(execFileImpl ? { execFileImpl } : {}),
-      }),
-    )
-  }
+  app.use('/api/upload', createUploadRouter({ db, requireAuth, r2Client, r2Bucket: config.r2Bucket }))
 
   if (staticDir) {
     app.use(express.static(staticDir))

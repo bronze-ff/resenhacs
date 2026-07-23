@@ -1,0 +1,140 @@
+[
+  {
+    "nome": "A",
+    "x": 0.5015,
+    "y": 0.6495,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Apartments",
+    "x": 0.2378,
+    "y": 0.1856,
+    "nivel": "noob"
+  },
+  {
+    "nome": "B",
+    "x": 0.1328,
+    "y": 0.3028,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Base CT",
+    "x": 0.3354,
+    "y": 0.4884,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Base T",
+    "x": 0.8774,
+    "y": 0.2442,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Catwalk",
+    "x": 0.6064,
+    "y": 0.4176,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Conector",
+    "x": 0.499,
+    "y": 0.5738,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Mid",
+    "x": 0.5991,
+    "y": 0.5079,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Palace",
+    "x": 0.8896,
+    "y": 0.6007,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Rampa T",
+    "x": 0.731,
+    "y": 0.652,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Andaime",
+    "x": 0.6382,
+    "y": 0.7276,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Beco Lateral",
+    "x": 0.8408,
+    "y": 0.2418,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Beco de Tras",
+    "x": 0.5771,
+    "y": 0.2589,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Beco do Palace",
+    "x": 0.8628,
+    "y": 0.4835,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Caminhao",
+    "x": 0.1816,
+    "y": 0.2003,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Casa",
+    "x": 0.6333,
+    "y": 0.1759,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Escada",
+    "x": 0.5405,
+    "y": 0.6422,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Escada de Corda",
+    "x": 0.4331,
+    "y": 0.3541,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Jungle",
+    "x": 0.4648,
+    "y": 0.6349,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Loja",
+    "x": 0.1768,
+    "y": 0.4127,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Ninho do Sniper",
+    "x": 0.3867,
+    "y": 0.547,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Topo do Mid",
+    "x": 0.7236,
+    "y": 0.5104,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Underpass",
+    "x": 0.5381,
+    "y": 0.254,
+    "nivel": "pro"
+  }
+]

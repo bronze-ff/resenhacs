@@ -1,0 +1,170 @@
+[
+  {
+    "nome": "A",
+    "x": 0.7166,
+    "y": 0.3001,
+    "nivel": "noob"
+  },
+  {
+    "nome": "B",
+    "x": 0.3036,
+    "y": 0.5188,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Base CT",
+    "x": 0.574,
+    "y": 0.1886,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Base T",
+    "x": 0.5201,
+    "y": 0.907,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Canal",
+    "x": 0.6346,
+    "y": 0.5837,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Conector",
+    "x": 0.5081,
+    "y": 0.5867,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Main",
+    "x": 0.8359,
+    "y": 0.4004,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Mid",
+    "x": 0.5336,
+    "y": 0.4699,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Palace",
+    "x": 0.4288,
+    "y": 0.3233,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Agua",
+    "x": 0.574,
+    "y": 0.0928,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Beco",
+    "x": 0.3375,
+    "y": 0.3622,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Escada T",
+    "x": 0.6638,
+    "y": 0.6406,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Escada do Tunel",
+    "x": 0.6144,
+    "y": 0.2889,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Fonte",
+    "x": 0.8359,
+    "y": 0.2993,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Fora do Long",
+    "x": 0.2447,
+    "y": 0.5874,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Fundo do B",
+    "x": 0.3884,
+    "y": 0.461,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Heaven",
+    "x": 0.7042,
+    "y": 0.2474,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Lado CT de Cima",
+    "x": 0.4273,
+    "y": 0.1774,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Lado T de Cima",
+    "x": 0.7865,
+    "y": 0.5882,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Ninho do Sniper",
+    "x": 0.2911,
+    "y": 0.211,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Passarela",
+    "x": 0.6974,
+    "y": 0.3251,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Ponte",
+    "x": 0.4872,
+    "y": 0.6585,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Portas do Mid",
+    "x": 0.5351,
+    "y": 0.6136,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Rua",
+    "x": 0.6507,
+    "y": 0.7393,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Ruinas",
+    "x": 0.3165,
+    "y": 0.7256,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Tijolos",
+    "x": 0.348,
+    "y": 0.4161,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Tunel",
+    "x": 0.5859,
+    "y": 0.2365,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Tunel de Baixo",
+    "x": 0.3884,
+    "y": 0.3442,
+    "nivel": "pro"
+  }
+]

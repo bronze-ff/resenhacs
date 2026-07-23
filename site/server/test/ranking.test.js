@@ -4,7 +4,7 @@ import { createApp } from '../src/app.js'
 import { signToken } from '../src/auth/jwt.js'
 
 const config = { jwtSecret: 's', appUrl: 'http://localhost:5173', isProduction: false }
-const cookie = `resenha_token=${signToken({ steamId: '76561198000000009', isAdmin: false }, config.jwtSecret)}`
+const cookie = `resenha_token=${signToken({ steamId: '76561198000000009', isSuperAdmin: false }, config.jwtSecret)}`
 
 function appWith(rows) {
   const db = { query: vi.fn().mockResolvedValue({ rows }) }
@@ -31,6 +31,49 @@ describe('GET /api/ranking', () => {
     })
     expect(res.body[0].estilo).not.toBeNull() // 2+ partidas -> classificado em algum estilo (testes dedicados em analise.test.js)
     expect(res.body[1].nick).toBe('baixo')
+  })
+
+  it('escopo populacional: quem entra no ranking é eu + amigos accepted (friendships), não group_members', async () => {
+    const { app, db } = appWith([])
+    const res = await request(app).get('/api/ranking').set('Cookie', cookie)
+    expect(res.status).toBe(200)
+    const chamada = db.query.mock.calls.find(([sql]) => sql.includes('join players p on p.steam_id64 = gm.steam_id64'))
+    expect(chamada).toBeDefined()
+    const [sql, params] = chamada
+    // A população (LEFT JOIN base, inclui quem tem 0 partidas) vem de um union: o próprio
+    // viewer + quem tem amizade accepted com ele — não mais da tabela de grupo.
+    expect(sql).toContain('from (')
+    expect(sql).toContain('union')
+    expect(sql).toContain('from friendships f')
+    expect(sql).toContain("f.status = 'accepted'")
+    expect(sql).not.toContain('group_members')
+    expect(params[0]).toBe('76561198000000009') // viewer do cookie -> $1 no union
+  })
+
+  it('forma recente: sobe, cai, estável e amostra insuficiente', async () => {
+    const db = { query: vi.fn() }
+    db.query
+      // requireAuth reconsulta tokens_validos_apos antes de qualquer query da própria rota.
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [
+        { steam_id64: '1', recente: '1.40', geral: '1.10', total: 8 }, // subindo
+        { steam_id64: '2', recente: '0.80', geral: '1.10', total: 8 }, // caindo
+        { steam_id64: '3', recente: '1.11', geral: '1.10', total: 8 }, // estável (dentro do limiar)
+        { steam_id64: '4', recente: '1.40', geral: '1.10', total: 3 }, // amostra insuficiente (<5)
+      ] })
+      .mockResolvedValueOnce({ rows: [
+        { steam_id64: '1', nick: 'sobe', avatar_url: null, partidas: 8, vitorias: 4, kills: 80, deaths: 80, hs: 20, rating: '1.10', aces: 0, clutch_wins: 0, clutch_attempts: 0 },
+        { steam_id64: '2', nick: 'desce', avatar_url: null, partidas: 8, vitorias: 4, kills: 80, deaths: 80, hs: 20, rating: '1.10', aces: 0, clutch_wins: 0, clutch_attempts: 0 },
+        { steam_id64: '3', nick: 'estavel', avatar_url: null, partidas: 8, vitorias: 4, kills: 80, deaths: 80, hs: 20, rating: '1.10', aces: 0, clutch_wins: 0, clutch_attempts: 0 },
+        { steam_id64: '4', nick: 'poucas', avatar_url: null, partidas: 3, vitorias: 1, kills: 30, deaths: 30, hs: 5, rating: '1.10', aces: 0, clutch_wins: 0, clutch_attempts: 0 },
+      ] })
+    const app = createApp({ config, db })
+    const res = await request(app).get('/api/ranking').set('Cookie', cookie)
+    const porNick = Object.fromEntries(res.body.map((r) => [r.nick, r.forma]))
+    expect(porNick.sobe).toMatchObject({ tendencia: 'subindo', recente: 1.4, geral: 1.1 })
+    expect(porNick.desce).toMatchObject({ tendencia: 'caindo', recente: 0.8, geral: 1.1 })
+    expect(porNick.estavel).toMatchObject({ tendencia: 'estavel' })
+    expect(porNick.poucas).toBeNull()
   })
 
   it('jogador sem partidas ainda: rating null vai pro fim', async () => {

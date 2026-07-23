@@ -1,0 +1,98 @@
+import { describe, it, expect, vi } from 'vitest'
+import request from 'supertest'
+import { createApp } from '../src/app.js'
+import { signToken } from '../src/auth/jwt.js'
+
+const config = { jwtSecret: 's', appUrl: 'http://localhost:5173', isProduction: false, r2Bucket: 'resenha-demos' }
+const cookieJogador = `resenha_token=${signToken({ steamId: '765', isSuperAdmin: false }, config.jwtSecret)}`
+const cookieAdmin = `resenha_token=${signToken({ steamId: '999', isSuperAdmin: true }, config.jwtSecret)}`
+
+function appWith(handlers) {
+  const db = {
+    query: vi.fn().mockImplementation((sql) => {
+      if (typeof sql === 'string' && sql.includes('is_super_admin from players')) {
+        return Promise.resolve({ rows: [{ is_super_admin: true }] })
+      }
+      for (const [needle, rows] of handlers) {
+        if (sql.includes(needle)) return Promise.resolve({ rows })
+      }
+      return Promise.resolve({ rows: [] })
+    }),
+  }
+  return { app: createApp({ config, db }), db }
+}
+
+describe('GET /api/taticas', () => {
+  it('jogador comum: 403 (pagina ainda em teste, admin-only)', async () => {
+    const { app } = appWith([])
+    expect((await request(app).get('/api/taticas?map=de_mirage').set('Cookie', cookieJogador)).status).toBe(403)
+  })
+
+  it('admin lista só aprovadas por padrao', async () => {
+    const { app, db } = appWith([['from taticas', []]])
+    await request(app).get('/api/taticas?map=de_mirage').set('Cookie', cookieAdmin)
+    const chamada = db.query.mock.calls.find((c) => c[0].includes('from taticas'))
+    expect(chamada[0]).toContain("status = 'aprovada'")
+  })
+})
+
+describe('POST /api/taticas', () => {
+  it('qualquer jogador autenticado pode sugerir, entra como sugerida', async () => {
+    const { app, db } = appWith([
+      ['from matches m where m.id', [{ id: 1 }]], // partida visível ao viewer
+      ['insert into taticas', [{ id: 't1' }]],
+    ])
+    const res = await request(app).post('/api/taticas').set('Cookie', cookieJogador).send({
+      nome: 'Execução B', descricao: 'bronze entra seco', map: 'de_mirage',
+      matchId: '22222222-2222-2222-2222-222222222222', roundNumber: 5,
+    })
+    expect(res.status).toBe(201)
+    const insert = db.query.mock.calls.find((c) => c[0].includes('insert into taticas'))
+    expect(insert[1]).toContain('sugerida')
+  })
+
+  it('sem nome: 400', async () => {
+    const { app } = appWith([])
+    const res = await request(app).post('/api/taticas').set('Cookie', cookieJogador).send({ map: 'de_mirage', matchId: 'm1', roundNumber: 1 })
+    expect(res.status).toBe(400)
+  })
+
+  it('partida não visível ao viewer (não jogou nem é amigo de quem jogou): 404', async () => {
+    const { app } = appWith([]) // sem handler pra 'from matches m where m.id' → rows: []
+    const res = await request(app).post('/api/taticas').set('Cookie', cookieJogador).send({
+      nome: 'Execução B', map: 'de_mirage',
+      matchId: '22222222-2222-2222-2222-222222222222', roundNumber: 5,
+    })
+    expect(res.status).toBe(404)
+  })
+
+  it('checagem de posse usa visibilidade por amizade (não group_id)', async () => {
+    const { app, db } = appWith([
+      ['from matches m where m.id', [{ id: 1 }]],
+      ['insert into taticas', [{ id: 't1' }]],
+    ])
+    await request(app).post('/api/taticas').set('Cookie', cookieJogador).send({
+      nome: 'Execução B', map: 'de_mirage',
+      matchId: '22222222-2222-2222-2222-222222222222', roundNumber: 5,
+    })
+    const visivel = db.query.mock.calls.find((c) => c[0].includes('from matches m where m.id'))
+    expect(visivel[0]).toContain('from friendships f')
+    expect(visivel[1]).toEqual(['22222222-2222-2222-2222-222222222222', '765'])
+  })
+})
+
+describe('PATCH /api/taticas/:id', () => {
+  it('jogador comum: 403', async () => {
+    const { app } = appWith([])
+    const res = await request(app).patch('/api/taticas/t1').set('Cookie', cookieJogador).send({ status: 'aprovada' })
+    expect(res.status).toBe(403)
+  })
+
+  it('admin aprova', async () => {
+    const { app, db } = appWith([['update taticas', [{ id: 't1' }]]])
+    const res = await request(app).patch('/api/taticas/t1').set('Cookie', cookieAdmin).send({ status: 'aprovada' })
+    expect(res.status).toBe(200)
+    const chamada = db.query.mock.calls.find((c) => c[0].includes('update taticas'))
+    expect(chamada[1]).toEqual(['aprovada', 't1'])
+  })
+})

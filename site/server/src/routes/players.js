@@ -1,15 +1,27 @@
 import { Router } from 'express'
-import { requireAdmin } from '../auth/middleware.js'
+import { createRequireSuperAdmin } from '../auth/middleware.js'
 
 export function createPlayersRouter({ db, requireAuth, fetchBans }) {
   const router = Router()
+  const requireSuperAdmin = createRequireSuperAdmin(db)
 
-  // Alerta de ban/smurf: cruza os Jogadores do grupo com GetPlayerBans da Steam —
-  // "a conta de alguém do grupo tomou VAC/Overwatch ban?" Precisa vir antes de
+  // Alerta de ban/smurf: cruza eu + meus amigos accepted com GetPlayerBans da Steam —
+  // "a conta de algum amigo tomou VAC/Overwatch ban?" Precisa vir antes de
   // qualquer rota "/:algo" (não tem hoje em players.js, mas por hábito/segurança).
   router.get('/bans', requireAuth, async (req, res) => {
     if (!fetchBans) return res.status(503).json({ erro: 'Checagem de ban não configurada (falta STEAM_API_KEY)' })
-    const { rows } = await db.query('select steam_id64, nick from players order by nick')
+    const eu = req.player.steamId
+    // Escopado por amizade: checa ban só de mim + amigos accepted, não do roster global do
+    // sistema inteiro (era vazamento de SteamID+nick de todo mundo pra qualquer logado).
+    const { rows } = await db.query(
+      `select p.steam_id64, p.nick
+       from players p
+       where p.steam_id64 = $1 or p.steam_id64 in (
+         select case when f.player_a = $1 then f.player_b else f.player_a end
+         from friendships f where (f.player_a = $1 or f.player_b = $1) and f.status = 'accepted')
+       order by p.nick`,
+      [eu],
+    )
     const bans = await fetchBans(rows.map((p) => p.steam_id64))
     const porId = new Map(bans.map((b) => [b.steamId, b]))
     res.json(
@@ -22,20 +34,31 @@ export function createPlayersRouter({ db, requireAuth, fetchBans }) {
   })
 
   router.get('/', requireAuth, async (req, res) => {
+    const eu = req.player.steamId
     const { rows } = await db.query(
-      'select steam_id64, nick, avatar_url, is_admin from players order by nick',
+      `select p.steam_id64, p.nick, coalesce(p.avatar_url, sa.avatar_url) as avatar_url, p.is_super_admin
+       from players p
+       left join steam_avatares sa on sa.steam_id64 = p.steam_id64
+       where p.steam_id64 = $1 or p.steam_id64 in (
+         select case when f.player_a = $1 then f.player_b else f.player_a end
+         from friendships f where (f.player_a = $1 or f.player_b = $1) and f.status = 'accepted')
+       order by p.nick`,
+      [eu],
     )
     res.json(
       rows.map((p) => ({
         steamId: p.steam_id64,
         nick: p.nick,
         avatarUrl: p.avatar_url,
-        isAdmin: p.is_admin,
+        // isSuperAdmin só vai no próprio registro do jogador logado — pra qualquer amigo,
+        // isso é reconhecimento de alvo de maior privilégio (client não usa esse campo
+        // pros outros jogadores da lista, só pro `jogador` do /api/auth/me).
+        ...(p.steam_id64 === eu ? { isSuperAdmin: p.is_super_admin } : {}),
       })),
     )
   })
 
-  router.post('/', requireAuth, requireAdmin, async (req, res) => {
+  router.post('/', requireAuth, requireSuperAdmin, async (req, res) => {
     const steamId = String(req.body?.steamId ?? '')
     if (!/^\d{17}$/.test(steamId)) {
       return res.status(400).json({ erro: 'steamId deve ser o SteamID64 (17 dígitos)' })
@@ -52,7 +75,7 @@ export function createPlayersRouter({ db, requireAuth, fetchBans }) {
 
   // Promove um Participante (já visto em alguma Partida) a Jogador com um clique,
   // sem precisar digitar o SteamID64 na mão — puxa o nick do histórico de partidas.
-  router.post('/promote', requireAuth, requireAdmin, async (req, res) => {
+  router.post('/promote', requireAuth, requireSuperAdmin, async (req, res) => {
     const steamId = String(req.body?.steamId ?? '')
     if (!/^\d{17}$/.test(steamId)) {
       return res.status(400).json({ erro: 'steamId deve ser o SteamID64 (17 dígitos)' })
@@ -86,6 +109,11 @@ export function createPlayersRouter({ db, requireAuth, fetchBans }) {
       'update players set match_auth_code = $2, last_share_code = $3 where steam_id64 = $1',
       [req.player.steamId, matchAuthCode, lastShareCode],
     )
+    res.json({ ok: true })
+  })
+
+  router.put('/me/tour-concluido', requireAuth, async (req, res) => {
+    await db.query('update players set tour_concluido = true where steam_id64 = $1', [req.player.steamId])
     res.json({ ok: true })
   })
 

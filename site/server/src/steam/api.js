@@ -47,3 +47,21 @@ export function createFetchBans(apiKey, fetchImpl = fetch) {
     }
   }
 }
+
+// GetFriendList: só devolve dado se o perfil Steam tiver a lista de amigos pública —
+// perfil privado responde 401 (res.ok false), tratado igual a qualquer outro erro:
+// devolve lista vazia (auto-friend vira no-op, nunca quebra o login).
+export function createFetchFriendList(apiKey, fetchImpl = fetch) {
+  return async function fetchFriendList(steamId) {
+    try {
+      const url = `https://api.steampowered.com/ISteamUser/GetFriendList/v1/?key=${apiKey}&steamid=${steamId}&relationship=friend`
+      const res = await fetchImpl(url)
+      if (!res.ok) return []
+      const data = await res.json()
+      const friends = data?.friendslist?.friends ?? []
+      return friends.map((f) => f.steamid)
+    } catch {
+      return []
+    }
+  }
+}

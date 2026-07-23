@@ -45,6 +45,52 @@ def test_walk_chain_respeita_limite():
     assert len(novos) == 4
 
 
+def test_buscar_avatares_usa_avatarmedium():
+    chamadas = []
+
+    def fake_get(url):
+        chamadas.append(url)
+        return {"response": {"players": [
+            {"steamid": "111", "avatarmedium": "https://x/medium1.jpg", "avatar": "https://x/small1.jpg"},
+            {"steamid": "222", "avatar": "https://x/small2.jpg"},  # sem avatarmedium: cai pro avatar pequeno
+        ]}}
+
+    mapa = steam_api.buscar_avatares("KEY", ["111", "222"], http_get_json=fake_get)
+    assert mapa == {"111": "https://x/medium1.jpg", "222": "https://x/small2.jpg"}
+    assert len(chamadas) == 1
+    assert "key=KEY" in chamadas[0] and "steamids=111%2C222" in chamadas[0]
+
+
+def test_buscar_avatares_ignora_id_sem_perfil():
+    def fake_get(url):
+        return {"response": {"players": []}}
+
+    assert steam_api.buscar_avatares("KEY", ["999"], http_get_json=fake_get) == {}
+
+
+def test_buscar_avatares_faz_lotes_de_100():
+    chamadas = []
+
+    def fake_get(url):
+        chamadas.append(url)
+        return {"response": {"players": []}}
+
+    ids = [str(i) for i in range(150)]
+    steam_api.buscar_avatares("KEY", ids, http_get_json=fake_get)
+    assert len(chamadas) == 2
+
+
+def test_buscar_avatares_dedup_preserva_ordem():
+    chamadas = []
+
+    def fake_get(url):
+        chamadas.append(url)
+        return {"response": {"players": []}}
+
+    steam_api.buscar_avatares("KEY", ["1", "2", "1"], http_get_json=fake_get)
+    assert "steamids=1%2C2" in chamadas[0]
+
+
 def test_http_get_json_trata_404_como_fim_da_corrente():
     import urllib.error
 

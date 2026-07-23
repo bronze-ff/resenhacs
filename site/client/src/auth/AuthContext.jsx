@@ -8,7 +8,9 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     fetch('/api/auth/me')
       .then((res) => (res.ok ? res.json() : null))
-      .then((jogador) => setEstado({ carregando: false, jogador }))
+      .then((jogador) => {
+        setEstado({ carregando: false, jogador })
+      })
       .catch(() => setEstado({ carregando: false, jogador: null }))
   }, [])
 

@@ -4,7 +4,7 @@ import { createApp } from '../src/app.js'
 import { signToken } from '../src/auth/jwt.js'
 
 const config = { jwtSecret: 's', appUrl: 'http://localhost:5173', isProduction: false }
-const cookie = `resenha_token=${signToken({ steamId: '76561198000000009', isAdmin: false }, config.jwtSecret)}`
+const cookie = `resenha_token=${signToken({ steamId: '76561198000000009', isSuperAdmin: false }, config.jwtSecret)}`
 
 function appWith(handlers) {
   const db = {
@@ -15,7 +15,7 @@ function appWith(handlers) {
       return Promise.resolve({ rows: [] })
     }),
   }
-  return { app: createApp({ config, db }) }
+  return { app: createApp({ config, db }), db }
 }
 
 describe('GET /api/sessions', () => {
@@ -25,7 +25,7 @@ describe('GET /api/sessions', () => {
   })
 
   it('agrupa partidas em sessões pelo gap de 3h e acha o destaque (maior rating médio)', async () => {
-    const { app } = appWith([
+    const { app, db } = appWith([
       // needle precisa ser específico: a query de jogadores tem um subselect que
       // também contém "from matches where status" (mesmo texto), então esse needle
       // mais genérico casaria errado se viesse antes — ver aviso em profile.test.js.
@@ -57,5 +57,28 @@ describe('GET /api/sessions', () => {
     expect(primeiraSessao.destaque.nick).toBe('fih')
     expect(primeiraSessao.destaque.ratingMedio).toBeCloseTo(1.3, 2) // média de 1.50 e 1.10
     expect(primeiraSessao.destaque.aces).toBe(1)
+
+    // Visibilidade por amizade (friendships.js), não mais group_id: as três queries
+    // (matches, match_players e highlights/aces) escopam pelo viewer via partidaVisivelExpr.
+    const [matchesSql, matchesParams] = db.query.mock.calls.find(([s]) => s.includes('select id, map, played_at'))
+    expect(matchesSql).toContain('from friendships f')
+    expect(matchesSql).not.toContain('group_id')
+    expect(matchesParams).toEqual(['76561198000000009'])
+    const [playersSql, playersParams] = db.query.mock.calls.find(([s]) => s.includes('join players p on p.steam_id64 = mp.steam_id64'))
+    expect(playersSql).toContain('from friendships f')
+    expect(playersSql).not.toContain('group_id')
+    expect(playersParams).toEqual(['76561198000000009'])
+    const [acesSql, acesParams] = db.query.mock.calls.find(([s]) => s.includes("h.kind = 'ace'"))
+    expect(acesSql).toContain('from friendships f')
+    expect(acesSql).not.toContain('group_id')
+    expect(acesParams).toEqual(['76561198000000009'])
+
+    // Finding S6: sem LIMIT essas três queries varriam TODO o histórico de partidas
+    // visíveis a cada request (DoS barato). As três precisam do MESMO recorte de
+    // partidas (senão jogador/ace de uma partida "sobra" sem a partida correspondente).
+    for (const sql of [matchesSql, playersSql, acesSql]) {
+      expect(sql).toContain('limit 750')
+      expect(sql).toContain('order by played_at desc nulls last, id desc')
+    }
   })
 })

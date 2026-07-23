@@ -1,28 +1,63 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { corRating, dataHora } from '../lib/format.js'
+import { dataHora } from '../lib/format.js'
 import LinhaEvolucao from '../components/LinhaEvolucao.jsx'
 import FiltroPeriodo from '../components/FiltroPeriodo.jsx'
+import { Card, SectionHeader, StatTile, RatingBadge, Select } from '../components/ui'
 
 const LINHAS_STAT = [
-  { rotulo: 'Rating', chave: 'rating', formato: (v) => v?.toFixed(2) ?? '–', cor: true },
+  { rotulo: 'Rating', chave: 'rating', formato: (v) => v?.toFixed(2) ?? '–', rating: true },
   { rotulo: 'K/D', chave: 'kd', formato: (v) => v },
+  { rotulo: 'Vitórias', chave: 'winrate', formato: (v) => `${v}%` },
   { rotulo: 'ADR', chave: 'adr', formato: (v) => v },
   { rotulo: 'HS%', chave: 'hsPct', formato: (v) => `${v}%` },
+  { rotulo: 'Kills/partida', chave: 'kills', formato: (v, s) => (s.partidas ? Math.round((v / s.partidas) * 10) / 10 : v) },
   { rotulo: 'Precisão', chave: 'accuracy', formato: (v) => `${v}%` },
   { rotulo: 'Clutch %', chave: 'clutchPct', formato: (v) => `${v}%` },
-  { rotulo: 'Vitórias', chave: 'winrate', formato: (v) => `${v}%` },
+  { rotulo: 'Entry win %', chave: 'entryWinPct', formato: (v) => `${v}%` },
   { rotulo: 'Partidas', chave: 'partidas', formato: (v) => v },
 ]
 
-function ColunaJogador({ p, ladoOposto }) {
-  if (!p) return <div className="flex-1" />
+function AvatarFallback({ nick }) {
   return (
-    <div className="flex flex-1 flex-col items-center gap-1 text-center">
-      {p.avatarUrl && <img src={p.avatarUrl} alt="" className="panel-cut h-14 w-14 border border-borda object-cover" />}
-      <Link to={`/jogador/${p.steamId}`} className="font-display font-semibold uppercase text-texto hover:text-destaque">
-        {p.nick || p.steamId}
-      </Link>
+    <div className="panel-cut-sm flex h-16 w-16 shrink-0 items-center justify-center border border-borda bg-fundo font-display text-lg font-bold uppercase text-texto-fraco sm:h-20 sm:w-20">
+      {(nick || '?').slice(0, 2)}
+    </div>
+  )
+}
+
+function CabecalhoJogador({ p, alinhamento }) {
+  if (!p) return <div className="min-w-0 flex-1" />
+  return (
+    <Link
+      to={`/jogador/${p.steamId}`}
+      className={`flex min-w-0 flex-1 flex-col items-center gap-2 transition-colors duration-200 hover:text-destaque sm:flex-row ${alinhamento === 'direita' ? 'sm:flex-row-reverse sm:text-right' : 'sm:text-left'}`}
+    >
+      {p.avatarUrl ? (
+        <img src={p.avatarUrl} alt="" className="panel-cut-sm h-16 w-16 shrink-0 border border-borda object-cover sm:h-20 sm:w-20" />
+      ) : (
+        <AvatarFallback nick={p.nick} />
+      )}
+      <div className="flex min-w-0 flex-col items-center gap-1 sm:items-start">
+        <span className="w-full truncate font-display text-base font-semibold uppercase tracking-wide text-texto sm:text-lg">
+          {p.nick || p.steamId}
+        </span>
+        <RatingBadge valor={p.stats?.rating} className="text-sm" />
+      </div>
+    </Link>
+  )
+}
+
+// Barra dividida A|B proporcional ao peso de cada lado nessa métrica (só quando os dois
+// valores são numéricos e positivos — clutch%/precisão etc. já são 0–100).
+function BarraComparacao({ va, vb }) {
+  if (typeof va !== 'number' || typeof vb !== 'number' || (va === 0 && vb === 0)) return null
+  const total = Math.abs(va) + Math.abs(vb)
+  const pctA = total ? (Math.abs(va) / total) * 100 : 50
+  return (
+    <div className="mt-1 flex h-1 w-full overflow-hidden rounded-full bg-fundo">
+      <div className="bg-time-a" style={{ width: `${pctA}%` }} />
+      <div className="bg-time-b" style={{ width: `${100 - pctA}%` }} />
     </div>
   )
 }
@@ -62,99 +97,104 @@ export default function Comparar() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="font-display text-2xl font-bold uppercase tracking-wide text-texto">Comparar Jogadores</h2>
-        <p className="font-mono text-sm text-texto-fraco">Rating, stats e confronto direto entre dois Jogadores do grupo.</p>
-      </div>
+      <SectionHeader
+        titulo="Comparar Jogadores"
+        subtitulo="Rating, stats e confronto direto entre dois Jogadores do grupo."
+      />
 
-      <div className="flex flex-wrap items-center gap-3">
-        <select value={a} onChange={(e) => setA(e.target.value)} className="rounded border border-borda bg-superficie px-3 py-2 font-mono text-sm">
-          <option value="">Jogador A…</option>
-          {jogadores.map((j) => <option key={j.steamId} value={j.steamId}>{j.nick || j.steamId}</option>)}
-        </select>
-        <span className="font-display text-texto-fraco">vs</span>
-        <select value={b} onChange={(e) => setB(e.target.value)} className="rounded border border-borda bg-superficie px-3 py-2 font-mono text-sm">
-          <option value="">Jogador B…</option>
-          {jogadores.map((j) => <option key={j.steamId} value={j.steamId}>{j.nick || j.steamId}</option>)}
-        </select>
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <Select value={a} onChange={(e) => setA(e.target.value)} className="w-full sm:w-48 sm:flex-none">
+            <option value="">Jogador A…</option>
+            {jogadores.map((j) => <option key={j.steamId} value={j.steamId}>{j.nick || j.steamId}</option>)}
+          </Select>
+          <span className="shrink-0 text-center font-display text-texto-fraco sm:text-left">vs</span>
+          <Select value={b} onChange={(e) => setB(e.target.value)} className="w-full sm:w-48 sm:flex-none">
+            <option value="">Jogador B…</option>
+            {jogadores.map((j) => <option key={j.steamId} value={j.steamId}>{j.nick || j.steamId}</option>)}
+          </Select>
+        </div>
         <FiltroPeriodo de={de} ate={ate} onDe={setDe} onAte={setAte} />
       </div>
 
       {erro && <p className="font-mono text-sm text-perigo">{erro}</p>}
 
+      {/* Estado vazio: sem os dois jogadores escolhidos, `dados` é null — em vez de
+          deixar a página em branco, mostra uma instrução clara. */}
+      {!dados && !erro && (
+        <Card className="flex flex-col items-center justify-center gap-2 px-6 py-16 text-center">
+          <span className="font-display text-lg font-semibold uppercase tracking-wide text-texto-fraco">
+            Escolha dois jogadores
+          </span>
+          <p className="max-w-sm font-mono text-xs text-texto-fraco/80">
+            Selecione o Jogador A e o Jogador B acima pra ver o confronto direto — rating, stats lado a lado e histórico entre eles.
+          </p>
+        </Card>
+      )}
+
       {dados && (
         <>
-          <div className="panel-cut border border-borda bg-superficie p-4">
-            <div className="mb-4 flex items-start justify-between">
-              <ColunaJogador p={dados.a} />
-              <div className="px-2 pt-2 font-display text-xs uppercase tracking-widest text-texto-fraco">vs</div>
-              <ColunaJogador p={dados.b} ladoOposto />
+          <Card className="p-4 sm:p-5">
+            <div className="flex items-start justify-between gap-3">
+              <CabecalhoJogador p={dados.a} alinhamento="esquerda" />
+              <div className="shrink-0 pt-2 font-display text-xs uppercase tracking-widest text-texto-fraco sm:pt-6">vs</div>
+              <CabecalhoJogador p={dados.b} alinhamento="direita" />
             </div>
-            <div className="divide-y divide-borda">
+
+            <div className="mt-4 divide-y divide-borda border-t border-borda">
               {LINHAS_STAT.map((linha) => {
                 const va = dados.a.stats[linha.chave]
                 const vb = dados.b.stats[linha.chave]
                 const aGanha = typeof va === 'number' && typeof vb === 'number' && va > vb
                 const bGanha = typeof va === 'number' && typeof vb === 'number' && vb > va
                 return (
-                  <div key={linha.chave} className="grid grid-cols-3 items-center py-2 font-mono text-sm tabular-nums">
-                    <span className={`text-right ${aGanha ? 'font-semibold text-destaque' : 'text-texto'} ${linha.cor ? corRating(va) : ''}`}>
-                      {linha.formato(va)}
+                  <div key={linha.chave} className="grid grid-cols-3 items-center gap-2 py-2.5">
+                    <span className={`text-right font-mono text-sm font-bold tabular-nums ${aGanha ? 'text-destaque' : 'text-texto'}`}>
+                      {linha.formato(va, dados.a.stats)}
                     </span>
-                    <span className="text-center text-[10px] uppercase tracking-wider text-texto-fraco">{linha.rotulo}</span>
-                    <span className={`text-left ${bGanha ? 'font-semibold text-destaque' : 'text-texto'} ${linha.cor ? corRating(vb) : ''}`}>
-                      {linha.formato(vb)}
+                    <span className="text-center text-[10px] font-display uppercase tracking-wider text-texto-fraco">{linha.rotulo}</span>
+                    <span className={`text-left font-mono text-sm font-bold tabular-nums ${bGanha ? 'text-destaque' : 'text-texto'}`}>
+                      {linha.formato(vb, dados.b.stats)}
                     </span>
+                    <div className="col-span-3">
+                      <BarraComparacao va={typeof va === 'number' ? va : 0} vb={typeof vb === 'number' ? vb : 0} />
+                    </div>
                   </div>
                 )
               })}
             </div>
-          </div>
+          </Card>
 
           <section>
-            <h3 className="mb-3 font-display text-lg font-semibold uppercase tracking-wide text-texto">Confronto direto</h3>
+            <SectionHeader titulo="Confronto direto" />
             {dados.confronto.partidasJuntos === 0 ? (
               <p className="font-mono text-sm text-texto-fraco">Esses dois nunca jogaram a mesma Partida ainda.</p>
             ) : (
-              <div className="panel-cut grid grid-cols-2 gap-4 border border-borda bg-superficie p-4 sm:grid-cols-4">
-                <StatConfronto rotulo="Partidas juntos" valor={dados.confronto.partidasJuntos} />
-                <StatConfronto rotulo="Mesmo time" valor={`${dados.confronto.mesmoTimeVitorias}/${dados.confronto.mesmoTime}`} sub="vitórias" />
-                <StatConfronto rotulo={`${dados.a.nick || 'A'} venceu`} valor={dados.confronto.aVenceu} sub="times opostos" />
-                <StatConfronto rotulo={`${dados.b.nick || 'B'} venceu`} valor={dados.confronto.bVenceu} sub="times opostos" />
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <StatTile rotulo="Partidas juntos" valor={dados.confronto.partidasJuntos} />
+                <StatTile rotulo="Mesmo time" valor={`${dados.confronto.mesmoTimeVitorias}/${dados.confronto.mesmoTime}`} sub="vitórias" />
+                <StatTile rotulo={`${dados.a.nick || 'A'} venceu`} valor={dados.confronto.aVenceu} sub="times opostos" />
+                <StatTile rotulo={`${dados.b.nick || 'B'} venceu`} valor={dados.confronto.bVenceu} sub="times opostos" />
               </div>
             )}
           </section>
 
-          <div className="grid gap-6 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <section>
-              <h3 className="mb-3 font-display text-lg font-semibold uppercase tracking-wide text-texto">
-                Evolução — {dados.a.nick || dados.a.steamId}
-              </h3>
-              <div className="panel-cut border border-borda bg-superficie p-4">
+              <SectionHeader titulo={`Evolução — ${dados.a.nick || dados.a.steamId}`} />
+              <Card className="p-4">
                 <LinhaEvolucao pontos={dados.a.evolucao.map((e) => ({ label: dataHora(e.playedAt), valor: e.rating }))} />
-              </div>
+              </Card>
             </section>
             <section>
-              <h3 className="mb-3 font-display text-lg font-semibold uppercase tracking-wide text-texto">
-                Evolução — {dados.b.nick || dados.b.steamId}
-              </h3>
-              <div className="panel-cut border border-borda bg-superficie p-4">
+              <SectionHeader titulo={`Evolução — ${dados.b.nick || dados.b.steamId}`} />
+              <Card className="p-4">
                 <LinhaEvolucao pontos={dados.b.evolucao.map((e) => ({ label: dataHora(e.playedAt), valor: e.rating }))} cor="var(--color-time-b)" />
-              </div>
+              </Card>
             </section>
           </div>
         </>
       )}
-    </div>
-  )
-}
-
-function StatConfronto({ rotulo, valor, sub }) {
-  return (
-    <div className="text-center">
-      <div className="font-mono text-2xl font-semibold tabular-nums text-texto">{valor}</div>
-      <div className="font-mono text-[10px] uppercase tracking-wider text-texto-fraco">{rotulo}</div>
-      {sub && <div className="font-mono text-[10px] text-texto-fraco">{sub}</div>}
     </div>
   )
 }

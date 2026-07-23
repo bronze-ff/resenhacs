@@ -1,0 +1,110 @@
+[
+  {
+    "nome": "A",
+    "x": 0.3863,
+    "y": 0.2103,
+    "nivel": "noob"
+  },
+  {
+    "nome": "B",
+    "x": 0.8307,
+    "y": 0.2811,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Base CT",
+    "x": 0.4938,
+    "y": 0.1468,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Base T",
+    "x": 0.4474,
+    "y": 0.8938,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Hall Principal",
+    "x": 0.2252,
+    "y": 0.5496,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Mid",
+    "x": 0.4547,
+    "y": 0.574,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Rampa",
+    "x": 0.8282,
+    "y": 0.5667,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Topo do Mid",
+    "x": 0.4645,
+    "y": 0.4178,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Agua",
+    "x": 0.6891,
+    "y": 0.7449,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Beco",
+    "x": 0.8429,
+    "y": 0.2518,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Casa",
+    "x": 0.5377,
+    "y": 0.2835,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Entrada Lateral",
+    "x": 0.5914,
+    "y": 0.5203,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Outside",
+    "x": 0.1642,
+    "y": 0.6033,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Hall Lateral",
+    "x": 0.3106,
+    "y": 0.3396,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Lado T de Baixo",
+    "x": 0.7965,
+    "y": 0.574,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Lado T de Cima",
+    "x": 0.6769,
+    "y": 0.5838,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Ruinas",
+    "x": 0.6939,
+    "y": 0.7254,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Tunel",
+    "x": 0.6524,
+    "y": 0.784,
+    "nivel": "pro"
+  }
+]

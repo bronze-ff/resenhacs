@@ -1,0 +1,98 @@
+[
+  {
+    "nome": "A",
+    "x": 0.5713,
+    "y": 0.4952,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Alley",
+    "x": 0.5751,
+    "y": 0.145,
+    "nivel": "noob"
+  },
+  {
+    "nome": "B",
+    "x": 0.6598,
+    "y": 0.8053,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Base CT",
+    "x": 0.9416,
+    "y": 0.7478,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Base T",
+    "x": 0.2574,
+    "y": 0.1871,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Conector",
+    "x": 0.6364,
+    "y": 0.6407,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Ivy",
+    "x": 0.7588,
+    "y": 0.1144,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Main T",
+    "x": 0.3837,
+    "y": 0.3038,
+    "nivel": "noob"
+  },
+  {
+    "nome": "Caixa Eletrica",
+    "x": 0.4923,
+    "y": 0.4911,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Dumpster",
+    "x": 0.4236,
+    "y": 0.1443,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Entrada",
+    "x": 0.905,
+    "y": 0.7035,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Escada T",
+    "x": 0.3282,
+    "y": 0.2177,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Fundo do B",
+    "x": 0.2976,
+    "y": 0.7708,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Lado T de Cima",
+    "x": 0.3225,
+    "y": 0.4837,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Long Dog",
+    "x": 0.4226,
+    "y": 0.5679,
+    "nivel": "pro"
+  },
+  {
+    "nome": "Tuneis",
+    "x": 0.956,
+    "y": 0.5239,
+    "nivel": "pro"
+  }
+]

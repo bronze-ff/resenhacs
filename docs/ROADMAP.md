@@ -87,26 +87,57 @@ de clipe, crash de stream do R2, empate contado como derrota, crashes do MapaCal
 Partida, correlação errada de resposta do GC no bot) já foram corrigidos e estão em
 produção. O que ficou pra depois, por ordem de risco:
 
-- **Último round da partida some da tabela `rounds`** — só é derivado de
-  `round_officially_ended`, que tipicamente não dispara no round que fecha a partida
-  (ela termina antes, no `cs_win_panel_match`). Efeito: o clutch/entry do round decisivo
-  (o mais memorável) é sempre computado como perdido. `parse.py`.
-- **Dois algoritmos de clutch divergentes** — `replay.py.detect_clutch` (usado nos
-  Highlights) não olha quem ganhou o round; `transform.py.clutch_outcomes` (usado no
-  Ranking/perfil) exige vitória do round. Podem discordar sobre a mesma partida.
-- **Download truncado passa em silêncio** — se a CDN da Valve cortar a conexão no meio,
-  o `.dem` parcial é parseado "com sucesso" e grava stats errados. `main.py`.
-- **Upload manual sobe o `.dem` sem comprimir** sob a chave `demos/{id}.dem.bz2`
-  (extensão mente sobre o conteúdo) — custo de storage 3-5x maior que o necessário.
-- **Lote do `fetch` sem limite** — pode estourar o timeout de 45min do job num backfill
-  grande (o de hoje passou de 44min). Falta um `LIMIT N` + continuar na próxima rodada.
-- **Revogação de acesso/admin demora até 7 dias** — o JWT não é revalidado contra a
-  whitelist a cada request. Baixo risco aqui (grupo fechado de amigos), mas documentado.
+- ~~**Último round da partida some da tabela `rounds`**~~ — **resolvido 2026-07-20**:
+  `parse._construir_rounds` completa o round decisivo com um round sintético a partir
+  do placar final (`team_rounds_total`) quando `round_officially_ended` não disparou
+  pra ele — o caso comum, já que a partida termina antes desse evento no round que
+  fecha o mapa. `win_reason` fica vazio nesse round (não há evento de razão de vitória
+  disponível tão perto do fim). Só vale pra frente: partidas já gravadas continuam sem
+  o round decisivo até serem reprocessadas (`cmd_reprocess`, limitado à janela de 90
+  dias em que o `.dem` ainda está no R2).
+- ~~**Dois algoritmos de clutch divergentes**~~ — **resolvido 2026-07-20**: a divergência
+  entre Highlights/Ranking já tinha sido corrigida antes (ambos usam
+  `transform.clutch_outcomes`); a que restava era o anel do Replay 2D
+  (`replay.detect_clutch`, critério "cinematográfico" sem checar o resultado oficial do
+  round) — `build_replay` agora recebe `winner_by_round` e só mostra o anel quando o
+  time do clutcher bate com quem realmente venceu o round.
+- ~~**Download truncado passa em silêncio**~~ — **resolvido 2026-07-20**:
+  `_baixar_e_descomprimir` agora valida bytes recebidos vs. `Content-Length` (quando o
+  header existe) e checa `dec.eof` do bz2 ao final — um corte de conexão no meio agora
+  levanta exceção (cai no `except` já existente de `cmd_fetch`, marca `failed`, não
+  derruba o lote) em vez de gravar stats parciais em silêncio.
+- ~~**Upload manual sobe o `.dem` sem comprimir**~~ — **resolvido 2026-07-20**:
+  `_finalizar_ingest` comprime com `bz2` antes de subir pro R2 — a chave
+  `demos/{id}.dem.bz2` finalmente bate com o conteúdo. `cmd_reprocess` descomprime ao
+  ler de volta, com fallback pra objetos arquivados antes deste fix (ainda `.dem` cru).
+  Sem backfill dos objetos já armazenados (custoso: precisaria baixar+recomprimir+
+  resubir todo o histórico) — só partidas novas ganham o benefício de custo.
+- ~~**Lote do `fetch` sem limite**~~ — **resolvido 2026-07-18**: processa em lotes de 15
+  por run (mais recentes primeiro), commitando cada partida. Runs de 30/60min drenam
+  o resto sem estourar o timeout.
+- ~~**Revogação de acesso/admin demora até 7 dias**~~ — **já resolvido antes desta entrada
+  ser escrita** (código desatualizou o roadmap): `createRequireSuperAdmin`
+  (`site/server/src/auth/middleware.js`) já reconsulta `players.is_super_admin` no banco
+  a cada request quando o claim do JWT diz `true` — rebaixar um admin tem efeito
+  imediato. O claim `isSuperAdmin` do cookie do usuário rebaixado continua "mentindo"
+  por até 7 dias, mas é inofensivo (não concede privilégio nenhum, só serve de
+  pré-filtro pra evitar tocar o banco quando já é `false`). Não há hoje nenhum
+  mecanismo geral de "revogar acesso" de usuário comum no schema — só admin (coberto)
+  e convite de grupo (`revogado_em`, já revalidado a cada request via
+  `createRequireGroupMember`).
 - **Re-ingest não limpa jogador/round órfão** — se um fix no parser reduzir rounds ou
   remover um sid espúrio, a linha antiga fica pra trás em vez de ser removida.
+- **Replay 2D sem streaming por round** (achado em `docs/adr/0005-libs-animacao-e-performance.md`)
+  — o client baixa o JSON da partida inteira (vários MB) antes do primeiro round tocar;
+  em mobile com conexão ruim pode significar espera perceptível. Baixa prioridade — só
+  agir se virar reclamação real.
 
 ## Fora de escopo (decidido)
 
-- Renderização de vídeo estilo Allstar (BRIEF; deep-link no Replay 2D cobre).
+- ~~Renderização de vídeo estilo Allstar~~ — **reaberto 2026-07-19**: construir a
+  renderização por conta própria continua fora de escopo (risco de ban de conta Steam,
+  ver `docs/adr/0004-viabilidade-clipes-video-real.md`), mas **integrar com a API de
+  clipes do Allstar** (conta de parceiro já criada) está em avaliação — só falta o
+  preço deles pra decidir com o grupo.
 - Análise de economia ($ por round) — demoparser2 expõe, mas custo/benefício baixo agora.
 - Win rate forecast estilo Leetify — exige modelo/dados que não temos.

@@ -1,6 +1,8 @@
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from coletor import storage_r2, db
@@ -8,12 +10,40 @@ from coletor import storage_r2, db
 
 # ---- storage ----
 
+class FakeBody:
+    def __init__(self, data):
+        self._data = data
+
+    def read(self):
+        return self._data
+
+
 class FakeS3:
     def __init__(self):
         self.puts = []
+        self.deletes = []
+        self.gets = []
+        self.heads = []
+        self.objetos = {}  # key -> bytes, pro get_object devolver de volta
+        self.cors = []
 
     def put_object(self, **kw):
         self.puts.append(kw)
+        self.objetos[kw["Key"]] = kw["Body"]
+
+    def delete_object(self, **kw):
+        self.deletes.append(kw)
+
+    def get_object(self, **kw):
+        self.gets.append(kw)
+        return {"Body": FakeBody(self.objetos[kw["Key"]])}
+
+    def head_object(self, **kw):
+        self.heads.append(kw)
+        return {"ContentLength": len(self.objetos[kw["Key"]])}
+
+    def put_bucket_cors(self, **kw):
+        self.cors.append(kw)
 
 
 def test_keys():
@@ -27,6 +57,69 @@ def test_upload_bytes():
     assert key == "demos/1.dem.bz2"
     assert s3.puts[0]["Bucket"] == "bucket"
     assert s3.puts[0]["Body"] == b"abc"
+
+
+def test_delete_object():
+    s3 = FakeS3()
+    storage_r2.delete_object(s3, "bucket", "demos/1.dem.bz2")
+    assert s3.deletes[0] == {"Bucket": "bucket", "Key": "demos/1.dem.bz2"}
+
+
+def test_download_bytes_devolve_o_que_foi_upado():
+    s3 = FakeS3()
+    storage_r2.upload_bytes(s3, "bucket", "demos/1.dem.bz2", b"conteudo-da-demo")
+    assert storage_r2.download_bytes(s3, "bucket", "demos/1.dem.bz2") == b"conteudo-da-demo"
+
+
+# ---- finding #2 da auditoria: teto de tamanho via HEAD antes do download ----
+
+def test_content_length_faz_head_sem_baixar_o_corpo():
+    s3 = FakeS3()
+    storage_r2.upload_bytes(s3, "bucket", "demos/1.dem.bz2", b"12345")
+    assert storage_r2.content_length(s3, "bucket", "demos/1.dem.bz2") == 5
+    assert s3.heads == [{"Bucket": "bucket", "Key": "demos/1.dem.bz2"}]
+    assert s3.gets == []  # HEAD não deve ter baixado o corpo
+
+
+def test_download_bytes_sem_max_bytes_nao_chama_head():
+    s3 = FakeS3()
+    storage_r2.upload_bytes(s3, "bucket", "demos/1.dem.bz2", b"conteudo")
+    storage_r2.download_bytes(s3, "bucket", "demos/1.dem.bz2")
+    assert s3.heads == []
+
+
+def test_download_bytes_dentro_do_teto_baixa_normalmente():
+    s3 = FakeS3()
+    storage_r2.upload_bytes(s3, "bucket", "demos/1.dem.bz2", b"conteudo-pequeno")
+    dados = storage_r2.download_bytes(s3, "bucket", "demos/1.dem.bz2", max_bytes=1000)
+    assert dados == b"conteudo-pequeno"
+    assert len(s3.heads) == 1
+
+
+def test_download_bytes_acima_do_teto_lanca_erro_sem_baixar_o_corpo():
+    s3 = FakeS3()
+    storage_r2.upload_bytes(s3, "bucket", "demos/1.dem.bz2", b"x" * 1000)
+    with pytest.raises(storage_r2.ArquivoGrandeDemaisError):
+        storage_r2.download_bytes(s3, "bucket", "demos/1.dem.bz2", max_bytes=500)
+    assert s3.gets == []  # abortou antes de baixar o corpo
+
+
+def test_configurar_cors_manda_regra_pro_bucket():
+    s3 = FakeS3()
+    storage_r2.configurar_cors(s3, "bucket", ["https://a.com", "http://localhost:5173"])
+    assert s3.cors[0]["Bucket"] == "bucket"
+    regra = s3.cors[0]["CORSConfiguration"]["CORSRules"][0]
+    assert regra["AllowedOrigins"] == ["https://a.com", "http://localhost:5173"]
+    assert regra["AllowedMethods"] == ["PUT", "GET"]
+    assert regra["AllowedHeaders"] == ["content-type"]
+    assert regra["MaxAgeSeconds"] == 3600
+
+
+def test_key_from_url_extrai_a_key_do_bucket_configurado():
+    url = "https://abc.r2.cloudflarestorage.com/resenha-demos/replays/42.json"
+    assert storage_r2.key_from_url(url, "resenha-demos") == "replays/42.json"
+    # bucket errado (ou url de outro provedor) -> não sabe extrair, não inventa
+    assert storage_r2.key_from_url(url, "outro-bucket") is None
 
 
 # ---- db ----
@@ -53,12 +146,30 @@ class FakeCursor:
             return self.conn.fingerprint_row
         return ["00000000-0000-0000-0000-000000000001"]
 
+    def fetchall(self):
+        if self._last.startswith("select id, hltv_url, arquivo_r2_key from partidas_pro_fila"):
+            return self.conn.fila_rows
+        if self._last.startswith("select id, adicionado_por, arquivo_r2_key, share_code, played_at, plataforma_manual from uploads_pendentes"):
+            return self.conn.uploads_rows
+        if self._last.startswith("select id, arquivo_r2_key from uploads_pendentes"):
+            return self.conn.uploads_falhos_rows
+        if self._last.startswith("select steam_id64 from steam_avatares"):
+            return [(s,) for s in self.conn.avatares_frescos]
+        if "distinct mp.steam_id64" in self._last:
+            return [(s,) for s in self.conn.match_players_sem_avatar]
+        return []
+
 
 class FakeConn:
     def __init__(self, fingerprint_row=None):
         self.calls = []
         self.commits = 0
         self.fingerprint_row = fingerprint_row
+        self.fila_rows = []
+        self.uploads_rows = []
+        self.uploads_falhos_rows = []
+        self.avatares_frescos = []
+        self.match_players_sem_avatar = []
 
     def cursor(self):
         return FakeCursor(self)
@@ -76,7 +187,7 @@ def _parsed():
         "players": [
             {"steam_id64": "A", "nick": "fih", "team": "A", "kills": 20, "deaths": 10,
              "assists": 4, "headshot_kills": 9, "damage": 2100, "rounds_played": 22,
-             "rating": 1.2, "won": True},
+             "rating": 1.2, "kast_pct": 0.75, "won": True},
         ],
         "rounds": [{"round_number": 1, "winner_team": "A", "win_reason": "elim"}],
         "highlights": [{"steam_id64": "A", "round_number": 1, "kind": "ace", "description": "ACE"}],
@@ -100,6 +211,150 @@ def test_store_parsed_grava_tudo_e_commita():
     assert any(s.startswith("delete from match_player_weapons") for s in sqls)
     assert any(s.startswith("delete from match_round_econ") for s in sqls)
     assert any(s.startswith("delete from kill_positions") for s in sqls)
+    assert any(s.startswith("delete from match_players") for s in sqls)
+    assert any(s.startswith("delete from rounds") for s in sqls)
+
+
+def test_store_parsed_grava_ended_early_e_abandoned_by():
+    conn = FakeConn()
+    parsed = _parsed()
+    parsed["ended_early"] = True
+    parsed["abandoned_by"] = "76561199447162948"
+    db.store_parsed(conn, parsed, share_code="CSGO-x", source="valve_mm")
+    match_call = next(c for c in conn.calls if c[0].startswith("insert into matches"))
+    assert match_call[1][-3:-1] == (True, "76561199447162948")
+
+
+def test_store_parsed_sem_ended_early_grava_false_e_none_por_padrao():
+    conn = FakeConn()
+    db.store_parsed(conn, _parsed(), share_code="CSGO-x", source="valve_mm")
+    match_call = next(c for c in conn.calls if c[0].startswith("insert into matches"))
+    assert match_call[1][-3:-1] == (False, None)
+
+
+def test_store_parsed_dedupe_por_fingerprint_atualiza_ended_early_tambem():
+    existente = "11111111-1111-1111-1111-111111111111"
+    conn = FakeConn(fingerprint_row=[existente])
+    parsed = _parsed()
+    parsed["ended_early"] = True
+    parsed["abandoned_by"] = "765"
+    db.store_parsed(conn, parsed, share_code="CSGO-x", source="valve_mm")
+    match_call = next(c for c in conn.calls if c[0].startswith("update matches set share_code"))
+    assert match_call[1][-4:-2] == (True, "765")
+
+
+def test_store_parsed_grava_plataforma_manual():
+    conn = FakeConn()
+    parsed = _parsed()
+    parsed["plataforma_manual"] = "gamers_club"
+    db.store_parsed(conn, parsed, share_code="CSGO-x", source="upload")
+    match_call = next(c for c in conn.calls if c[0].startswith("insert into matches"))
+    assert match_call[1][-1] == "gamers_club"
+
+
+def test_store_parsed_limpa_jogador_e_round_orfao_no_reprocess():
+    # Reprocessar (parser corrigido reduz o nº de jogadores/rounds) não pode deixar
+    # a linha antiga pra trás — mesma garantia que highlights/weapons/econ já têm.
+    conn = FakeConn()
+    parsed = _parsed()
+    parsed["players"].append({"steam_id64": "B", "nick": "outro", "team": "B", "kills": 5,
+                               "deaths": 12, "assists": 1, "headshot_kills": 1, "damage": 900,
+                               "rounds_played": 22, "rating": 0.8, "kast_pct": 0.5, "won": False})
+    parsed["rounds"].append({"round_number": 2, "winner_team": "B", "win_reason": "elim"})
+    db.store_parsed(conn, parsed, share_code="CSGO-x", source="upload")
+
+    del_players = next(c for c in conn.calls if c[0].startswith("delete from match_players"))
+    assert del_players[1][1] == ["A", "B"]
+    del_rounds = next(c for c in conn.calls if c[0].startswith("delete from rounds"))
+    assert del_rounds[1][1] == [1, 2]
+
+
+def test_store_parsed_grava_kast_pct_em_match_players():
+    conn = FakeConn()
+    db.store_parsed(conn, _parsed(), share_code="CSGO-x", source="upload")
+    insert = next(c for c in conn.calls if c[0].startswith("insert into match_players"))
+    # Verificar que kast_pct está no índice correto (depois de rating, que está no índice 10)
+    # (match_id, steam_id64, nick, team, kills, deaths, assists, headshot_kills, damage, rounds_played, rating, kast_pct, won, ...)
+    assert insert[1][11] == 0.75  # kast_pct deve estar na posição 11 (0-indexed)
+
+
+def test_store_parsed_grava_premier_rating_em_match_players():
+    conn = FakeConn()
+    parsed = _parsed()
+    parsed["players"][0]["premier_rating_before"] = 5200
+    parsed["players"][0]["premier_rating_after"] = 5242
+    db.store_parsed(conn, parsed, share_code="CSGO-x", source="upload")
+    insert = next(c for c in conn.calls if c[0].startswith("insert into match_players"))
+    assert insert[1][-2:] == (5200, 5242)
+
+
+def test_todas_as_queries_de_store_parsed_tem_placeholders_e_params_alinhados():
+    # Regra geral, não só match_players: nº de %s na SQL tem que bater com o nº de
+    # params na tupla — achado real (revisão da Task 3 do plano de KAST): um %s a
+    # mais no values() de match_players (41 vs 40 colunas/params) quebraria TODO
+    # ingest em produção, mas passava despercebido porque FakeCursor só grava
+    # (sql, params) sem validar a contagem — os testes específicos de cada campo
+    # (ex.: o de kast_pct acima) checam a POSIÇÃO certa mas não pegam esse
+    # desalinhamento de contagem sozinhos.
+    conn = FakeConn()
+    db.store_parsed(conn, _parsed(), share_code="CSGO-x", source="upload")
+    for sql, params in conn.calls:
+        esperado = sql.count("%s")
+        recebido = len(params) if params is not None else 0
+        assert esperado == recebido, f"{sql[:60]}...: {esperado} placeholders vs {recebido} params"
+
+
+def test_store_parsed_grava_economia_por_jogador_e_compras():
+    conn = FakeConn()
+    parsed = _parsed()
+    parsed["player_round_econ"] = [
+        {"round_number": 1, "steam_id64": "A", "team": "A", "equip_value": 4000, "buy_type": "eco"},
+    ]
+    parsed["purchases"] = [
+        {"round_number": 1, "steam_id64": "A", "item": "deagle", "cost": 700, "tick": 100},
+    ]
+    db.store_parsed(conn, parsed, share_code="CSGO-x", source="upload")
+    econ_insert = next(c for c in conn.calls if c[0].startswith("insert into match_player_round_econ"))
+    assert econ_insert[1] == ("00000000-0000-0000-0000-000000000001", 1, "A", "A", 4000, "eco")
+    compra_insert = next(c for c in conn.calls if c[0].startswith("insert into match_player_purchases"))
+    assert compra_insert[1] == ("00000000-0000-0000-0000-000000000001", 1, "A", "deagle", 700, 100)
+    assert any(s.startswith("delete from match_player_round_econ") for s, _ in conn.calls)
+    assert any(s.startswith("delete from match_player_purchases") for s, _ in conn.calls)
+
+
+def test_write_player_round_econ_e_idempotente_contra_duplicata_no_mesmo_lote():
+    # Achado real: uma demo com reinício técnico no meio do round 1 gera 2 leituras de
+    # current_equip_value pro mesmo (round_number, steam_id64) — sem ON CONFLICT, a 2a
+    # linha duplicada estourava a PK (match_id, round_number, steam_id64) e derrubava o
+    # ingest inteiro do upload manual.
+    conn = FakeConn()
+    parsed = _parsed()
+    parsed["player_round_econ"] = [
+        {"round_number": 1, "steam_id64": "A", "team": "A", "equip_value": 800, "buy_type": "eco"},
+        {"round_number": 1, "steam_id64": "A", "team": "A", "equip_value": 4000, "buy_type": "eco"},
+    ]
+    db.store_parsed(conn, parsed, share_code="CSGO-x", source="upload")
+    inserts = [c for c in conn.calls if c[0].startswith("insert into match_player_round_econ")]
+    assert len(inserts) == 2
+    assert all("on conflict (match_id, round_number, steam_id64) do update" in sql for sql, _ in inserts)
+
+
+def test_store_parsed_grava_dano_e_flashes_por_par():
+    conn = FakeConn()
+    parsed = _parsed()
+    parsed["player_damage"] = [
+        {"attacker": "A", "victim": "B", "weapon": "ak47", "damage": 300, "hits": 4},
+    ]
+    parsed["player_flashes"] = [
+        {"attacker": "A", "victim": "B", "count": 2, "duration_sum": 3.5},
+    ]
+    db.store_parsed(conn, parsed, share_code="CSGO-x", source="upload")
+    dano_insert = next(c for c in conn.calls if c[0].startswith("insert into match_player_damage"))
+    assert dano_insert[1] == ("00000000-0000-0000-0000-000000000001", "A", "B", "ak47", 300, 4)
+    flash_insert = next(c for c in conn.calls if c[0].startswith("insert into match_player_flashes"))
+    assert flash_insert[1] == ("00000000-0000-0000-0000-000000000001", "A", "B", 2, 3.5)
+    assert any(s.startswith("delete from match_player_damage") for s, _ in conn.calls)
+    assert any(s.startswith("delete from match_player_flashes") for s, _ in conn.calls)
 
 
 def test_store_parsed_grava_posicoes_de_kill():
@@ -107,11 +362,25 @@ def test_store_parsed_grava_posicoes_de_kill():
     parsed = _parsed()
     parsed["kill_positions"] = [{
         "round_number": 1, "tick": 500, "killer": "A", "victim": "B", "weapon": "ak47",
+        "victim_weapon": "usp_silencer", "assister": "C",
         "headshot": True, "killer_x": 100.0, "killer_y": 200.0, "victim_x": 150.0, "victim_y": 250.0,
     }]
     db.store_parsed(conn, parsed, share_code="CSGO-x", source="upload")
     insert = next(c for c in conn.calls if c[0].startswith("insert into kill_positions"))
-    assert insert[1] == ("00000000-0000-0000-0000-000000000001", 1, 500, "A", "B", "ak47", True, 100.0, 200.0, 150.0, 250.0)
+    assert insert[1] == (
+        "00000000-0000-0000-0000-000000000001", 1, 500, "A", "B", "ak47", "usp_silencer", True,
+        100.0, 200.0, 150.0, 250.0, "C",
+    )
+
+
+def test_store_parsed_grava_dano_por_round():
+    conn = FakeConn()
+    parsed = _parsed()
+    parsed["player_round_damage"] = [{"round_number": 1, "steam_id64": "A", "damage": 87}]
+    db.store_parsed(conn, parsed, share_code="CSGO-x", source="upload")
+    insert = next(c for c in conn.calls if c[0].startswith("insert into match_player_round_damage"))
+    assert insert[1] == ("00000000-0000-0000-0000-000000000001", 1, "A", 87)
+    assert any(s.startswith("delete from match_player_round_damage") for s, _ in conn.calls)
 
 
 def test_store_parsed_grava_economia_por_round():
@@ -134,13 +403,190 @@ def test_store_parsed_grava_stats_por_arma():
     assert insert[1] == ("00000000-0000-0000-0000-000000000001", "A", "ak47", 10, 5, 80, 30, 1500)
 
 
+# ---- fila pro ----
+
+def test_listar_fila_pro_pendente():
+    conn = FakeConn()
+    conn.fila_rows = [("f1", "https://hltv.org/download/demo/123", None)]
+    resultado = db.listar_fila_pro_pendente(conn)
+    assert resultado == [("f1", "https://hltv.org/download/demo/123", None)]
+    assert any("partidas_pro_fila" in c[0] and "pendente" in c[0] for c in conn.calls)
+
+
+def test_atualizar_fila_pro_concluida():
+    conn = FakeConn()
+    db.atualizar_fila_pro(conn, "f1", "concluida", match_id="m1")
+    update = next(c for c in conn.calls if c[0].startswith("update partidas_pro_fila"))
+    assert update[1] == ("concluida", "m1", None, [], "f1")
+    assert conn.commits == 1
+
+
+def test_atualizar_fila_pro_com_match_ids():
+    # Série Bo3/Bo5: vários mapas processados de um único item da fila.
+    conn = FakeConn()
+    db.atualizar_fila_pro(conn, "f1", "concluida", match_id="m1", match_ids=["m1", "m2", "m3"])
+    update = next(c for c in conn.calls if c[0].startswith("update partidas_pro_fila"))
+    assert update[1] == ("concluida", "m1", None, ["m1", "m2", "m3"], "f1")
+    assert conn.commits == 1
+
+
+# ---- uploads pendentes ----
+
+def test_listar_uploads_pendentes_devolve_so_status_pendente():
+    conn = FakeConn()
+    conn.uploads_rows = [
+        ("u1", "765", "uploads-pendentes/abc.dem", None, None, None),
+    ]
+    resultado = db.listar_uploads_pendentes(conn)
+    assert resultado == [("u1", "765", "uploads-pendentes/abc.dem", None, None, None)]
+    assert any("uploads_pendentes" in c[0] and "pendente" in c[0] for c in conn.calls)
+
+
+def test_listar_uploads_pendentes_inclui_plataforma_manual():
+    conn = FakeConn()
+    conn.uploads_rows = [
+        ("u1", "765", "uploads-pendentes/abc.dem", None, None, "gamers_club"),
+    ]
+    resultado = db.listar_uploads_pendentes(conn)
+    assert resultado[0][5] == "gamers_club"
+    select = next(c for c in conn.calls if c[0].startswith("select id, adicionado_por"))
+    assert "plataforma_manual" in select[0]
+
+
+def test_atualizar_upload_pendente_grava_status_match_id_e_erro():
+    conn = FakeConn()
+    db.atualizar_upload_pendente(conn, "u1", "concluido", match_id="m1")
+    update = next(c for c in conn.calls if c[0].startswith("update uploads_pendentes"))
+    assert update[1] == ("concluido", "m1", None, "u1")
+    assert "processando_desde" not in update[0]
+    assert conn.commits == 1
+
+
+# ---- finding #8 da auditoria: upload travado em 'processando' nunca revertia sozinho ----
+
+def test_atualizar_upload_pendente_para_processando_carimba_processando_desde():
+    conn = FakeConn()
+    db.atualizar_upload_pendente(conn, "u1", "processando")
+    update = next(c for c in conn.calls if c[0].startswith("update uploads_pendentes"))
+    assert "processando_desde = now()" in update[0]
+    assert update[1] == ("processando", None, None, "u1")
+    assert conn.commits == 1
+
+
+def test_reverter_uploads_travados_gera_sql_com_teto_de_tempo_e_tentativas():
+    conn = FakeConn()
+    ids = db.reverter_uploads_travados(conn, minutos=30, max_tentativas=3)
+    sql, params = conn.calls[-1]
+    assert "status = 'processando'" in sql
+    assert "processando_desde < now()" in sql
+    assert "tentativas = tentativas + 1" in sql
+    assert "processando_desde = null" in sql
+    assert params == (3, 3, "travado em 'processando' por mais de 30 min — provável processo morto no meio", 30)
+    assert conn.commits == 1
+    assert ids == []  # FakeCursor.fetchall() não reconhece essa query -> []
+
+
+# ---- finding #17 da auditoria: limpeza de upload órfão no R2 ----
+
+def test_listar_uploads_falhos_antigos_devolve_id_e_key():
+    conn = FakeConn()
+    conn.uploads_falhos_rows = [("u1", "uploads-pendentes/abc.dem")]
+    resultado = db.listar_uploads_falhos_antigos(conn, dias=30)
+    assert resultado == [("u1", "uploads-pendentes/abc.dem")]
+    select = next(c for c in conn.calls if c[0].startswith("select id, arquivo_r2_key from uploads_pendentes"))
+    assert "status = 'falhou'" in select[0]
+    assert select[1] == (30,)
+
+
+def test_marcar_upload_limpo_atualiza_status():
+    conn = FakeConn()
+    db.marcar_upload_limpo(conn, "u1")
+    update = next(c for c in conn.calls if c[0].startswith("update uploads_pendentes"))
+    assert "status = 'limpo'" in update[0]
+    assert update[1] == ("u1",)
+    assert conn.commits == 1
+
+
+def test_store_parsed_grava_lineups():
+    conn = FakeConn()
+    parsed = _parsed()
+    parsed["lineups"] = [{
+        "round_number": 5, "map": "de_mirage", "tipo": "smoke",
+        "thrower_steam_id": "A", "thrower_nick": "bronze",
+        "thrower_x": 100.0, "thrower_y": 200.0, "thrower_yaw": 45.0, "thrower_pitch": -10.0,
+        "target_x": 300.0, "target_y": 400.0, "tick": 5000, "origem": "grupo", "lado": "T",
+    }]
+    db.store_parsed(conn, parsed, share_code="CSGO-x", source="upload")
+    insert = next(c for c in conn.calls if c[0].startswith("insert into lineups"))
+    assert insert[1] == (
+        "00000000-0000-0000-0000-000000000001", 5, "de_mirage", "smoke",
+        "A", "bronze", 100.0, 200.0, 45.0, -10.0, 300.0, 400.0, 5000, "grupo", "T",
+    )
+
+
+def test_store_parsed_grava_nome_de_time():
+    conn = FakeConn()
+    parsed = _parsed()
+    parsed["team_a_name"] = "FaZe"
+    parsed["team_b_name"] = "Vitality"
+    db.store_parsed(conn, parsed, share_code="CSGO-x", source="pro")
+    match_call = next(c for c in conn.calls if c[0].startswith("insert into matches"))
+    assert "FaZe" in match_call[1]
+    assert "Vitality" in match_call[1]
+
+
+# ---- avatares ----
+
+def test_upsert_avatares_grava_cada_um_e_commita():
+    conn = FakeConn()
+    db.upsert_avatares(conn, {"111": "https://x/1.jpg", "222": "https://x/2.jpg"})
+    inserts = [c for c in conn.calls if c[0].startswith("insert into steam_avatares")]
+    assert len(inserts) == 2
+    assert inserts[0][1] == ("111", "https://x/1.jpg")
+    assert conn.commits == 1
+
+
+def test_upsert_avatares_mapa_vazio_nao_faz_nada():
+    conn = FakeConn()
+    db.upsert_avatares(conn, {})
+    assert conn.calls == []
+    assert conn.commits == 0
+
+
+def test_listar_steam_ids_sem_avatar_fresco_filtra_os_ja_cacheados():
+    conn = FakeConn()
+    conn.avatares_frescos = ["111"]
+    resultado = db.listar_steam_ids_sem_avatar_fresco(conn, ["111", "222", "333"])
+    assert resultado == ["222", "333"]
+
+
+def test_listar_steam_ids_sem_avatar_fresco_dedup_e_ignora_vazio():
+    conn = FakeConn()
+    resultado = db.listar_steam_ids_sem_avatar_fresco(conn, ["111", "111", None, ""])
+    assert resultado == ["111"]
+
+
+def test_listar_steam_ids_de_match_players_sem_avatar_fresco():
+    conn = FakeConn()
+    conn.match_players_sem_avatar = ["111", "222"]
+    assert db.listar_steam_ids_de_match_players_sem_avatar_fresco(conn) == ["111", "222"]
+
+
 def test_record_pending_match():
     conn = FakeConn()
     mid = db.record_pending_match(conn, "CSGO-novo")
     assert mid == "00000000-0000-0000-0000-000000000001"
     assert conn.commits == 1
-    assert conn.calls[0][1] == ("CSGO-novo", "valve_mm")
+    assert conn.calls[0][1] == ("CSGO-novo", "valve_mm", None)
     assert "played_at" in conn.calls[0][0] and "now()" in conn.calls[0][0]
+    assert "group_id" not in conn.calls[0][0]
+
+
+def test_record_pending_match_grava_discovered_by():
+    conn = FakeConn()
+    db.record_pending_match(conn, "CSGO-novo", discovered_by="76500000000000001")
+    assert conn.calls[0][1] == ("CSGO-novo", "valve_mm", "76500000000000001")
+    assert "discovered_by" in conn.calls[0][0]
 
 
 def test_store_parsed_por_padrao_preserva_played_at_existente():
@@ -170,6 +616,58 @@ def test_match_fingerprint_estavel_e_sensivel_ao_conteudo():
     invertido = _parsed()
     invertido["players"] = list(reversed(dois["players"]))
     assert db.match_fingerprint(dois) == db.match_fingerprint(invertido)
+
+
+# ---- fila FACEIT + ELO (Fase B) ----
+
+def test_enfileirar_faceit_e_idempotente_e_alinha_placeholders():
+    conn = FakeConn()
+    db.enfileirar_faceit(conn, "fm1", "111")
+    sql, params = conn.calls[-1]
+    assert "on conflict (faceit_match_id) do nothing" in sql
+    assert sql.count("%s") == len(params) == 2
+
+
+def test_falhar_faceit_pendente_incrementa_e_marca_failed_no_limite():
+    conn = FakeConn()
+    db.falhar_faceit_pendente(conn, "fm1", "boom", max_tentativas=3)
+    sql, params = conn.calls[-1]
+    # uma query só: incrementa tentativas, guarda erro, e o status vira 'failed'
+    # quando tentativas+1 >= max — senão volta pra 'pending' (retry na próxima rodada)
+    assert "tentativas = tentativas + 1" in sql
+    assert "case when tentativas + 1 >= %s then 'failed' else 'pending' end" in sql
+    assert sql.count("%s") == len(params)
+
+
+# ---- fetch: retry de erro transitório (CDN da Valve) em vez de failed direto ----
+
+def test_falhar_fetch_pendente_incrementa_e_marca_failed_no_limite():
+    conn = FakeConn()
+    db.falhar_fetch_pendente(conn, "CSGO-abc", "boom", max_tentativas=3)
+    sql, params = conn.calls[-1]
+    # mesma semântica de falhar_faceit_pendente: incrementa tentativas, guarda erro,
+    # e só marca 'failed' de vez quando tentativas+1 >= max — senão volta pra 'pending'
+    # pra ser re-baixada no próximo ciclo do fetch, sem custar a Partida numa falha só.
+    assert "tentativas = tentativas + 1" in sql
+    assert "case when tentativas + 1 >= %s then 'failed' else 'pending' end" in sql
+    assert "share_code = %s" in sql
+    assert "status = 'pending'" in sql
+    assert sql.count("%s") == len(params)
+
+
+def test_falhar_fetch_pendente_default_max_tentativas_e_3():
+    conn = FakeConn()
+    db.falhar_fetch_pendente(conn, "CSGO-abc", "boom")
+    sql, params = conn.calls[-1]
+    assert params[0] == 3
+
+
+def test_gravar_elo_partida_atualiza_match_players():
+    conn = FakeConn()
+    db.gravar_elo_partida(conn, "m1", "111", 1400, 1425)
+    sql, params = conn.calls[-1]
+    assert "update match_players set faceit_elo_before = %s, faceit_elo_after = %s" in sql
+    assert params == (1400, 1425, "m1", "111")
 
 
 def test_store_parsed_dedupe_por_fingerprint_atualiza_em_vez_de_inserir():

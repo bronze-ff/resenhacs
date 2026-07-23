@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { nomeMapa } from '../lib/format.js'
+import { CORES } from '../lib/colors.js'
+import { Select } from './ui'
 
 const TAM = 480
 
@@ -8,7 +10,7 @@ function desenhar(ctx, radar, pontos, cor) {
   if (radar && radar.complete && radar.naturalWidth > 0) {
     ctx.drawImage(radar, 0, 0, TAM, TAM)
   } else {
-    ctx.fillStyle = '#0a0d12'
+    ctx.fillStyle = CORES.fundo
     ctx.fillRect(0, 0, TAM, TAM)
   }
   ctx.globalCompositeOperation = 'lighter'
@@ -69,32 +71,28 @@ export default function PosicionamentoAgregado({ steamId }) {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-3">
-        <div className="flex overflow-hidden rounded border border-borda font-mono text-xs uppercase">
+        <div className="panel-cut-sm flex overflow-hidden border border-borda font-mono text-xs uppercase">
           {[['mortes', 'Onde morre'], ['kills', 'Onde mata']].map(([v, label]) => (
             <button
               key={v}
               onClick={() => setModo(v)}
-              className={`px-3 py-1.5 transition-colors ${modo === v ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'}`}
+              className={`flex min-h-10 items-center px-3 py-1.5 transition-colors lg:min-h-0 ${modo === v ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'}`}
             >
               {label}
             </button>
           ))}
         </div>
         {dados?.mapas?.length > 0 && (
-          <select
-            value={mapaEscolhido || dados.map}
-            onChange={(e) => setMapaEscolhido(e.target.value)}
-            className="rounded border border-borda bg-superficie px-2 py-1 font-mono text-xs"
-          >
+          <Select value={mapaEscolhido || dados.map} onChange={(e) => setMapaEscolhido(e.target.value)} selectClassName="text-xs">
             {dados.mapas.map((m) => (
               <option key={m.map} value={m.map}>{nomeMapa(m.map)} ({m.pontos})</option>
             ))}
-          </select>
+          </Select>
         )}
         {dados && <span className="font-mono text-xs text-texto-fraco">{dados.pontos.length} pontos</span>}
       </div>
       {dados && !dados.calibrated && (
-        <p className="font-mono text-xs uppercase tracking-wide text-amber-400">
+        <p className="font-mono text-xs uppercase tracking-wide" style={{ color: CORES.aviso }}>
           Mapa sem calibração de radar — sem preview visual ainda.
         </p>
       )}

@@ -35,8 +35,8 @@ export function origemPartida(source) {
 // Verde/vermelho/neutro para rating estilo HLTV.
 export function corRating(rating) {
   if (rating == null) return 'text-texto-fraco'
-  if (rating >= 1.15) return 'text-emerald-400'
-  if (rating <= 0.85) return 'text-rose-400'
+  if (rating >= 1.15) return 'text-sucesso'
+  if (rating <= 0.85) return 'text-perigo'
   return 'text-texto'
 }
 

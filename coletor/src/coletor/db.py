@@ -44,7 +44,10 @@ def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status,
               share_code = coalesce(%s, share_code), source = %s, map = %s,
               score_a = %s, score_b = %s, played_at = {played_expr},
               demo_url = coalesce(%s, demo_url), replay_url = coalesce(%s, replay_url),
-              status = %s
+              status = %s, team_a_name = coalesce(%s, team_a_name),
+              team_b_name = coalesce(%s, team_b_name),
+              ended_early = %s, abandoned_by_steam_id64 = %s,
+              plataforma_manual = coalesce(%s, plataforma_manual)
             where id = %s
             """,
             (
@@ -57,6 +60,11 @@ def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status,
                 demo_url,
                 replay_url,
                 status,
+                parsed.get("team_a_name"),
+                parsed.get("team_b_name"),
+                parsed.get("ended_early", False),
+                parsed.get("abandoned_by"),
+                parsed.get("plataforma_manual"),
                 match_id,
             ),
         )
@@ -73,8 +81,8 @@ def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status,
     )
     cur.execute(
         f"""
-        insert into matches (share_code, source, map, score_a, score_b, played_at, demo_url, replay_url, status, fingerprint)
-        values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        insert into matches (share_code, source, map, score_a, score_b, played_at, demo_url, replay_url, status, fingerprint, team_a_name, team_b_name, ended_early, abandoned_by_steam_id64, plataforma_manual)
+        values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         on conflict (share_code) do update set
           source = excluded.source, map = excluded.map,
           score_a = excluded.score_a, score_b = excluded.score_b,
@@ -82,7 +90,12 @@ def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status,
           demo_url = coalesce(excluded.demo_url, matches.demo_url),
           replay_url = coalesce(excluded.replay_url, matches.replay_url),
           status = excluded.status,
-          fingerprint = excluded.fingerprint
+          fingerprint = excluded.fingerprint,
+          team_a_name = coalesce(excluded.team_a_name, matches.team_a_name),
+          team_b_name = coalesce(excluded.team_b_name, matches.team_b_name),
+          ended_early = excluded.ended_early,
+          abandoned_by_steam_id64 = excluded.abandoned_by_steam_id64,
+          plataforma_manual = coalesce(excluded.plataforma_manual, matches.plataforma_manual)
         returning id
         """,
         (
@@ -96,18 +109,30 @@ def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status,
             replay_url,
             status,
             fingerprint,
+            parsed.get("team_a_name"),
+            parsed.get("team_b_name"),
+            parsed.get("ended_early", False),
+            parsed.get("abandoned_by"),
+            parsed.get("plataforma_manual"),
         ),
     )
     return cur.fetchone()[0]
 
 
 def _write_players(cur, match_id, players):
+    # Limpa órfão: se um reprocess (parser corrigido) produzir menos jogadores que a
+    # gravação anterior, a linha antiga não pode ficar pra trás — mesmo padrão que
+    # highlights/weapons/econ/damage/flashes/kill_positions/lineups já usam abaixo.
+    cur.execute(
+        "delete from match_players where match_id = %s and steam_id64 != all(%s)",
+        (match_id, [p["steam_id64"] for p in players]),
+    )
     for p in players:
         cur.execute(
             """
             insert into match_players
               (match_id, steam_id64, nick, team, kills, deaths, assists,
-               headshot_kills, damage, rounds_played, rating, won, team_kills,
+               headshot_kills, damage, rounds_played, rating, kast_pct, won, team_kills,
                utility_damage, shots_fired, shots_hit,
                entry_kills, entry_deaths, entry_wins,
                trade_kills, traded_deaths, clutch_wins, clutch_attempts,
@@ -115,16 +140,19 @@ def _write_players(cur, match_id, players):
                he_thrown, molotovs_thrown, enemies_flashed, teammates_flashed,
                enemy_flash_duration, teammate_flash_duration, clutch_saves,
                he_team_damage, molotov_team_damage, flash_assists,
-               enemy_flash_landed_count, enemy_flash_landed_duration_sum)
-            values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+               enemy_flash_landed_count, enemy_flash_landed_duration_sum,
+               premier_rating_before, premier_rating_after)
+            values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s)
+                    %s, %s, %s, %s, %s,
+                    %s, %s)
             on conflict (match_id, steam_id64) do update set
               nick = excluded.nick, team = excluded.team, kills = excluded.kills,
               deaths = excluded.deaths, assists = excluded.assists,
               headshot_kills = excluded.headshot_kills, damage = excluded.damage,
               rounds_played = excluded.rounds_played, rating = excluded.rating,
+              kast_pct = excluded.kast_pct,
               won = excluded.won, team_kills = excluded.team_kills,
               utility_damage = excluded.utility_damage,
               shots_fired = excluded.shots_fired, shots_hit = excluded.shots_hit,
@@ -144,7 +172,9 @@ def _write_players(cur, match_id, players):
               molotov_team_damage = excluded.molotov_team_damage,
               flash_assists = excluded.flash_assists,
               enemy_flash_landed_count = excluded.enemy_flash_landed_count,
-              enemy_flash_landed_duration_sum = excluded.enemy_flash_landed_duration_sum
+              enemy_flash_landed_duration_sum = excluded.enemy_flash_landed_duration_sum,
+              premier_rating_before = excluded.premier_rating_before,
+              premier_rating_after = excluded.premier_rating_after
             """,
             (
                 match_id,
@@ -158,6 +188,7 @@ def _write_players(cur, match_id, players):
                 p.get("damage", 0),
                 p.get("rounds_played", 0),
                 p.get("rating"),
+                p.get("kast_pct"),
                 p.get("won"),
                 p.get("team_kills", 0),
                 p.get("utility_damage", 0),
@@ -186,6 +217,8 @@ def _write_players(cur, match_id, players):
                 p.get("flash_assists", 0),
                 p.get("enemy_flash_landed_count", 0),
                 p.get("enemy_flash_landed_duration_sum", 0),
+                p.get("premier_rating_before"),
+                p.get("premier_rating_after"),
             ),
         )
     # is_tracked é cache de "é Jogador": liga para quem está na whitelist.
@@ -197,15 +230,21 @@ def _write_players(cur, match_id, players):
 
 
 def _write_rounds(cur, match_id, rounds):
+    # Mesma limpeza de órfão que _write_players — ver comentário lá.
+    cur.execute(
+        "delete from rounds where match_id = %s and round_number != all(%s)",
+        (match_id, [r["round_number"] for r in rounds]),
+    )
     for r in rounds:
         cur.execute(
             """
-            insert into rounds (match_id, round_number, winner_team, win_reason)
-            values (%s, %s, %s, %s)
+            insert into rounds (match_id, round_number, winner_team, win_reason, side_a)
+            values (%s, %s, %s, %s, %s)
             on conflict (match_id, round_number) do update set
-              winner_team = excluded.winner_team, win_reason = excluded.win_reason
+              winner_team = excluded.winner_team, win_reason = excluded.win_reason,
+              side_a = excluded.side_a
             """,
-            (match_id, r["round_number"], r.get("winner_team"), r.get("win_reason")),
+            (match_id, r["round_number"], r.get("winner_team"), r.get("win_reason"), r.get("side_a")),
         )
 
 
@@ -255,20 +294,111 @@ def _write_round_econ(cur, match_id, round_econ):
         )
 
 
+def _write_player_round_econ(cur, match_id, player_round_econ):
+    # ON CONFLICT DO UPDATE (não só o delete por match_id acima): uma partida com
+    # reinício técnico no meio do round 1 gera 2 leituras de current_equip_value pro
+    # mesmo (round_number, steam_id64) — sem isso, a segunda linha duplicada estoura
+    # a PK e derruba o ingest inteiro (achado real: upload manual que travava com
+    # "duplicate key value... match_player_round_econ_pkey"). Fica o valor mais
+    # recente (excluded.*), que reflete o estado após o reinício.
+    cur.execute("delete from match_player_round_econ where match_id = %s", (match_id,))
+    for e in player_round_econ:
+        cur.execute(
+            """
+            insert into match_player_round_econ
+              (match_id, round_number, steam_id64, team, equip_value, buy_type)
+            values (%s, %s, %s, %s, %s, %s)
+            on conflict (match_id, round_number, steam_id64) do update set
+              team = excluded.team, equip_value = excluded.equip_value, buy_type = excluded.buy_type
+            """,
+            (match_id, e["round_number"], e["steam_id64"], e.get("team"), e["equip_value"], e["buy_type"]),
+        )
+
+
+def _write_purchases(cur, match_id, purchases):
+    cur.execute("delete from match_player_purchases where match_id = %s", (match_id,))
+    for c in purchases:
+        cur.execute(
+            """
+            insert into match_player_purchases (match_id, round_number, steam_id64, item, cost, tick)
+            values (%s, %s, %s, %s, %s, %s)
+            """,
+            (match_id, c["round_number"], c["steam_id64"], c["item"], c.get("cost"), c.get("tick")),
+        )
+
+
+def _write_player_damage(cur, match_id, player_damage):
+    cur.execute("delete from match_player_damage where match_id = %s", (match_id,))
+    for d in player_damage:
+        cur.execute(
+            """
+            insert into match_player_damage (match_id, attacker, victim, weapon, damage, hits)
+            values (%s, %s, %s, %s, %s, %s)
+            """,
+            (match_id, d["attacker"], d["victim"], d["weapon"], d["damage"], d["hits"]),
+        )
+
+
+def _write_player_flashes(cur, match_id, player_flashes):
+    cur.execute("delete from match_player_flashes where match_id = %s", (match_id,))
+    for f in player_flashes:
+        cur.execute(
+            """
+            insert into match_player_flashes (match_id, attacker, victim, count, duration_sum)
+            values (%s, %s, %s, %s, %s)
+            """,
+            (match_id, f["attacker"], f["victim"], f["count"], f["duration_sum"]),
+        )
+
+
 def _write_kill_positions(cur, match_id, kill_positions):
     cur.execute("delete from kill_positions where match_id = %s", (match_id,))
     for k in kill_positions:
         cur.execute(
             """
             insert into kill_positions
-              (match_id, round_number, tick, killer, victim, weapon, headshot,
-               killer_x, killer_y, victim_x, victim_y)
-            values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+              (match_id, round_number, tick, killer, victim, weapon, victim_weapon, headshot,
+               killer_x, killer_y, victim_x, victim_y, assister)
+            values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 match_id, k["round_number"], k["tick"], k.get("killer"), k["victim"],
-                k.get("weapon", ""), k.get("headshot", False),
-                k.get("killer_x"), k.get("killer_y"), k["victim_x"], k["victim_y"],
+                k.get("weapon", ""), k.get("victim_weapon"), k.get("headshot", False),
+                k.get("killer_x"), k.get("killer_y"), k["victim_x"], k["victim_y"], k.get("assister"),
+            ),
+        )
+
+
+def _write_player_round_damage(cur, match_id, player_round_damage):
+    # Base do filtro T/CT dentro da Partida (FIL-51b): dano em inimigo por round, pra
+    # recalcular ADR/rating filtrado sem precisar reparsear o .dem.
+    cur.execute("delete from match_player_round_damage where match_id = %s", (match_id,))
+    for d in player_round_damage:
+        cur.execute(
+            """
+            insert into match_player_round_damage (match_id, round_number, steam_id64, damage)
+            values (%s, %s, %s, %s)
+            """,
+            (match_id, d["round_number"], d["steam_id64"], d["damage"]),
+        )
+
+
+def _write_lineups(cur, match_id, lineups):
+    cur.execute("delete from lineups where match_id = %s", (match_id,))
+    for l in lineups:
+        cur.execute(
+            """
+            insert into lineups
+              (match_id, round_number, map, tipo, thrower_steam_id, thrower_nick,
+               thrower_x, thrower_y, thrower_yaw, thrower_pitch, target_x, target_y,
+               tick, origem, lado)
+            values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                match_id, l["round_number"], l["map"], l["tipo"],
+                l["thrower_steam_id"], l.get("thrower_nick", ""),
+                l["thrower_x"], l["thrower_y"], l.get("thrower_yaw", 0), l.get("thrower_pitch", 0),
+                l["target_x"], l["target_y"], l["tick"], l["origem"], l.get("lado"),
             ),
         )
 
@@ -278,49 +408,77 @@ def store_parsed(conn, parsed, share_code=None, source="valve_mm", demo_url=None
     """Grava a Partida inteira numa transação. Devolve o match_id (uuid)."""
     with conn.cursor() as cur:
         match_id = _insert_match(
-            cur, share_code, source, parsed, demo_url, replay_url, status, prefer_new_played_at
+            cur, share_code, source, parsed, demo_url, replay_url, status, prefer_new_played_at,
         )
         _write_players(cur, match_id, parsed.get("players", []))
         _write_rounds(cur, match_id, parsed.get("rounds", []))
         _write_highlights(cur, match_id, parsed.get("highlights", []))
         _write_player_weapons(cur, match_id, parsed.get("players", []))
         _write_round_econ(cur, match_id, parsed.get("round_econ", []))
+        _write_player_round_econ(cur, match_id, parsed.get("player_round_econ", []))
+        _write_purchases(cur, match_id, parsed.get("purchases", []))
+        _write_player_damage(cur, match_id, parsed.get("player_damage", []))
+        _write_player_flashes(cur, match_id, parsed.get("player_flashes", []))
         _write_kill_positions(cur, match_id, parsed.get("kill_positions", []))
+        _write_player_round_damage(cur, match_id, parsed.get("player_round_damage", []))
+        _write_lineups(cur, match_id, parsed.get("lineups", []))
     conn.commit()
     return match_id
 
 
-def record_pending_match(conn, share_code, source="valve_mm"):
+def record_pending_match(conn, share_code, discovered_by=None, source="valve_mm"):
     """Registra um share code descoberto sem demo ainda (status pending). Idempotente.
 
     Grava played_at = now() (hora da descoberta): é bem mais próximo da hora real
     da Partida do que a mtime do .dem, que só reflete quando o arquivo foi baixado
     (pode ser dias depois — o formato .dem não guarda data em lugar nenhum).
+
+    `discovered_by` (opcional): steamId64 do jogador cujo polling encontrou esse share
+    code (ver cmd_discover) — permite o site mostrar "partidas pendentes" escopado por
+    amizade sem precisar de match_players (que só existe depois do parse).
     """
     with conn.cursor() as cur:
         cur.execute(
             """
-            insert into matches (share_code, source, status, played_at)
-            values (%s, %s, 'pending', now())
+            insert into matches (share_code, source, status, played_at, discovered_by)
+            values (%s, %s, 'pending', now(), %s)
             on conflict (share_code) do nothing
             returning id
             """,
-            (share_code, source),
+            (share_code, source, discovered_by),
         )
         row = cur.fetchone()
     conn.commit()
     return row[0] if row else None
 
 
-def list_pending_share_codes(conn):
-    """Share codes de Partidas descobertas (discover) mas ainda sem demo — status pending."""
+def list_pending_share_codes(conn, limit=None):
+    """Share codes de Partidas descobertas (discover) mas ainda sem demo — status pending.
+
+    `limit` (opcional) processa só as N mais antigas por vez — o fetch baixa+parseia em série
+    e cada run tem janela de 45 min no Actions; com a fila grande, resolver/baixar tudo de uma
+    vez estoura o timeout e o run é cancelado sem commitar. Em lotes, cada run termina e commita,
+    e os runs de 30 em 30 min drenam o backlog. Ordem: MAIS RECENTES primeiro — é o que os
+    jogadores querem ver logo depois de jogar, e as partidas velhas (muitas com demo já expirada
+    na Valve) não devem bloquear as de hoje."""
     with conn.cursor() as cur:
         cur.execute(
             "select share_code from matches "
             "where status = 'pending' and share_code is not null "
-            "order by played_at nulls last"
+            "order by played_at desc nulls last"
+            + (" limit %s" if limit else ""),
+            (limit,) if limit else None,
         )
         return [r[0] for r in cur.fetchall()]
+
+
+def contar_pendentes(conn):
+    """Quantas Partidas estão em status pending (com share_code) — pra logar o backlog."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "select count(*) from matches where status = 'pending' and share_code is not null"
+        )
+        return cur.fetchone()[0]
 
 
 def mark_skipped(conn, share_code):
@@ -330,6 +488,24 @@ def mark_skipped(conn, share_code):
         cur.execute(
             "update matches set status = 'skipped' where share_code = %s and status = 'pending'",
             (share_code,),
+        )
+    conn.commit()
+
+
+def falhar_fetch_pendente(conn, share_code, erro, max_tentativas=3):
+    """Incrementa tentativas de uma Partida que falhou no fetch (download/parse do .dem);
+    só vira 'failed' de vez depois de esgotar `max_tentativas` — um erro transitório da
+    CDN da Valve (502/503, timeout de rede — aconteceu de verdade em 2026-07-22) não pode
+    custar a Partida inteira numa falha só. Enquanto não esgota, volta pra 'pending' e é
+    re-baixada automaticamente no próximo ciclo do fetch — mesma semântica de
+    falhar_faceit_pendente/reverter_uploads_travados."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "update matches set "
+            "status = case when tentativas + 1 >= %s then 'failed' else 'pending' end, "
+            "tentativas = tentativas + 1, erro = %s "
+            "where share_code = %s and status = 'pending'",
+            (max_tentativas, str(erro)[:500], share_code),
         )
     conn.commit()
 
@@ -353,7 +529,270 @@ def set_last_share_code(conn, steam_id64, share_code):
     conn.commit()
 
 
+def listar_fila_pro_pendente(conn):
+    with conn.cursor() as cur:
+        cur.execute(
+            "select id, hltv_url, arquivo_r2_key from partidas_pro_fila "
+            "where status = 'pendente' order by adicionado_em"
+        )
+        return cur.fetchall()
+
+
+def atualizar_fila_pro(conn, fila_id, status, match_id=None, erro=None, match_ids=None):
+    with conn.cursor() as cur:
+        cur.execute(
+            "update partidas_pro_fila set status = %s, match_id = %s, erro = %s, match_ids = %s where id = %s",
+            (status, match_id, erro, match_ids if match_ids is not None else [], fila_id),
+        )
+    conn.commit()
+
+
+def listar_uploads_pendentes(conn):
+    """Fila de uploads manuais (qualquer membro do grupo, via 'Enviar Demo' no site) —
+    par simplificado de listar_fila_pro_pendente: um .dem só por item, sem .rar/multi-mapa."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "select id, adicionado_por, arquivo_r2_key, share_code, played_at, plataforma_manual "
+            "from uploads_pendentes where status = 'pendente' order by adicionado_em"
+        )
+        return cur.fetchall()
+
+
+def atualizar_upload_pendente(conn, upload_id, status, match_id=None, erro=None):
+    with conn.cursor() as cur:
+        if status == "processando":
+            # Carimba o início do processamento — é o que permite
+            # reverter_uploads_travados() detectar depois que esse item ficou
+            # 'processando' tempo demais (achado #8: processo morto no meio nunca
+            # revertia sozinho).
+            cur.execute(
+                "update uploads_pendentes set status = %s, match_id = %s, erro = %s, "
+                "processando_desde = now() where id = %s",
+                (status, match_id, erro, upload_id),
+            )
+        else:
+            cur.execute(
+                "update uploads_pendentes set status = %s, match_id = %s, erro = %s where id = %s",
+                (status, match_id, erro, upload_id),
+            )
+    conn.commit()
+
+
+def reverter_uploads_travados(conn, minutos=30, max_tentativas=3):
+    """Auditoria finding #8: um upload preso em 'processando' porque o Coletor morreu
+    no meio (crash do runner, timeout do job do Actions) nunca voltava sozinho pra
+    fila — ficava 'processando' pra sempre, invisível tanto pro retry quanto pro
+    usuário. Chamado no INÍCIO de cmd_processar_uploads_pendentes: qualquer item
+    'processando' há mais de `minutos` volta pra 'pendente' (nova tentativa) ou vira
+    'falhou' quando já esgotou `max_tentativas` — mesma semântica de esgotamento já
+    usada em falhar_faceit_pendente. Devolve a lista de ids revertidos (só para log)."""
+    mensagem_erro = f"travado em 'processando' por mais de {minutos} min — provável processo morto no meio"
+    with conn.cursor() as cur:
+        cur.execute(
+            "update uploads_pendentes set "
+            "status = case when tentativas + 1 >= %s then 'falhou' else 'pendente' end, "
+            "tentativas = tentativas + 1, "
+            "erro = case when tentativas + 1 >= %s then %s else erro end, "
+            "processando_desde = null "
+            "where status = 'processando' and processando_desde < now() - (%s || ' minutes')::interval "
+            "returning id",
+            (max_tentativas, max_tentativas, mensagem_erro, minutos),
+        )
+        ids = [r[0] for r in cur.fetchall()]
+    conn.commit()
+    return ids
+
+
+def listar_uploads_falhos_antigos(conn, dias=30):
+    """Uploads com status 'falhou' há mais de `dias` dias — candidatos à limpeza do
+    objeto órfão no R2 (achado #17 da auditoria: uploads falhos nunca tinham uma rota
+    de limpeza equivalente ao cleanup/reprocess da fila de Partidas Pro; o `.dem` que
+    deu erro ficava ocupando espaço no bucket pra sempre, sem custo zero)."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "select id, arquivo_r2_key from uploads_pendentes "
+            "where status = 'falhou' and adicionado_em < now() - (%s || ' days')::interval",
+            (dias,),
+        )
+        return cur.fetchall()
+
+
+def marcar_upload_limpo(conn, upload_id):
+    """Marca que o objeto órfão desse upload já foi apagado do R2 — status 'limpo'
+    tira o item de listar_uploads_falhos_antigos, então rodar a limpeza de novo não
+    tenta apagar o mesmo objeto (que já não existe mais) uma segunda vez."""
+    with conn.cursor() as cur:
+        cur.execute("update uploads_pendentes set status = 'limpo' where id = %s", (upload_id,))
+    conn.commit()
+
+
+def upsert_avatares(conn, mapa):
+    """Grava/atualiza o cache de avatares (dict steam_id64 -> avatar_url). Idempotente:
+    reprocessar o mesmo id só atualiza avatar_url e atualizado_em."""
+    if not mapa:
+        return
+    with conn.cursor() as cur:
+        for steam_id64, avatar_url in mapa.items():
+            cur.execute(
+                """
+                insert into steam_avatares (steam_id64, avatar_url, atualizado_em)
+                values (%s, %s, now())
+                on conflict (steam_id64) do update set
+                  avatar_url = excluded.avatar_url, atualizado_em = excluded.atualizado_em
+                """,
+                (steam_id64, avatar_url),
+            )
+    conn.commit()
+
+
+def listar_steam_ids_sem_avatar_fresco(conn, steam_ids, dias=30):
+    """Filtra `steam_ids` mantendo só os que NÃO têm avatar em cache recente (ausente
+    ou atualizado_em mais velho que `dias`) — evita bater na Steam Web API de novo
+    pra quem já foi resolvido há pouco tempo."""
+    steam_ids = list(dict.fromkeys(s for s in steam_ids if s))
+    if not steam_ids:
+        return []
+    with conn.cursor() as cur:
+        cur.execute(
+            "select steam_id64 from steam_avatares "
+            "where steam_id64 = any(%s) and atualizado_em > now() - (%s || ' days')::interval",
+            (steam_ids, dias),
+        )
+        frescos = {r[0] for r in cur.fetchall()}
+    return [s for s in steam_ids if s not in frescos]
+
+
+def listar_steam_ids_de_match_players_sem_avatar_fresco(conn, dias=30):
+    """Todos os steam_id64 distintos que já apareceram em alguma Partida
+    (match_players) e não têm avatar em cache recente — usado pelo backfill."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            select distinct mp.steam_id64
+            from match_players mp
+            left join steam_avatares sa on sa.steam_id64 = mp.steam_id64
+            where sa.steam_id64 is null or sa.atualizado_em <= now() - (%s || ' days')::interval
+            """,
+            (dias,),
+        )
+        return [r[0] for r in cur.fetchall()]
+
+
 def connect(database_url):
     import psycopg
 
     return psycopg.connect(database_url)
+
+
+# ---------------------------------------------------------------------------
+# FACEIT Fase B: fila de partidas descobertas + ELO (ver spec 2026-07-16)
+
+
+def listar_vinculados_faceit(conn):
+    """Membros com conta FACEIT vinculada (Fase A) — a descoberta roda pra cada um deles."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "select steam_id64, faceit_id from players where faceit_id is not null"
+        )
+        return cur.fetchall()
+
+
+def faceit_match_ids_conhecidos(conn):
+    """Tudo que já foi visto: ingerido (matches) ou enfileirado (qualquer status)."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "select faceit_match_id from matches where faceit_match_id is not null "
+            "union select faceit_match_id from faceit_pendentes"
+        )
+        return {r[0] for r in cur.fetchall()}
+
+
+def membro_ja_sincronizou_faceit(conn, steam_id64):
+    """True se a descoberta já rodou alguma vez pra esse membro (linhas na fila, em
+    qualquer status, são o marcador persistente — itens 'done' nunca são apagados)."""
+    with conn.cursor() as cur:
+        cur.execute("select 1 from faceit_pendentes where steam_id64 = %s limit 1", (steam_id64,))
+        return cur.fetchone() is not None
+
+
+def enfileirar_faceit(conn, faceit_match_id, steam_id64):
+    with conn.cursor() as cur:
+        cur.execute(
+            "insert into faceit_pendentes (faceit_match_id, steam_id64) "
+            "values (%s, %s) on conflict (faceit_match_id) do nothing",
+            (faceit_match_id, steam_id64),
+        )
+    conn.commit()
+
+
+def listar_faceit_pendentes(conn, limite=10):
+    with conn.cursor() as cur:
+        cur.execute(
+            "select faceit_match_id, steam_id64, tentativas from faceit_pendentes "
+            "where status = 'pending' order by created_at limit %s",
+            (limite,),
+        )
+        return cur.fetchall()
+
+
+def concluir_faceit_pendente(conn, faceit_match_id):
+    with conn.cursor() as cur:
+        cur.execute(
+            "update faceit_pendentes set status = 'done', erro = null "
+            "where faceit_match_id = %s",
+            (faceit_match_id,),
+        )
+    conn.commit()
+
+
+def falhar_faceit_pendente(conn, faceit_match_id, erro, max_tentativas=3):
+    """Incrementa tentativas; volta pra 'pending' (retry na próxima rodada) até o limite,
+    depois fica 'failed' pra inspeção manual — mesma semântica da fila de uploads."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "update faceit_pendentes set "
+            "status = case when tentativas + 1 >= %s then 'failed' else 'pending' end, "
+            "tentativas = tentativas + 1, erro = %s "
+            "where faceit_match_id = %s",
+            (max_tentativas, str(erro)[:500], faceit_match_id),
+        )
+    conn.commit()
+
+
+def marcar_faceit_match(conn, match_id, faceit_match_id):
+    with conn.cursor() as cur:
+        cur.execute(
+            "update matches set faceit_match_id = %s where id = %s",
+            (faceit_match_id, match_id),
+        )
+    conn.commit()
+
+
+def elo_snapshot(conn, steam_id64):
+    with conn.cursor() as cur:
+        cur.execute(
+            "select faceit_elo, faceit_elo_atualizado_em from players where steam_id64 = %s",
+            (steam_id64,),
+        )
+        row = cur.fetchone()
+        return (row[0], row[1]) if row else (None, None)
+
+
+def atualizar_elo(conn, steam_id64, elo, level):
+    with conn.cursor() as cur:
+        cur.execute(
+            "update players set faceit_elo = %s, faceit_skill_level = %s, "
+            "faceit_elo_atualizado_em = now() where steam_id64 = %s",
+            (elo, level, steam_id64),
+        )
+    conn.commit()
+
+
+def gravar_elo_partida(conn, match_id, steam_id64, before, after):
+    with conn.cursor() as cur:
+        cur.execute(
+            "update match_players set faceit_elo_before = %s, faceit_elo_after = %s "
+            "where match_id = %s and steam_id64 = %s",
+            (before, after, match_id, steam_id64),
+        )
+    conn.commit()

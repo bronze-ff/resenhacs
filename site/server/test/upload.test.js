@@ -1,110 +1,153 @@
-import { describe, it, expect, vi, afterAll } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import request from 'supertest'
-import fs from 'node:fs'
-import os from 'node:os'
-import path from 'node:path'
 import { createApp } from '../src/app.js'
 import { signToken } from '../src/auth/jwt.js'
 
-const config = {
-  jwtSecret: 's',
-  appUrl: 'http://localhost:5173',
-  isProduction: false,
-  coletorDir: '/fake/coletor',
-  pythonBin: '/fake/python',
+vi.mock('../src/r2.js', async (importOriginal) => {
+  const original = await importOriginal()
+  return { ...original, presignUpload: vi.fn().mockResolvedValue('https://r2.example/presigned-put') }
+})
+import { presignUpload } from '../src/r2.js'
+
+const config = { jwtSecret: 's', appUrl: 'http://localhost:5173', isProduction: false, r2Bucket: 'resenha-demos' }
+const cookie = `resenha_token=${signToken({ steamId: '765', isSuperAdmin: false }, config.jwtSecret)}`
+
+function appWith(handlers, extra = {}) {
+  const db = {
+    query: vi.fn().mockImplementation((sql) => {
+      for (const [needle, rows] of handlers) {
+        if (sql.includes(needle)) return Promise.resolve({ rows })
+      }
+      return Promise.resolve({ rows: [] })
+    }),
+  }
+  return { app: createApp({ config, db, r2Client: { send: vi.fn() }, ...extra }), db }
 }
-const cookie = `resenha_token=${signToken({ steamId: '76561198000000009', isAdmin: false }, config.jwtSecret)}`
 
-const demoFalso = path.join(os.tmpdir(), 'resenha-test.dem')
-fs.writeFileSync(demoFalso, 'conteudo falso de demo')
-afterAll(() => fs.rm(demoFalso, () => {}))
-
-function appWith(execFileImpl) {
-  const db = { query: vi.fn().mockResolvedValue({ rows: [] }) }
-  return createApp({ config, db, execFileImpl })
-}
-
-describe('POST /api/upload', () => {
+describe('POST /api/upload/upload-url', () => {
   it('sem login: 401', async () => {
-    // sem .attach() de propósito: requireAuth roda antes do multer e rejeita pelo
-    // cookie, sem precisar ler o corpo — anexar um arquivo aqui cria uma corrida de
-    // ECONNRESET no supertest (servidor responde 401 antes do upload terminar).
-    const app = appWith()
-    const res = await request(app).post('/api/upload')
+    const { app } = appWith([])
+    const res = await request(app).post('/api/upload/upload-url').send({ filename: 'x.dem' })
     expect(res.status).toBe(401)
   })
 
-  it('sem arquivo: 400', async () => {
-    const app = appWith()
-    const res = await request(app).post('/api/upload').set('Cookie', cookie)
-    expect(res.status).toBe(400)
-    expect(res.body.erro).toMatch(/nenhum arquivo/i)
+  it('sem R2 configurado: 503', async () => {
+    const { app } = appWith([], { r2Client: null })
+    const res = await request(app)
+      .post('/api/upload/upload-url')
+      .set('Cookie', cookie)
+      .send({ filename: 'x.dem' })
+    expect(res.status).toBe(503)
   })
 
   it('extensão errada: 400', async () => {
-    const txtFalso = path.join(os.tmpdir(), 'resenha-test.txt')
-    fs.writeFileSync(txtFalso, 'x')
-    const app = appWith()
-    const res = await request(app).post('/api/upload').set('Cookie', cookie).attach('demo', txtFalso)
+    const { app } = appWith([])
+    const res = await request(app)
+      .post('/api/upload/upload-url')
+      .set('Cookie', cookie)
+      .send({ filename: 'demo.txt' })
     expect(res.status).toBe(400)
     expect(res.body.erro).toMatch(/\.dem/)
-    fs.rmSync(txtFalso)
   })
 
   it('share code inválido: 400', async () => {
-    const app = appWith()
+    const { app } = appWith([])
     const res = await request(app)
-      .post('/api/upload')
+      .post('/api/upload/upload-url')
       .set('Cookie', cookie)
-      .field('shareCode', 'nao-e-um-share-code')
-      .attach('demo', demoFalso)
+      .send({ filename: 'x.dem', shareCode: 'nao-e-um-share-code' })
     expect(res.status).toBe(400)
     expect(res.body.erro).toMatch(/share code/i)
   })
 
   it('data inválida: 400', async () => {
-    const app = appWith()
+    const { app } = appWith([])
     const res = await request(app)
-      .post('/api/upload')
+      .post('/api/upload/upload-url')
       .set('Cookie', cookie)
-      .field('playedAt', 'ontem à noite')
-      .attach('demo', demoFalso)
+      .send({ filename: 'x.dem', playedAt: 'ontem à noite' })
     expect(res.status).toBe(400)
   })
 
-  it('sucesso: chama o coletor e devolve o matchId extraído do stdout', async () => {
-    const execFileImpl = vi.fn((bin, args, opts, cb) => {
-      cb(null, 'parseando e gravando...\ningest: Partida gravada abc-123\n', '')
-    })
-    const app = appWith(execFileImpl)
+  it('caminho feliz: insere na fila sem group_id e devolve a url assinada', async () => {
+    const { app, db } = appWith([['insert into uploads_pendentes', [{ id: 'u1' }]]])
     const res = await request(app)
-      .post('/api/upload')
+      .post('/api/upload/upload-url')
       .set('Cookie', cookie)
-      .field('shareCode', 'CSGO-aaaaa-bbbbb-ccccc-ddddd-eeeee')
-      .field('playedAt', '2026-07-09T20:15')
-      .attach('demo', demoFalso)
+      .send({ filename: 'MinhaDemo.DEM', shareCode: 'CSGO-aaaaa-bbbbb-ccccc-ddddd-eeeee', playedAt: '2026-07-09T20:15' })
     expect(res.status).toBe(200)
-    expect(res.body).toMatchObject({ ok: true, matchId: 'abc-123' })
-    const [bin, args, opts] = execFileImpl.mock.calls[0]
-    expect(bin).toBe(config.pythonBin)
-    expect(args).toEqual(
-      expect.arrayContaining([
-        '-m', 'coletor.main', 'ingest',
-        '--source', 'upload',
-        '--share-code', 'CSGO-aaaaa-bbbbb-ccccc-ddddd-eeeee',
-        '--played-at', '2026-07-09T20:15',
-      ]),
-    )
-    expect(opts.cwd).toBe(config.coletorDir)
+    expect(res.body.id).toBe('u1')
+    expect(res.body.uploadUrl).toBe('https://r2.example/presigned-put')
+    expect(res.body.key).toMatch(/^uploads-pendentes\/.+\.dem$/)
+    const insert = db.query.mock.calls.find((c) => c[0].includes('insert into uploads_pendentes'))
+    expect(insert[0]).not.toContain('group_id')
+    expect(insert[1]).toEqual(['765', res.body.key, 'CSGO-aaaaa-bbbbb-ccccc-ddddd-eeeee', '2026-07-09T20:15', null])
+    expect(presignUpload).toHaveBeenCalledWith(expect.anything(), 'resenha-demos', res.body.key, 'application/octet-stream')
   })
 
-  it('falha no coletor: 500 com o stderr', async () => {
-    const execFileImpl = vi.fn((bin, args, opts, cb) => {
-      cb(new Error('exit 1'), '', 'Traceback: algo quebrou')
-    })
-    const app = appWith(execFileImpl)
-    const res = await request(app).post('/api/upload').set('Cookie', cookie).attach('demo', demoFalso)
-    expect(res.status).toBe(500)
-    expect(res.body.detalhe).toContain('Traceback')
+  it('plataforma manual invalida: 400', async () => {
+    const { app } = appWith([])
+    const res = await request(app)
+      .post('/api/upload/upload-url')
+      .set('Cookie', cookie)
+      .send({ filename: 'x.dem', plataformaManual: 'esl' })
+    expect(res.status).toBe(400)
+    expect(res.body.erro).toMatch(/plataforma/i)
+  })
+
+  it('plataforma manual valida: grava na fila', async () => {
+    const { app, db } = appWith([['insert into uploads_pendentes', [{ id: 'u1' }]]])
+    const res = await request(app)
+      .post('/api/upload/upload-url')
+      .set('Cookie', cookie)
+      .send({ filename: 'x.dem', plataformaManual: 'gamers_club' })
+    expect(res.status).toBe(200)
+    const insert = db.query.mock.calls.find((c) => c[0].includes('insert into uploads_pendentes'))
+    expect(insert[1]).toEqual(['765', res.body.key, null, null, 'gamers_club'])
+  })
+
+  // ---- finding #2 da auditoria: teto de tamanho (defesa em profundidade client-side) ----
+
+  it('tamanho acima do limite: 400', async () => {
+    const { app } = appWith([])
+    const res = await request(app)
+      .post('/api/upload/upload-url')
+      .set('Cookie', cookie)
+      .send({ filename: 'x.dem', tamanho: 500 * 1024 * 1024 })
+    expect(res.status).toBe(400)
+    expect(res.body.erro).toMatch(/limite/i)
+  })
+
+  it('tamanho invalido (nao numerico ou <= 0): 400', async () => {
+    const { app } = appWith([])
+    const res1 = await request(app)
+      .post('/api/upload/upload-url')
+      .set('Cookie', cookie)
+      .send({ filename: 'x.dem', tamanho: 'muito' })
+    expect(res1.status).toBe(400)
+
+    const res2 = await request(app)
+      .post('/api/upload/upload-url')
+      .set('Cookie', cookie)
+      .send({ filename: 'x.dem', tamanho: 0 })
+    expect(res2.status).toBe(400)
+  })
+
+  it('tamanho dentro do limite: aceita normalmente', async () => {
+    const { app } = appWith([['insert into uploads_pendentes', [{ id: 'u1' }]]])
+    const res = await request(app)
+      .post('/api/upload/upload-url')
+      .set('Cookie', cookie)
+      .send({ filename: 'x.dem', tamanho: 100 * 1024 * 1024 })
+    expect(res.status).toBe(200)
+  })
+
+  it('sem tamanho (compat com cliente antigo): aceita normalmente', async () => {
+    const { app } = appWith([['insert into uploads_pendentes', [{ id: 'u1' }]]])
+    const res = await request(app)
+      .post('/api/upload/upload-url')
+      .set('Cookie', cookie)
+      .send({ filename: 'x.dem' })
+    expect(res.status).toBe(200)
   })
 })

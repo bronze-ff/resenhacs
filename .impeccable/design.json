@@ -1,0 +1,138 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-15T00:00:00.000Z",
+  "title": "Design System: Resenha",
+  "extensions": {
+    "colorMeta": {
+      "destaque-vermelho": { "role": "primary", "displayName": "Vermelho de Destaque", "canonical": "#ff2e43", "tonalRamp": ["#2a0509", "#4a1219", "#7a1e2b", "#ad2a3d", "#e0364f", "#ff2e43", "#ff6b7a", "#ffb0b8"] },
+      "destaque-vermelho-fraco": { "role": "primary", "displayName": "Vermelho de Destaque (fraco)", "canonical": "#4a1219" },
+      "time-a-ambar": { "role": "secondary", "displayName": "Âmbar do Time A", "canonical": "#f5a524", "tonalRamp": ["#2e1d05", "#4d300a", "#7a4d10", "#ad6d17", "#e08f1f", "#f5a524", "#f8bc5c", "#fbd394"] },
+      "time-b-azul": { "role": "secondary", "displayName": "Azul do Time B", "canonical": "#4fb6ff", "tonalRamp": ["#05202e", "#0a3650", "#105679", "#177fa8", "#1fa8d4", "#4fb6ff", "#7fcaff", "#b3e0ff"] },
+      "sucesso-verde": { "role": "tertiary", "displayName": "Verde de Sucesso", "canonical": "#24d17e" },
+      "perigo-vermelho": { "role": "tertiary", "displayName": "Vermelho de Perigo", "canonical": "#ff3b4e" },
+      "fundo-quase-preto": { "role": "neutral", "displayName": "Fundo", "canonical": "#0a0a0c" },
+      "superficie": { "role": "neutral", "displayName": "Superfície", "canonical": "#141419" },
+      "superficie-alta": { "role": "neutral", "displayName": "Superfície Alta", "canonical": "#1d1d24" },
+      "borda": { "role": "neutral", "displayName": "Borda", "canonical": "#2a2a32" },
+      "texto": { "role": "neutral", "displayName": "Texto", "canonical": "#f1f2f4" },
+      "texto-fraco": { "role": "neutral", "displayName": "Texto Fraco", "canonical": "#8b8b96" }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display (Rajdhani)", "purpose": "Títulos de seção, placar, valores grandes de destaque (rating, contagens)." },
+      "body": { "displayName": "Body (Inter)", "purpose": "Prosa corrida — ajuda, descrições, mensagens de erro/vazio. Raro nesse produto." },
+      "label": { "displayName": "Label/Mono (JetBrains Mono)", "purpose": "Todo dado tabular/numérico e rótulo de coluna/badge, sempre com tabular-nums." }
+    },
+    "shadows": [
+      { "name": "flutuante", "value": "0 8px 32px rgba(0,0,0,0.45)", "purpose": "Modais, popovers, dropdowns abertos, tooltip flutuante — nunca em conteúdo de repouso." }
+    ],
+    "motion": [
+      { "name": "surgir", "value": "cubic-bezier(0.16,1,0.3,1) 0.45s", "purpose": "Fade + slide-up de entrada de conteúdo novo." },
+      { "name": "pulso-sinal", "value": "opacity 1↔0.45 2s ease-in-out infinite", "purpose": "Indicador \"ao vivo\"/pendente (ex. sincronização em andamento)." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "lg", "value": "1024px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Button Primary",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Ação principal de um formulário/tela (Enviar, Adicionar, Confirmar).",
+      "html": "<button class=\"ds-btn-primary\">Enviar</button>",
+      "css": ".ds-btn-primary { clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px); min-height: 2.5rem; border: 1px solid #ff2e43; background: #ff2e43; color: #0a0a0c; padding: 0.5rem 1rem; font-family: Rajdhani, system-ui, sans-serif; font-size: 0.875rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em; transition: opacity 0.2s, background-color 0.2s; } .ds-btn-primary:hover { background: #e0293b; } .ds-btn-primary:focus-visible { outline: 2px solid #ff2e43; outline-offset: 2px; } .ds-btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }"
+    },
+    {
+      "name": "Button Secondary / Ghost",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Ação secundária (cancelar, filtro auxiliar).",
+      "html": "<button class=\"ds-btn-secondary\">Cancelar</button>",
+      "css": ".ds-btn-secondary { clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px); border: 1px solid #2a2a32; background: transparent; color: #8b8b96; padding: 0.5rem 1rem; font-family: JetBrains Mono, ui-monospace, monospace; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; transition: color 0.2s, border-color 0.2s; } .ds-btn-secondary:hover, .ds-btn-secondary:focus-visible { border-color: #ff2e43; color: #ff2e43; }"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Painel base de conteúdo — corte diagonal, borda hairline, fundo superfície.",
+      "html": "<div class=\"ds-card\">Conteúdo</div>",
+      "css": ".ds-card { clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px); background: #141419; border: 1px solid #2a2a32; padding: 1rem; } .ds-card.ds-interativo:hover { border-color: rgba(255,46,67,0.6); cursor: pointer; }"
+    },
+    {
+      "name": "Badge",
+      "kind": "chip",
+      "refersTo": "badge-destaque",
+      "description": "Chip pequeno de metadado/categoria/resultado — 4 tons fixos (destaque/sucesso/perigo/neutro).",
+      "html": "<span class=\"ds-badge ds-badge-destaque\">AUTO</span>",
+      "css": ".ds-badge { clip-path: polygon(4px 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%, 0 4px); display: inline-block; border-width: 1px; border-style: solid; padding: 0.125rem 0.375rem; font-family: JetBrains Mono, ui-monospace, monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; } .ds-badge-destaque { border-color: rgba(255,46,67,0.4); background: rgba(255,46,67,0.1); color: #ff2e43; } .ds-badge-sucesso { border-color: rgba(36,209,126,0.4); background: rgba(36,209,126,0.1); color: #24d17e; } .ds-badge-perigo { border-color: rgba(255,59,78,0.4); background: rgba(255,59,78,0.1); color: #ff3b4e; }"
+    },
+    {
+      "name": "Rating Badge",
+      "kind": "chip",
+      "refersTo": "rating-badge",
+      "description": "Badge numérico de rating — verde ≥1.0, vermelho <1.0, sempre 2 casas decimais.",
+      "html": "<span class=\"ds-rating-badge ds-rating-good\">1.35</span>",
+      "css": ".ds-rating-badge { clip-path: polygon(4px 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%, 0 4px); display: inline-block; padding: 0.125rem 0.375rem; font-family: JetBrains Mono, ui-monospace, monospace; font-size: 0.75rem; font-weight: 700; font-variant-numeric: tabular-nums; } .ds-rating-good { background: rgba(36,209,126,0.15); color: #24d17e; } .ds-rating-bad { background: rgba(255,59,78,0.15); color: #ff3b4e; }"
+    },
+    {
+      "name": "Stat Tile",
+      "kind": "card",
+      "refersTo": "stat-tile",
+      "description": "Tile de estatística de destaque — rótulo mono em cima, valor grande, sub opcional, marca decorativa no canto.",
+      "html": "<div class=\"ds-stat-tile\"><div class=\"ds-stat-mark\"></div><div class=\"ds-stat-label\">Rating</div><div class=\"ds-stat-value\">1.24</div><div class=\"ds-stat-sub\">últimas 20 partidas</div></div>",
+      "css": ".ds-stat-tile { position: relative; clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px); background: #141419; border: 1px solid #2a2a32; padding: 1rem; } .ds-stat-mark { position: absolute; left: 0; top: 0; height: 2px; width: 1.5rem; background: rgba(255,46,67,0.6); } .ds-stat-label { font-family: JetBrains Mono, ui-monospace, monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.15em; color: #8b8b96; } .ds-stat-value { margin-top: 0.375rem; font-family: Rajdhani, system-ui, sans-serif; font-size: 1.5rem; font-weight: 600; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; color: #f1f2f4; } .ds-stat-sub { margin-top: 0.125rem; font-family: JetBrains Mono, ui-monospace, monospace; font-size: 0.75rem; color: #8b8b96; }"
+    },
+    {
+      "name": "Select",
+      "kind": "input",
+      "refersTo": "select",
+      "description": "Select nativo com aparência customizada (chevron próprio, sem chrome do navegador).",
+      "html": "<div class=\"ds-select-wrap\"><select class=\"ds-select\"><option>Todos os mapas</option></select><svg class=\"ds-select-chevron\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M6 9L12 15L18 9\"/></svg></div>",
+      "css": ".ds-select-wrap { position: relative; display: inline-block; } .ds-select { min-height: 2.5rem; width: 100%; cursor: pointer; appearance: none; border-radius: 4px; border: 1px solid #2a2a32; background: #141419; padding: 0.5rem 2.25rem 0.5rem 0.75rem; font-family: JetBrains Mono, ui-monospace, monospace; font-size: 0.875rem; color: #f1f2f4; transition: border-color 0.2s; } .ds-select:hover { border-color: rgba(255,46,67,0.6); } .ds-select:focus-visible { border-color: #ff2e43; outline: none; } .ds-select-chevron { pointer-events: none; position: absolute; right: 0.625rem; top: 50%; transform: translateY(-50%); height: 1rem; width: 1rem; color: #8b8b96; }"
+    },
+    {
+      "name": "Tabela de Dados (linha expansível)",
+      "kind": "custom",
+      "refersTo": "data-table-row",
+      "description": "Componente-assinatura: linha de tabela densa com hover, colunas numéricas tabular à direita, e uma linha filha expansível (progressive disclosure) abaixo dela.",
+      "html": "<tr class=\"ds-table-row\"><td class=\"ds-table-cell-label\">Jogador</td><td class=\"ds-table-cell-num\">18</td><td class=\"ds-table-cell-num\">12</td></tr>",
+      "css": ".ds-table-row { border-top: 1px solid #2a2a32; transition: background-color 0.2s; } .ds-table-row:hover { background: rgba(29,29,36,0.5); } .ds-table-cell-label { padding: 0.5rem 0.75rem; font-family: JetBrains Mono, ui-monospace, monospace; font-size: 0.875rem; color: #f1f2f4; } .ds-table-cell-num { padding: 0.5rem 0.5rem; text-align: right; font-family: JetBrains Mono, ui-monospace, monospace; font-size: 0.875rem; font-variant-numeric: tabular-nums; color: #f1f2f4; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Debriefing pós-partida",
+    "overview": "O Resenha é a sala onde o grupo se senta depois do jogo pra entender o que aconteceu de verdade — não um app de entretenimento, uma mesa de análise. Cada tela deve parecer o painel de um analista revisando a fita: dado em primeiro lugar, decoração só quando serve a leitura, tom sério mesmo quando o assunto é brincadeira entre amigos. A identidade visual herdada — cantos cortados diagonalmente, tipografia monoespaçada pra tudo que é número, paleta escura e contida — já aponta nessa direção; o trabalho de redesign é executar essa direção com mais disciplina e consistência, não abandoná-la por um dashboard SaaS genérico.",
+    "keyCharacteristics": [
+      "Corte diagonal (panel-cut) como assinatura, não enfeite — aparece em praticamente todo container.",
+      "Um único acento de cor principal (vermelho/coral), usado com moderação.",
+      "Tipografia mono pra todo dado tabular/numérico; display condensado pra títulos e números grandes.",
+      "Chapado por padrão — sem sombra em superfícies de repouso."
+    ],
+    "rules": [
+      { "name": "A Regra do Acento Único", "body": "Se dois elementos na mesma tela usam vermelho de destaque por motivos diferentes, um dos dois está errado — essa cor significa \"aja aqui\" ou \"isso está selecionado\", nunca \"isso é importante\" em geral.", "section": "colors" },
+      { "name": "A Regra do Time Real", "body": "A cor de time segue o time de verdade do jogador sendo mostrado, nunca uma posição fixa na tela.", "section": "colors" },
+      { "name": "A Regra do Sinal Duplo", "body": "Nenhum julgamento de bom/ruim depende só da cor verde/vermelho — todo indicador carrega também um ícone, seta, ou o próprio valor numérico visível ao lado.", "section": "colors" },
+      { "name": "A Regra do Número Tabular", "body": "Se o valor é comparado por magnitude com outro na mesma coluna, ele é mono + tabular-nums, alinhado à direita.", "section": "typography" },
+      { "name": "A Regra do Mono Automático", "body": "Dado tabular nunca escolhe a fonte manualmente — herda de uma classe utilitária aplicada uma vez no elemento pai.", "section": "typography" },
+      { "name": "A Regra do Chapado-Por-Padrão", "body": "Sombra é reservada só pra elementos flutuantes/transitórios (modal, popover, tooltip) — nunca em repouso.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do usar corte diagonal como silhueta padrão de qualquer container novo.",
+      "Do reforçar todo indicador bom/ruim com ícone/seta além da cor.",
+      "Do manter a cor de time seguindo o time real do jogador mostrado.",
+      "Do aplicar tabular-nums + mono + right-align em toda coluna numérica nova.",
+      "Do reservar sombra só pra elementos flutuantes/transitórios.",
+      "Do ajustar a densidade por contexto (Feed espaçado, Partida denso)."
+    ],
+    "donts": [
+      "Don't usar border-radius arredondado como default.",
+      "Don't usar side-stripe colorido em cards/alertas/listas (exceção: item ativo da navegação).",
+      "Don't aninhar cards dentro de cards.",
+      "Don't aplicar gradiente em texto.",
+      "Don't aplicar zebra striping em tabelas.",
+      "Don't deixar um dado de julgamento depender só da cor.",
+      "Don't parecer projeto de fim de semana."
+    ]
+  }
+}

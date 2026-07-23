@@ -205,6 +205,38 @@ def clutch_outcomes(kills, teams, winner_by_round):
     return saida
 
 
+def kast_pct(kills, trades, jogadores, rounds_total):
+    """% de rounds em que o jogador teve Kill, Assist, Sobreviveu ou foi
+    vingado (Traded) — uma das 4 condições já conta o round.
+    `trades` é a lista JÁ COMPUTADA por trade_kills(kills, teams) — não
+    recalcula aqui pra não duplicar trabalho que enrich() já fez.
+    `jogadores` é a lista/set dos steam_id64 dos participantes da partida.
+    kills precisa ter "assister" (parse.py) — ausência é tratada como None,
+    sem quebrar (fixtures antigas de teste continuam funcionando, só sem
+    contar o componente de assist). rounds_total<=0 devolve {}."""
+    if rounds_total <= 0:
+        return {}
+    por_round = _agrupar_por_round(kills)
+    vingados_por_round = {}
+    for t in trades:
+        vingados_por_round.setdefault(t["round_number"], set()).add(t["avenged_teammate"])
+
+    atende = {sid: 0 for sid in jogadores}
+    for round_number in range(1, rounds_total + 1):
+        round_kills = por_round.get(round_number, [])
+        morreram = {k["victim"] for k in round_kills if k.get("victim")}
+        mataram = {
+            k["attacker"] for k in round_kills
+            if k.get("attacker") and not k.get("team_kill") and k["attacker"] != k.get("victim")
+        }
+        assistiram = {k["assister"] for k in round_kills if k.get("assister")}
+        vingados = vingados_por_round.get(round_number, set())
+        for sid in jogadores:
+            if sid in mataram or sid in assistiram or sid in vingados or sid not in morreram:
+                atende[sid] += 1
+    return {sid: round(cont / rounds_total * 100, 1) for sid, cont in atende.items()}
+
+
 def hltv_rating(kills, deaths, rounds, k):
     """Aproximação do HLTV Rating 1.0. `k` é o dict {1:..,5:..} de _distribuicao_multikills."""
     if rounds <= 0:
@@ -235,6 +267,7 @@ def enrich(parsed):
 
     entry = entry_duels(kills, teams, winner_by_round) if tem_tick else []
     trades = trade_kills(kills, teams) if tem_tick else []
+    kast = kast_pct(kills, trades, teams.keys(), rounds_total) if tem_tick else {}
     clutches = clutch_outcomes(kills, teams, winner_by_round) if tem_tick else []
 
     entry_kills, entry_deaths, entry_wins = {}, {}, {}
@@ -269,6 +302,7 @@ def enrich(parsed):
                 "rounds_played": rounds_total,
                 "won": None if vencedor is None else p["team"] == vencedor,
                 "rating": rating,
+                "kast_pct": kast.get(sid),
                 "entry_kills": entry_kills.get(sid, 0),
                 "entry_deaths": entry_deaths.get(sid, 0),
                 "entry_wins": entry_wins.get(sid, 0),

@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import { partidaVisivelExpr } from '../friendships.js'
 
 // Duas Partidas entram na mesma "Resenha" (sessão) se a diferença entre elas é menor
 // que isso — várias partidas seguidas numa noite viram um resumo só, em vez de N cards
@@ -18,21 +19,46 @@ export function createSessionsRouter({ db, requireAuth }) {
 
   // "Resenhas": Partidas jogadas seguidas (gap < 3h) agrupadas num resumo — quem se
   // destacou, quantas venceu/perdeu, ao invés de olhar partida por partida.
+  // Escopado às Partidas visíveis ao viewer (eu + amigos accepted) em TODAS as
+  // queries: sem isso, qualquer conta Steam logada puxava o histórico de todo mundo
+  // numa requisição (login é aberto).
   router.get('/', requireAuth, async (req, res) => {
+    const eu = req.player.steamId
+    // Sem LIMIT aqui a query varria TODO o histórico de Partidas visíveis (e os dois
+    // joins abaixo, um por Jogador) a cada request — caro e sem teto conforme o círculo
+    // de amigos cresce/joga mais, e um vetor de DoS barato. 750 Partidas é bem folgado
+    // pras ~15 sessões recentes que a rota devolve por padrão (Feed.jsx só pede limit=5).
+    // "id desc" desempata o "order by played_at" (podem repetir) garantindo que as três
+    // queries abaixo recortem exatamente o mesmo conjunto de Partidas.
+    const recentes = `order by played_at desc nulls last, id desc limit 750`
     const matchesQ = await db.query(
-      `select id, map, played_at, score_a, score_b
-       from matches where status = 'parsed' order by played_at asc nulls last`,
+      `select id, map, played_at, score_a, score_b from (
+         select id, map, played_at, score_a, score_b
+         from matches m where status = 'parsed' and ${partidaVisivelExpr('m', '$1')} ${recentes}
+       ) recentes order by played_at asc nulls last`,
+      [eu],
     )
     const playersQ = await db.query(
       `select mp.match_id, mp.steam_id64, p.nick, mp.kills, mp.deaths, mp.assists,
-              mp.rating, mp.won, mp.clutch_wins, mp.entry_kills
+              mp.rating, mp.won, mp.clutch_wins, mp.entry_kills,
+              coalesce(p.avatar_url, sa.avatar_url) as avatar_url
        from match_players mp
        join players p on p.steam_id64 = mp.steam_id64
-       where mp.match_id in (select id from matches where status = 'parsed')`,
+       left join steam_avatares sa on sa.steam_id64 = mp.steam_id64
+       where mp.match_id in (
+         select id from matches m where status = 'parsed' and ${partidaVisivelExpr('m', '$1')} ${recentes}
+       )`,
+      [eu],
     )
     const acesQ = await db.query(
       `select h.match_id, h.steam_id64, count(*)::int as aces
-       from highlights h where h.kind = 'ace' group by h.match_id, h.steam_id64`,
+       from highlights h join matches m on m.id = h.match_id
+       where h.kind = 'ace' and ${partidaVisivelExpr('m', '$1')}
+         and m.id in (
+           select id from matches m2 where status = 'parsed' and ${partidaVisivelExpr('m2', '$1')} ${recentes}
+         )
+       group by h.match_id, h.steam_id64`,
+      [eu],
     )
 
     const jogadoresPorPartida = new Map()
@@ -72,7 +98,7 @@ export function createSessionsRouter({ db, requireAuth }) {
         for (const j of jogadores) {
           if (!porJogador.has(j.steam_id64)) {
             porJogador.set(j.steam_id64, {
-              steamId: j.steam_id64, nick: j.nick, partidas: 0, kills: 0, deaths: 0,
+              steamId: j.steam_id64, nick: j.nick, avatarUrl: j.avatar_url, partidas: 0, kills: 0, deaths: 0,
               assists: 0, ratingSoma: 0, clutchWins: 0, entryKills: 0, aces: 0,
             })
           }

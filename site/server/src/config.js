@@ -4,18 +4,20 @@ export function loadConfig(env = process.env) {
   if (missing.length > 0) {
     throw new Error(`Variáveis de ambiente faltando: ${missing.join(', ')}`)
   }
+  const isProduction = env.NODE_ENV === 'production'
+  // Só barra em produção: dev/teste comumente usa um JWT_SECRET curto tipo 'segredo-de-teste'
+  // ou 's', e isso não pode quebrar o ambiente local. Checagem é no boot (uma vez), não a
+  // cada request — um secret fraco permite forjar cookie de sessão (inclusive isSuperAdmin).
+  if (isProduction && env.JWT_SECRET.length < 32) {
+    throw new Error('JWT_SECRET fraco: precisa de pelo menos 32 caracteres em produção')
+  }
   return {
     databaseUrl: env.DATABASE_URL,
     jwtSecret: env.JWT_SECRET,
     steamApiKey: env.STEAM_API_KEY,
     appUrl: env.APP_URL ?? 'http://localhost:5173',
     port: Number(env.PORT ?? 3001),
-    isProduction: env.NODE_ENV === 'production',
-    // Upload manual de demo (roda o Coletor Python local via child_process). Só faz
-    // sentido em dev/self-hosted — indefinido no ambiente serverless da Vercel, onde
-    // a rota fica desligada (não há Python nem filesystem persistente na função).
-    coletorDir: env.COLETOR_DIR ?? null,
-    pythonBin: env.COLETOR_PYTHON ?? null,
+    isProduction,
     // R2 (Cloudflare) — o bucket é PRIVADO de propósito (replays/demos têm dados
     // reais dos 10 participantes de cada Partida, incluindo randoms não whitelistados
     // que nunca consentiram ficar públicos). O server faz proxy autenticado; nunca
@@ -24,5 +26,21 @@ export function loadConfig(env = process.env) {
     r2AccessKeyId: env.R2_ACCESS_KEY_ID ?? null,
     r2SecretAccessKey: env.R2_SECRET_ACCESS_KEY ?? null,
     r2Bucket: env.R2_BUCKET ?? null,
+    // OAuth de vínculo FACEIT (Fase A) — client id é público, mas fica em env var pra
+    // poder trocar sem novo deploy. Sem ele, a rota de vínculo devolve 503 (mesmo padrão
+    // do upload manual quando falta config de Coletor).
+    faceitClientId: env.FACEIT_CLIENT_ID ?? null,
+    // Alguns apps FACEIT criados como "Authorization Code with PKCE" ainda exigem
+    // Basic Auth (client_id:client_secret) no POST do token endpoint, mesmo com PKCE —
+    // opcional aqui: se não vier, a troca de token segue só com code_verifier.
+    faceitClientSecret: env.FACEIT_CLIENT_SECRET ?? null,
+    // Clipes de vídeo real do Allstar (ADR-0004) — pedido SOB DEMANDA (o jogador clica
+    // "gerar clipe" na tela da Partida, não é automático) e restrito a uma allowlist de
+    // steamId64 até o preço por clipe ser confirmado com o suporte deles.
+    allstarApiKey: env.ALLSTAR_API_KEY ?? null,
+    allstarSteamIds: new Set((env.ALLSTAR_STEAM_IDS ?? '').split(',').map((s) => s.trim()).filter(Boolean)),
+    // Valida o webhook de retorno — o mesmo valor cadastrado no dashboard deles
+    // ("Webhook Auth"). Sem isso, /api/allstar/webhook rejeita tudo.
+    allstarWebhookAuth: env.ALLSTAR_WEBHOOK_AUTH ?? null,
   }
 }
