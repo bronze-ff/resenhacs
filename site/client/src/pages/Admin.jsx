@@ -49,6 +49,11 @@ export default function Admin() {
       .catch(() => setCompeticoes([]))
   }
 
+  async function confirmarVencedor(id) {
+    const res = await fetch(`/api/competicoes/${id}/confirmar-vencedor`, { method: 'PUT' })
+    if (res.ok) carregarCompeticoes()
+  }
+
   async function enviarVideoCurso(slug, arquivo) {
     const partes = Math.ceil(arquivo.size / TAMANHO_PARTE)
     setStatusUpload((s) => ({ ...s, [slug]: { estado: 'enviando', atual: 0, total: partes } }))
@@ -217,22 +222,54 @@ export default function Admin() {
         {competicoes?.length === 0 && (
           <p className="font-mono text-sm text-texto-fraco">Nenhuma competição cadastrada.</p>
         )}
-        {competicoes?.map((c) => (
-          <Card key={c.id} className="flex items-center justify-between gap-3 px-3 py-2">
-            <div className="min-w-0">
-              <p className="truncate font-display text-sm font-semibold uppercase text-texto">{c.nome}</p>
-              <p className="font-mono text-[10px] uppercase text-texto-fraco/70">
-                {new Date(c.dataInicio).toLocaleDateString('pt-BR')} – {new Date(c.dataFim).toLocaleDateString('pt-BR')}
-              </p>
-            </div>
-            <button
-              onClick={() => { setCompeticaoEditando(c); setFormCompeticaoAberto(true) }}
-              className="panel-cut-sm min-h-10 shrink-0 border border-borda px-3 py-1 font-mono text-xs uppercase tracking-wide text-texto-fraco hover:border-destaque/50 hover:text-destaque lg:min-h-0"
-            >
-              Editar
-            </button>
-          </Card>
-        ))}
+        {competicoes?.map((c) => {
+          const vencedorNick = c.leaderboard?.find((l) => l.steamId === c.vencedorSteamId)?.nick
+          return (
+            <Card key={c.id} className="space-y-2 px-3 py-2">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate font-display text-sm font-semibold uppercase text-texto">{c.nome}</p>
+                  <p className="font-mono text-[10px] uppercase text-texto-fraco/70">
+                    {new Date(c.dataInicio).toLocaleDateString('pt-BR')} – {new Date(c.dataFim).toLocaleDateString('pt-BR')}
+                  </p>
+                </div>
+                <button
+                  onClick={() => { setCompeticaoEditando(c); setFormCompeticaoAberto(true) }}
+                  className="panel-cut-sm min-h-10 shrink-0 border border-borda px-3 py-1 font-mono text-xs uppercase tracking-wide text-texto-fraco hover:border-destaque/50 hover:text-destaque lg:min-h-0"
+                >
+                  Editar
+                </button>
+              </div>
+              {c.vencedorSteamId && !c.vencedorConfirmado && (
+                <div className="panel-cut-sm border border-destaque bg-destaque/10 p-3">
+                  <p className="font-mono text-sm text-destaque">
+                    Vencedor: {vencedorNick ?? c.vencedorSteamId} — confira os clipes antes de confirmar.
+                  </p>
+                  <div className="mt-2 space-y-1">
+                    {c.vencedorSubmissoes?.map((s) => (
+                      <div key={s.id} className="flex items-center justify-between gap-2 font-mono text-xs text-texto-fraco">
+                        <a href={s.clipUrl} target="_blank" rel="noreferrer" className="truncate hover:text-destaque">
+                          clipe · {s.pontuacao.total} pts
+                        </a>
+                        {s.origemNaoVerificada && (
+                          <span className="shrink-0 text-perigo">
+                            ⚠️ upload manual{s.plataformaManual ? ` — ${s.plataformaManual}` : ''} — data não verificada
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => confirmarVencedor(c.id)}
+                    className="panel-cut-sm mt-2 min-h-10 border border-destaque px-3 font-mono text-xs uppercase text-destaque lg:min-h-0"
+                  >
+                    Confirmar vencedor
+                  </button>
+                </div>
+              )}
+            </Card>
+          )
+        })}
         {formCompeticaoAberto && (
           <FormCompeticao
             inicial={competicaoEditando}
