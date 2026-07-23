@@ -93,7 +93,7 @@ function CardCompeticao({ comp, viewerSteamId, onTradelinkEnviado }) {
         />
       )}
 
-      {souVencedor && encerrada && !comp.tradelinkVencedor && (
+      {souVencedor && encerrada && comp.vencedorConfirmado && !comp.tradelinkVencedor && (
         <form onSubmit={enviarTradelink} className="mt-4 panel-cut-sm border border-destaque bg-destaque/10 p-3">
           <p className="font-mono text-sm text-destaque">🏆 Você venceu! Informe seu tradelink pra receber o prêmio.</p>
           <div className="mt-2 flex gap-2">
@@ -108,6 +108,11 @@ function CardCompeticao({ comp, viewerSteamId, onTradelinkEnviado }) {
             </button>
           </div>
         </form>
+      )}
+      {souVencedor && encerrada && !comp.vencedorConfirmado && (
+        <p className="mt-4 font-mono text-sm text-texto-fraco">
+          Você está na liderança — aguardando confirmação do admin antes de liberar o envio do tradelink.
+        </p>
       )}
       {souVencedor && comp.tradelinkVencedor && (
         <p className="mt-4 font-mono text-sm text-sucesso">Tradelink enviado — aguarde o contato pro envio do prêmio.</p>

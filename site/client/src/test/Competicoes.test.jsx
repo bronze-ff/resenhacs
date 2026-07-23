@@ -66,7 +66,7 @@ describe('Competicoes', () => {
           encerradas: [{
             id: 'comp1', nome: 'Semana 1', premioDescricao: 'Skin', dataFim: new Date(Date.now() - 86400000).toISOString(),
             limiteDiario: 2, limiteTotal: 10, minimoParaRankear: 3,
-            vencedorSteamId: '765', tradelinkVencedor: null,
+            vencedorSteamId: '765', vencedorConfirmado: true, tradelinkVencedor: null,
             leaderboard: [{ steamId: '765', nick: 'bronze', avatarUrl: null, total: 300, qualificado: true }],
           }],
         }),
@@ -75,6 +75,29 @@ describe('Competicoes', () => {
     render(<AuthProvider><Competicoes /></AuthProvider>)
     await waitFor(() => expect(screen.getByText(/voc[êe] venceu/i)).toBeInTheDocument())
     expect(screen.getByPlaceholderText(/tradelink/i)).toBeInTheDocument()
+  })
+
+  it('vencedor mas ainda nao confirmado pelo admin: mostra aguardando, nao o formulario', async () => {
+    global.fetch = vi.fn().mockImplementation((url) => {
+      if (typeof url === 'string' && url.includes('/api/auth/me')) {
+        return Promise.resolve({ ok: true, json: async () => ({ steamId: '765', nick: 'bronze', isSuperAdmin: false }) })
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          ativa: null,
+          encerradas: [{
+            id: 'comp1', nome: 'Semana 1', premioDescricao: 'Skin', dataFim: new Date(Date.now() - 86400000).toISOString(),
+            limiteDiario: 2, limiteTotal: 10, minimoParaRankear: 1,
+            vencedorSteamId: '765', vencedorConfirmado: false, tradelinkVencedor: null,
+            leaderboard: [{ steamId: '765', nick: 'bronze', avatarUrl: null, total: 300, qualificado: true }],
+          }],
+        }),
+      })
+    })
+    render(<AuthProvider><Competicoes /></AuthProvider>)
+    await waitFor(() => expect(screen.getByText(/aguardando confirma[çc][ãa]o/i)).toBeInTheDocument())
+    expect(screen.queryByPlaceholderText(/tradelink/i)).not.toBeInTheDocument()
   })
 
   it('mostra imagem do premio e link pro mercado quando presentes', async () => {
