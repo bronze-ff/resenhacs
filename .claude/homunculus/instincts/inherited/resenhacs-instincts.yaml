@@ -1,0 +1,775 @@
+# Instincts generated from https://github.com/bronze-ff/resenhacs
+# Generated: 2026-07-21T14:01:25.981Z
+# Version: 2.0
+# NOTE: This file supplements (does not replace) any existing curated instincts.
+# High-confidence manually curated instincts should be preserved alongside these.
+
+---
+id: resenhacs-commit-conventional
+trigger: "when writing a commit message"
+confidence: 0.85
+domain: git
+source: repo-analysis
+source_repo: https://github.com/bronze-ff/resenhacs
+---
+
+# Resenhacs Commit Conventional
+
+## Action
+
+Use conventional commit format with prefixes: refactor, feat, test, docs, fix
+
+## Evidence
+
+- 22 commits analyzed
+- Detected conventional commit pattern
+- Examples: feat: migracao aditiva de amizades (friendships + conta_criada_em + backfill), test: cobre o outro ramo do placeholder (\$2) em aceitar amizade
+
+---
+id: resenhacs-commit-length
+trigger: "when writing a commit message"
+confidence: 0.6
+domain: git
+source: repo-analysis
+source_repo: https://github.com/bronze-ff/resenhacs
+---
+
+# Resenhacs Commit Length
+
+## Action
+
+Write moderate-length commit messages (~69 characters)
+
+## Evidence
+
+- Average commit message length: 69 chars
+- Based on 22 commits
+
+---
+id: resenhacs-naming-files
+trigger: "when creating a new file"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/bronze-ff/resenhacs
+---
+
+# Resenhacs Naming Files
+
+## Action
+
+Use camelCase naming convention
+
+## Evidence
+
+- Analyzed file naming patterns in repository
+- Dominant pattern: camelCase
+
+---
+id: resenhacs-import-relative
+trigger: "when importing modules"
+confidence: 0.75
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/bronze-ff/resenhacs
+---
+
+# Resenhacs Import Relative
+
+## Action
+
+Use relative imports for project files
+
+## Evidence
+
+- Import analysis shows relative import pattern
+- Example: import { x } from '../lib/x'
+
+---
+id: resenhacs-export-style
+trigger: "when exporting from a module"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/bronze-ff/resenhacs
+---
+
+# Resenhacs Export Style
+
+## Action
+
+Prefer named exports
+
+## Evidence
+
+- Export pattern analysis
+- Dominant style: named
+
+---
+id: resenhacs-arch-type-based
+trigger: "when adding new code"
+confidence: 0.8
+domain: architecture
+source: repo-analysis
+source_repo: https://github.com/bronze-ff/resenhacs
+---
+
+# Resenhacs Arch Type Based
+
+## Action
+
+Place code in the appropriate type folder (components/, services/, utils/, etc.)
+
+## Evidence
+
+- Type-based module organization detected
+- Folders: 
+
+---
+id: resenhacs-test-framework
+trigger: "when writing tests"
+confidence: 0.9
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/bronze-ff/resenhacs
+---
+
+# Resenhacs Test Framework
+
+## Action
+
+Use vitest as the test framework
+
+## Evidence
+
+- Test framework detected: vitest
+- File pattern: *.test.js
+
+---
+id: resenhacs-test-naming
+trigger: "when creating a test file"
+confidence: 0.85
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/bronze-ff/resenhacs
+---
+
+# Resenhacs Test Naming
+
+## Action
+
+Name test files using the pattern: *.test.js
+
+## Evidence
+
+- File pattern: *.test.js
+- Consistent across test files
+
+---
+id: resenhacs-test-mocking
+trigger: "when mocking dependencies in tests"
+confidence: 0.75
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/bronze-ff/resenhacs
+---
+
+# Resenhacs Test Mocking
+
+## Action
+
+Use vi.mock for mocking
+
+## Evidence
+
+- Mocking pattern detected: vi.mock
+- Consistent across test files
+
+---
+id: resenhacs-test-types
+trigger: "when planning tests for a feature"
+confidence: 0.7
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/bronze-ff/resenhacs
+---
+
+# Resenhacs Test Types
+
+## Action
+
+Write unit, integration tests to match project standards
+
+## Evidence
+
+- Test types detected: unit, integration
+- Coverage config: no
+
+---
+id: resenhacs-workflow-database-migration
+trigger: "when modifying the database schema or adding tables"
+confidence: 0.7
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/bronze-ff/resenhacs
+---
+
+# Resenhacs Workflow Database Migration
+
+## Action
+
+Follow the database-migration workflow:
+1. Create migration file
+2. Update schema definitions
+3. Generate/update types
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~4x per month
+- Files: migrations/*
+
+---
+id: resenhacs-workflow-feature-development
+trigger: "when implementing a new feature"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/bronze-ff/resenhacs
+---
+
+# Resenhacs Workflow Feature Development
+
+## Action
+
+Follow the feature-development workflow:
+1. Add feature implementation
+2. Add tests for feature
+3. Update documentation
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~8x per month
+- Files: **/*.test.*, **/api/**
+
+---
+id: resenhacs-workflow-refactoring
+trigger: "when refactoring code"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/bronze-ff/resenhacs
+---
+
+# Resenhacs Workflow Refactoring
+
+## Action
+
+Follow the refactoring workflow:
+1. Ensure tests pass before refactor
+2. Refactor code structure
+3. Verify tests still pass
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~18x per month
+- Files: src/**/*
+
+---
+id: resenhacs-workflow-feature-module-implementation-with-tests
+trigger: "when doing feature module implementation with tests"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/bronze-ff/resenhacs
+---
+
+# Resenhacs Workflow Feature Module Implementation With Tests
+
+## Action
+
+Follow the feature-module-implementation-with-tests workflow:
+1. Create or update the main module file in site/server/src/
+2. Create or update the corresponding test file in site/server/test/
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: site/server/src/{feature}.js, site/server/test/{feature}.test.js
+
+---
+id: resenhacs-workflow-api-route-addition-or-refactor-with-tests
+trigger: "when doing api route addition or refactor with tests"
+confidence: 0.65
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/bronze-ff/resenhacs
+---
+
+# Resenhacs Workflow Api Route Addition Or Refactor With Tests
+
+## Action
+
+Follow the api-route-addition-or-refactor-with-tests workflow:
+1. Create or update route handler in site/server/src/routes/
+2. Update route mounting in site/server/src/app.js
+3. Create or update corresponding test file in site/server/test/
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~3x per month
+- Files: site/server/src/routes/{route}.js, site/server/src/app.js, site/server/test/{route}.test.js
+
+---
+id: resenhacs-workflow-database-migration-workflow
+trigger: "when doing database migration workflow"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/bronze-ff/resenhacs
+---
+
+# Resenhacs Workflow Database Migration Workflow
+
+## Action
+
+Follow the database-migration-workflow workflow:
+1. Create or update migration SQL file in supabase/migrations/
+2. Optionally update related backend code to match schema changes
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: supabase/migrations/{number}_{description}.sql
+
+---
+id: resenhacs-workflow-feature-removal-backend-and-client
+trigger: "when doing feature removal backend and client"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/bronze-ff/resenhacs
+---
+
+# Resenhacs Workflow Feature Removal Backend And Client
+
+## Action
+
+Follow the feature-removal-backend-and-client workflow:
+1. Delete or update backend route files in site/server/src/routes/
+2. Remove route mounts in site/server/src/app.js
+3. Delete or update backend test files in site/server/test/
+4. Delete or update frontend page/component files in site/client/src/pages/ or site/client/src/components/
+5. Remove related imports and routing in site/client/src/App.jsx
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: site/server/src/routes/{feature}.js, site/server/src/app.js, site/server/test/{feature}.test.js
+
+---
+id: resenhacs-workflow-refactor-feature-across-multiple-routes-and-tests
+trigger: "when doing refactor feature across multiple routes and tests"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/bronze-ff/resenhacs
+---
+
+# Resenhacs Workflow Refactor Feature Across Multiple Routes And Tests
+
+## Action
+
+Follow the refactor-feature-across-multiple-routes-and-tests workflow:
+1. Update multiple route handler files in site/server/src/routes/ to use the new model or pattern
+2. Update corresponding test files in site/server/test/
+3. Update shared logic or middleware if necessary
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: site/server/src/routes/*.js, site/server/test/*.test.js, site/server/src/auth/middleware.js
+
+---
+id: resenhacs-workflow-client-page-addition-or-removal-with-tests
+trigger: "when doing client page addition or removal with tests"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/bronze-ff/resenhacs
+---
+
+# Resenhacs Workflow Client Page Addition Or Removal With Tests
+
+## Action
+
+Follow the client-page-addition-or-removal-with-tests workflow:
+1. Create or delete page/component file in site/client/src/pages/ or site/client/src/components/
+2. Update routing in site/client/src/App.jsx
+3. Create or delete corresponding test file in site/client/src/test/
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: site/client/src/pages/{Page}.jsx, site/client/src/components/{Component}.jsx, site/client/src/App.jsx
+
+---
+id: resenhacs-instinct-file-naming-camelCase
+trigger: "When creating a new file in the codebase"
+confidence: 0.85
+domain: code-style
+source: repo-analysis
+source_repo: bronze-ff/resenhacs
+---
+
+# Resenhacs Instinct File Naming CamelCase
+
+## Action
+
+Name the file using camelCase (e.g., friendships.js, profile.js)
+
+## Evidence
+
+- Pattern in files: site/server/src/friendships.js, site/server/src/profile.js
+
+---
+id: resenhacs-instinct-function-naming-camelCase
+trigger: "When defining a new function"
+confidence: 0.85
+domain: code-style
+source: repo-analysis
+source_repo: bronze-ff/resenhacs
+---
+
+# Resenhacs Instinct Function Naming CamelCase
+
+## Action
+
+Name the function using camelCase
+
+## Evidence
+
+- Pattern in codebase: JavaScript functions follow camelCase
+
+---
+id: resenhacs-instinct-class-naming-PascalCase
+trigger: "When defining a new class"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: bronze-ff/resenhacs
+---
+
+# Resenhacs Instinct Class Naming PascalCase
+
+## Action
+
+Name the class using PascalCase
+
+## Evidence
+
+- Pattern in codebase: JavaScript classes use PascalCase
+
+---
+id: resenhacs-instinct-constant-naming-SCREAMING_SNAKE_CASE
+trigger: "When defining a constant"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: bronze-ff/resenhacs
+---
+
+# Resenhacs Instinct Constant Naming SCREAMING_SNAKE_CASE
+
+## Action
+
+Name the constant using SCREAMING_SNAKE_CASE
+
+## Evidence
+
+- Pattern in codebase: Constants use SCREAMING_SNAKE_CASE
+
+---
+id: resenhacs-instinct-import-relative
+trigger: "When importing modules"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: bronze-ff/resenhacs
+---
+
+# Resenhacs Instinct Import Relative
+
+## Action
+
+Use relative import paths
+
+## Evidence
+
+- Pattern in codebase: All imports are relative
+
+---
+id: resenhacs-instinct-export-named
+trigger: "When exporting functions or variables"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: bronze-ff/resenhacs
+---
+
+# Resenhacs Instinct Export Named
+
+## Action
+
+Use named exports
+
+## Evidence
+
+- Pattern in codebase: All exports are named
+
+---
+id: resenhacs-instinct-test-file-pattern
+trigger: "When creating a test file"
+confidence: 0.9
+domain: testing
+source: repo-analysis
+source_repo: bronze-ff/resenhacs
+---
+
+# Resenhacs Instinct Test File Pattern
+
+## Action
+
+Name the test file as *.test.js
+
+## Evidence
+
+- Pattern in files: site/server/test/friendships.test.js, *.test.js
+
+---
+id: resenhacs-instinct-test-framework-vitest
+trigger: "When writing tests"
+confidence: 0.9
+domain: testing
+source: repo-analysis
+source_repo: bronze-ff/resenhacs
+---
+
+# Resenhacs Instinct Test Framework Vitest
+
+## Action
+
+Use the Vitest testing framework
+
+## Evidence
+
+- Pattern in codebase: testing.framework = vitest
+
+---
+id: resenhacs-instinct-test-mocking-vi-mock
+trigger: "When mocking dependencies in tests"
+confidence: 0.85
+domain: testing
+source: repo-analysis
+source_repo: bronze-ff/resenhacs
+---
+
+# Resenhacs Instinct Test Mocking Vi Mock
+
+## Action
+
+Use vi.mock for mocking
+
+## Evidence
+
+- Pattern in codebase: mockingStyle = vi.mock
+
+---
+id: resenhacs-instinct-test-type-unit-integration
+trigger: "When writing tests for a feature"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: bronze-ff/resenhacs
+---
+
+# Resenhacs Instinct Test Type Unit Integration
+
+## Action
+
+Write both unit and integration tests as appropriate
+
+## Evidence
+
+- Pattern in codebase: testTypes = [unit, integration]
+
+---
+id: resenhacs-instinct-commit-conventional-format
+trigger: "When writing a commit message"
+confidence: 0.95
+domain: git
+source: repo-analysis
+source_repo: bronze-ff/resenhacs
+---
+
+# Resenhacs Instinct Commit Conventional Format
+
+## Action
+
+Use conventional commit format: <type>: <description>
+
+## Evidence
+
+- Seen in commit: 'feat: migracao aditiva de amizades (friendships + conta_criada_em + backfill)'
+- Pattern in commit prefixes: refactor, feat, test, docs, fix
+
+---
+id: resenhacs-instinct-commit-average-length
+trigger: "When writing a commit message"
+confidence: 0.7
+domain: git
+source: repo-analysis
+source_repo: bronze-ff/resenhacs
+---
+
+# Resenhacs Instinct Commit Average Length
+
+## Action
+
+Keep the commit message concise, around 69 characters on average
+
+## Evidence
+
+- Pattern: averageLength = 69
+
+---
+id: resenhacs-instinct-feature-module-implementation
+trigger: "When someone wants to add a new backend feature or module"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: bronze-ff/resenhacs
+---
+
+# Resenhacs Instinct Feature Module Implementation
+
+## Action
+
+Create or update the main module file in site/server/src/ and the corresponding test file in site/server/test/
+
+## Evidence
+
+- Workflow: feature-module-implementation-with-tests
+- Seen in commits: feat: migracao aditiva de amizades, feat: modulo friendships
+- Pattern in files: site/server/src/friendships.js, site/server/test/friendships.test.js
+
+---
+id: resenhacs-instinct-api-route-addition-or-refactor
+trigger: "When someone wants to add a new API endpoint or refactor an existing route"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: bronze-ff/resenhacs
+---
+
+# Resenhacs Instinct Api Route Addition Or Refactor
+
+## Action
+
+Create or update route handler in site/server/src/routes/, update route mounting in site/server/src/app.js, and create or update the corresponding test file in site/server/test/
+
+## Evidence
+
+- Workflow: api-route-addition-or-refactor-with-tests
+- Pattern in files: site/server/src/routes/{route}.js, site/server/src/app.js, site/server/test/{route}.test.js
+
+---
+id: resenhacs-instinct-database-migration
+trigger: "When someone wants to add, modify, or remove database tables/columns"
+confidence: 0.95
+domain: workflow
+source: repo-analysis
+source_repo: bronze-ff/resenhacs
+---
+
+# Resenhacs Instinct Database Migration
+
+## Action
+
+Create or update migration SQL file in supabase/migrations/, and optionally update related backend code
+
+## Evidence
+
+- Workflow: database-migration-workflow
+- Pattern in files: supabase/migrations/{number}_{description}.sql
+- Seen in commit: feat: migracao aditiva de amizades
+
+---
+id: resenhacs-instinct-feature-removal-backend-client
+trigger: "When someone wants to fully remove a feature from the codebase"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: bronze-ff/resenhacs
+---
+
+# Resenhacs Instinct Feature Removal Backend Client
+
+## Action
+
+Delete or update backend route files, remove route mounts, delete or update backend test files, delete or update frontend page/component files, and remove related imports and routing
+
+## Evidence
+
+- Workflow: feature-removal-backend-and-client
+- Pattern in files: site/server/src/routes/{feature}.js, site/client/src/pages/{Feature}.jsx
+
+---
+id: resenhacs-instinct-refactor-model-across-routes
+trigger: "When someone wants to change a core data model or access logic affecting multiple endpoints"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: bronze-ff/resenhacs
+---
+
+# Resenhacs Instinct Refactor Model Across Routes
+
+## Action
+
+Update multiple route handler files, update corresponding test files, and update shared logic or middleware if necessary
+
+## Evidence
+
+- Workflow: refactor-feature-across-multiple-routes-and-tests
+- Seen in commit: refactor: ranking/recordes/ladoPorMapa/sessions escopam por amizade
+- Pattern in files: site/server/src/routes/*.js, site/server/test/*.test.js
+
+---
+id: resenhacs-instinct-client-page-addition-or-removal
+trigger: "When someone wants to add a new page/component to the frontend or remove an obsolete one"
+confidence: 0.85
+domain: workflow
+source: repo-analysis
+source_repo: bronze-ff/resenhacs
+---
+
+# Resenhacs Instinct Client Page Addition Or Removal
+
+## Action
+
+Create or delete page/component file in site/client/src/pages/ or site/client/src/components/, update routing in site/client/src/App.jsx, and create or delete corresponding test file in site/client/src/test/
+
+## Evidence
+
+- Workflow: client-page-addition-or-removal-with-tests
+- Pattern in files: site/client/src/pages/{Page}.jsx, site/client/src/components/{Component}.jsx, site/client/src/App.jsx, site/client/src/test/{Page|Component}.test.jsx
+
