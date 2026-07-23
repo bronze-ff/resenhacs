@@ -21,6 +21,7 @@ function inteiroPositivoOuIndefinido(v) {
 function mapCompeticao(c) {
   return {
     id: c.id, nome: c.nome, descricao: c.descricao, premioDescricao: c.premio_descricao,
+    premioImagemUrl: c.premio_imagem_url, premioMercadoUrl: c.premio_mercado_url,
     dataInicio: c.data_inicio, dataFim: c.data_fim,
     limiteDiario: c.limite_diario, limiteTotal: c.limite_total, minimoParaRankear: c.minimo_para_rankear,
     vencedorSteamId: c.vencedor_steam_id64,
@@ -100,10 +101,12 @@ async function buscarClipesRecentes(db, competicaoId) {
 export function createCompeticoesRouter({ db, requireAuth }) {
   const router = Router()
   const requireSuperAdmin = createRequireSuperAdmin(db)
+  const MERCADO_STEAM_PREFIXO = 'https://steamcommunity.com/market/'
 
   router.get('/', requireAuth, async (req, res) => {
     const { rows } = await db.query(
-      `select id, nome, descricao, premio_descricao, data_inicio, data_fim,
+      `select id, nome, descricao, premio_descricao, premio_imagem_url, premio_mercado_url,
+              data_inicio, data_fim,
               limite_diario, limite_total, minimo_para_rankear, vencedor_steam_id64, tradelink_vencedor
        from competicoes
        order by data_inicio desc`,
@@ -137,22 +140,44 @@ export function createCompeticoesRouter({ db, requireAuth }) {
     })
   })
 
+  // Endpoint leve só pra "existe competição ativa agora?" — GET / já calcula leaderboard
+  // completo de todas as competições (pesado) e Shell.jsx fica montado em toda página
+  // autenticada, então chamar o endpoint pesado a cada poll seria desperdício de carga.
+  router.get('/status', requireAuth, async (req, res) => {
+    const { rows } = await db.query(
+      `select exists(
+         select 1 from competicoes where data_inicio <= now() and data_fim >= now()
+       ) as tem_ativa`,
+    )
+    res.json({ temAtiva: rows[0].tem_ativa })
+  })
+
   // #9 da auditoria (rate limiting como defesa em profundidade, além da regra de
   // negócio de limite diário/total) e #11 da spec (submissões também precisam do
   // limite estrito, não só as rotas de admin) - site/server/src/rateLimit.js.
   router.post('/admin', limiteEstrito, requireAuth, requireSuperAdmin, async (req, res) => {
-    const { nome, descricao, premioDescricao, dataInicio, dataFim, limiteDiario, limiteTotal, minimoParaRankear } = req.body ?? {}
+    const {
+      nome, descricao, premioDescricao, premioImagemUrl, premioMercadoUrl,
+      dataInicio, dataFim, limiteDiario, limiteTotal, minimoParaRankear,
+    } = req.body ?? {}
     if (!nome || !dataInicio || !dataFim) return res.status(400).json({ erro: 'nome, dataInicio e dataFim são obrigatórios' })
+    if (!premioImagemUrl || !premioMercadoUrl) {
+      return res.status(400).json({ erro: 'premioImagemUrl e premioMercadoUrl são obrigatórios' })
+    }
+    if (!premioMercadoUrl.startsWith(MERCADO_STEAM_PREFIXO)) {
+      return res.status(400).json({ erro: `premioMercadoUrl precisa ser um link do mercado da Steam (${MERCADO_STEAM_PREFIXO}...)` })
+    }
     if (new Date(dataFim) <= new Date(dataInicio)) return res.status(400).json({ erro: 'dataFim precisa ser depois de dataInicio' })
     if (!inteiroPositivoOuIndefinido(limiteDiario) || !inteiroPositivoOuIndefinido(limiteTotal) || !inteiroPositivoOuIndefinido(minimoParaRankear)) {
       return res.status(400).json({ erro: 'limiteDiario, limiteTotal e minimoParaRankear precisam ser inteiros positivos' })
     }
     const { rows } = await db.query(
       `insert into competicoes
-         (nome, descricao, premio_descricao, data_inicio, data_fim, limite_diario, limite_total, minimo_para_rankear, criado_por)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         (nome, descricao, premio_descricao, premio_imagem_url, premio_mercado_url,
+          data_inicio, data_fim, limite_diario, limite_total, minimo_para_rankear, criado_por)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        returning id`,
-      [nome, descricao ?? '', premioDescricao ?? '', dataInicio, dataFim,
+      [nome, descricao ?? '', premioDescricao ?? '', premioImagemUrl, premioMercadoUrl, dataInicio, dataFim,
         limiteDiario ?? 2, limiteTotal ?? 10, minimoParaRankear ?? 3, req.player.steamId],
     )
     res.status(201).json({ id: rows[0].id })
@@ -160,9 +185,18 @@ export function createCompeticoesRouter({ db, requireAuth }) {
 
   router.put('/admin/:id', limiteEstrito, requireAuth, requireSuperAdmin, async (req, res) => {
     if (!UUID_RE.test(req.params.id)) return res.status(404).json({ erro: 'competição não encontrada' })
-    const { nome, descricao, premioDescricao, dataInicio, dataFim, limiteDiario, limiteTotal, minimoParaRankear } = req.body ?? {}
+    const {
+      nome, descricao, premioDescricao, premioImagemUrl, premioMercadoUrl,
+      dataInicio, dataFim, limiteDiario, limiteTotal, minimoParaRankear,
+    } = req.body ?? {}
     if (!inteiroPositivoOuIndefinido(limiteDiario) || !inteiroPositivoOuIndefinido(limiteTotal) || !inteiroPositivoOuIndefinido(minimoParaRankear)) {
       return res.status(400).json({ erro: 'limiteDiario, limiteTotal e minimoParaRankear precisam ser inteiros positivos' })
+    }
+    // Update parcial: só valida o domínio de premioMercadoUrl quando o campo é enviado
+    // (mesma lógica de dataInicio/dataFim abaixo — editar só outro campo não deve exigir
+    // reenviar imagem/link).
+    if (premioMercadoUrl && !premioMercadoUrl.startsWith(MERCADO_STEAM_PREFIXO)) {
+      return res.status(400).json({ erro: `premioMercadoUrl precisa ser um link do mercado da Steam (${MERCADO_STEAM_PREFIXO}...)` })
     }
     // Update parcial: quando só dataInicio OU só dataFim vem no body, precisa validar
     // contra a data já gravada. Sem isso, um PUT que move só dataFim pra antes do
@@ -188,12 +222,15 @@ export function createCompeticoesRouter({ db, requireAuth }) {
       `update competicoes set
          nome = coalesce($1, nome), descricao = coalesce($2, descricao),
          premio_descricao = coalesce($3, premio_descricao),
-         data_inicio = coalesce($4, data_inicio), data_fim = coalesce($5, data_fim),
-         limite_diario = coalesce($6, limite_diario), limite_total = coalesce($7, limite_total),
-         minimo_para_rankear = coalesce($8, minimo_para_rankear)
-       where id = $9
+         premio_imagem_url = coalesce($4, premio_imagem_url),
+         premio_mercado_url = coalesce($5, premio_mercado_url),
+         data_inicio = coalesce($6, data_inicio), data_fim = coalesce($7, data_fim),
+         limite_diario = coalesce($8, limite_diario), limite_total = coalesce($9, limite_total),
+         minimo_para_rankear = coalesce($10, minimo_para_rankear)
+       where id = $11
        returning id`,
-      [nome, descricao, premioDescricao, dataInicio, dataFim, limiteDiario, limiteTotal, minimoParaRankear, req.params.id],
+      [nome, descricao, premioDescricao, premioImagemUrl, premioMercadoUrl, dataInicio, dataFim,
+        limiteDiario, limiteTotal, minimoParaRankear, req.params.id],
     )
     if (!rows.length) return res.status(404).json({ erro: 'competição não encontrada' })
     res.json({ ok: true })

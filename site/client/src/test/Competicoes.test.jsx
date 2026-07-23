@@ -76,4 +76,42 @@ describe('Competicoes', () => {
     await waitFor(() => expect(screen.getByText(/voc[êe] venceu/i)).toBeInTheDocument())
     expect(screen.getByPlaceholderText(/tradelink/i)).toBeInTheDocument()
   })
+
+  it('mostra imagem do premio e link pro mercado quando presentes', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        ativa: {
+          id: 'comp1', nome: 'Semana 1', premioDescricao: 'Skin AK-47',
+          premioImagemUrl: 'https://exemplo.com/ak47.png',
+          premioMercadoUrl: 'https://steamcommunity.com/market/listings/730/AK-47',
+          dataFim: new Date(Date.now() + 86400000).toISOString(),
+          leaderboard: [], limiteDiario: 2, limiteTotal: 10, minimoParaRankear: 3,
+        },
+        encerradas: [],
+      }),
+    })
+    render(<Competicoes />)
+    await waitFor(() => expect(screen.getByRole('img', { name: /skin ak-47/i })).toBeInTheDocument())
+    expect(screen.getByRole('link', { name: /ver no mercado/i })).toHaveAttribute(
+      'href', 'https://steamcommunity.com/market/listings/730/AK-47',
+    )
+  })
+
+  it('sem imagem/link do premio (competicao antiga): nao quebra e nao mostra o link', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        ativa: {
+          id: 'comp1', nome: 'Semana 1', premioDescricao: 'Skin',
+          dataFim: new Date(Date.now() + 86400000).toISOString(),
+          leaderboard: [], limiteDiario: 2, limiteTotal: 10, minimoParaRankear: 3,
+        },
+        encerradas: [],
+      }),
+    })
+    render(<Competicoes />)
+    await waitFor(() => expect(screen.getByText('Semana 1')).toBeInTheDocument())
+    expect(screen.queryByRole('link', { name: /ver no mercado/i })).not.toBeInTheDocument()
+  })
 })

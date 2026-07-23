@@ -51,6 +51,27 @@ function CardCompeticao({ comp, viewerSteamId, onTradelinkEnviado }) {
         <h2 className="font-display text-xl font-bold text-texto">{comp.nome}</h2>
         {comp.premioDescricao && <Badge tom="destaque">{comp.premioDescricao}</Badge>}
       </div>
+      {(comp.premioImagemUrl || comp.premioMercadoUrl) && (
+        <div className="mt-3 flex items-center gap-3">
+          {comp.premioImagemUrl && (
+            <img
+              src={comp.premioImagemUrl}
+              alt={comp.premioDescricao || 'Prêmio da competição'}
+              className="panel-cut-sm h-16 w-16 border border-borda object-cover"
+            />
+          )}
+          {comp.premioMercadoUrl && (
+            <a
+              href={comp.premioMercadoUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="panel-cut-sm border border-borda px-2 py-1 font-mono text-xs uppercase tracking-wide text-texto-fraco hover:border-destaque/50 hover:text-destaque"
+            >
+              Ver no mercado ↗
+            </a>
+          )}
+        </div>
+      )}
       {comp.descricao && <p className="mt-2 font-mono text-sm text-texto-fraco">{comp.descricao}</p>}
       <p className="mt-1 font-mono text-xs text-texto-fraco">
         Limite: {comp.limiteDiario}/dia · {comp.limiteTotal} no total · mínimo {comp.minimoParaRankear} pra rankear

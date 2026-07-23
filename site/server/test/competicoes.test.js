@@ -61,6 +61,25 @@ describe('GET /api/competicoes', () => {
     expect(res.body.agendadas).toHaveLength(1)
     expect(res.body.agendadas[0].id).toBe('comp-futura')
   })
+
+  it('inclui premioImagemUrl/premioMercadoUrl na resposta e na query', async () => {
+    const agora = new Date()
+    const { app, db } = appWith([
+      ['from competicoes', [{
+        id: 'comp1', nome: 'Teste', descricao: '', premio_descricao: 'Skin',
+        premio_imagem_url: 'https://exemplo.com/ak47.png',
+        premio_mercado_url: 'https://steamcommunity.com/market/listings/730/AK-47',
+        data_inicio: new Date(agora.getTime() - 86400000), data_fim: new Date(agora.getTime() + 86400000),
+        limite_diario: 2, limite_total: 10, minimo_para_rankear: 3, vencedor_steam_id64: null,
+      }]],
+    ])
+    const res = await request(app).get('/api/competicoes').set('Cookie', cookieJogador)
+    expect(res.body.ativa.premioImagemUrl).toBe('https://exemplo.com/ak47.png')
+    expect(res.body.ativa.premioMercadoUrl).toBe('https://steamcommunity.com/market/listings/730/AK-47')
+    const [sql] = db.query.mock.calls.find(([s]) => s.includes('from competicoes'))
+    expect(sql).toContain('premio_imagem_url')
+    expect(sql).toContain('premio_mercado_url')
+  })
 })
 
 describe('POST /api/competicoes/admin', () => {
@@ -75,18 +94,43 @@ describe('POST /api/competicoes/admin', () => {
     const { app, db } = appWith([['insert into competicoes', [{ id: 'comp-nova' }]]])
     const res = await request(app).post('/api/competicoes/admin').set('Cookie', cookieAdmin).send({
       nome: 'Semana 1', descricao: 'desc', premioDescricao: 'Skin AK',
+      premioImagemUrl: 'https://exemplo.com/ak47.png',
+      premioMercadoUrl: 'https://steamcommunity.com/market/listings/730/AK-47',
       dataInicio: '2026-08-01T00:00:00Z', dataFim: '2026-08-08T00:00:00Z',
       limiteDiario: 2, limiteTotal: 10, minimoParaRankear: 3,
     })
     expect(res.status).toBe(201)
     const insert = db.query.mock.calls.find(([sql]) => sql.includes('insert into competicoes'))
     expect(insert).toBeTruthy()
+    expect(insert[1]).toContain('https://exemplo.com/ak47.png')
+    expect(insert[1]).toContain('https://steamcommunity.com/market/listings/730/AK-47')
+  })
+
+  it('sem premioImagemUrl/premioMercadoUrl: 400', async () => {
+    const { app } = appWith([])
+    const res = await request(app).post('/api/competicoes/admin').set('Cookie', cookieAdmin).send({
+      nome: 'X', dataInicio: '2026-08-01T00:00:00Z', dataFim: '2026-08-08T00:00:00Z',
+    })
+    expect(res.status).toBe(400)
+  })
+
+  it('premioMercadoUrl fora do dominio da steam: 400', async () => {
+    const { app } = appWith([])
+    const res = await request(app).post('/api/competicoes/admin').set('Cookie', cookieAdmin).send({
+      nome: 'X', dataInicio: '2026-08-01T00:00:00Z', dataFim: '2026-08-08T00:00:00Z',
+      premioImagemUrl: 'https://exemplo.com/ak47.png',
+      premioMercadoUrl: 'https://exemplo.com/market',
+    })
+    expect(res.status).toBe(400)
+    expect(res.body.erro).toMatch(/steamcommunity\.com\/market/)
   })
 
   it('data_fim antes de data_inicio: 400', async () => {
     const { app } = appWith([])
     const res = await request(app).post('/api/competicoes/admin').set('Cookie', cookieAdmin).send({
       nome: 'X', dataInicio: '2026-08-08T00:00:00Z', dataFim: '2026-08-01T00:00:00Z',
+      premioImagemUrl: 'https://exemplo.com/ak47.png',
+      premioMercadoUrl: 'https://steamcommunity.com/market/listings/730/AK-47',
     })
     expect(res.status).toBe(400)
   })
@@ -95,6 +139,8 @@ describe('POST /api/competicoes/admin', () => {
     const { app } = appWith([])
     const res = await request(app).post('/api/competicoes/admin').set('Cookie', cookieAdmin).send({
       nome: 'X', dataInicio: '2026-08-01T00:00:00Z', dataFim: '2026-08-08T00:00:00Z', limiteDiario: -1,
+      premioImagemUrl: 'https://exemplo.com/ak47.png',
+      premioMercadoUrl: 'https://steamcommunity.com/market/listings/730/AK-47',
     })
     expect(res.status).toBe(400)
   })
@@ -103,6 +149,8 @@ describe('POST /api/competicoes/admin', () => {
     const { app } = appWith([])
     const res = await request(app).post('/api/competicoes/admin').set('Cookie', cookieAdmin).send({
       nome: 'X', dataInicio: '2026-08-01T00:00:00Z', dataFim: '2026-08-08T00:00:00Z', limiteTotal: 2.5,
+      premioImagemUrl: 'https://exemplo.com/ak47.png',
+      premioMercadoUrl: 'https://steamcommunity.com/market/listings/730/AK-47',
     })
     expect(res.status).toBe(400)
   })
@@ -172,6 +220,28 @@ describe('PUT /api/competicoes/admin/:id', () => {
     const res = await request(app).put(`/api/competicoes/admin/${COMP_ID}`).set('Cookie', cookieAdmin)
       .send({ dataFim: '2026-08-10T00:00:00Z' })
     expect(res.status).toBe(404)
+  })
+
+  it('premioMercadoUrl fora do dominio da steam: 400', async () => {
+    const { app } = appWith([])
+    const res = await request(app).put(`/api/competicoes/admin/${COMP_ID}`).set('Cookie', cookieAdmin)
+      .send({ premioMercadoUrl: 'https://exemplo.com/market' })
+    expect(res.status).toBe(400)
+    expect(res.body.erro).toMatch(/steamcommunity\.com\/market/)
+  })
+
+  it('premioImagemUrl e premioMercadoUrl validos: atualiza com sucesso', async () => {
+    const { app, db } = appWith([
+      ['update competicoes set', [{ id: COMP_ID }]],
+    ])
+    const res = await request(app).put(`/api/competicoes/admin/${COMP_ID}`).set('Cookie', cookieAdmin).send({
+      premioImagemUrl: 'https://exemplo.com/ak47.png',
+      premioMercadoUrl: 'https://steamcommunity.com/market/listings/730/AK-47',
+    })
+    expect(res.status).toBe(200)
+    const update = db.query.mock.calls.find(([sql]) => sql.includes('update competicoes set'))
+    expect(update[1]).toContain('https://exemplo.com/ak47.png')
+    expect(update[1]).toContain('https://steamcommunity.com/market/listings/730/AK-47')
   })
 })
 
@@ -390,5 +460,30 @@ describe('tradelink so aparece pro vencedor/admin em GET /', () => {
     const res = await request(app).get('/api/competicoes').set('Cookie', cookieJogador) // cookie do 765, vencedor é 999
     const comp = res.body.encerradas[0]
     expect(comp.tradelinkVencedor).toBeUndefined()
+  })
+})
+
+describe('GET /api/competicoes/status', () => {
+  it('sem login: 401', async () => {
+    const { app } = appWith([])
+    expect((await request(app).get('/api/competicoes/status')).status).toBe(401)
+  })
+
+  it('existe competicao no periodo atual: temAtiva true', async () => {
+    const { app } = appWith([
+      ['from competicoes where data_inicio', [{ tem_ativa: true }]],
+    ])
+    const res = await request(app).get('/api/competicoes/status').set('Cookie', cookieJogador)
+    expect(res.status).toBe(200)
+    expect(res.body).toEqual({ temAtiva: true })
+  })
+
+  it('nenhuma competicao no periodo atual: temAtiva false', async () => {
+    const { app } = appWith([
+      ['from competicoes where data_inicio', [{ tem_ativa: false }]],
+    ])
+    const res = await request(app).get('/api/competicoes/status').set('Cookie', cookieJogador)
+    expect(res.status).toBe(200)
+    expect(res.body).toEqual({ temAtiva: false })
   })
 })

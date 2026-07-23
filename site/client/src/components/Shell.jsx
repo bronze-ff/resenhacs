@@ -160,13 +160,17 @@ const NAV_ICONES = {
   ),
 }
 
-// Granadas/Táticas são públicos pra visualização — entram direto na barra mobile
-// pra todo mundo (só criar/editar continua admin, escondido dentro da própria página).
+// Base fixa da barra mobile: as 4 rotas de hábito diário, não de consulta situacional
+// (docs/superpowers/specs/2026-07-23-indicador-competicao-ativa-design.md) — Partidas é
+// o job principal (rever a partida logo depois de jogar), Comparar resolve discussão do
+// grupo via Head to Head (caso de uso citado explicitamente no PRODUCT.md), Clipes está
+// ligado ao fluxo de Competições. Granadas/Táticas (consulta situacional, ex.: lineup de
+// smoke antes de um round) continuam acessíveis pelo menu "Mais", só saem da barra fixa.
 const NAV_INFERIOR_BASE = [
   { to: '/', end: true, label: 'Partidas', icone: 'partidas' },
   { to: '/ranking', label: 'Ranking', icone: 'ranking' },
-  { to: '/granadas', label: 'Granadas', icone: 'granadas' },
-  { to: '/taticas', label: 'Táticas', icone: 'taticas' },
+  { to: '/clipes', label: 'Clipes', icone: 'clipes' },
+  { to: '/comparar', label: 'Comparar', icone: 'comparar' },
 ]
 
 function itemClasse(colapsada) {
@@ -178,6 +182,18 @@ function itemClasse(colapsada) {
         ? 'border-destaque bg-destaque/10 text-texto'
         : 'border-transparent text-texto-fraco hover:border-destaque/40 hover:bg-superficie-alta hover:text-texto'
     }`
+}
+
+// Ponto pulsante sobreposto ao ícone de Competições — mesmo padrão visual (bg-destaque +
+// animate-pulso-sinal) já usado no aviso de sincronização de Feed.jsx:112. O texto
+// sr-only garante leitura por leitor de tela sem depender só de cor/animação.
+function IndicadorCompeticaoAtiva() {
+  return (
+    <span className="absolute -right-0.5 -top-0.5 inline-flex h-2.5 w-2.5">
+      <span className="absolute inline-flex h-full w-full animate-pulso-sinal rounded-full bg-destaque shadow-[0_0_6px_var(--color-destaque)]" />
+      <span className="sr-only">Competição ativa</span>
+    </span>
+  )
 }
 
 export default function Shell({ children }) {
@@ -198,6 +214,25 @@ export default function Shell({ children }) {
       // ignora (ex.: storage indisponível)
     }
   }, [colapsada])
+
+  const [temCompeticaoAtiva, setTemCompeticaoAtiva] = useState(false)
+
+  // Descobre se existe competição ativa pra acender o indicador (sidebar + barra
+  // inferior mobile) — mesmo padrão de polling já usado em Feed.jsx pro aviso de
+  // sincronização, intervalo maior (60s) porque início/fim de competição não muda a
+  // cada segundo.
+  useEffect(() => {
+    let vivo = true
+    function carregar() {
+      fetch('/api/competicoes/status')
+        .then((res) => (res.ok ? res.json() : null))
+        .then((s) => { if (vivo && s) setTemCompeticaoAtiva(Boolean(s.temAtiva)) })
+        .catch(() => {})
+    }
+    carregar()
+    const t = setInterval(carregar, 60000)
+    return () => { vivo = false; clearInterval(t) }
+  }, [])
 
   async function sair() {
     await fetch('/api/auth/logout', { method: 'POST' })
@@ -251,7 +286,10 @@ export default function Shell({ children }) {
               title={colapsada ? item.label : undefined}
               aria-label={colapsada ? item.label : undefined}
             >
-              <span className="shrink-0">{NAV_ICONES[item.icone]}</span>
+              <span className="relative shrink-0">
+                {NAV_ICONES[item.icone]}
+                {item.to === '/competicoes' && temCompeticaoAtiva && <IndicadorCompeticaoAtiva />}
+              </span>
               <span className={`font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque ${colapsada ? 'lg:hidden' : ''}`}>
                 {numerarItem(indice)}
               </span>
@@ -350,7 +388,7 @@ export default function Shell({ children }) {
         </header>
         <main className="px-4 pb-20 pt-4 lg:px-6 lg:py-6">{children}</main>
       </div>
-      <BarraInferior menuAberto={menuAberto} onAbrirMenu={() => setMenuAberto(true)} />
+      <BarraInferior menuAberto={menuAberto} onAbrirMenu={() => setMenuAberto(true)} temCompeticaoAtiva={temCompeticaoAtiva} />
     </div>
   )
 }
@@ -358,9 +396,16 @@ export default function Shell({ children }) {
 // Barra de navegação inferior mobile (estilo app da FACEIT): fica sempre
 // visível em telas pequenas (lg:hidden), abaixo do overlay (z-30) e do
 // drawer (z-40) pra não competir visualmente quando o menu completo abre.
-function BarraInferior({ menuAberto, onAbrirMenu }) {
+function BarraInferior({ menuAberto, onAbrirMenu, temCompeticaoAtiva }) {
   const location = useLocation()
-  const itens = NAV_INFERIOR_BASE
+  // Com competição ativa, Comparar cede o lugar pra Competições (mesmo indicador da
+  // sidebar) — Partidas/Ranking/Clipes continuam fixos. Sem competição ativa, a barra
+  // volta ao normal (docs/superpowers/specs/2026-07-23-indicador-competicao-ativa-design.md).
+  const itens = temCompeticaoAtiva
+    ? NAV_INFERIOR_BASE.map((item) =>
+        item.to === '/comparar' ? { to: '/competicoes', label: 'Competições', icone: 'competicoes' } : item,
+      )
+    : NAV_INFERIOR_BASE
 
   function itemNavClasse({ isActive }) {
     return `flex h-14 flex-col items-center justify-center gap-1 text-[10px] font-mono uppercase tracking-wide transition-colors ${
@@ -384,7 +429,10 @@ function BarraInferior({ menuAberto, onAbrirMenu }) {
     >
       {itens.map((item) => (
         <NavLink key={item.to} to={item.to} end={item.end} className={itemNavClasse}>
-          {NAV_ICONES[item.icone]}
+          <span className="relative">
+            {NAV_ICONES[item.icone]}
+            {item.to === '/competicoes' && temCompeticaoAtiva && <IndicadorCompeticaoAtiva />}
+          </span>
           {item.label}
         </NavLink>
       ))}
