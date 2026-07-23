@@ -69,7 +69,25 @@ acumulando.
   qualquer bump em pipeline crítico (parser de demo, driver de banco) merecem uma
   rodada de teste antes de mergear, não merge automático.
 
-## 5. Antes de começar uma branch longa
+## 5. Manter o `main` local sincronizado
+
+- Sempre sincronizar o `main` local com o `origin/main` com frequência —
+  `git fetch origin && git pull --rebase origin main` — em vez de deixar acumular
+  divergência até precisar mexer nele. Descobrir a divergência só na hora de agir
+  (como aconteceu em 2026-07-23: main local 1 commit à frente por um spec, origin 4
+  commits à frente por merges do Dependabot) transforma um `pull` trivial num rebase
+  reativo no meio da tarefa.
+- Só é aceitável o `main` local ficar à frente do `origin/main` por commits **pequenos
+  e de baixo risco** (doc, spec, ajuste de config) que ainda não foram enviados. Isso
+  segue o mesmo padrão que o próprio repositório já usa pra commits de documentação
+  direto no `main` (ex.: `97a8ce5 docs: adiciona guia de fluxo de trabalho`).
+- Trabalho de implementação de verdade (código, migration, feature) **não** deve
+  acumular no `main` local, nem sem push — vai pra branch/worktree dedicada (seções 1
+  e 2). Um `main` local carregando commits de feature é fácil de esquecer, mistura
+  contexto de tarefas diferentes, e tende a virar o mesmo tipo de bagunça que motivou
+  este guia.
+
+## 6. Antes de começar uma branch longa
 
 - Sempre checar a divergência com a `main` **antes** de começar a trabalhar, não no
   meio:
@@ -83,7 +101,7 @@ acumulando.
 - Branches que vão durar mais que alguns dias devem sincronizar com a `main`
   periodicamente (merge ou rebase), não só no final.
 
-## 6. Backlog / issues
+## 7. Backlog / issues
 
 Hoje o projeto não usa nenhum rastreador — decisões e pendências vivem só na
 conversa com a IA e nos arquivos de memória dela. Isso funciona pra pendências de
@@ -107,7 +125,7 @@ Sem um rastreador, o mínimo viável é: toda decisão importante e toda pendên
 adiada vira uma nota explícita (arquivo de memória, comentário no código, ou
 `spawn_task`), nunca só "vou lembrar disso".
 
-## 7. Regras específicas pra sessões de IA (Claude Code)
+## 8. Regras específicas pra sessões de IA (Claude Code)
 
 Baseado em bugs reais desta sessão:
 
