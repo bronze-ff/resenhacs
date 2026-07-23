@@ -1,4 +1,3 @@
-import { Link } from 'react-router-dom'
 import { Card, Badge, RatingBadge, ResultChip, MapIcon, Avatar, SteamIcon } from '../components/ui'
 import { nomeArma } from '../lib/format.js'
 
@@ -315,12 +314,12 @@ export default function Landing() {
         <span className="font-display text-lg font-bold uppercase tracking-widest text-texto">
           Resenha<span className="text-destaque">.</span>
         </span>
-        <Link
-          to="/entrar"
+        <a
+          href="/api/auth/steam"
           className="panel-cut-sm border border-borda px-4 py-2 font-mono text-xs uppercase tracking-wide text-texto-fraco transition-colors duration-200 hover:border-destaque hover:text-destaque"
         >
           Entrar
-        </Link>
+        </a>
       </header>
 
       {/* Hero */}
@@ -342,14 +341,14 @@ export default function Landing() {
           Descoberta automática das Partidas, replay 2D, economia por round e comparativos entre
           Jogadores, pra parar de discutir quem carregou e ir direto no dado.
         </p>
-        <Link
-          to="/entrar"
+        <a
+          href="/api/auth/steam"
           className="animate-surgir panel-cut relative mt-9 flex items-center gap-3 border border-destaque bg-destaque px-7 py-3.5 font-display text-sm font-semibold uppercase tracking-wider text-fundo shadow-[0_0_40px_-10px_rgba(255,46,67,0.6)] transition-shadow hover:shadow-[0_0_60px_-8px_rgba(255,46,67,0.8)]"
           style={{ animationDelay: '280ms' }}
         >
           <SteamIcon className="h-5 w-5" />
           Entrar com Steam
-        </Link>
+        </a>
         <p className="animate-surgir relative mt-6 font-mono text-[11px] uppercase tracking-widest text-texto-fraco/60" style={{ animationDelay: '360ms' }}>
           Fechado pro grupo, feito pra resenha, não pra internet
         </p>
@@ -386,13 +385,13 @@ export default function Landing() {
         <h2 className="max-w-md text-2xl font-bold uppercase tracking-wide text-texto [text-wrap:balance] sm:text-3xl">
           Entra e chama a resenha
         </h2>
-        <Link
-          to="/entrar"
+        <a
+          href="/api/auth/steam"
           className="panel-cut mt-8 flex items-center gap-3 border border-destaque bg-destaque px-7 py-3.5 font-display text-sm font-semibold uppercase tracking-wider text-fundo shadow-[0_0_40px_-10px_rgba(255,46,67,0.6)] transition-shadow hover:shadow-[0_0_60px_-8px_rgba(255,46,67,0.8)]"
         >
           <SteamIcon className="h-5 w-5" />
           Entrar com Steam
-        </Link>
+        </a>
       </div>
 
       <footer className="border-t border-borda px-6 py-8 text-center">

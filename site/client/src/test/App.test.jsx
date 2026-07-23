@@ -29,12 +29,12 @@ beforeEach(() => {
 })
 
 describe('App', () => {
-  it('sem login: mostra a landing com CTAs que levam pro /entrar', async () => {
+  it('sem login: mostra a landing com CTAs que levam direto pro Steam', async () => {
     mockMe(null)
     render(<App />)
     const links = await screen.findAllByRole('link', { name: /entrar com steam/i })
     expect(links.length).toBeGreaterThan(0)
-    links.forEach((link) => expect(link).toHaveAttribute('href', '/entrar'))
+    links.forEach((link) => expect(link).toHaveAttribute('href', '/api/auth/steam'))
   })
 
   it('logado: mostra o shell com o nick do jogador', async () => {
