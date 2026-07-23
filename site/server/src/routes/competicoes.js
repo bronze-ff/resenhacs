@@ -101,6 +101,7 @@ async function buscarClipesRecentes(db, competicaoId) {
 export function createCompeticoesRouter({ db, requireAuth }) {
   const router = Router()
   const requireSuperAdmin = createRequireSuperAdmin(db)
+  const MERCADO_STEAM_PREFIXO = 'https://steamcommunity.com/market/'
 
   router.get('/', requireAuth, async (req, res) => {
     const { rows } = await db.query(
@@ -155,18 +156,28 @@ export function createCompeticoesRouter({ db, requireAuth }) {
   // negócio de limite diário/total) e #11 da spec (submissões também precisam do
   // limite estrito, não só as rotas de admin) - site/server/src/rateLimit.js.
   router.post('/admin', limiteEstrito, requireAuth, requireSuperAdmin, async (req, res) => {
-    const { nome, descricao, premioDescricao, dataInicio, dataFim, limiteDiario, limiteTotal, minimoParaRankear } = req.body ?? {}
+    const {
+      nome, descricao, premioDescricao, premioImagemUrl, premioMercadoUrl,
+      dataInicio, dataFim, limiteDiario, limiteTotal, minimoParaRankear,
+    } = req.body ?? {}
     if (!nome || !dataInicio || !dataFim) return res.status(400).json({ erro: 'nome, dataInicio e dataFim são obrigatórios' })
+    if (!premioImagemUrl || !premioMercadoUrl) {
+      return res.status(400).json({ erro: 'premioImagemUrl e premioMercadoUrl são obrigatórios' })
+    }
+    if (!premioMercadoUrl.startsWith(MERCADO_STEAM_PREFIXO)) {
+      return res.status(400).json({ erro: `premioMercadoUrl precisa ser um link do mercado da Steam (${MERCADO_STEAM_PREFIXO}...)` })
+    }
     if (new Date(dataFim) <= new Date(dataInicio)) return res.status(400).json({ erro: 'dataFim precisa ser depois de dataInicio' })
     if (!inteiroPositivoOuIndefinido(limiteDiario) || !inteiroPositivoOuIndefinido(limiteTotal) || !inteiroPositivoOuIndefinido(minimoParaRankear)) {
       return res.status(400).json({ erro: 'limiteDiario, limiteTotal e minimoParaRankear precisam ser inteiros positivos' })
     }
     const { rows } = await db.query(
       `insert into competicoes
-         (nome, descricao, premio_descricao, data_inicio, data_fim, limite_diario, limite_total, minimo_para_rankear, criado_por)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         (nome, descricao, premio_descricao, premio_imagem_url, premio_mercado_url,
+          data_inicio, data_fim, limite_diario, limite_total, minimo_para_rankear, criado_por)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        returning id`,
-      [nome, descricao ?? '', premioDescricao ?? '', dataInicio, dataFim,
+      [nome, descricao ?? '', premioDescricao ?? '', premioImagemUrl, premioMercadoUrl, dataInicio, dataFim,
         limiteDiario ?? 2, limiteTotal ?? 10, minimoParaRankear ?? 3, req.player.steamId],
     )
     res.status(201).json({ id: rows[0].id })

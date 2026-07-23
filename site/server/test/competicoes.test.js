@@ -94,12 +94,35 @@ describe('POST /api/competicoes/admin', () => {
     const { app, db } = appWith([['insert into competicoes', [{ id: 'comp-nova' }]]])
     const res = await request(app).post('/api/competicoes/admin').set('Cookie', cookieAdmin).send({
       nome: 'Semana 1', descricao: 'desc', premioDescricao: 'Skin AK',
+      premioImagemUrl: 'https://exemplo.com/ak47.png',
+      premioMercadoUrl: 'https://steamcommunity.com/market/listings/730/AK-47',
       dataInicio: '2026-08-01T00:00:00Z', dataFim: '2026-08-08T00:00:00Z',
       limiteDiario: 2, limiteTotal: 10, minimoParaRankear: 3,
     })
     expect(res.status).toBe(201)
     const insert = db.query.mock.calls.find(([sql]) => sql.includes('insert into competicoes'))
     expect(insert).toBeTruthy()
+    expect(insert[1]).toContain('https://exemplo.com/ak47.png')
+    expect(insert[1]).toContain('https://steamcommunity.com/market/listings/730/AK-47')
+  })
+
+  it('sem premioImagemUrl/premioMercadoUrl: 400', async () => {
+    const { app } = appWith([])
+    const res = await request(app).post('/api/competicoes/admin').set('Cookie', cookieAdmin).send({
+      nome: 'X', dataInicio: '2026-08-01T00:00:00Z', dataFim: '2026-08-08T00:00:00Z',
+    })
+    expect(res.status).toBe(400)
+  })
+
+  it('premioMercadoUrl fora do dominio da steam: 400', async () => {
+    const { app } = appWith([])
+    const res = await request(app).post('/api/competicoes/admin').set('Cookie', cookieAdmin).send({
+      nome: 'X', dataInicio: '2026-08-01T00:00:00Z', dataFim: '2026-08-08T00:00:00Z',
+      premioImagemUrl: 'https://exemplo.com/ak47.png',
+      premioMercadoUrl: 'https://exemplo.com/market',
+    })
+    expect(res.status).toBe(400)
+    expect(res.body.erro).toMatch(/steamcommunity\.com\/market/)
   })
 
   it('data_fim antes de data_inicio: 400', async () => {
