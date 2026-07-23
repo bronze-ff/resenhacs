@@ -431,7 +431,7 @@ function BarraInferior({ menuAberto, onAbrirMenu, temCompeticaoAtiva }) {
         <NavLink key={item.to} to={item.to} end={item.end} className={itemNavClasse}>
           <span className="relative">
             {NAV_ICONES[item.icone]}
-            {item.to === '/competicoes' && <IndicadorCompeticaoAtiva />}
+            {item.to === '/competicoes' && temCompeticaoAtiva && <IndicadorCompeticaoAtiva />}
           </span>
           {item.label}
         </NavLink>

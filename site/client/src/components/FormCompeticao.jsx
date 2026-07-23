@@ -24,11 +24,14 @@ export default function FormCompeticao({ inicial = null, onSalvo, onCancelar }) 
   async function salvar(e) {
     e.preventDefault()
     setErro(null)
-    if (!premioImagemUrl.trim() || !premioMercadoUrl.trim()) {
+    // Obrigatório só na criação: o PUT no servidor trata esses campos como opcionais
+    // (coalesce pra update parcial) — editar só o nome de uma competição legada (com
+    // esses campos null) não pode ser bloqueado por exigir link válido de novo.
+    if (!inicial && (!premioImagemUrl.trim() || !premioMercadoUrl.trim())) {
       setErro('Link da imagem e link do mercado da Steam são obrigatórios.')
       return
     }
-    if (!premioMercadoUrl.startsWith(MERCADO_STEAM_PREFIXO)) {
+    if (premioMercadoUrl && !premioMercadoUrl.startsWith(MERCADO_STEAM_PREFIXO)) {
       setErro(`O link do mercado precisa começar com ${MERCADO_STEAM_PREFIXO}`)
       return
     }
