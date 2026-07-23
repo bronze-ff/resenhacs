@@ -221,6 +221,28 @@ describe('PUT /api/competicoes/admin/:id', () => {
       .send({ dataFim: '2026-08-10T00:00:00Z' })
     expect(res.status).toBe(404)
   })
+
+  it('premioMercadoUrl fora do dominio da steam: 400', async () => {
+    const { app } = appWith([])
+    const res = await request(app).put(`/api/competicoes/admin/${COMP_ID}`).set('Cookie', cookieAdmin)
+      .send({ premioMercadoUrl: 'https://exemplo.com/market' })
+    expect(res.status).toBe(400)
+    expect(res.body.erro).toMatch(/steamcommunity\.com\/market/)
+  })
+
+  it('premioImagemUrl e premioMercadoUrl validos: atualiza com sucesso', async () => {
+    const { app, db } = appWith([
+      ['update competicoes set', [{ id: COMP_ID }]],
+    ])
+    const res = await request(app).put(`/api/competicoes/admin/${COMP_ID}`).set('Cookie', cookieAdmin).send({
+      premioImagemUrl: 'https://exemplo.com/ak47.png',
+      premioMercadoUrl: 'https://steamcommunity.com/market/listings/730/AK-47',
+    })
+    expect(res.status).toBe(200)
+    const update = db.query.mock.calls.find(([sql]) => sql.includes('update competicoes set'))
+    expect(update[1]).toContain('https://exemplo.com/ak47.png')
+    expect(update[1]).toContain('https://steamcommunity.com/market/listings/730/AK-47')
+  })
 })
 
 describe('GET /api/competicoes/:id/elegiveis', () => {

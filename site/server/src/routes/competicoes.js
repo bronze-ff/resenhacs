@@ -185,9 +185,18 @@ export function createCompeticoesRouter({ db, requireAuth }) {
 
   router.put('/admin/:id', limiteEstrito, requireAuth, requireSuperAdmin, async (req, res) => {
     if (!UUID_RE.test(req.params.id)) return res.status(404).json({ erro: 'competição não encontrada' })
-    const { nome, descricao, premioDescricao, dataInicio, dataFim, limiteDiario, limiteTotal, minimoParaRankear } = req.body ?? {}
+    const {
+      nome, descricao, premioDescricao, premioImagemUrl, premioMercadoUrl,
+      dataInicio, dataFim, limiteDiario, limiteTotal, minimoParaRankear,
+    } = req.body ?? {}
     if (!inteiroPositivoOuIndefinido(limiteDiario) || !inteiroPositivoOuIndefinido(limiteTotal) || !inteiroPositivoOuIndefinido(minimoParaRankear)) {
       return res.status(400).json({ erro: 'limiteDiario, limiteTotal e minimoParaRankear precisam ser inteiros positivos' })
+    }
+    // Update parcial: só valida o domínio de premioMercadoUrl quando o campo é enviado
+    // (mesma lógica de dataInicio/dataFim abaixo — editar só outro campo não deve exigir
+    // reenviar imagem/link).
+    if (premioMercadoUrl && !premioMercadoUrl.startsWith(MERCADO_STEAM_PREFIXO)) {
+      return res.status(400).json({ erro: `premioMercadoUrl precisa ser um link do mercado da Steam (${MERCADO_STEAM_PREFIXO}...)` })
     }
     // Update parcial: quando só dataInicio OU só dataFim vem no body, precisa validar
     // contra a data já gravada. Sem isso, um PUT que move só dataFim pra antes do
@@ -213,12 +222,15 @@ export function createCompeticoesRouter({ db, requireAuth }) {
       `update competicoes set
          nome = coalesce($1, nome), descricao = coalesce($2, descricao),
          premio_descricao = coalesce($3, premio_descricao),
-         data_inicio = coalesce($4, data_inicio), data_fim = coalesce($5, data_fim),
-         limite_diario = coalesce($6, limite_diario), limite_total = coalesce($7, limite_total),
-         minimo_para_rankear = coalesce($8, minimo_para_rankear)
-       where id = $9
+         premio_imagem_url = coalesce($4, premio_imagem_url),
+         premio_mercado_url = coalesce($5, premio_mercado_url),
+         data_inicio = coalesce($6, data_inicio), data_fim = coalesce($7, data_fim),
+         limite_diario = coalesce($8, limite_diario), limite_total = coalesce($9, limite_total),
+         minimo_para_rankear = coalesce($10, minimo_para_rankear)
+       where id = $11
        returning id`,
-      [nome, descricao, premioDescricao, dataInicio, dataFim, limiteDiario, limiteTotal, minimoParaRankear, req.params.id],
+      [nome, descricao, premioDescricao, premioImagemUrl, premioMercadoUrl, dataInicio, dataFim,
+        limiteDiario, limiteTotal, minimoParaRankear, req.params.id],
     )
     if (!rows.length) return res.status(404).json({ erro: 'competição não encontrada' })
     res.json({ ok: true })
