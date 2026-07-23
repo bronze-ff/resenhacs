@@ -145,6 +145,13 @@ def _baixar_com_teto(url, max_bytes, timeout=120):
         return b"".join(partes)
 
 
+# Erro transitório na CDN da Valve (502/503, timeout de rede — aconteceu de verdade em
+# 2026-07-22, share_code CSGO-t7Wnv-cjwub-UOS5t-iEfz2-ZLhnL) não pode marcar a Partida
+# como 'failed' de cara: dbmod.falhar_fetch_pendente dá algumas tentativas (mesma
+# semântica de _MAX_TENTATIVAS_DEMO_FACEIT) antes de desistir de vez.
+_MAX_TENTATIVAS_FETCH = 3
+
+
 def cmd_fetch(config, conn, since=None, bot_dir=None, node_bin="node"):
     """Baixa e ingere as Partidas pendentes (descobertas pelo discover, ainda sem demo).
 
@@ -206,17 +213,15 @@ def cmd_fetch(config, conn, since=None, bot_dir=None, node_bin="node"):
                 print(f"  {code}: ingerida {mid} (played_at={played_at})")
                 total += 1
         except Exception as e:  # noqa: BLE001
-            # Uma partida com demo problemático não derruba o lote; marca failed pra
-            # não ficar re-baixando 200MB toda hora (dá pra re-tentar voltando pra
-            # pending na mão depois de corrigir o parser).
+            # Uma partida com demo problemático não derruba o lote; registra a tentativa
+            # (mesmo padrão de falhar_faceit_pendente) em vez de marcar 'failed' de cara —
+            # erro transitório da CDN da Valve (502/503, timeout) não deve custar a
+            # Partida inteira numa falha só. Só vira 'failed' de vez após esgotar as
+            # tentativas; até lá fica 'pending' e é re-baixada automaticamente no
+            # próximo ciclo do fetch.
             conn.rollback()
-            print(f"  {code}: FALHOU ({e}) — marcando como failed")
-            with conn.cursor() as cur:
-                cur.execute(
-                    "update matches set status = 'failed' where share_code = %s and status = 'pending'",
-                    (code,),
-                )
-            conn.commit()
+            print(f"  {code}: FALHOU ({e})")
+            dbmod.falhar_fetch_pendente(conn, code, e, max_tentativas=_MAX_TENTATIVAS_FETCH)
 
     print(f"fetch: {total} Partida(s) ingerida(s)")
     return total

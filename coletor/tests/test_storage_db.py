@@ -639,6 +639,29 @@ def test_falhar_faceit_pendente_incrementa_e_marca_failed_no_limite():
     assert sql.count("%s") == len(params)
 
 
+# ---- fetch: retry de erro transitório (CDN da Valve) em vez de failed direto ----
+
+def test_falhar_fetch_pendente_incrementa_e_marca_failed_no_limite():
+    conn = FakeConn()
+    db.falhar_fetch_pendente(conn, "CSGO-abc", "boom", max_tentativas=3)
+    sql, params = conn.calls[-1]
+    # mesma semântica de falhar_faceit_pendente: incrementa tentativas, guarda erro,
+    # e só marca 'failed' de vez quando tentativas+1 >= max — senão volta pra 'pending'
+    # pra ser re-baixada no próximo ciclo do fetch, sem custar a Partida numa falha só.
+    assert "tentativas = tentativas + 1" in sql
+    assert "case when tentativas + 1 >= %s then 'failed' else 'pending' end" in sql
+    assert "share_code = %s" in sql
+    assert "status = 'pending'" in sql
+    assert sql.count("%s") == len(params)
+
+
+def test_falhar_fetch_pendente_default_max_tentativas_e_3():
+    conn = FakeConn()
+    db.falhar_fetch_pendente(conn, "CSGO-abc", "boom")
+    sql, params = conn.calls[-1]
+    assert params[0] == 3
+
+
 def test_gravar_elo_partida_atualiza_match_players():
     conn = FakeConn()
     db.gravar_elo_partida(conn, "m1", "111", 1400, 1425)

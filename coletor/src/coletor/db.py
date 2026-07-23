@@ -492,6 +492,24 @@ def mark_skipped(conn, share_code):
     conn.commit()
 
 
+def falhar_fetch_pendente(conn, share_code, erro, max_tentativas=3):
+    """Incrementa tentativas de uma Partida que falhou no fetch (download/parse do .dem);
+    só vira 'failed' de vez depois de esgotar `max_tentativas` — um erro transitório da
+    CDN da Valve (502/503, timeout de rede — aconteceu de verdade em 2026-07-22) não pode
+    custar a Partida inteira numa falha só. Enquanto não esgota, volta pra 'pending' e é
+    re-baixada automaticamente no próximo ciclo do fetch — mesma semântica de
+    falhar_faceit_pendente/reverter_uploads_travados."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "update matches set "
+            "status = case when tentativas + 1 >= %s then 'failed' else 'pending' end, "
+            "tentativas = tentativas + 1, erro = %s "
+            "where share_code = %s and status = 'pending'",
+            (max_tentativas, str(erro)[:500], share_code),
+        )
+    conn.commit()
+
+
 def list_tracked_players(conn):
     """[(steam_id64, match_auth_code, last_share_code)] dos Jogadores com onboarding feito."""
     with conn.cursor() as cur:

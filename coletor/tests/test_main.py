@@ -1015,6 +1015,77 @@ def test_cmd_fetch_nao_loga_url_assinada_do_dem(monkeypatch, capsys):
     assert code in saida
 
 
+# ---- retry de erro transitório no fetch (CDN da Valve) em vez de failed direto ----
+
+def test_cmd_fetch_erro_de_download_registra_tentativa_em_vez_de_marcar_failed_direto(monkeypatch, capsys):
+    """Um erro transitório (502/503, timeout de rede na CDN da Valve — aconteceu de
+    verdade em 2026-07-22) não pode marcar a Partida como 'failed' de cara: cmd_fetch
+    deve registrar a tentativa via dbmod.falhar_fetch_pendente (mesmo padrão de
+    falhar_faceit_pendente), não fazer o update de 'failed' direto na cursor."""
+    config = Config(env={"DATABASE_URL": "x"})
+    # conn não pode ser None: a implementação chama conn.rollback() diretamente no except,
+    # mesmo padrão de cmd_processar_fila_pro/cmd_sincronizar_faceit.
+    conn = types.SimpleNamespace(rollback=lambda: None)
+    code = "CSGO-aaaaa-bbbbb-ccccc-ddddd-eeeee"
+
+    monkeypatch.setattr(main.dbmod, "list_pending_share_codes", lambda c, limit=None: [code])
+    monkeypatch.setattr(main.dbmod, "contar_pendentes", lambda c: 1)
+    monkeypatch.setattr(
+        main, "_resolver_demo_urls",
+        lambda codes, bot_dir, node_bin: [{"shareCode": codes[0], "demoUrl": "https://x", "matchTime": None}],
+    )
+
+    def _baixar_falha(url, destino):
+        raise RuntimeError("502 Bad Gateway")
+
+    monkeypatch.setattr(main, "_baixar_e_descomprimir", _baixar_falha)
+
+    retries = []
+    monkeypatch.setattr(
+        main.dbmod, "falhar_fetch_pendente",
+        lambda c, code, erro, **kw: retries.append((code, kw.get("max_tentativas"))),
+    )
+
+    total = main.cmd_fetch(config, conn)
+
+    assert total == 0
+    assert retries == [(code, 3)]
+    assert "FALHOU" in capsys.readouterr().out
+
+
+def test_cmd_fetch_erro_de_download_nao_derruba_o_lote(monkeypatch):
+    """Uma Partida com demo problemático não impede as outras do mesmo lote de serem
+    ingeridas — mesma garantia que já existia antes do retry, só mudou COMO a falha
+    é registrada."""
+    config = Config(env={"DATABASE_URL": "x"})
+    conn = types.SimpleNamespace(rollback=lambda: None)
+    code_ruim = "CSGO-ruim0-ruim0-ruim0-ruim0-ruim00"
+    code_bom = "CSGO-bom00-bom00-bom00-bom00-bom000"
+
+    monkeypatch.setattr(main.dbmod, "list_pending_share_codes", lambda c, limit=None: [code_ruim, code_bom])
+    monkeypatch.setattr(main.dbmod, "contar_pendentes", lambda c: 2)
+    monkeypatch.setattr(
+        main, "_resolver_demo_urls",
+        lambda codes, bot_dir, node_bin: [
+            {"shareCode": code_ruim, "demoUrl": "https://x/ruim", "matchTime": None},
+            {"shareCode": code_bom, "demoUrl": "https://x/bom", "matchTime": None},
+        ],
+    )
+
+    def _baixar(url, destino):
+        if "ruim" in url:
+            raise RuntimeError("timeout")
+        destino.write_bytes(b"x")
+
+    monkeypatch.setattr(main, "_baixar_e_descomprimir", _baixar)
+    monkeypatch.setattr(main, "ingest_demo", lambda *a, **kw: "m-bom")
+    monkeypatch.setattr(main.dbmod, "falhar_fetch_pendente", lambda c, code, erro, **kw: None)
+
+    total = main.cmd_fetch(config, conn)
+
+    assert total == 1
+
+
 # ---- finding #16 da auditoria: download do hltvUrl em streaming, com teto de tamanho ----
 
 def test_baixar_com_teto_devolve_conteudo_dentro_do_teto(monkeypatch):
