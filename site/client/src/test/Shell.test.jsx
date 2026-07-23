@@ -67,6 +67,6 @@ describe('Shell — indicador de competicao ativa (sidebar)', () => {
 
   it('com competicao ativa: mostra o indicador (texto acessivel) perto de Competicoes', async () => {
     renderShell({ temAtiva: true })
-    await waitFor(() => expect(screen.getByText(/competi[çc][ãa]o ativa/i)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getAllByText(/competi[çc][ãa]o ativa/i).length).toBeGreaterThan(0))
   })
 })
