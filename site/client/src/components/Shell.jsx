@@ -388,7 +388,7 @@ export default function Shell({ children }) {
         </header>
         <main className="px-4 pb-20 pt-4 lg:px-6 lg:py-6">{children}</main>
       </div>
-      <BarraInferior menuAberto={menuAberto} onAbrirMenu={() => setMenuAberto(true)} />
+      <BarraInferior menuAberto={menuAberto} onAbrirMenu={() => setMenuAberto(true)} temCompeticaoAtiva={temCompeticaoAtiva} />
     </div>
   )
 }
@@ -396,9 +396,16 @@ export default function Shell({ children }) {
 // Barra de navegação inferior mobile (estilo app da FACEIT): fica sempre
 // visível em telas pequenas (lg:hidden), abaixo do overlay (z-30) e do
 // drawer (z-40) pra não competir visualmente quando o menu completo abre.
-function BarraInferior({ menuAberto, onAbrirMenu }) {
+function BarraInferior({ menuAberto, onAbrirMenu, temCompeticaoAtiva }) {
   const location = useLocation()
-  const itens = NAV_INFERIOR_BASE
+  // Com competição ativa, Comparar cede o lugar pra Competições (mesmo indicador da
+  // sidebar) — Partidas/Ranking/Clipes continuam fixos. Sem competição ativa, a barra
+  // volta ao normal (docs/superpowers/specs/2026-07-23-indicador-competicao-ativa-design.md).
+  const itens = temCompeticaoAtiva
+    ? NAV_INFERIOR_BASE.map((item) =>
+        item.to === '/comparar' ? { to: '/competicoes', label: 'Competições', icone: 'competicoes' } : item,
+      )
+    : NAV_INFERIOR_BASE
 
   function itemNavClasse({ isActive }) {
     return `flex h-14 flex-col items-center justify-center gap-1 text-[10px] font-mono uppercase tracking-wide transition-colors ${
@@ -422,7 +429,10 @@ function BarraInferior({ menuAberto, onAbrirMenu }) {
     >
       {itens.map((item) => (
         <NavLink key={item.to} to={item.to} end={item.end} className={itemNavClasse}>
-          {NAV_ICONES[item.icone]}
+          <span className="relative">
+            {NAV_ICONES[item.icone]}
+            {item.to === '/competicoes' && <IndicadorCompeticaoAtiva />}
+          </span>
           {item.label}
         </NavLink>
       ))}

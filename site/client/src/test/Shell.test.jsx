@@ -43,6 +43,19 @@ describe('Shell — barra inferior mobile', () => {
     expect(within(barra).getByRole('link', { name: /^clipes$/i })).toBeInTheDocument()
     expect(within(barra).getByRole('link', { name: /comparar/i })).toBeInTheDocument()
   })
+
+  it('com competicao ativa: Comparar vira Competicoes, com o indicador', async () => {
+    renderShell({ temAtiva: true })
+    await waitFor(() => expect(screen.getByText('bronze')).toBeInTheDocument())
+    const barra = screen.getByRole('navigation', { name: 'Navegação principal' })
+    await waitFor(() => expect(within(barra).queryByRole('link', { name: /comparar/i })).not.toBeInTheDocument())
+    expect(within(barra).getByRole('link', { name: /competi[çc][õo]es/i })).toBeInTheDocument()
+    expect(within(barra).getByText(/competi[çc][ãa]o ativa/i)).toBeInTheDocument()
+    // as outras 3 continuam
+    expect(within(barra).getByRole('link', { name: /^partidas$/i })).toBeInTheDocument()
+    expect(within(barra).getByRole('link', { name: /^ranking$/i })).toBeInTheDocument()
+    expect(within(barra).getByRole('link', { name: /^clipes$/i })).toBeInTheDocument()
+  })
 })
 
 describe('Shell — indicador de competicao ativa (sidebar)', () => {
