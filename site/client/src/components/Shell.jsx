@@ -160,13 +160,17 @@ const NAV_ICONES = {
   ),
 }
 
-// Granadas/Táticas são públicos pra visualização — entram direto na barra mobile
-// pra todo mundo (só criar/editar continua admin, escondido dentro da própria página).
+// Base fixa da barra mobile: as 4 rotas de hábito diário, não de consulta situacional
+// (docs/superpowers/specs/2026-07-23-indicador-competicao-ativa-design.md) — Partidas é
+// o job principal (rever a partida logo depois de jogar), Comparar resolve discussão do
+// grupo via Head to Head (caso de uso citado explicitamente no PRODUCT.md), Clipes está
+// ligado ao fluxo de Competições. Granadas/Táticas (consulta situacional, ex.: lineup de
+// smoke antes de um round) continuam acessíveis pelo menu "Mais", só saem da barra fixa.
 const NAV_INFERIOR_BASE = [
   { to: '/', end: true, label: 'Partidas', icone: 'partidas' },
   { to: '/ranking', label: 'Ranking', icone: 'ranking' },
-  { to: '/granadas', label: 'Granadas', icone: 'granadas' },
-  { to: '/taticas', label: 'Táticas', icone: 'taticas' },
+  { to: '/clipes', label: 'Clipes', icone: 'clipes' },
+  { to: '/comparar', label: 'Comparar', icone: 'comparar' },
 ]
 
 function itemClasse(colapsada) {
