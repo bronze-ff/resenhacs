@@ -61,6 +61,25 @@ describe('GET /api/competicoes', () => {
     expect(res.body.agendadas).toHaveLength(1)
     expect(res.body.agendadas[0].id).toBe('comp-futura')
   })
+
+  it('inclui premioImagemUrl/premioMercadoUrl na resposta e na query', async () => {
+    const agora = new Date()
+    const { app, db } = appWith([
+      ['from competicoes', [{
+        id: 'comp1', nome: 'Teste', descricao: '', premio_descricao: 'Skin',
+        premio_imagem_url: 'https://exemplo.com/ak47.png',
+        premio_mercado_url: 'https://steamcommunity.com/market/listings/730/AK-47',
+        data_inicio: new Date(agora.getTime() - 86400000), data_fim: new Date(agora.getTime() + 86400000),
+        limite_diario: 2, limite_total: 10, minimo_para_rankear: 3, vencedor_steam_id64: null,
+      }]],
+    ])
+    const res = await request(app).get('/api/competicoes').set('Cookie', cookieJogador)
+    expect(res.body.ativa.premioImagemUrl).toBe('https://exemplo.com/ak47.png')
+    expect(res.body.ativa.premioMercadoUrl).toBe('https://steamcommunity.com/market/listings/730/AK-47')
+    const [sql] = db.query.mock.calls.find(([s]) => s.includes('from competicoes'))
+    expect(sql).toContain('premio_imagem_url')
+    expect(sql).toContain('premio_mercado_url')
+  })
 })
 
 describe('POST /api/competicoes/admin', () => {
@@ -390,5 +409,30 @@ describe('tradelink so aparece pro vencedor/admin em GET /', () => {
     const res = await request(app).get('/api/competicoes').set('Cookie', cookieJogador) // cookie do 765, vencedor é 999
     const comp = res.body.encerradas[0]
     expect(comp.tradelinkVencedor).toBeUndefined()
+  })
+})
+
+describe('GET /api/competicoes/status', () => {
+  it('sem login: 401', async () => {
+    const { app } = appWith([])
+    expect((await request(app).get('/api/competicoes/status')).status).toBe(401)
+  })
+
+  it('existe competicao no periodo atual: temAtiva true', async () => {
+    const { app } = appWith([
+      ['from competicoes where data_inicio', [{ tem_ativa: true }]],
+    ])
+    const res = await request(app).get('/api/competicoes/status').set('Cookie', cookieJogador)
+    expect(res.status).toBe(200)
+    expect(res.body).toEqual({ temAtiva: true })
+  })
+
+  it('nenhuma competicao no periodo atual: temAtiva false', async () => {
+    const { app } = appWith([
+      ['from competicoes where data_inicio', [{ tem_ativa: false }]],
+    ])
+    const res = await request(app).get('/api/competicoes/status').set('Cookie', cookieJogador)
+    expect(res.status).toBe(200)
+    expect(res.body).toEqual({ temAtiva: false })
   })
 })

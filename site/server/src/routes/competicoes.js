@@ -21,6 +21,7 @@ function inteiroPositivoOuIndefinido(v) {
 function mapCompeticao(c) {
   return {
     id: c.id, nome: c.nome, descricao: c.descricao, premioDescricao: c.premio_descricao,
+    premioImagemUrl: c.premio_imagem_url, premioMercadoUrl: c.premio_mercado_url,
     dataInicio: c.data_inicio, dataFim: c.data_fim,
     limiteDiario: c.limite_diario, limiteTotal: c.limite_total, minimoParaRankear: c.minimo_para_rankear,
     vencedorSteamId: c.vencedor_steam_id64,
@@ -103,7 +104,8 @@ export function createCompeticoesRouter({ db, requireAuth }) {
 
   router.get('/', requireAuth, async (req, res) => {
     const { rows } = await db.query(
-      `select id, nome, descricao, premio_descricao, data_inicio, data_fim,
+      `select id, nome, descricao, premio_descricao, premio_imagem_url, premio_mercado_url,
+              data_inicio, data_fim,
               limite_diario, limite_total, minimo_para_rankear, vencedor_steam_id64, tradelink_vencedor
        from competicoes
        order by data_inicio desc`,
@@ -135,6 +137,18 @@ export function createCompeticoesRouter({ db, requireAuth }) {
       agendadas: await Promise.all(agendadas.map(montar)),
       encerradas: await Promise.all(encerradas.map(montar)),
     })
+  })
+
+  // Endpoint leve só pra "existe competição ativa agora?" — GET / já calcula leaderboard
+  // completo de todas as competições (pesado) e Shell.jsx fica montado em toda página
+  // autenticada, então chamar o endpoint pesado a cada poll seria desperdício de carga.
+  router.get('/status', requireAuth, async (req, res) => {
+    const { rows } = await db.query(
+      `select exists(
+         select 1 from competicoes where data_inicio <= now() and data_fim >= now()
+       ) as tem_ativa`,
+    )
+    res.json({ temAtiva: rows[0].tem_ativa })
   })
 
   // #9 da auditoria (rate limiting como defesa em profundidade, além da regra de
