@@ -236,7 +236,7 @@ export default function Shell({ children }) {
 
   async function sair() {
     await fetch('/api/auth/logout', { method: 'POST' })
-    window.location.href = '/entrar'
+    window.location.href = '/'
   }
 
   function fecharMenu() {
