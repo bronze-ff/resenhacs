@@ -31,7 +31,7 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
     const cond = ["m.status = 'parsed'"]
     const params = [req.player.steamId]
     cond.push(partidaVisivelExpr('m', `$${params.length}`))
-    const { from, to, map, source, mvp, ids } = req.query
+    const { from, to, map, source, jogador, ids } = req.query
     if (ids) {
       const lista = String(ids).split(',').filter((s) => /^[0-9a-f-]{36}$/i.test(s))
       if (lista.length === 0) return res.json([])
@@ -63,16 +63,16 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
       params.push(source)
       cond.push(`m.source = $${params.length}`)
     }
-    let mvpJoin = ''
-    if (!ids && mvp && /^\d{17}$/.test(mvp)) {
-      params.push(mvp)
-      mvpJoin = `join lateral (
-         select mp2.steam_id64
-         from match_players mp2
-         where mp2.match_id = m.id and mp2.is_tracked
-         order by mp2.rating desc nulls last, mp2.kills desc
-         limit 1
-       ) mvp_filter on mvp_filter.steam_id64 = $${params.length}`
+    // Filtro por PARTICIPAÇÃO (partidas em que o jogador jogou) — era por MVP calculado,
+    // mas isso confundia: o usuário escolhia o próprio nick esperando ver as partidas
+    // dele e recebia só as em que foi o melhor rating (caso real, 2026-07-24). O chip de
+    // MVP exibido no card continua vindo do lateral `mvp` abaixo — só o FILTRO mudou.
+    if (!ids && jogador && /^\d{17}$/.test(jogador)) {
+      params.push(jogador)
+      cond.push(`exists (
+         select 1 from match_players jogador_filter
+         where jogador_filter.match_id = m.id and jogador_filter.steam_id64 = $${params.length}
+       )`)
     }
     const { rows } = await db.query(
       `select m.id, m.map, m.played_at, m.score_a, m.score_b, m.status, m.source,
@@ -96,7 +96,6 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
          order by mp3.rating desc nulls last, mp3.kills desc
          limit 1
        ) mvp on true
-       ${mvpJoin}
        where ${cond.join(' and ')}
        group by m.id, mvp.mvp
        order by m.played_at desc nulls last, m.created_at desc

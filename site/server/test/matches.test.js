@@ -61,24 +61,29 @@ describe('GET /api/matches', () => {
     expect(res.body[0].mvp).toBeNull()
   })
 
-  it('filtra por mvp quando steamid válido é passado', async () => {
+  it('filtra por PARTICIPACAO do jogador quando steamid válido é passado (não por MVP)', async () => {
+    // O filtro antigo era por MVP calculado — confundia o usuário, que escolhia o próprio
+    // nick esperando ver as partidas em que JOGOU (caso real: PEIDA_LEITE, 2026-07-24).
     const { app, db } = appWith([
       ['from matches m', [{ id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9, status: 'parsed', source: 'valve_mm', tracked: [], mvp: { steamId: '76561198000000009', nick: 'fih', rating: '1.35' } }]],
     ])
-    const res = await request(app).get('/api/matches?mvp=76561198000000009').set('Cookie', cookie)
+    const res = await request(app).get('/api/matches?jogador=76561198000000009').set('Cookie', cookie)
     expect(res.status).toBe(200)
-    const sql = db.query.mock.calls.find(([s]) => s.includes('from matches m'))[0]
-    expect(sql).toContain('mvp_filter')
+    const call = db.query.mock.calls.find(([s]) => s.includes('from matches m'))
+    const [sql, params] = call
+    expect(sql).toContain('jogador_filter')
+    expect(sql).not.toContain('mvp_filter')
+    expect(params).toContain('76561198000000009')
   })
 
-  it('ignora param mvp inválido (não é steamid 64-bit)', async () => {
+  it('ignora param jogador inválido (não é steamid 64-bit)', async () => {
     const { app, db } = appWith([
       ['from matches m', [{ id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9, status: 'parsed', source: 'valve_mm', tracked: [], mvp: null }]],
     ])
-    const res = await request(app).get('/api/matches?mvp=abc').set('Cookie', cookie)
+    const res = await request(app).get('/api/matches?jogador=abc').set('Cookie', cookie)
     expect(res.status).toBe(200)
     const sql = db.query.mock.calls.find(([s]) => s.includes('from matches m'))[0]
-    expect(sql).not.toContain('mvp_filter')
+    expect(sql).not.toContain('jogador_filter')
   })
 
   it('aceita limit e offset e os manda como params parametrizados', async () => {

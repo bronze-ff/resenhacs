@@ -204,7 +204,9 @@ export default function Feed() {
   const [mapa, setMapa] = useState('')
   const [origem, setOrigem] = useState('')
   const [resultado, setResultado] = useState('')
-  const [mvp, setMvp] = useState('')
+  // Filtro por participação (partidas em que o jogador jogou) — era "MVP", mas o nome e
+  // a semântica confundiam: o usuário escolhia o próprio nick esperando as partidas dele.
+  const [jogador, setJogador] = useState('')
   const [jogadores, setJogadores] = useState([])
   const [temMais, setTemMais] = useState(false)
   const [carregandoMais, setCarregandoMais] = useState(false)
@@ -229,7 +231,7 @@ export default function Feed() {
     if (ate) qs.set('to', ate)
     if (mapa) qs.set('map', mapa)
     if (origem) qs.set('source', origem)
-    if (mvp) qs.set('mvp', mvp)
+    if (jogador) qs.set('jogador', jogador)
     qs.set('limit', String(TAMANHO_PAGINA))
     qs.set('offset', String(offset))
     return qs
@@ -257,7 +259,7 @@ export default function Feed() {
         setTemMais(false)
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [de, ate, mapa, origem, mvp, sessaoAtiva])
+  }, [de, ate, mapa, origem, jogador, sessaoAtiva])
 
   function carregarMais() {
     if (carregandoMais || !partidas || sessaoAtiva) return
@@ -305,16 +307,20 @@ export default function Feed() {
       )}
 
       <div className={`panel-cut-sm flex flex-col gap-3 border border-borda bg-superficie p-3 lg:flex-row lg:flex-wrap lg:items-center lg:gap-x-5 lg:gap-y-3 ${sessaoAtiva ? 'hidden' : ''}`}>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex w-full flex-col gap-3 lg:w-auto lg:flex-row lg:flex-wrap lg:items-center">
           <FiltroPeriodo de={de} ate={ate} onDe={setDe} onAte={setAte} />
-          <Select value={mapa} onChange={(e) => setMapa(e.target.value)} className="w-auto" selectClassName="py-1.5 text-xs">
-            <option value="">Todos os mapas</option>
-            {MAPAS.map((m) => <option key={m} value={m}>{nomeMapa(m)}</option>)}
-          </Select>
-          <Select value={mvp} onChange={(e) => setMvp(e.target.value)} className="w-auto" selectClassName="py-1.5 text-xs">
-            <option value="">Todos os MVPs</option>
-            {jogadores.map((j) => <option key={j.steamId} value={j.steamId}>{j.nick}</option>)}
-          </Select>
+          {/* No mobile os dois selects dividem a largura em grid (a quebra livre deixava
+              cada um de um tamanho, visual quebrado); no desktop segue inline. */}
+          <div className="grid w-full grid-cols-2 gap-2 lg:flex lg:w-auto lg:items-center lg:gap-3">
+            <Select value={mapa} onChange={(e) => setMapa(e.target.value)} className="w-full lg:w-auto" selectClassName="py-1.5 text-xs">
+              <option value="">Todos os mapas</option>
+              {MAPAS.map((m) => <option key={m} value={m}>{nomeMapa(m)}</option>)}
+            </Select>
+            <Select value={jogador} onChange={(e) => setJogador(e.target.value)} className="w-full lg:w-auto" selectClassName="py-1.5 text-xs">
+              <option value="">Todos os jogadores</option>
+              {jogadores.map((j) => <option key={j.steamId} value={j.steamId}>{j.nick}</option>)}
+            </Select>
+          </div>
         </div>
         <div className="flex flex-col gap-2 lg:ml-auto lg:flex-row lg:flex-wrap lg:items-center lg:gap-3">
           <div className="panel-cut-sm flex w-full overflow-hidden border border-borda font-mono text-xs uppercase lg:w-auto">
