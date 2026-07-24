@@ -47,11 +47,14 @@ function PlayerClipe({ clipUrl, viewerSteamId, titulo }) {
 // Tooltip explica o calculo — mesma logica de transparencia da spec (Competicoes
 // tambem mostra o detalhamento), aqui e so leitura sobre o clipe.
 function tituloPontuacao(p) {
-  const partes = [`${p.kills} kills (${p.pontosKills})`]
+  const partes = []
+  // pontuacao_detalhe nulo (fallback dos dois endpoints) chega como { total } só —
+  // sem o guard aqui o tooltip mostrava "undefined kills (undefined)".
+  if (p.kills != null) partes.push(`${p.kills} kills (${p.pontosKills})`)
   if (p.headshots > 0) partes.push(`${p.headshots} headshots (+${p.pontosHeadshots})`)
   if (p.clutch) partes.push(`clutch ${p.clutch} (+${p.pontosClutch})`)
   if (p.armas > 0) partes.push(`${p.armas} armas distintas (+${p.pontosArmas})`)
-  return `${partes.join(' + ')} = ${p.total}`
+  return partes.length ? `${partes.join(' + ')} = ${p.total}` : `${p.total}`
 }
 
 export default function CardClipe({ clipe, aberto, onAbrir, viewerSteamId }) {

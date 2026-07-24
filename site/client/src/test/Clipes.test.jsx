@@ -106,6 +106,39 @@ describe('Clipes', () => {
     await waitFor(() => expect(screen.getByText(/nenhum clipe desse jogador/i)).toBeInTheDocument())
   })
 
+  it('deep link pra jogador sem clipe (id nao aparece nas opcoes) nao deixa o trigger do filtro em branco', async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => RESPOSTA_DOIS_JOGADORES })
+    render(
+      <MemoryRouter initialEntries={['/clipes?jogador=999']}>
+        <Clipes />
+      </MemoryRouter>,
+    )
+    await waitFor(() => expect(screen.getByText(/nenhum clipe desse jogador/i)).toBeInTheDocument())
+    // "999" nao aparece em mais nenhum lugar da tela nesse cenario (nenhum clipe
+    // carregado desse jogador), entao o rotulo sintetico do trigger do Select
+    // ("Jogador 999") e a unica ocorrencia — sem precisar escopar com within().
+    expect(screen.getByRole('button', { name: /jogador 999/i })).toBeInTheDocument()
+  })
+
+  it('clipe com pontuacao_detalhe nulo (fallback so com total) mostra tooltip sem "undefined"', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        clipes: [{
+          id: 'c3', matchId: 'm3', steamId: '333', nick: 'semdetalhe', avatarUrl: null,
+          clipUrl: 'https://allstar.gg/clip/3', clipSnapshotUrl: null,
+          kind: 'triple', roundNumber: 12, map: 'de_ancient', playedAt: '2026-07-22T00:00:00Z',
+          pontuacao: { total: 80 },
+        }],
+      }),
+    })
+    render(<MemoryRouter><Clipes /></MemoryRouter>)
+    await waitFor(() => expect(screen.getByText('80')).toBeInTheDocument())
+    const elementoPontuacao = screen.getByText('80')
+    expect(elementoPontuacao).toHaveAttribute('title', '80')
+    expect(elementoPontuacao.getAttribute('title')).not.toMatch(/undefined/)
+  })
+
   it('card mostra a partida (mapa + dia/hora) como link pra pagina da partida', async () => {
     global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => RESPOSTA })
     render(<MemoryRouter><Clipes /></MemoryRouter>)

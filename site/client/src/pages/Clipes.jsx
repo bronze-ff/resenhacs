@@ -62,6 +62,12 @@ export default function Clipes() {
               {opcoesJogador.map((o) => (
                 <option key={o.valor} value={o.valor}>{o.label}</option>
               ))}
+              {/* Deep link (ou troca de periodo) pode trazer um jogadorFiltro sem clipe
+                  na lista carregada — sem essa opcao sintetica o trigger do Select fica
+                  em branco (nenhuma opcao bate o value) e nao da pra "ver" o que limpar. */}
+              {jogadorFiltro && !opcoesJogador.some((o) => o.valor === jogadorFiltro) && (
+                <option key={jogadorFiltro} value={jogadorFiltro}>{`Jogador ${jogadorFiltro}`}</option>
+              )}
             </Select>
             {PERIODOS.map((p) => (
               <button
