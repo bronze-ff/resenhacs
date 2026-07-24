@@ -439,8 +439,11 @@ export function createProfileRouter({ db, requireAuth }) {
     const destaquesVisivel = visivelWhere(req.player.steamId, destaquesParams)
     const premierParams = [steamId]
     const premierVisivel = visivelWhere(req.player.steamId, premierParams)
+    const clipesParams = [steamId]
+    const clipesPeriodo = periodoWhere(from, to, clipesParams)
+    const clipesVisivel = visivelWhere(req.player.steamId, clipesParams)
 
-    const [stats, porMapa, recentes, sinergia, evolucao, statsGerais, sequencia, estilo, destaques, armas, economia, premierRow] = await Promise.all([
+    const [stats, porMapa, recentes, sinergia, evolucao, statsGerais, sequencia, estilo, destaques, armas, economia, premierRow, clipes] = await Promise.all([
       statsAgregados(db, steamId, from, to, req.player.steamId),
       db.query(
         `select m.map, count(*)::int as partidas,
@@ -500,6 +503,24 @@ export function createProfileRouter({ db, requireAuth }) {
          order by m.played_at desc nulls last limit 1`,
         premierParams,
       ),
+      // Prévia dos melhores clipes do jogador pro perfil — mesmo shape da aba Clipes
+      // (clipes.js), MESMA regra de visibilidade por amizade (clipe de partida que o
+      // viewer não pode ver não vaza) e mesmo cuidado com kind: subquery em highlights,
+      // nunca join inner (excluiria clipes do fluxo por-jogador, migração 0042).
+      db.query(
+        `select ac.id, ac.clip_url, ac.clip_snapshot_url, ac.pontuacao_total, ac.pontuacao_detalhe,
+                ac.round_number, ac.match_id,
+                (select h.kind from highlights h
+                 where h.match_id = ac.match_id and h.steam_id64 = ac.steam_id64 and h.round_number = ac.round_number
+                 limit 1) as kind,
+                m.map, m.played_at
+         from allstar_clips ac
+         join matches m on m.id = ac.match_id
+         where ac.steam_id64 = $1 and ac.status = 'Processed'${clipesPeriodo}${clipesVisivel}
+         order by ac.pontuacao_total desc nulls last
+         limit 6`,
+        clipesParams,
+      ),
     ])
 
     const badges = calcularBadges({
@@ -533,6 +554,13 @@ export function createProfileRouter({ db, requireAuth }) {
         description: d.description,
         map: d.map,
         playedAt: d.played_at,
+      })),
+      clipes: clipes.rows.map((c) => ({
+        id: c.id, matchId: c.match_id, steamId,
+        nick: jogador.nick, avatarUrl: jogador.avatar_url,
+        clipUrl: c.clip_url, clipSnapshotUrl: c.clip_snapshot_url,
+        kind: c.kind, roundNumber: c.round_number, map: c.map, playedAt: c.played_at,
+        pontuacao: c.pontuacao_detalhe ?? { total: c.pontuacao_total ?? 0 },
       })),
       porMapa: porMapa.rows.map((r) => ({
         map: r.map,

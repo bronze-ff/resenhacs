@@ -244,6 +244,109 @@ describe('GET /api/profile/:steamId', () => {
     expect(res.body.premierAtual).toBeNull()
     expect(res.body.recentes[0]).toMatchObject({ premierBefore: null, premierAfter: null })
   })
+
+  it('inclui clipes do jogador (6 melhores por pontuacao) com shape da aba Clipes', async () => {
+    const { app } = appWith([
+      ['where p.steam_id64 = $1', [{ steam_id64: '765', nick: 'bronze', avatar_url: 'https://a/av.jpg' }]],
+      ['group by mp.steam_id64', []],
+      ['count(*)::int as partidas', [{
+        partidas: 1, vitorias: 0, kills: 10, deaths: 15, assists: 2, hs: 3, damage: 1200, rounds: 22, rating: '0.85',
+        he_thrown: 0, he_damage: 0, he_team_damage: 0, molotovs_thrown: 0, molotov_damage: 0, molotov_team_damage: 0,
+        flashes_thrown: 0, enemies_flashed: 0, enemy_flash_duration: '0', flash_assists: 0,
+        enemy_flash_landed_count: 0, enemy_flash_landed_duration_sum: '0',
+      }]],
+      ['group by m.map', []],
+      ['m.score_a, m.score_b', []],
+      ['from match_players mp1', []],
+      ['mp.rating is not null', []],
+      ['mp.won from match_players', []],
+      ['from highlights h join matches m on m.id = h.match_id', []],
+      ['from match_player_weapons w join matches m', []],
+      ['join match_round_econ e on e.match_id', []],
+      ['mp.premier_rating_after is not null', []],
+      ['from allstar_clips ac', [{
+        id: 'c1', clip_url: 'https://allstar.gg/clip/1', clip_snapshot_url: null,
+        pontuacao_total: 154, pontuacao_detalhe: { total: 154, kills: 5 },
+        round_number: 5, match_id: 'm1', kind: 'ace', map: 'de_mirage', played_at: '2026-07-20T00:00:00Z',
+      }]],
+    ])
+    const res = await request(app).get('/api/profile/765').set('Cookie', cookie)
+    expect(res.status).toBe(200)
+    expect(res.body.clipes).toEqual([{
+      id: 'c1', matchId: 'm1', steamId: '765', nick: 'bronze', avatarUrl: 'https://a/av.jpg',
+      clipUrl: 'https://allstar.gg/clip/1', clipSnapshotUrl: null,
+      kind: 'ace', roundNumber: 5, map: 'de_mirage', playedAt: '2026-07-20T00:00:00Z',
+      pontuacao: { total: 154, kills: 5 },
+    }])
+  })
+
+  it('clipes do perfil: query filtra por steam_id64 com visibilidade por amizade e limita a 6', async () => {
+    const { app, db } = appWith([
+      ['where p.steam_id64 = $1', [{ steam_id64: '765', nick: 'bronze', avatar_url: null }]],
+      ['group by mp.steam_id64', []],
+      ['count(*)::int as partidas', [{
+        partidas: 0, vitorias: 0, kills: 0, deaths: 0, assists: 0, hs: 0, damage: 0, rounds: 0, rating: null,
+        he_thrown: 0, he_damage: 0, he_team_damage: 0, molotovs_thrown: 0, molotov_damage: 0, molotov_team_damage: 0,
+        flashes_thrown: 0, enemies_flashed: 0, enemy_flash_duration: '0', flash_assists: 0,
+        enemy_flash_landed_count: 0, enemy_flash_landed_duration_sum: '0',
+      }]],
+      ['group by m.map', []],
+      ['m.score_a, m.score_b', []],
+      ['from match_players mp1', []],
+      ['mp.rating is not null', []],
+      ['mp.won from match_players', []],
+      ['from highlights h join matches m on m.id = h.match_id', []],
+      ['from match_player_weapons w join matches m', []],
+      ['join match_round_econ e on e.match_id', []],
+      ['mp.premier_rating_after is not null', []],
+      ['from allstar_clips ac', []],
+    ])
+    const res = await request(app).get('/api/profile/765').set('Cookie', cookie)
+    expect(res.status).toBe(200)
+    expect(res.body.clipes).toEqual([])
+    const chamada = db.query.mock.calls.find(([sql]) => sql.includes('from allstar_clips ac'))
+    expect(chamada).toBeTruthy()
+    const [sql, params] = chamada
+    expect(sql).toContain('from friendships f')
+    expect(sql).not.toContain('group_id')
+    expect(sql).toContain('limit 6')
+    expect(sql).toContain("ac.status = 'Processed'")
+    // kind por subquery em highlights, nunca join inner (migração 0042)
+    expect(sql).toContain('select h.kind from highlights h')
+    expect(sql).not.toMatch(/join highlights/)
+    expect(params[0]).toBe('765')
+    expect(params).toContain(STEAM_ID)
+  })
+
+  it('clipes com pontuacao_detalhe nulo caem no fallback { total }', async () => {
+    const { app } = appWith([
+      ['where p.steam_id64 = $1', [{ steam_id64: '765', nick: 'bronze', avatar_url: null }]],
+      ['group by mp.steam_id64', []],
+      ['count(*)::int as partidas', [{
+        partidas: 0, vitorias: 0, kills: 0, deaths: 0, assists: 0, hs: 0, damage: 0, rounds: 0, rating: null,
+        he_thrown: 0, he_damage: 0, he_team_damage: 0, molotovs_thrown: 0, molotov_damage: 0, molotov_team_damage: 0,
+        flashes_thrown: 0, enemies_flashed: 0, enemy_flash_duration: '0', flash_assists: 0,
+        enemy_flash_landed_count: 0, enemy_flash_landed_duration_sum: '0',
+      }]],
+      ['group by m.map', []],
+      ['m.score_a, m.score_b', []],
+      ['from match_players mp1', []],
+      ['mp.rating is not null', []],
+      ['mp.won from match_players', []],
+      ['from highlights h join matches m on m.id = h.match_id', []],
+      ['from match_player_weapons w join matches m', []],
+      ['join match_round_econ e on e.match_id', []],
+      ['mp.premier_rating_after is not null', []],
+      ['from allstar_clips ac', [{
+        id: 'c2', clip_url: 'https://allstar.gg/clip/2', clip_snapshot_url: null,
+        pontuacao_total: 80, pontuacao_detalhe: null,
+        round_number: 3, match_id: 'm2', kind: null, map: 'de_dust2', played_at: '2026-07-21T00:00:00Z',
+      }]],
+    ])
+    const res = await request(app).get('/api/profile/765').set('Cookie', cookie)
+    expect(res.body.clipes[0].pontuacao).toEqual({ total: 80 })
+    expect(res.body.clipes[0].kind).toBeNull()
+  })
 })
 
 describe('GET /api/profile/compare', () => {
