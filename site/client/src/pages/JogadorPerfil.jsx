@@ -6,6 +6,8 @@ import LinhaEvolucao from '../components/LinhaEvolucao.jsx'
 import FiltroPeriodo from '../components/FiltroPeriodo.jsx'
 import TagEstilo from '../components/TagEstilo.jsx'
 import PosicionamentoAgregado from '../components/PosicionamentoAgregado.jsx'
+import CardClipe from '../components/CardClipe.jsx'
+import { useAuth } from '../auth/AuthContext.jsx'
 
 // Stat compacto pro card mobile de partida (padrão do CardJogador em Ranking.jsx).
 // `rating` (se passado) desenha um badge verde/vermelho estilo FACEIT (>= 1.0 / < 1.0).
@@ -165,9 +167,36 @@ function SecaoHighlights({ destaques }) {
   )
 }
 
+// Seção de Clipes do perfil — prévia dos 6 melhores (por pontuação, backend já ordena e
+// limita), reusando o CardClipe da aba Clipes; "Ver todos" abre a aba já filtrada nele.
+function SecaoClipes({ clipes, steamId, viewerSteamId }) {
+  const [clipeAberto, setClipeAberto] = useState(null)
+  return (
+    <section>
+      <SectionHeader
+        titulo="Clipes"
+        acao={
+          <Link
+            to={`/clipes?jogador=${steamId}`}
+            className="panel-cut-sm min-h-10 border border-borda px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-texto-fraco hover:border-destaque/50 hover:text-destaque lg:min-h-0"
+          >
+            Ver todos →
+          </Link>
+        }
+      />
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {clipes.map((c) => (
+          <CardClipe key={c.id} clipe={c} aberto={clipeAberto === c.id} onAbrir={setClipeAberto} viewerSteamId={viewerSteamId} />
+        ))}
+      </div>
+    </section>
+  )
+}
+
 export default function JogadorPerfil() {
   const { steamId } = useParams()
   const navegar = useNavigate()
+  const { jogador: viewer } = useAuth()
   const [data, setData] = useState(null)
   const [erro, setErro] = useState(false)
   const [de, setDe] = useState('')
@@ -192,6 +221,7 @@ export default function JogadorPerfil() {
   if (!data) return <p className="font-mono text-sm text-texto-fraco">Carregando…</p>
 
   const { jogador, stats, porMapa, recentes, sinergia, evolucao, badges, estilo, destaques, armas, economia, premierAtual } = data
+  const clipes = data.clipes ?? []
 
   return (
     <div className="space-y-6">
@@ -401,6 +431,9 @@ export default function JogadorPerfil() {
 
       {/* 4. Highlights — aces/clutches com deep-link, resumo por tipo/mapa e carregar mais. */}
       {destaques.length > 0 && <SecaoHighlights destaques={destaques} />}
+
+      {/* 4b. Clipes — prévia dos melhores momentos em vídeo, reusando o card da aba Clipes. */}
+      {clipes.length > 0 && <SecaoClipes clipes={clipes} steamId={jogador.steamId} viewerSteamId={viewer?.steamId} />}
 
       {/* 5. Armas. */}
       <section>
