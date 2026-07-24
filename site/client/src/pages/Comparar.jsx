@@ -102,33 +102,46 @@ export default function Comparar() {
         subtitulo="Rating, stats e confronto direto entre dois Jogadores do grupo."
       />
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <Select value={a} onChange={(e) => setA(e.target.value)} className="w-full sm:w-48 sm:flex-none">
+      <Card className="p-4 sm:p-5">
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
+          <div>
+            <p className="mb-2 font-mono text-xs uppercase tracking-wide text-texto-fraco">Duelo</p>
+            <div className="grid items-center gap-2 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
+              <Select value={a} onChange={(e) => setA(e.target.value)} className="w-full">
             <option value="">Jogador A…</option>
             {jogadores.map((j) => <option key={j.steamId} value={j.steamId}>{j.nick || j.steamId}</option>)}
           </Select>
-          <span className="shrink-0 text-center font-display text-texto-fraco sm:text-left">vs</span>
-          <Select value={b} onChange={(e) => setB(e.target.value)} className="w-full sm:w-48 sm:flex-none">
+              <span className="panel-cut-sm mx-auto flex h-9 w-9 items-center justify-center border border-borda bg-fundo font-display text-xs uppercase tracking-wide text-texto-fraco">vs</span>
+              <Select value={b} onChange={(e) => setB(e.target.value)} className="w-full">
             <option value="">Jogador B…</option>
             {jogadores.map((j) => <option key={j.steamId} value={j.steamId}>{j.nick || j.steamId}</option>)}
           </Select>
+            </div>
+          </div>
+          <div>
+            <p className="mb-2 font-mono text-xs uppercase tracking-wide text-texto-fraco">Recorte</p>
+            <FiltroPeriodo de={de} ate={ate} onDe={setDe} onAte={setAte} />
+          </div>
         </div>
-        <FiltroPeriodo de={de} ate={ate} onDe={setDe} onAte={setAte} />
-      </div>
+      </Card>
 
       {erro && <p className="font-mono text-sm text-perigo">{erro}</p>}
 
       {/* Estado vazio: sem os dois jogadores escolhidos, `dados` é null — em vez de
           deixar a página em branco, mostra uma instrução clara. */}
       {!dados && !erro && (
-        <Card className="flex flex-col items-center justify-center gap-2 px-6 py-16 text-center">
-          <span className="font-display text-lg font-semibold uppercase tracking-wide text-texto-fraco">
-            Escolha dois jogadores
-          </span>
-          <p className="max-w-sm font-mono text-xs text-texto-fraco/80">
-            Selecione o Jogador A e o Jogador B acima pra ver o confronto direto — rating, stats lado a lado e histórico entre eles.
-          </p>
+        <Card className="grid gap-6 p-5 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center sm:p-8">
+          <div className="panel-cut flex h-16 w-16 items-center justify-center border border-destaque/50 bg-destaque/10 font-display text-2xl font-bold text-destaque">VS</div>
+          <div>
+            <span className="font-display text-xl font-semibold uppercase tracking-wide text-texto">Prepare o confronto</span>
+            <p className="mt-1 max-w-xl font-mono text-xs leading-relaxed text-texto-fraco">
+              Selecione um jogador de cada lado. O relatório mostra a vantagem por métrica, o desempenho recente e o histórico das partidas que jogaram juntos.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 font-mono text-xs text-texto-fraco">
+              <span><b className="text-destaque">01</b> Escolha os jogadores</span>
+              <span><b className="text-destaque">02</b> Ajuste o período se quiser</span>
+            </div>
+          </div>
         </Card>
       )}
 

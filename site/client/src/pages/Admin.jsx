@@ -133,9 +133,10 @@ export default function Admin() {
   }
 
   return (
-    <div className="max-w-md space-y-6">
-      <SectionHeader titulo="Admin" />
-      <form onSubmit={adicionar} className="space-y-3">
+    <div className="max-w-6xl space-y-6">
+      <SectionHeader titulo="Admin" subtitulo="Controle de acesso, conteúdo do curso e competições do grupo." />
+      <Card className="p-4 sm:p-5">
+      <form onSubmit={adicionar} className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
         <label className="block font-mono text-xs uppercase tracking-wide text-texto-fraco" htmlFor="steamId">
           SteamID64 do novo Jogador (17 dígitos)
         </label>
@@ -143,25 +144,54 @@ export default function Admin() {
           id="steamId"
           value={steamId}
           onChange={(e) => setSteamId(e.target.value)}
-          className="panel-cut-sm min-h-10 w-full border border-borda bg-superficie px-3 py-2 font-mono text-sm lg:min-h-0"
+          className="panel-cut-sm mt-1 min-h-10 w-full border border-borda bg-fundo px-3 py-2 font-mono text-sm lg:min-h-0"
           placeholder="76561198…"
         />
         <button
           type="submit"
-          className="panel-cut-sm min-h-10 w-full border border-destaque bg-destaque px-4 py-2 font-display text-sm font-semibold uppercase tracking-wide text-fundo lg:min-h-0 lg:w-auto"
+          className="panel-cut-sm min-h-10 border border-destaque bg-destaque px-4 py-2 font-display text-sm font-semibold uppercase tracking-wide text-fundo transition-colors duration-200 hover:bg-destaque/85 lg:min-h-0"
         >
           Adicionar à whitelist
         </button>
       </form>
+      </Card>
       {mensagem && <p className="font-mono text-sm text-texto-fraco">{mensagem}</p>}
 
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(18rem,0.9fr)]">
       <div className="space-y-3">
-        <SectionHeader titulo="Táticas pendentes" />
+        <SectionHeader titulo="Curso de mira" subtitulo="Biblioteca de vídeos do grupo" />
+        <div className="overflow-hidden border border-borda bg-superficie">
+          {videosCurso?.map((v, index) => (
+            <div key={v.slug} className={`flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between ${index > 0 ? 'border-t border-borda' : ''}`}>
+              <div className="min-w-0">
+                <p className="truncate font-display text-base font-semibold uppercase text-texto">{v.titulo}</p>
+                <p className="mt-0.5 font-mono text-[10px] uppercase tracking-wide text-texto-fraco/70">{v.slug}.mp4</p>
+              </div>
+              <label className={`panel-cut-sm flex min-h-10 shrink-0 cursor-pointer items-center justify-center border px-3 py-1 font-mono text-xs uppercase tracking-wide transition-colors duration-200 lg:min-h-0 ${statusUpload[v.slug]?.estado === 'erro' ? 'border-perigo text-perigo' : v.disponivel ? 'border-sucesso/50 text-sucesso hover:border-destaque hover:text-destaque' : 'border-borda text-texto-fraco hover:border-destaque/50 hover:text-destaque'}`}>
+                {rotuloUpload(statusUpload[v.slug], v.disponivel)}
+                <input
+                  type="file"
+                  accept="video/mp4"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0]
+                    if (f) enviarVideoCurso(v.slug, f)
+                  }}
+                />
+              </label>
+            </div>
+          ))}
+          {videosCurso?.length === 0 && <p className="p-4 font-mono text-sm text-texto-fraco">Nenhum vídeo cadastrado.</p>}
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        <SectionHeader titulo="Táticas pendentes" subtitulo="Fila de revisão" />
         {taticasPendentes?.length === 0 && (
           <p className="font-mono text-sm text-texto-fraco">Nenhuma tática aguardando revisão.</p>
         )}
         {taticasPendentes?.map((t) => (
-          <Card key={t.id} className="space-y-2 px-3 py-2">
+          <Card key={t.id} className="space-y-3 p-4">
             <p className="font-display text-sm font-semibold uppercase text-texto">{t.nome}</p>
             <p className="font-mono text-xs text-texto-fraco">{t.descricao}</p>
             <p className="font-mono text-[10px] uppercase text-texto-fraco/70">sugerida por {t.criadoPorNick || t.criadoPor}</p>
@@ -182,50 +212,26 @@ export default function Admin() {
           </Card>
         ))}
       </div>
-
-      <div className="space-y-3">
-        <SectionHeader titulo="Curso de mira — upload dos vídeos" />
-        <div className="space-y-2">
-          {videosCurso?.map((v) => (
-            <Card key={v.slug} className="flex items-center justify-between gap-3 px-3 py-2">
-              <div className="min-w-0">
-                <p className="truncate font-display text-sm font-semibold uppercase text-texto">{v.titulo}</p>
-                <p className="font-mono text-[10px] uppercase text-texto-fraco/70">{v.slug}.mp4</p>
-              </div>
-              <label className="panel-cut-sm flex min-h-10 shrink-0 cursor-pointer items-center border border-borda px-3 py-1 font-mono text-xs uppercase tracking-wide text-texto-fraco transition-colors hover:border-destaque/50 hover:text-destaque lg:min-h-0">
-                {rotuloUpload(statusUpload[v.slug], v.disponivel)}
-                <input
-                  type="file"
-                  accept="video/mp4"
-                  className="hidden"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0]
-                    if (f) enviarVideoCurso(v.slug, f)
-                  }}
-                />
-              </label>
-            </Card>
-          ))}
-        </div>
       </div>
 
-      <div className="mt-8 space-y-3">
-        <div className="flex items-center justify-between">
-          <SectionHeader titulo="Competições" />
-          <button
+      <div className="space-y-3">
+        <SectionHeader
+          titulo="Competições"
+          subtitulo="Crie, acompanhe e confirme os resultados."
+          acao={<button
             onClick={() => { setCompeticaoEditando(null); setFormCompeticaoAberto(true) }}
-            className="panel-cut-sm min-h-10 border border-destaque px-3 font-mono text-xs uppercase text-destaque lg:min-h-0"
+            className="panel-cut-sm min-h-10 border border-destaque px-3 font-mono text-xs uppercase text-destaque transition-colors duration-200 hover:bg-destaque/10 lg:min-h-0"
           >
             Nova competição
-          </button>
-        </div>
+          </button>}
+        />
         {competicoes?.length === 0 && (
           <p className="font-mono text-sm text-texto-fraco">Nenhuma competição cadastrada.</p>
         )}
         {competicoes?.map((c) => {
           const vencedorNick = c.leaderboard?.find((l) => l.steamId === c.vencedorSteamId)?.nick
           return (
-            <Card key={c.id} className="space-y-2 px-3 py-2">
+            <Card key={c.id} className="space-y-3 p-4">
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <p className="truncate font-display text-sm font-semibold uppercase text-texto">{c.nome}</p>

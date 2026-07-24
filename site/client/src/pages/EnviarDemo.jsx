@@ -90,27 +90,28 @@ export default function EnviarDemo() {
   ]
 
   return (
-    <div className="max-w-3xl space-y-4">
+    <div className="max-w-5xl space-y-6">
       <SectionHeader
         titulo="Enviar demo"
         subtitulo="Baixe o .dem em CS2 → Assistir → Suas Partidas (ou do Faceit/GC) e envie aqui. O processamento roda a cada ~30 minutos — a Partida aparece no Feed quando terminar."
       />
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_auto]">
-      <Card className="p-4 sm:p-5">
-        <form onSubmit={enviar} className="space-y-4">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(17rem,0.48fr)]">
+      <Card className="p-4 sm:p-6">
+        <form onSubmit={enviar} className="space-y-5">
           <label
             htmlFor="arquivo"
             onDragOver={(e) => { e.preventDefault(); setArrastando(true) }}
             onDragLeave={() => setArrastando(false)}
             onDrop={onDrop}
-            className={`flex cursor-pointer flex-col items-center justify-center gap-2 border border-dashed px-4 py-10 text-center transition-colors ${
+            className={`flex min-h-48 cursor-pointer flex-col items-center justify-center gap-3 border border-dashed px-4 py-10 text-center transition-colors duration-200 ${
               arrastando ? 'border-destaque bg-destaque/5' : 'border-borda hover:border-destaque/60'
             }`}
           >
-            <span className="block w-full truncate px-2 text-center font-display text-sm font-semibold uppercase tracking-wide text-texto" title={arquivo?.name}>
+            <span className="block w-full truncate px-2 text-center font-display text-base font-semibold uppercase tracking-wide text-texto" title={arquivo?.name}>
               {arquivo ? arquivo.name : 'Arraste o .dem aqui ou clique pra escolher'}
             </span>
+            {!arquivo && <span className="font-mono text-xs text-texto-fraco">Arquivos de demo do Counter-Strike 2</span>}
             {arquivo && (
               <span className="font-mono text-xs text-texto-fraco">{formatarTamanho(arquivo.size)}</span>
             )}
@@ -123,6 +124,7 @@ export default function EnviarDemo() {
             />
           </label>
 
+          <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label className="block font-mono text-xs uppercase tracking-wide text-texto-fraco" htmlFor="shareCode">
               Share code (opcional, evita duplicar se descoberto automaticamente)
@@ -132,7 +134,7 @@ export default function EnviarDemo() {
               value={shareCode}
               onChange={(e) => setShareCode(e.target.value)}
               placeholder="CSGO-xxxxx-xxxxx-xxxxx-xxxxx-xxxxx"
-              className="panel-cut-sm min-h-10 w-full border border-borda bg-superficie px-3 py-2 font-mono text-sm lg:min-h-0"
+              className="panel-cut-sm mt-1 min-h-10 w-full border border-borda bg-fundo px-3 py-2 font-mono text-sm lg:min-h-0"
             />
           </div>
           <div>
@@ -144,8 +146,9 @@ export default function EnviarDemo() {
               type="datetime-local"
               value={playedAt}
               onChange={(e) => setPlayedAt(e.target.value)}
-              className="panel-cut-sm min-h-10 w-full border border-borda bg-superficie px-3 py-2 font-mono text-sm lg:min-h-0"
+              className="panel-cut-sm mt-1 min-h-10 w-full border border-borda bg-fundo px-3 py-2 font-mono text-sm lg:min-h-0"
             />
+          </div>
           </div>
           <div>
             <label className="block font-mono text-xs uppercase tracking-wide text-texto-fraco" htmlFor="plataforma">
@@ -155,7 +158,7 @@ export default function EnviarDemo() {
               id="plataforma"
               value={plataforma}
               onChange={(e) => setPlataforma(e.target.value)}
-              className="panel-cut-sm min-h-10 w-full border border-borda bg-superficie px-3 py-2 font-mono text-sm lg:min-h-0"
+              className="panel-cut-sm mt-1 min-h-10 w-full border border-borda bg-fundo px-3 py-2 font-mono text-sm lg:min-h-0"
             >
               {PLATAFORMAS.map((p) => (
                 <option key={p.valor} value={p.valor}>{p.label}</option>
@@ -165,7 +168,7 @@ export default function EnviarDemo() {
           <button
             type="submit"
             disabled={!arquivo || enviando}
-            className="panel-cut-sm min-h-10 w-full border border-destaque bg-destaque px-4 py-2 font-display text-sm font-semibold uppercase tracking-wide text-fundo transition-opacity disabled:opacity-40 lg:min-h-0 lg:w-auto"
+            className="panel-cut-sm min-h-10 w-full border border-destaque bg-destaque px-5 py-2 font-display text-sm font-semibold uppercase tracking-wide text-fundo transition-colors duration-200 hover:bg-destaque/85 disabled:opacity-40 lg:min-h-0 lg:w-auto"
           >
             {enviando ? 'Enviando…' : 'Enviar'}
           </button>
@@ -179,11 +182,13 @@ export default function EnviarDemo() {
         )}
       </Card>
 
-      <Card className="h-fit w-full p-4 sm:p-5 lg:w-60">
-        <p className="mb-3 font-mono text-xs uppercase tracking-wide text-texto-fraco">O que acontece depois</p>
+      <Card className="h-fit p-5">
+        <p className="font-display text-base font-semibold uppercase tracking-wide text-texto">Rota da demo</p>
+        <p className="mt-1 font-mono text-xs leading-relaxed text-texto-fraco">Depois do envio, o coletor processa o arquivo e entrega a partida pronta no seu feed.</p>
+        <p className="mb-4 mt-5 font-mono text-[10px] uppercase tracking-wide text-texto-fraco">Acompanhamento</p>
         <ol className="space-y-3">
           {PASSOS.map((p, i) => (
-            <li key={p.titulo} className="flex items-start gap-2.5">
+            <li key={p.titulo} className="flex items-start gap-3">
               <span
                 className={`panel-cut-sm mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center border font-mono text-[10px] font-bold ${
                   p.feito ? 'border-destaque bg-destaque/10 text-destaque' : 'border-borda text-texto-fraco'
