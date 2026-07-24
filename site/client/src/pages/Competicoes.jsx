@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { SectionHeader, Card, Badge } from '../components/ui'
 import { useAuth } from '../auth/AuthContext.jsx'
+import { dataHora } from '../lib/format.js'
 import SeletorClipesCompeticao from '../components/SeletorClipesCompeticao.jsx'
 
 function Leaderboard({ leaderboard, minimoParaRankear }) {
@@ -33,6 +34,7 @@ function CardCompeticao({ comp, viewerSteamId, onTradelinkEnviado }) {
   const [enviando, setEnviando] = useState(false)
   const [seletorAberto, setSeletorAberto] = useState(false)
   const encerrada = new Date(comp.dataFim) < new Date()
+  const naoComecou = new Date() < new Date(comp.dataInicio)
   const souVencedor = comp.vencedorSteamId === viewerSteamId
 
   async function enviarTradelink(e) {
@@ -48,7 +50,10 @@ function CardCompeticao({ comp, viewerSteamId, onTradelinkEnviado }) {
   return (
     <Card className="p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="font-display text-xl font-bold text-texto">{comp.nome}</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="font-display text-xl font-bold text-texto">{comp.nome}</h2>
+          {naoComecou && <Badge tom="neutro">EM BREVE</Badge>}
+        </div>
         {comp.premioDescricao && <Badge tom="destaque">{comp.premioDescricao}</Badge>}
       </div>
       {(comp.premioImagemUrl || comp.premioMercadoUrl) && (
@@ -73,11 +78,21 @@ function CardCompeticao({ comp, viewerSteamId, onTradelinkEnviado }) {
         </div>
       )}
       {comp.descricao && <p className="mt-2 font-mono text-sm text-texto-fraco">{comp.descricao}</p>}
-      <p className="mt-1 font-mono text-xs text-texto-fraco">
-        Limite: {comp.limiteDiario}/dia · {comp.limiteTotal} no total · mínimo {comp.minimoParaRankear} pra rankear
-      </p>
+      {naoComecou && (
+        <p className="mt-2 font-mono text-sm text-destaque">Começa em {dataHora(comp.dataInicio)}.</p>
+      )}
+      <div className="mt-3">
+        <h3 className="mb-1 font-display text-sm font-semibold uppercase tracking-wide text-texto-fraco">Regras</h3>
+        <ul className="space-y-1 font-mono text-xs text-texto-fraco">
+          <li>· Período: {dataHora(comp.dataInicio)} até {dataHora(comp.dataFim)}.</li>
+          <li className="text-texto">· Só valem clipes de partidas jogadas dentro do período — partidas de antes não contam.</li>
+          <li>· Até {comp.limiteDiario} clipes por dia, {comp.limiteTotal} no total.</li>
+          <li>· Mínimo de {comp.minimoParaRankear} clipes enviados pra entrar no ranking.</li>
+          <li>· Pontuação: kills (curva não-linear) + headshots + clutch + variedade de armas.</li>
+        </ul>
+      </div>
 
-      {!encerrada && (
+      {!encerrada && !naoComecou && (
         <button
           onClick={() => setSeletorAberto(true)}
           className="panel-cut-sm mt-3 min-h-10 border border-destaque bg-destaque/10 px-3 font-mono text-xs uppercase text-destaque hover:bg-destaque/20 lg:min-h-0"
@@ -148,9 +163,9 @@ export default function Competicoes() {
 
   function carregar() {
     fetch('/api/competicoes')
-      .then((res) => (res.ok ? res.json() : { ativa: null, encerradas: [] }))
+      .then((res) => (res.ok ? res.json() : { ativa: null, agendadas: [], encerradas: [] }))
       .then(setDados)
-      .catch(() => setDados({ ativa: null, encerradas: [] }))
+      .catch(() => setDados({ ativa: null, agendadas: [], encerradas: [] }))
   }
 
   useEffect(carregar, [])
@@ -160,10 +175,13 @@ export default function Competicoes() {
   return (
     <div className="space-y-6">
       <SectionHeader titulo="Competições" />
-      {!dados.ativa && dados.encerradas.length === 0 && (
+      {!dados.ativa && (dados.agendadas ?? []).length === 0 && dados.encerradas.length === 0 && (
         <p className="font-mono text-sm text-texto-fraco">Nenhuma competição no momento.</p>
       )}
       {dados.ativa && <CardCompeticao comp={dados.ativa} viewerSteamId={jogador?.steamId} onTradelinkEnviado={carregar} />}
+      {(dados.agendadas ?? []).map((comp) => (
+        <CardCompeticao key={comp.id} comp={comp} viewerSteamId={jogador?.steamId} onTradelinkEnviado={carregar} />
+      ))}
       {dados.encerradas.map((comp) => (
         <CardCompeticao key={comp.id} comp={comp} viewerSteamId={jogador?.steamId} onTradelinkEnviado={carregar} />
       ))}
