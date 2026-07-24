@@ -358,6 +358,17 @@ describe('POST /api/competicoes/:id/submissoes', () => {
     expect(res.status).toBe(404)
   })
 
+  it('competicao ainda nao comecou: 400', async () => {
+    const amanha = new Date(Date.now() + 86400000).toISOString()
+    const semana = new Date(Date.now() + 7 * 86400000).toISOString()
+    const { app } = appWith([
+      ['from competicoes where id', [{ id: COMP_ID, data_inicio: amanha, data_fim: semana, limite_diario: 2, limite_total: 10 }]],
+    ])
+    const res = await request(app).post(`/api/competicoes/${COMP_ID}/submissoes`).set('Cookie', cookieJogador).send({ allstarClipId: CLIP_ID })
+    expect(res.status).toBe(400)
+    expect(res.body.erro).toMatch(/n[ãa]o come[çc]ou/i)
+  })
+
   it('clipe valido dentro do periodo e dos limites: envia com sucesso', async () => {
     const gravados = []
     const db = {

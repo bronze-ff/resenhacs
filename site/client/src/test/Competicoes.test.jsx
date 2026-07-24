@@ -165,4 +165,46 @@ describe('Competicoes', () => {
     await waitFor(() => expect(screen.getByText('Semana 1')).toBeInTheDocument())
     expect(screen.queryByRole('link', { name: /ver no mercado/i })).not.toBeInTheDocument()
   })
+
+  it('competicao agendada aparece com EM BREVE, regras e SEM botao de enviar', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        ativa: null,
+        agendadas: [{
+          id: 'comp-futura', nome: 'Electrum Week', premioDescricao: 'M4A1-S Electrum',
+          descricao: 'Primeira competição oficial.',
+          dataInicio: new Date(Date.now() + 86400000).toISOString(),
+          dataFim: new Date(Date.now() + 7 * 86400000).toISOString(),
+          leaderboard: [], limiteDiario: 3, limiteTotal: 10, minimoParaRankear: 2,
+        }],
+        encerradas: [],
+      }),
+    })
+    render(<Competicoes />)
+    await waitFor(() => expect(screen.getByText('Electrum Week')).toBeInTheDocument())
+    expect(screen.getByText(/em breve/i)).toBeInTheDocument()
+    expect(screen.getByText(/come[çc]a em/i)).toBeInTheDocument()
+    expect(screen.getByText(/jogadas dentro do per[íi]odo/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /enviar clipe/i })).not.toBeInTheDocument()
+  })
+
+  it('competicao ativa mostra as regras E o botao de enviar', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        ativa: {
+          id: 'comp1', nome: 'Semana 1', premioDescricao: 'Skin',
+          dataInicio: new Date(Date.now() - 86400000).toISOString(),
+          dataFim: new Date(Date.now() + 86400000).toISOString(),
+          leaderboard: [], limiteDiario: 2, limiteTotal: 10, minimoParaRankear: 3,
+        },
+        agendadas: [], encerradas: [],
+      }),
+    })
+    render(<Competicoes />)
+    await waitFor(() => expect(screen.getByText('Semana 1')).toBeInTheDocument())
+    expect(screen.getByText(/jogadas dentro do per[íi]odo/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /enviar clipe/i })).toBeInTheDocument()
+  })
 })
