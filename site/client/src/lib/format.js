@@ -16,8 +16,58 @@ export function dataRelativa(iso) {
   return d.toLocaleDateString('pt-BR')
 }
 
-// Data/hora absoluta no fuso do navegador (ex.: "08/07/2026 21:04") — pedido do grupo:
+// Data/hora absoluta no fuso de Brasília (ex.: "08/07/2026 21:04") — pedido do grupo:
 // "ontem" relativo engana perto da virada do dia; played_at no banco é UTC.
+const FUSO_BRASILIA = 'America/Sao_Paulo'
+
+function partesNoHorarioDeBrasilia(data) {
+  return Object.fromEntries(
+    new Intl.DateTimeFormat('en-CA', {
+      timeZone: FUSO_BRASILIA,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+    }).formatToParts(data)
+      .filter(({ type }) => type !== 'literal')
+      .map(({ type, value }) => [type, value]),
+  )
+}
+
+// O datetime-local representa sempre Brasília, nunca o fuso do navegador.
+export function paraDatetimeLocalBrasilia(iso) {
+  if (!iso) return ''
+  const data = new Date(iso)
+  if (Number.isNaN(data.getTime())) return ''
+  const p = partesNoHorarioDeBrasilia(data)
+  return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`
+}
+
+export function datetimeLocalBrasiliaParaIso(valor) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(valor ?? '')
+  if (!match) return ''
+  const [, ano, mes, dia, hora, minuto] = match
+  const utcPretendido = Date.UTC(ano, Number(mes) - 1, dia, hora, minuto)
+  let instante = utcPretendido
+  // Recalcula o offset para o próprio instante, sem depender do fuso da máquina.
+  for (let i = 0; i < 2; i += 1) {
+    const p = partesNoHorarioDeBrasilia(new Date(instante))
+    const comoUtc = Date.UTC(p.year, Number(p.month) - 1, p.day, p.hour, p.minute, p.second)
+    instante = utcPretendido - (comoUtc - instante)
+  }
+  return new Date(instante).toISOString()
+}
+
+export function contadorRegressivo(alvo, agora = Date.now()) {
+  const restante = new Date(alvo).getTime() - agora
+  if (!Number.isFinite(restante) || restante <= 0) return '00:00:00'
+  const segundos = Math.floor(restante / 1000)
+  const dias = Math.floor(segundos / 86400)
+  const horas = Math.floor((segundos % 86400) / 3600)
+  const minutos = Math.floor((segundos % 3600) / 60)
+  const secs = segundos % 60
+  const dois = (n) => String(n).padStart(2, '0')
+  return dias > 0 ? `${dias}d ${dois(horas)}:${dois(minutos)}:${dois(secs)}` : `${dois(horas)}:${dois(minutos)}:${dois(secs)}`
+}
+
 export function dataHora(iso) {
   if (!iso) return 'data desconhecida'
   const d = new Date(iso)
@@ -25,7 +75,7 @@ export function dataHora(iso) {
   // Fuso fixo de Brasília (não o do aparelho): o grupo inteiro é brasileiro e as regras
   // de competição falam em horário de Brasília — a exibição não pode variar com o fuso
   // do dispositivo (viagem, VPN, relógio errado).
-  const tz = { timeZone: 'America/Sao_Paulo' }
+  const tz = { timeZone: FUSO_BRASILIA }
   return `${d.toLocaleDateString('pt-BR', tz)} ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', ...tz })}`
 }
 

@@ -1,22 +1,11 @@
 // site/client/src/components/FormCompeticao.jsx
 import { useState } from 'react'
+import { datetimeLocalBrasiliaParaIso, paraDatetimeLocalBrasilia } from '../lib/format.js'
 
 // Mesmo padrão de modal já usado em granadas/FormGranada.jsx e
 // SeletorClipesCompeticao.jsx — fixed inset-0 com backdrop clicável fechando o form.
 
 const MERCADO_STEAM_PREFIXO = 'https://steamcommunity.com/market/'
-
-// ISO UTC do servidor → string de datetime-local no fuso LOCAL do navegador. Fatiar a
-// string crua (slice(0,16)) reinterpretava o horário UTC como local — cada ciclo de
-// abrir-editar-salvar empurrava as datas +3h (bug real: Electrum Week criada 00:01
-// acabou gravada 06:01 depois de duas edições).
-function paraDatetimeLocal(iso) {
-  if (!iso) return ''
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return ''
-  const pad = (n) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
 
 export default function FormCompeticao({ inicial = null, onSalvo, onCancelar }) {
   const [nome, setNome] = useState(inicial?.nome ?? '')
@@ -25,8 +14,8 @@ export default function FormCompeticao({ inicial = null, onSalvo, onCancelar }) 
   const [premioImagemUrl, setPremioImagemUrl] = useState(inicial?.premioImagemUrl ?? '')
   const [premioMercadoUrl, setPremioMercadoUrl] = useState(inicial?.premioMercadoUrl ?? '')
   const [imagemComErro, setImagemComErro] = useState(false)
-  const [dataInicio, setDataInicio] = useState(paraDatetimeLocal(inicial?.dataInicio))
-  const [dataFim, setDataFim] = useState(paraDatetimeLocal(inicial?.dataFim))
+  const [dataInicio, setDataInicio] = useState(paraDatetimeLocalBrasilia(inicial?.dataInicio))
+  const [dataFim, setDataFim] = useState(paraDatetimeLocalBrasilia(inicial?.dataFim))
   const [limiteDiario, setLimiteDiario] = useState(inicial?.limiteDiario ?? 2)
   const [limiteTotal, setLimiteTotal] = useState(inicial?.limiteTotal ?? 10)
   const [minimoParaRankear, setMinimoParaRankear] = useState(inicial?.minimoParaRankear ?? 3)
@@ -52,8 +41,8 @@ export default function FormCompeticao({ inicial = null, onSalvo, onCancelar }) 
       nome, descricao, premioDescricao, premioImagemUrl, premioMercadoUrl,
       // datetime-local pode vir vazio (campo ainda não preenchido) — new Date('').toISOString()
       // lança RangeError, então só convertemos quando há valor; o servidor valida o resto.
-      dataInicio: dataInicio ? new Date(dataInicio).toISOString() : dataInicio,
-      dataFim: dataFim ? new Date(dataFim).toISOString() : dataFim,
+      dataInicio: dataInicio ? datetimeLocalBrasiliaParaIso(dataInicio) : dataInicio,
+      dataFim: dataFim ? datetimeLocalBrasiliaParaIso(dataFim) : dataFim,
       limiteDiario: Number(limiteDiario), limiteTotal: Number(limiteTotal), minimoParaRankear: Number(minimoParaRankear),
     }
     const res = await fetch(inicial ? `/api/competicoes/admin/${inicial.id}` : '/api/competicoes/admin', {
@@ -129,10 +118,12 @@ export default function FormCompeticao({ inicial = null, onSalvo, onCancelar }) 
           <label className="block font-mono text-xs text-texto-fraco">
             Início
             <input type="datetime-local" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} className="mt-1 min-h-10 w-full border border-borda bg-fundo px-2 font-mono text-sm text-texto" />
+            <span className="mt-1 block text-[10px]">Horário de Brasília</span>
           </label>
           <label className="block font-mono text-xs text-texto-fraco">
             Fim
             <input type="datetime-local" value={dataFim} onChange={(e) => setDataFim(e.target.value)} className="mt-1 min-h-10 w-full border border-borda bg-fundo px-2 font-mono text-sm text-texto" />
+            <span className="mt-1 block text-[10px]">Horário de Brasília</span>
           </label>
         </div>
         <div className="mt-3 grid grid-cols-3 gap-3">

@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { SectionHeader, Card, Badge } from '../components/ui'
 import { useAuth } from '../auth/AuthContext.jsx'
-import { dataHora } from '../lib/format.js'
+import { contadorRegressivo, dataHora } from '../lib/format.js'
 import SeletorClipesCompeticao from '../components/SeletorClipesCompeticao.jsx'
 
 function Leaderboard({ leaderboard, minimoParaRankear }) {
@@ -33,8 +33,14 @@ function CardCompeticao({ comp, viewerSteamId, onTradelinkEnviado }) {
   const [tradelink, setTradelink] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [seletorAberto, setSeletorAberto] = useState(false)
-  const encerrada = new Date(comp.dataFim) < new Date()
-  const naoComecou = new Date() < new Date(comp.dataInicio)
+  const [agora, setAgora] = useState(Date.now())
+  useEffect(() => {
+    const intervalo = window.setInterval(() => setAgora(Date.now()), 1000)
+    return () => window.clearInterval(intervalo)
+  }, [])
+  const encerrada = new Date(comp.dataFim).getTime() < agora
+  const naoComecou = new Date(comp.dataInicio).getTime() > agora
+  const alvoContador = naoComecou ? comp.dataInicio : comp.dataFim
   const souVencedor = comp.vencedorSteamId === viewerSteamId
 
   async function enviarTradelink(e) {
@@ -80,6 +86,12 @@ function CardCompeticao({ comp, viewerSteamId, onTradelinkEnviado }) {
       {comp.descricao && <p className="mt-2 font-mono text-sm text-texto-fraco">{comp.descricao}</p>}
       {naoComecou && (
         <p className="mt-2 font-mono text-sm text-destaque">Começa em {dataHora(comp.dataInicio)}.</p>
+      )}
+      {!encerrada && (
+        <p className="panel-cut-sm mt-3 inline-flex border border-borda bg-fundo px-2 py-1 font-mono text-xs tabular-nums text-texto" role="status" aria-live="polite">
+          <span className="mr-2 text-texto-fraco">{naoComecou ? 'INÍCIO EM' : 'TERMINA EM'}</span>
+          {contadorRegressivo(alvoContador, agora)}
+        </p>
       )}
       <div className="mt-3">
         <h3 className="mb-1 font-display text-sm font-semibold uppercase tracking-wide text-texto-fraco">Regras</h3>

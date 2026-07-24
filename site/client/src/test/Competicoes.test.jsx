@@ -185,6 +185,7 @@ describe('Competicoes', () => {
     await waitFor(() => expect(screen.getByText('Electrum Week')).toBeInTheDocument())
     expect(screen.getByText(/em breve/i)).toBeInTheDocument()
     expect(screen.getByText(/come[çc]a em/i)).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent(/início em/i)
     expect(screen.getByText(/jogadas dentro do per[íi]odo/i)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /enviar clipe/i })).not.toBeInTheDocument()
   })

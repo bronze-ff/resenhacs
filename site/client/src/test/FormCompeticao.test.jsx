@@ -67,6 +67,8 @@ describe('FormCompeticao', () => {
       limiteDiario: 3, limiteTotal: 10, minimoParaRankear: 2,
     }
     render(<FormCompeticao inicial={inicial} onSalvo={onSalvo} onCancelar={() => {}} />)
+    expect(screen.getByLabelText(/in[íi]cio/i)).toHaveValue('2026-07-25T00:01')
+    expect(screen.getByLabelText(/fim/i)).toHaveValue('2026-07-31T23:59')
     fireEvent.click(screen.getByRole('button', { name: /salvar/i }))
     await waitFor(() => expect(onSalvo).toHaveBeenCalled())
     const [, opts] = global.fetch.mock.calls[0]
