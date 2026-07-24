@@ -1,7 +1,9 @@
 // site/client/src/pages/Clipes.jsx
-import { useEffect, useState } from 'react'
-import { Card, SectionHeader, Badge } from '../components/ui'
+import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { SectionHeader, Select } from '../components/ui'
 import { useAuth } from '../auth/AuthContext.jsx'
+import CardClipe from '../components/CardClipe.jsx'
 
 const PERIODOS = [
   { valor: 'semana', label: 'Semana' },
@@ -9,103 +11,22 @@ const PERIODOS = [
   { valor: 'sempre', label: 'Sempre' },
 ]
 
-const NOME_KIND = {
-  ace: 'ACE', quad: 'QUAD KILL', triple: 'TRIPLE KILL',
-  clutch_1v5: 'CLUTCH 1v5', clutch_1v4: 'CLUTCH 1v4', clutch_1v3: 'CLUTCH 1v3',
-  clutch_1v2: 'CLUTCH 1v2', clutch_1v1: 'CLUTCH 1v1',
-}
-
-// kind vem null quando o round que a Allstar escolheu (gerar clipe por JOGADOR, não
-// mais por highlight) não bate com nenhum highlight nosso pra esse jogador/round — só
-// afeta o rótulo exibido, a pontuação (Task 2, clipesScore.js) não depende de kind.
-function nomeDoKind(kind) {
-  if (!kind) return 'MOMENTO'
-  return NOME_KIND[kind] ?? kind
-}
-
-function SnapshotPlaceholder() {
-  return (
-    <div className="mt-3 flex aspect-video w-full items-center justify-center border border-borda bg-superficie-alta text-texto-fraco">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-8 w-8">
-        <rect x="3" y="5" width="18" height="14" rx="1" />
-        <path d="M9 9L15 12L9 15V9Z" fill="currentColor" stroke="none" />
-      </svg>
-    </div>
-  )
-}
-
-function PlayerClipe({ clipUrl, viewerSteamId, titulo }) {
-  return (
-    <div className="mt-3 aspect-video w-full">
-      <iframe
-        src={`${clipUrl}&UID=${viewerSteamId ?? ''}&location=melhoresClipes`}
-        allow="autoplay; encrypted-media; picture-in-picture; clipboard-write; fullscreen"
-        allowFullScreen
-        className="h-full w-full border border-borda"
-        title={titulo ?? 'Clipe Allstar'}
-      />
-    </div>
-  )
-}
-
-// Tooltip explica o calculo — mesma logica de transparencia da spec (Competicoes
-// tambem mostra o detalhamento, Task 12/13), aqui e so leitura sobre o clipe.
-function tituloPontuacao(p) {
-  const partes = [`${p.kills} kills (${p.pontosKills})`]
-  if (p.headshots > 0) partes.push(`${p.headshots} headshots (+${p.pontosHeadshots})`)
-  if (p.clutch) partes.push(`clutch ${p.clutch} (+${p.pontosClutch})`)
-  if (p.armas > 0) partes.push(`${p.armas} armas distintas (+${p.pontosArmas})`)
-  return `${partes.join(' + ')} = ${p.total}`
-}
-
-function CardClipe({ clipe, aberto, onAbrir, viewerSteamId }) {
-  const { pontuacao } = clipe
-  return (
-    <Card className="p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2">
-          {clipe.avatarUrl && (
-            <img src={clipe.avatarUrl} alt="" className="panel-cut-sm h-8 w-8 shrink-0 border border-borda object-cover" />
-          )}
-          <div className="min-w-0">
-            <Badge tom="destaque">{nomeDoKind(clipe.kind)}</Badge>
-            <p className="mt-1 truncate font-mono text-sm text-texto">
-              <span>{clipe.nick}</span> · round {clipe.roundNumber} · {clipe.map}
-            </p>
-          </div>
-        </div>
-        <div className="shrink-0 text-right">
-          <div className="font-display text-lg font-bold text-destaque" title={tituloPontuacao(pontuacao)}>
-            {pontuacao.total}
-          </div>
-        </div>
-      </div>
-      {!aberto && (clipe.clipSnapshotUrl
-        ? <img src={clipe.clipSnapshotUrl} alt="" className="mt-3 aspect-video w-full border border-borda object-cover" />
-        : <SnapshotPlaceholder />)}
-      <button
-        type="button"
-        onClick={() => onAbrir(aberto ? null : clipe.id)}
-        className="panel-cut-sm mt-3 min-h-10 w-full border border-borda px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-texto-fraco hover:border-destaque/50 hover:text-destaque lg:min-h-0"
-      >
-        {aberto ? 'Fechar' : '▶ Assistir'}
-      </button>
-      {aberto && (
-        <PlayerClipe
-          clipUrl={clipe.clipUrl}
-          viewerSteamId={viewerSteamId}
-          titulo={`Clipe Allstar de ${clipe.nick} — ${nomeDoKind(clipe.kind)} round ${clipe.roundNumber}`}
-        />
-      )}
-    </Card>
-  )
-}
-
 export default function Clipes() {
   const { jogador } = useAuth()
   const [periodo, setPeriodo] = useState('sempre')
   const [dados, setDados] = useState(null)
   const [clipeAberto, setClipeAberto] = useState(null)
+  // Filtro por jogador espelhado na URL (?jogador=steamId) — o link "Ver todos" do
+  // perfil chega aqui já filtrado, e trocar o filtro atualiza a URL (compartilhável).
+  const [searchParams, setSearchParams] = useSearchParams()
+  const jogadorFiltro = searchParams.get('jogador') ?? ''
+
+  function setJogadorFiltro(valor) {
+    const proximos = new URLSearchParams(searchParams)
+    if (valor) proximos.set('jogador', valor)
+    else proximos.delete('jogador')
+    setSearchParams(proximos, { replace: true })
+  }
 
   useEffect(() => {
     setDados(null)
@@ -115,13 +36,39 @@ export default function Clipes() {
       .catch(() => setDados({ clipes: [] }))
   }, [periodo])
 
+  // Opções do dropdown derivadas da lista carregada (a aba carrega tudo de uma vez, sem
+  // paginação) — pares steamId/nick distintos, ordenados por nick.
+  const opcoesJogador = useMemo(() => {
+    if (!dados) return []
+    const vistos = new Map()
+    for (const c of dados.clipes) if (!vistos.has(c.steamId)) vistos.set(c.steamId, c.nick)
+    return [...vistos.entries()]
+      .map(([steamId, nick]) => ({ valor: steamId, label: nick }))
+      .sort((a, b) => a.label.localeCompare(b.label))
+  }, [dados])
+
+  const clipesFiltrados =
+    dados === null ? null : jogadorFiltro ? dados.clipes.filter((c) => c.steamId === jogadorFiltro) : dados.clipes
+
   return (
     <div className="space-y-6">
       <SectionHeader
         titulo="Clipes"
         className="flex-wrap"
         acao={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Select value={jogadorFiltro} onChange={(e) => setJogadorFiltro(e.target.value)} className="w-auto" selectClassName="py-1.5 text-xs">
+              <option value="">Todos</option>
+              {opcoesJogador.map((o) => (
+                <option key={o.valor} value={o.valor}>{o.label}</option>
+              ))}
+              {/* Deep link (ou troca de periodo) pode trazer um jogadorFiltro sem clipe
+                  na lista carregada — sem essa opcao sintetica o trigger do Select fica
+                  em branco (nenhuma opcao bate o value) e nao da pra "ver" o que limpar. */}
+              {jogadorFiltro && !opcoesJogador.some((o) => o.valor === jogadorFiltro) && (
+                <option key={jogadorFiltro} value={jogadorFiltro}>{`Jogador ${jogadorFiltro}`}</option>
+              )}
+            </Select>
             {PERIODOS.map((p) => (
               <button
                 key={p.valor}
@@ -140,13 +87,15 @@ export default function Clipes() {
         Pontuação: kills (curva não-linear) + headshots + clutch + variedade de armas — passe o mouse no número pra ver o cálculo.
       </p>
 
-      {dados === null ? (
+      {clipesFiltrados === null ? (
         <p className="font-mono text-sm text-texto-fraco">Carregando…</p>
-      ) : dados.clipes.length === 0 ? (
-        <p className="font-mono text-sm text-texto-fraco">Nenhum clipe nesse período ainda.</p>
+      ) : clipesFiltrados.length === 0 ? (
+        <p className="font-mono text-sm text-texto-fraco">
+          {jogadorFiltro ? 'Nenhum clipe desse jogador nesse período.' : 'Nenhum clipe nesse período ainda.'}
+        </p>
       ) : (
         <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {dados.clipes.map((c) => (
+          {clipesFiltrados.map((c) => (
             <CardClipe key={c.id} clipe={c} aberto={clipeAberto === c.id} onAbrir={setClipeAberto} viewerSteamId={jogador?.steamId} />
           ))}
         </section>

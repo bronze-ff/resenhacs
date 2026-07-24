@@ -676,7 +676,96 @@ git commit -m "feat: filtro por jogador na aba Clipes com deep link ?jogador="
 
 ---
 
-### Task 5: Regressão completa
+### Task 5: `CardClipe` ganha link pra partida (mapa amigável + dia/hora)
+
+Pedido adicional do usuário durante a execução: cada card de clipe deve informar de qual
+partida ele é (dia e hora) com um link que leva pra página da partida
+(`/partida/:matchId`) — vale pras duas telas de uma vez, já que o card é compartilhado
+(Task 1).
+
+**Files:**
+- Modify: `site/client/src/components/CardClipe.jsx`
+- Test: `site/client/src/test/Clipes.test.jsx`
+
+**Interfaces:**
+- Consumes: `clipe.matchId`, `clipe.map`, `clipe.playedAt` (ambos os payloads já trazem —
+  `clipes.js:47-62` e o campo `clipes` do perfil, Task 2), helpers `nomeMapa`/`dataHora`
+  de `../lib/format.js`, `Link` do react-router.
+- Produces: nenhuma outra task consome.
+
+- [ ] **Step 1: Escrever o teste que falha**
+
+Adicionar ao `describe('Clipes', ...)` em `site/client/src/test/Clipes.test.jsx`:
+
+```javascript
+  it('card mostra a partida (mapa + dia/hora) como link pra pagina da partida', async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => RESPOSTA })
+    render(<MemoryRouter><Clipes /></MemoryRouter>)
+    await waitFor(() => expect(screen.getAllByText('bronze').length).toBeGreaterThan(0))
+    const linkPartida = screen.getByRole('link', { name: /ver partida/i })
+    expect(linkPartida).toHaveAttribute('href', '/partida/m1')
+    // dataHora formata pt-BR: dd/mm/aaaa hh:mm — basta a data aparecer no link
+    expect(linkPartida.textContent).toMatch(/20\/07\/2026/)
+  })
+```
+
+(`RESPOSTA` já existe no topo do arquivo com `matchId: 'm1'`, `map: 'de_mirage'`,
+`playedAt: '2026-07-20T00:00:00Z'`. Atenção a timezone: `toLocaleDateString('pt-BR')`
+no ambiente de teste usa o fuso local — se o assert de data ficar frágil por fuso,
+asserte só o `href` e a presença de `nomeMapa`, ex.: `/Mirage/`.)
+
+- [ ] **Step 2: Rodar o teste pra confirmar que falha**
+
+Run: `cd site/client && npx vitest run src/test/Clipes.test.jsx`
+Expected: FAIL — nenhum link "ver partida" existe no card.
+
+- [ ] **Step 3: Implementar**
+
+Em `site/client/src/components/CardClipe.jsx`:
+
+1. Imports novos:
+
+```javascript
+import { Link } from 'react-router-dom'
+import { nomeMapa, dataHora } from '../lib/format.js'
+```
+
+2. Dentro do `CardClipe`, adicionar um link discreto com a partida logo abaixo da linha
+`nick · round · mapa` existente (dentro do `div.min-w-0` do header do card):
+
+```jsx
+            <p className="mt-1 truncate font-mono text-sm text-texto">
+              <span>{clipe.nick}</span> · round {clipe.roundNumber} · {clipe.map}
+            </p>
+            <Link
+              to={`/partida/${clipe.matchId}`}
+              className="mt-0.5 block truncate font-mono text-xs text-texto-fraco underline-offset-2 hover:text-destaque hover:underline"
+            >
+              Ver partida — {nomeMapa(clipe.map)} · {dataHora(clipe.playedAt)}
+            </Link>
+```
+
+- [ ] **Step 4: Rodar os testes pra confirmar que passam**
+
+Run: `cd site/client && npx vitest run src/test/Clipes.test.jsx`
+Expected: PASS (todos, incluindo os pré-existentes).
+
+Também rodar o teste do perfil (o card compartilhado mudou — o mock de lá tem
+`matchId`/`playedAt`, não deve quebrar):
+
+Run: `cd site/client && npx vitest run src/test/JogadorPerfil.test.jsx`
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add site/client/src/components/CardClipe.jsx site/client/src/test/Clipes.test.jsx
+git commit -m "feat: card de clipe linka pra partida com mapa e dia/hora"
+```
+
+---
+
+### Task 6: Regressão completa
 
 **Files:** nenhum arquivo novo — só verificação.
 
