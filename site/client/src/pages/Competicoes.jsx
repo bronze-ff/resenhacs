@@ -133,10 +133,14 @@ function CardCompeticao({ comp, viewerSteamId, onTradelinkEnviado }) {
         <p className="mt-4 font-mono text-sm text-sucesso">Tradelink enviado — aguarde o contato pro envio do prêmio.</p>
       )}
 
-      <div className="mt-4">
-        <h3 className="mb-2 font-display text-sm font-semibold uppercase tracking-wide text-texto-fraco">Leaderboard</h3>
-        <Leaderboard leaderboard={comp.leaderboard} minimoParaRankear={comp.minimoParaRankear} />
-      </div>
+      {/* Numa agendada o leaderboard é sempre vazio — título sobre caixa vazia só
+          deixa o card "em breve" oco; a seção aparece junto com a competição. */}
+      {!naoComecou && (
+        <div className="mt-4">
+          <h3 className="mb-2 font-display text-sm font-semibold uppercase tracking-wide text-texto-fraco">Leaderboard</h3>
+          <Leaderboard leaderboard={comp.leaderboard} minimoParaRankear={comp.minimoParaRankear} />
+        </div>
+      )}
 
       {comp.clipesRecentes?.length > 0 && (
         <div className="mt-4">
