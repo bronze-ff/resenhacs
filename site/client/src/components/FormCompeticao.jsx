@@ -6,6 +6,18 @@ import { useState } from 'react'
 
 const MERCADO_STEAM_PREFIXO = 'https://steamcommunity.com/market/'
 
+// ISO UTC do servidor → string de datetime-local no fuso LOCAL do navegador. Fatiar a
+// string crua (slice(0,16)) reinterpretava o horário UTC como local — cada ciclo de
+// abrir-editar-salvar empurrava as datas +3h (bug real: Electrum Week criada 00:01
+// acabou gravada 06:01 depois de duas edições).
+function paraDatetimeLocal(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
 export default function FormCompeticao({ inicial = null, onSalvo, onCancelar }) {
   const [nome, setNome] = useState(inicial?.nome ?? '')
   const [descricao, setDescricao] = useState(inicial?.descricao ?? '')
@@ -13,8 +25,8 @@ export default function FormCompeticao({ inicial = null, onSalvo, onCancelar }) 
   const [premioImagemUrl, setPremioImagemUrl] = useState(inicial?.premioImagemUrl ?? '')
   const [premioMercadoUrl, setPremioMercadoUrl] = useState(inicial?.premioMercadoUrl ?? '')
   const [imagemComErro, setImagemComErro] = useState(false)
-  const [dataInicio, setDataInicio] = useState(inicial?.dataInicio?.slice(0, 16) ?? '')
-  const [dataFim, setDataFim] = useState(inicial?.dataFim?.slice(0, 16) ?? '')
+  const [dataInicio, setDataInicio] = useState(paraDatetimeLocal(inicial?.dataInicio))
+  const [dataFim, setDataFim] = useState(paraDatetimeLocal(inicial?.dataFim))
   const [limiteDiario, setLimiteDiario] = useState(inicial?.limiteDiario ?? 2)
   const [limiteTotal, setLimiteTotal] = useState(inicial?.limiteTotal ?? 10)
   const [minimoParaRankear, setMinimoParaRankear] = useState(inicial?.minimoParaRankear ?? 3)

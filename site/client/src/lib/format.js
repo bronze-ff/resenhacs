@@ -22,7 +22,11 @@ export function dataHora(iso) {
   if (!iso) return 'data desconhecida'
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return 'data desconhecida'
-  return `${d.toLocaleDateString('pt-BR')} ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+  // Fuso fixo de Brasília (não o do aparelho): o grupo inteiro é brasileiro e as regras
+  // de competição falam em horário de Brasília — a exibição não pode variar com o fuso
+  // do dispositivo (viagem, VPN, relógio errado).
+  const tz = { timeZone: 'America/Sao_Paulo' }
+  return `${d.toLocaleDateString('pt-BR', tz)} ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', ...tz })}`
 }
 
 // Tag de origem da Partida: baixada pelo bot (valve_mm) ou enviada manualmente (upload).

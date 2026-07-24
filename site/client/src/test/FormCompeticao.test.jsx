@@ -52,4 +52,27 @@ describe('FormCompeticao', () => {
     await waitFor(() => expect(screen.getByText(/steamcommunity\.com\/market/i)).toBeInTheDocument())
     expect(global.fetch).not.toHaveBeenCalled()
   })
+
+  it('editar e salvar sem mexer nas datas NAO desloca o horario (bug real: +3h por ciclo de edicao)', async () => {
+    // O pre-preenchimento antigo fatiava a string ISO UTC crua (slice(0,16)) pro
+    // datetime-local, que reinterpretava como horario LOCAL — cada abrir-editar-salvar
+    // empurrava as datas +3h (Electrum Week foi criada 00:01 e acabou gravada 06:01).
+    const onSalvo = vi.fn()
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true }) })
+    const inicial = {
+      id: 'comp1', nome: 'Electrum Week', descricao: '', premioDescricao: 'Skin',
+      premioImagemUrl: 'https://exemplo.com/a.png',
+      premioMercadoUrl: 'https://steamcommunity.com/market/listings/730/X',
+      dataInicio: '2026-07-25T03:01:00.000Z', dataFim: '2026-08-01T02:59:00.000Z',
+      limiteDiario: 3, limiteTotal: 10, minimoParaRankear: 2,
+    }
+    render(<FormCompeticao inicial={inicial} onSalvo={onSalvo} onCancelar={() => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: /salvar/i }))
+    await waitFor(() => expect(onSalvo).toHaveBeenCalled())
+    const [, opts] = global.fetch.mock.calls[0]
+    const corpo = JSON.parse(opts.body)
+    // o INSTANTE salvo tem que ser o mesmo que entrou, independente do fuso da máquina
+    expect(new Date(corpo.dataInicio).getTime()).toBe(new Date(inicial.dataInicio).getTime())
+    expect(new Date(corpo.dataFim).getTime()).toBe(new Date(inicial.dataFim).getTime())
+  })
 })
