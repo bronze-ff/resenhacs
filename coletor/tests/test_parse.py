@@ -223,6 +223,23 @@ def test_nomes_de_time_ausente_ou_vazio_vira_none():
     assert parse._nomes_de_time([], fixed) == (None, None)
 
 
+def test_nomes_de_time_nan_do_pandas_nao_quebra():
+    # Bug real (2026-07-24, partida do Jubileu, share_code CSGO-... com erro "'float'
+    # object has no attribute 'strip'"): quando a demo não traz clã, o parser às vezes
+    # devolve NaN (float) em vez de None/"" pra team_clan_name — NaN é "truthy" em Python
+    # (bool(float('nan')) é True), então o antigo `r.get(...) or ""` não pegava esse caso
+    # e `.strip()` estourava. Mesmo padrão de NaN que `_sid`/`_num` já tratam, só faltava
+    # aqui.
+    import pandas as pd
+
+    fixed = {"1": "A", "2": "B"}
+    registros = [
+        {"steamid": 1, "team_clan_name": float("nan")},
+        {"steamid": 2, "team_clan_name": pd.NA},
+    ]
+    assert parse._nomes_de_time(registros, fixed) == (None, None)
+
+
 def test_casa_arremesso_mais_proximo_do_mesmo_jogador():
     # Confirmado empírico (demo real, 2026-07-13): weapon_fire NÃO tem entityid — a
     # correlação é por (thrower, weapon_fire mais próximo e anterior ao detonate),

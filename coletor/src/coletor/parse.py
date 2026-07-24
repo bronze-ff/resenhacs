@@ -134,11 +134,18 @@ def _nomes_de_time(registros, fixed):
     None quando a demo não traz nome de clã (comum em partida de matchmaking do grupo,
     só partida de pro/LAN costuma ter). `registros` é uma lista de dict/records (mesmo
     formato de parser.parse_ticks(...).to_dict("records"))."""
+    import pandas as pd
+
     nomes = {"A": None, "B": None}
     for r in registros:
         sid = _sid(r.get("steamid"))
         lado = fixed.get(sid)
-        nome = (r.get("team_clan_name") or "").strip()
+        bruto = r.get("team_clan_name")
+        # team_clan_name ausente vira NaN/pd.NA (não None/"") em alguns snapshots do
+        # parser — NaN é "truthy" em Python, então um `or ""` sozinho não pega esse caso
+        # e `.strip()` estoura (bug real, 2026-07-24). pd.isna cobre None/NaN/pd.NA de uma
+        # vez, mesmo espírito de _sid/_num logo abaixo.
+        nome = "" if bruto is None or pd.isna(bruto) else str(bruto).strip()
         if lado and nome and not nomes[lado]:
             nomes[lado] = nome
     return nomes["A"], nomes["B"]
