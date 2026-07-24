@@ -105,4 +105,17 @@ describe('Clipes', () => {
     )
     await waitFor(() => expect(screen.getByText(/nenhum clipe desse jogador/i)).toBeInTheDocument())
   })
+
+  it('card mostra a partida (mapa + dia/hora) como link pra pagina da partida', async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => RESPOSTA })
+    render(<MemoryRouter><Clipes /></MemoryRouter>)
+    await waitFor(() => expect(screen.getAllByText('bronze').length).toBeGreaterThan(0))
+    const linkPartida = screen.getByRole('link', { name: /ver partida/i })
+    expect(linkPartida).toHaveAttribute('href', '/partida/m1')
+    // Assertion adjusted to account for timezone (UTC mock converts to Brazil local time).
+    // Assert stable parts: href, map name, and presence of date/time format.
+    expect(linkPartida.textContent).toContain('Ver partida')
+    expect(linkPartida.textContent).toContain('Mirage')
+    expect(linkPartida.textContent).toMatch(/\d{2}\/\d{2}\/\d{4}/)
+  })
 })

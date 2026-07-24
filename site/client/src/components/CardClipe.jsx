@@ -1,7 +1,9 @@
 // site/client/src/components/CardClipe.jsx
 // Card de clipe da Allstar — extraído de Clipes.jsx pra reuso na seção de clipes do
 // perfil do jogador (mesma interface, mesmo comportamento nas duas telas).
+import { Link } from 'react-router-dom'
 import { Card, Badge } from './ui'
+import { nomeMapa, dataHora } from '../lib/format.js'
 
 const NOME_KIND = {
   ace: 'ACE', quad: 'QUAD KILL', triple: 'TRIPLE KILL',
@@ -66,6 +68,12 @@ export default function CardClipe({ clipe, aberto, onAbrir, viewerSteamId }) {
             <p className="mt-1 truncate font-mono text-sm text-texto">
               <span>{clipe.nick}</span> · round {clipe.roundNumber} · {clipe.map}
             </p>
+            <Link
+              to={`/partida/${clipe.matchId}`}
+              className="mt-0.5 block truncate font-mono text-xs text-texto-fraco underline-offset-2 hover:text-destaque hover:underline"
+            >
+              Ver partida — {nomeMapa(clipe.map)} · {dataHora(clipe.playedAt)}
+            </Link>
           </div>
         </div>
         <div className="shrink-0 text-right">
