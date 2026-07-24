@@ -541,20 +541,29 @@ describe('GET /api/competicoes/status', () => {
 
   it('existe competicao no periodo atual: temAtiva true', async () => {
     const { app } = appWith([
-      ['from competicoes where data_inicio', [{ tem_ativa: true }]],
+      ['from competicoes where data_inicio', [{ tem_ativa: true, tem_agendada: false }]],
     ])
     const res = await request(app).get('/api/competicoes/status').set('Cookie', cookieJogador)
     expect(res.status).toBe(200)
-    expect(res.body).toEqual({ temAtiva: true })
+    expect(res.body).toEqual({ temAtiva: true, temAgendada: false })
   })
 
-  it('nenhuma competicao no periodo atual: temAtiva false', async () => {
+  it('nenhuma competicao no periodo atual nem agendada: tudo false', async () => {
     const { app } = appWith([
-      ['from competicoes where data_inicio', [{ tem_ativa: false }]],
+      ['from competicoes where data_inicio', [{ tem_ativa: false, tem_agendada: false }]],
     ])
     const res = await request(app).get('/api/competicoes/status').set('Cookie', cookieJogador)
     expect(res.status).toBe(200)
-    expect(res.body).toEqual({ temAtiva: false })
+    expect(res.body).toEqual({ temAtiva: false, temAgendada: false })
+  })
+
+  it('competicao agendada (em breve): temAgendada true mesmo sem ativa', async () => {
+    const { app } = appWith([
+      ['from competicoes where data_inicio', [{ tem_ativa: false, tem_agendada: true }]],
+    ])
+    const res = await request(app).get('/api/competicoes/status').set('Cookie', cookieJogador)
+    expect(res.status).toBe(200)
+    expect(res.body).toEqual({ temAtiva: false, temAgendada: true })
   })
 })
 

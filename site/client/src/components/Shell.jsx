@@ -217,16 +217,17 @@ export default function Shell({ children }) {
 
   const [temCompeticaoAtiva, setTemCompeticaoAtiva] = useState(false)
 
-  // Descobre se existe competição ativa pra acender o indicador (sidebar + barra
-  // inferior mobile) — mesmo padrão de polling já usado em Feed.jsx pro aviso de
-  // sincronização, intervalo maior (60s) porque início/fim de competição não muda a
-  // cada segundo.
+  // Descobre se existe competição ativa OU agendada pra acender o indicador (sidebar +
+  // barra inferior mobile) — agendada conta porque o "em breve" é exatamente o momento
+  // de puxar o clique pra aba (ver regras/prêmio antes de começar). Mesmo padrão de
+  // polling já usado em Feed.jsx pro aviso de sincronização, intervalo maior (60s)
+  // porque início/fim de competição não muda a cada segundo.
   useEffect(() => {
     let vivo = true
     function carregar() {
       fetch('/api/competicoes/status')
         .then((res) => (res.ok ? res.json() : null))
-        .then((s) => { if (vivo && s) setTemCompeticaoAtiva(Boolean(s.temAtiva)) })
+        .then((s) => { if (vivo && s) setTemCompeticaoAtiva(Boolean(s.temAtiva || s.temAgendada)) })
         .catch(() => {})
     }
     carregar()

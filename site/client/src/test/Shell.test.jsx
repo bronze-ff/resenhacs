@@ -5,7 +5,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { AuthProvider } from '../auth/AuthContext.jsx'
 import Shell from '../components/Shell.jsx'
 
-function mockFetch({ temAtiva = false } = {}) {
+function mockFetch({ temAtiva = false, temAgendada = false } = {}) {
   vi.stubGlobal(
     'fetch',
     vi.fn().mockImplementation((url) => {
@@ -13,7 +13,7 @@ function mockFetch({ temAtiva = false } = {}) {
         return Promise.resolve({ ok: true, json: async () => ({ steamId: '765', nick: 'bronze', avatarUrl: null, isSuperAdmin: false }) })
       }
       if (typeof url === 'string' && url.includes('/api/competicoes/status')) {
-        return Promise.resolve({ ok: true, json: async () => ({ temAtiva }) })
+        return Promise.resolve({ ok: true, json: async () => ({ temAtiva, temAgendada }) })
       }
       return Promise.resolve({ ok: true, json: async () => ({}) })
     }),
@@ -68,5 +68,14 @@ describe('Shell — indicador de competicao ativa (sidebar)', () => {
   it('com competicao ativa: mostra o indicador (texto acessivel) perto de Competicoes', async () => {
     renderShell({ temAtiva: true })
     await waitFor(() => expect(screen.getAllByText(/competi[çc][ãa]o ativa/i).length).toBeGreaterThan(0))
+  })
+
+  it('competicao agendada (em breve): indicador acende igual, antes de comecar', async () => {
+    renderShell({ temAtiva: false, temAgendada: true })
+    await waitFor(() => expect(screen.getAllByText(/competi[çc][ãa]o ativa/i).length).toBeGreaterThan(0))
+    // e a barra mobile tambem troca Comparar por Competicoes
+    const barra = screen.getByRole('navigation', { name: 'Navegação principal' })
+    expect(within(barra).getByRole('link', { name: /competi[çc][õo]es/i })).toBeInTheDocument()
+    expect(within(barra).queryByRole('link', { name: /comparar/i })).not.toBeInTheDocument()
   })
 })

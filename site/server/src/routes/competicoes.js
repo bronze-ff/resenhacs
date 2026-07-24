@@ -176,12 +176,15 @@ export function createCompeticoesRouter({ db, requireAuth }) {
   // completo de todas as competições (pesado) e Shell.jsx fica montado em toda página
   // autenticada, então chamar o endpoint pesado a cada poll seria desperdício de carga.
   router.get('/status', requireAuth, async (req, res) => {
+    // temAgendada acende o mesmo indicador da sidebar/barra mobile ANTES da competição
+    // começar — o momento certo de puxar o clique pra aba (ver regras, prêmio, se
+    // preparar), não só depois que ela já está rolando.
     const { rows } = await db.query(
-      `select exists(
-         select 1 from competicoes where data_inicio <= now() and data_fim >= now()
-       ) as tem_ativa`,
+      `select
+         exists(select 1 from competicoes where data_inicio <= now() and data_fim >= now()) as tem_ativa,
+         exists(select 1 from competicoes where data_inicio > now()) as tem_agendada`,
     )
-    res.json({ temAtiva: rows[0].tem_ativa })
+    res.json({ temAtiva: rows[0].tem_ativa, temAgendada: rows[0].tem_agendada })
   })
 
   // #9 da auditoria (rate limiting como defesa em profundidade, além da regra de
