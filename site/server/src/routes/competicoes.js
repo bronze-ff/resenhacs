@@ -309,6 +309,10 @@ export function createCompeticoesRouter({ db, requireAuth }) {
     if (!compRows.length) return res.status(404).json({ erro: 'competição não encontrada' })
     const comp = compRows[0]
     if (new Date() > new Date(comp.data_fim)) return res.status(400).json({ erro: 'essa competição já encerrou' })
+    // Defesa em profundidade: a elegibilidade por played_at já barraria (nenhuma partida
+    // do período existe antes dele começar), mas o guard torna a regra explícita e a
+    // mensagem clara pro jogador que tentar antes da hora.
+    if (new Date() < new Date(comp.data_inicio)) return res.status(400).json({ erro: 'essa competição ainda não começou' })
 
     // #5 da auditoria (IDOR): só aceita clipe cujo steam_id64 (direto em allstar_clips,
     // migração 0042 — nunca via join inner com highlights, que excluiria clipes do
