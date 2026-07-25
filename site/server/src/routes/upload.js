@@ -128,7 +128,10 @@ export function createUploadRouter({ db, requireAuth, r2Client, r2Bucket }) {
     } catch (e) {
       // uploads_pendentes_alvo_ativo_idx: um envio ativo por Partida (a trava é do
       // banco, não do aplicativo — dois cliques simultâneos não passam pelos dois).
-      if (e?.code === '23505') {
+      // Escopado a matchId porque é a única unicidade que esse índice parcial descreve
+      // hoje; qualquer outro 23505 (inclusive no fluxo genérico, sem matchId) é um bug
+      // real e não deve virar essa mensagem.
+      if (matchId && e?.code === '23505') {
         return res.status(409).json({ erro: 'Já existe um envio em andamento pra esta partida' })
       }
       throw e

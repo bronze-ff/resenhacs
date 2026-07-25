@@ -208,32 +208,47 @@ describe('POST /api/upload/upload-url', () => {
   })
 
   it('matchId de partida onde o jogador não jogou: 403', async () => {
-    const { app } = appWith([['from matches m where m.id', [{ id: UUID, tem_demo: false, source: 'faceit', participou: false }]]])
+    const { app, db } = appWith([['from matches m where m.id', [{ id: UUID, tem_demo: false, source: 'faceit', participou: false }]]])
+    presignUpload.mockClear()
     const res = await request(app)
       .post('/api/upload/upload-url')
       .set('Cookie', cookie)
       .send({ filename: 'x.dem', matchId: UUID })
     expect(res.status).toBe(403)
     expect(res.body.erro).toMatch(/jogou/i)
+    expect(presignUpload).not.toHaveBeenCalled()
+    expect(db.query.mock.calls.some((c) => c[0].includes('insert into uploads_pendentes'))).toBe(false)
   })
 
   it('matchId inexistente: 403 (não revela que a partida existe ou não)', async () => {
-    const { app } = appWith([['from matches m where m.id', []]])
-    const res = await request(app)
+    const naoJogou = appWith([['from matches m where m.id', [{ id: UUID, tem_demo: false, source: 'faceit', participou: false }]]])
+    const resNaoJogou = await request(naoJogou.app)
       .post('/api/upload/upload-url')
       .set('Cookie', cookie)
       .send({ filename: 'x.dem', matchId: UUID })
-    expect(res.status).toBe(403)
+
+    const inexistente = appWith([['from matches m where m.id', []]])
+    const resInexistente = await request(inexistente.app)
+      .post('/api/upload/upload-url')
+      .set('Cookie', cookie)
+      .send({ filename: 'x.dem', matchId: UUID })
+
+    expect(resInexistente.status).toBe(403)
+    // Mesmo status E mesmo corpo — senão o 403 vira oráculo por causa da mensagem.
+    expect(resInexistente.body).toEqual(resNaoJogou.body)
   })
 
   it('partida que já tem demo processada: 409', async () => {
-    const { app } = appWith([['from matches m where m.id', [{ id: UUID, tem_demo: true, source: 'faceit', participou: true }]]])
+    const { app, db } = appWith([['from matches m where m.id', [{ id: UUID, tem_demo: true, source: 'faceit', participou: true }]]])
+    presignUpload.mockClear()
     const res = await request(app)
       .post('/api/upload/upload-url')
       .set('Cookie', cookie)
       .send({ filename: 'x.dem', matchId: UUID })
     expect(res.status).toBe(409)
     expect(res.body.erro).toMatch(/j[áa] tem demo/i)
+    expect(presignUpload).not.toHaveBeenCalled()
+    expect(db.query.mock.calls.some((c) => c[0].includes('insert into uploads_pendentes'))).toBe(false)
   })
 
   it('partida que não é faceit stats-only: 409', async () => {
