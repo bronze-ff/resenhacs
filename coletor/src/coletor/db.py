@@ -587,24 +587,31 @@ def listar_uploads_pendentes(conn):
 
 
 def dados_da_partida_alvo(conn, match_id):
-    """Mapa + steam ids dos Participantes da Partida que um envio de Demo diz
-    enriquecer — os dois lados da validação estrita feita antes de gravar
+    """Mapa + placar + steam ids dos Participantes da Partida que um envio de
+    Demo diz enriquecer — os lados da validação estrita feita antes de gravar
     (ver main._validar_demo_contra_alvo) — mais o `source` ORIGINAL da Partida.
 
     O `source` é devolvido pra que quem chama grave a Demo mantendo a identidade
     da Partida (ex.: 'faceit' continua 'faceit' depois de enriquecida) — sem
     isso, o enriquecimento sobrescrevia source com 'upload' e a Partida perdia
     o badge de plataforma, virava "MANUAL" na UI e contava como origem não
-    verificada em competição. None se a Partida não existe mais."""
+    verificada em competição. None se a Partida não existe mais.
+
+    `score_a`/`score_b` fecham um buraco da validação por mapa+roster: duas
+    Partidas do MESMO lobby, no MESMO mapa, na mesma noite têm roster idêntico
+    — sem o placar, a validação aceitaria a demo de uma no lugar da outra."""
     with conn.cursor() as cur:
-        cur.execute("select map, source from matches where id = %s", (match_id,))
+        cur.execute("select map, source, score_a, score_b from matches where id = %s", (match_id,))
         row = cur.fetchone()
         if row is None:
             return None
-        mapa, source = row
+        mapa, source, score_a, score_b = row
         cur.execute("select steam_id64 from match_players where match_id = %s", (match_id,))
         steam_ids = {r[0] for r in cur.fetchall()}
-    return {"map": mapa, "steam_ids": steam_ids, "source": source}
+    return {
+        "map": mapa, "steam_ids": steam_ids, "source": source,
+        "score_a": score_a, "score_b": score_b,
+    }
 
 
 def atualizar_upload_pendente(conn, upload_id, status, match_id=None, erro=None):

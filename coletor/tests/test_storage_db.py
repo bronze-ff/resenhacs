@@ -144,10 +144,13 @@ class FakeCursor:
         # (None = partida inédita, caminho do insert).
         if self._last.startswith("select id from matches where fingerprint"):
             return self.conn.fingerprint_row
-        if self._last.startswith("select map, source from matches where id"):
+        if self._last.startswith("select map, source, score_a, score_b from matches where id"):
             return (
                 None if getattr(self.conn, "alvo_map", None) is None
-                else (self.conn.alvo_map, getattr(self.conn, "alvo_source", "faceit"))
+                else (
+                    self.conn.alvo_map, getattr(self.conn, "alvo_source", "faceit"),
+                    getattr(self.conn, "alvo_score_a", None), getattr(self.conn, "alvo_score_b", None),
+                )
             )
         return ["00000000-0000-0000-0000-000000000001"]
 
@@ -382,7 +385,23 @@ def test_dados_da_partida_alvo_devolve_mapa_steam_ids_e_source():
     conn.alvo_map = "de_inferno"
     conn.alvo_source = "faceit"
     dados = db.dados_da_partida_alvo(conn, "m-alvo")
-    assert dados == {"map": "de_inferno", "steam_ids": {"A", "B"}, "source": "faceit"}
+    assert dados == {
+        "map": "de_inferno", "steam_ids": {"A", "B"}, "source": "faceit",
+        "score_a": None, "score_b": None,
+    }
+
+
+def test_dados_da_partida_alvo_devolve_score_a_e_score_b():
+    # Placar entra na validação (main._validar_demo_contra_alvo) pra fechar o
+    # buraco de duas Partidas do mesmo lobby/mapa/noite com roster idêntico.
+    conn = FakeConn()
+    conn.alvo_map = "de_inferno"
+    conn.alvo_source = "faceit"
+    conn.alvo_score_a = 13
+    conn.alvo_score_b = 7
+    dados = db.dados_da_partida_alvo(conn, "m-alvo")
+    assert dados["score_a"] == 13
+    assert dados["score_b"] == 7
 
 
 def test_dados_da_partida_alvo_devolve_none_quando_a_partida_sumiu():

@@ -726,8 +726,11 @@ def test_processar_uploads_pendentes_passa_o_teto_de_tempo_configurado(monkeypat
 
 # ---- envio amarrado a uma Partida: valida mapa + roster antes de gravar ----
 
-def _alvo(mapa="de_inferno", ids=("A", "B")):
-    return {"match_id": "m-alvo", "map": mapa, "steam_ids": set(ids)}
+def _alvo(mapa="de_inferno", ids=("A", "B"), score_a=None, score_b=None):
+    return {
+        "match_id": "m-alvo", "map": mapa, "steam_ids": set(ids),
+        "score_a": score_a, "score_b": score_b,
+    }
 
 
 def test_validar_demo_contra_alvo_aceita_mapa_e_roster_iguais():
@@ -761,6 +764,50 @@ def test_validar_demo_contra_alvo_com_mapa_vazio_ainda_recusa_roster_diferente()
     parsed = {"map": "de_dust2", "players": [{"steam_id64": "A"}, {"steam_id64": "Z"}]}
     with pytest.raises(main.DemoNaoConfereError, match="jogadores"):
         main._validar_demo_contra_alvo(parsed, _alvo(mapa=""))
+
+
+# ---- terceira checagem: placar (fecha o buraco de 2 partidas do mesmo lobby/mapa/noite) ----
+
+def test_validar_demo_contra_alvo_aceita_placar_igual():
+    parsed = {
+        "map": "de_inferno", "score_a": 13, "score_b": 7,
+        "players": [{"steam_id64": "A"}, {"steam_id64": "B"}],
+    }
+    main._validar_demo_contra_alvo(parsed, _alvo(score_a=13, score_b=7))  # não levanta
+
+
+def test_validar_demo_contra_alvo_aceita_placar_igual_com_lados_invertidos():
+    # ESTE é o teste que impede alguém de "consertar" pra comparação posicional
+    # depois: no caminho stats-only da FACEIT (faceit.montar_parsed_stats_only),
+    # o time A é a faction1 da API e o B a faction2, mas o parser atribui A/B
+    # pela lógica dele a partir da demo — sem garantia de que os dois lados
+    # cheguem à mesma atribuição. score_a==score_a and score_b==score_b
+    # recusaria essa demo legítima só porque os lados vieram trocados.
+    parsed = {
+        "map": "de_inferno", "score_a": 7, "score_b": 13,
+        "players": [{"steam_id64": "A"}, {"steam_id64": "B"}],
+    }
+    main._validar_demo_contra_alvo(parsed, _alvo(score_a=13, score_b=7))  # não levanta
+
+
+def test_validar_demo_contra_alvo_recusa_placar_diferente():
+    parsed = {
+        "map": "de_inferno", "score_a": 13, "score_b": 11,
+        "players": [{"steam_id64": "A"}, {"steam_id64": "B"}],
+    }
+    with pytest.raises(main.DemoNaoConfereError, match="placar"):
+        main._validar_demo_contra_alvo(parsed, _alvo(score_a=13, score_b=7))
+
+
+def test_validar_demo_contra_alvo_pula_a_checagem_de_placar_quando_a_partida_alvo_nao_tem():
+    # Mesma razão do skip de mapa vazio: dado ausente não pode virar bloqueio
+    # permanente. score_a/score_b da Partida alvo em None (qualquer um dos dois)
+    # deixa passar, qualquer que seja o placar da demo.
+    parsed = {
+        "map": "de_inferno", "score_a": 16, "score_b": 2,
+        "players": [{"steam_id64": "A"}, {"steam_id64": "B"}],
+    }
+    main._validar_demo_contra_alvo(parsed, _alvo(score_a=None, score_b=None))  # não levanta
 
 
 def _fake_parsed(mapa, steam_ids):
@@ -918,7 +965,10 @@ def test_processar_uploads_pendentes_com_alvo_passa_o_alvo_pro_ingest(monkeypatc
     monkeypatch.setattr(main.storage_r2, "delete_object", lambda client, bucket, key: None)
     monkeypatch.setattr(
         main.dbmod, "dados_da_partida_alvo",
-        lambda c, mid: {"map": "de_inferno", "steam_ids": {"A", "B"}, "source": "faceit"},
+        lambda c, mid: {
+            "map": "de_inferno", "steam_ids": {"A", "B"}, "source": "faceit",
+            "score_a": 13, "score_b": 7,
+        },
     )
     recebidos = []
 
@@ -931,7 +981,10 @@ def test_processar_uploads_pendentes_com_alvo_passa_o_alvo_pro_ingest(monkeypatc
     total = main.cmd_processar_uploads_pendentes(config, conn)
 
     assert total == 1
-    assert recebidos == [{"match_id": "m-alvo", "map": "de_inferno", "steam_ids": {"A", "B"}}]
+    assert recebidos == [{
+        "match_id": "m-alvo", "map": "de_inferno", "steam_ids": {"A", "B"},
+        "score_a": 13, "score_b": 7,
+    }]
 
 
 def test_processar_uploads_pendentes_com_alvo_mantem_o_source_original(monkeypatch):
@@ -947,7 +1000,10 @@ def test_processar_uploads_pendentes_com_alvo_mantem_o_source_original(monkeypat
     monkeypatch.setattr(main.storage_r2, "delete_object", lambda client, bucket, key: None)
     monkeypatch.setattr(
         main.dbmod, "dados_da_partida_alvo",
-        lambda c, mid: {"map": "de_inferno", "steam_ids": {"A", "B"}, "source": "faceit"},
+        lambda c, mid: {
+            "map": "de_inferno", "steam_ids": {"A", "B"}, "source": "faceit",
+            "score_a": 13, "score_b": 7,
+        },
     )
     recebidos = []
 
@@ -999,7 +1055,10 @@ def test_processar_uploads_pendentes_demo_que_nao_confere_falha_e_apaga_do_r2(mo
     monkeypatch.setattr(main.storage_r2, "delete_object", lambda client, bucket, key: deletes.append(key))
     monkeypatch.setattr(
         main.dbmod, "dados_da_partida_alvo",
-        lambda c, mid: {"map": "de_inferno", "steam_ids": {"A", "B"}, "source": "faceit"},
+        lambda c, mid: {
+            "map": "de_inferno", "steam_ids": {"A", "B"}, "source": "faceit",
+            "score_a": 13, "score_b": 7,
+        },
     )
     monkeypatch.setattr(
         main, "ingest_demo",

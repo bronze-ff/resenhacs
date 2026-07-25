@@ -402,10 +402,14 @@ class DemoNaoConfereError(Exception):
 
 
 def _validar_demo_contra_alvo(parsed, alvo):
-    """Validação estrita do envio amarrado a uma Partida: mapa igual E os mesmos
-    Participantes. O roster da Partida FACEIT vem da API oficial, então 10 steam
-    ids batendo é prova de que é a Partida certa — sem depender de K/D (que o
-    parser conta diferente da API) nem de horário (o .dem não guarda data).
+    """Validação estrita do envio amarrado a uma Partida: mapa igual, os mesmos
+    Participantes E o mesmo placar. O roster da Partida FACEIT vem da API
+    oficial, então 10 steam ids batendo já é forte prova de que é a Partida
+    certa — mas duas Partidas do MESMO lobby, no MESMO mapa, na mesma noite,
+    têm mapa e roster IDÊNTICOS; sem o placar, a validação aceitaria a demo de
+    uma no lugar da outra, e a Partida errada receberia silenciosamente
+    placar/rounds/stats de outro jogo. Não depende de K/D (que o parser conta
+    diferente da API) nem de horário (o .dem não guarda data).
 
     Portão de mapa pulado quando `alvo["map"]` está vazio/nulo: o caminho
     stats-only da FACEIT (faceit.montar_parsed_stats_only) grava matches.map = ""
@@ -422,6 +426,25 @@ def _validar_demo_contra_alvo(parsed, alvo):
     ids_demo = {p.get("steam_id64") for p in parsed.get("players", [])}
     if ids_demo != alvo["steam_ids"]:
         raise DemoNaoConfereError("os jogadores da demo não são os desta partida")
+
+    # Placar sem ordem: no caminho stats-only da FACEIT (faceit.montar_parsed_
+    # stats_only), o time A é a faction1 da API e o B a faction2 — mas o parser
+    # atribui A/B pela lógica dele a partir da demo, sem garantia de que os dois
+    # lados cheguem à mesma atribuição. Comparar score_a==score_a/score_b==score_b
+    # recusaria demos legítimas sistematicamente só porque os lados vieram
+    # invertidos; comparar o PAR sem ordem ({13,7} contra {13,7}) ainda pega a
+    # partida errada (13:11 contra 13:7 não bate) sem esse falso positivo.
+    # Placar ausente na Partida alvo (None em qualquer um dos dois) pula a
+    # checagem — mesmo raciocínio do portão de mapa: dado ausente não pode virar
+    # bloqueio permanente.
+    if alvo.get("score_a") is not None and alvo.get("score_b") is not None:
+        placar_alvo = {alvo["score_a"], alvo["score_b"]}
+        placar_demo = {parsed.get("score_a"), parsed.get("score_b")}
+        if placar_demo != placar_alvo:
+            raise DemoNaoConfereError(
+                f"o placar da demo ({parsed.get('score_a')}x{parsed.get('score_b')}) não "
+                f"confere com o desta partida ({alvo['score_a']}x{alvo['score_b']})"
+            )
 
 
 def cmd_processar_uploads_pendentes(config, conn):
@@ -462,7 +485,10 @@ def cmd_processar_uploads_pendentes(config, conn):
                 dados = dbmod.dados_da_partida_alvo(conn, match_alvo_id)
                 if dados is None:
                     raise DemoNaoConfereError("a partida deste envio não existe mais")
-                alvo = {"match_id": match_alvo_id, "map": dados["map"], "steam_ids": dados["steam_ids"]}
+                alvo = {
+                    "match_id": match_alvo_id, "map": dados["map"], "steam_ids": dados["steam_ids"],
+                    "score_a": dados["score_a"], "score_b": dados["score_b"],
+                }
                 source_do_upload = dados["source"]
 
             with tempfile.TemporaryDirectory() as tmp:
