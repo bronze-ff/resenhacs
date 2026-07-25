@@ -6,6 +6,7 @@ import { Avatar, MapIcon, SectionHeader, Select, ResultChip, PlataformaBadge, St
 import ReplayViewer from '../components/ReplayViewer.jsx'
 import MapaCalor from '../components/MapaCalor.jsx'
 import SeletorClipesCompeticao from '../components/SeletorClipesCompeticao.jsx'
+import EnviarDemoDaPartida from '../components/EnviarDemoDaPartida.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { useTransicaoModal } from '../lib/useTransicaoModal.js'
 
@@ -1373,6 +1374,8 @@ export default function Partida() {
             : ' Provavelmente por desistência/desconexão de algum jogador (não deu pra identificar quem com certeza).'}
         </div>
       )}
+
+      <EnviarDemoDaPartida partida={m} euSteamId={jogador?.steamId} onEnviado={carregar} />
 
       <BarraAbas abas={ABAS} ativa={abaAtiva} onSelecionar={setAbaAtiva} />
 
