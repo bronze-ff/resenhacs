@@ -394,6 +394,59 @@ _MAX_UPLOAD_BYTES = 400 * 1024 * 1024
 _TIMEOUT_PROCESSANDO_MINUTOS = 30
 
 
+class DemoNaoConfereError(Exception):
+    """A Demo enviada não corresponde à Partida que o envio diz enriquecer.
+
+    Erro DEFINITIVO, não transitório: retry não melhora, então quem trata apaga
+    o staging do R2 em vez de guardar pra próxima rodada."""
+
+
+def _validar_demo_contra_alvo(parsed, alvo):
+    """Validação estrita do envio amarrado a uma Partida: mapa igual, os mesmos
+    Participantes E o mesmo placar. O roster da Partida FACEIT vem da API
+    oficial, então 10 steam ids batendo já é forte prova de que é a Partida
+    certa — mas duas Partidas do MESMO lobby, no MESMO mapa, na mesma noite,
+    têm mapa e roster IDÊNTICOS; sem o placar, a validação aceitaria a demo de
+    uma no lugar da outra, e a Partida errada receberia silenciosamente
+    placar/rounds/stats de outro jogo. Não depende de K/D (que o parser conta
+    diferente da API) nem de horário (o .dem não guarda data).
+
+    Portão de mapa pulado quando `alvo["map"]` está vazio/nulo: o caminho
+    stats-only da FACEIT (faceit.montar_parsed_stats_only) grava matches.map = ""
+    quando a API não devolve o mapa — recusar por mapa vazio trancaria essa
+    Partida pra sempre, sem nenhum jeito de enriquecer (o arquivo seria sempre
+    apagado do R2 na validação). O cliente já trata esse caso (o pré-check
+    de mapa deixa passar quando o mapa da Partida está vazio); aqui, o conjunto
+    EXATO dos 10 steam ids já é prova suficiente de que é a Partida certa.
+    """
+    if alvo["map"] and parsed.get("map") != alvo["map"]:
+        raise DemoNaoConfereError(
+            f"o mapa da demo ({parsed.get('map')}) não confere com o desta partida ({alvo['map']})"
+        )
+    ids_demo = {p.get("steam_id64") for p in parsed.get("players", [])}
+    if ids_demo != alvo["steam_ids"]:
+        raise DemoNaoConfereError("os jogadores da demo não são os desta partida")
+
+    # Placar sem ordem: no caminho stats-only da FACEIT (faceit.montar_parsed_
+    # stats_only), o time A é a faction1 da API e o B a faction2 — mas o parser
+    # atribui A/B pela lógica dele a partir da demo, sem garantia de que os dois
+    # lados cheguem à mesma atribuição. Comparar score_a==score_a/score_b==score_b
+    # recusaria demos legítimas sistematicamente só porque os lados vieram
+    # invertidos; comparar o PAR sem ordem ({13,7} contra {13,7}) ainda pega a
+    # partida errada (13:11 contra 13:7 não bate) sem esse falso positivo.
+    # Placar ausente na Partida alvo (None em qualquer um dos dois) pula a
+    # checagem — mesmo raciocínio do portão de mapa: dado ausente não pode virar
+    # bloqueio permanente.
+    if alvo.get("score_a") is not None and alvo.get("score_b") is not None:
+        placar_alvo = {alvo["score_a"], alvo["score_b"]}
+        placar_demo = {parsed.get("score_a"), parsed.get("score_b")}
+        if placar_demo != placar_alvo:
+            raise DemoNaoConfereError(
+                f"o placar da demo ({parsed.get('score_a')}x{parsed.get('score_b')}) não "
+                f"confere com o desta partida ({alvo['score_a']}x{alvo['score_b']})"
+            )
+
+
 def cmd_processar_uploads_pendentes(config, conn):
     """Processa a fila de uploads manuais de demo (qualquer membro do grupo, via
     'Enviar Demo' no site): baixa o .dem do R2 (staging de upload direto via URL
@@ -416,22 +469,42 @@ def cmd_processar_uploads_pendentes(config, conn):
 
     client = storage_r2.make_client(config)
     total = 0
-    for upload_id, adicionado_por, arquivo_r2_key, share_code, played_at, plataforma_manual in pendentes:
+    for (upload_id, adicionado_por, arquivo_r2_key, share_code, played_at,
+         plataforma_manual, match_alvo_id) in pendentes:
         dbmod.atualizar_upload_pendente(conn, upload_id, "processando")
         try:
+            alvo = None
+            # Com alvo, a Partida enriquecida CONTINUA sendo a mesma Partida que já
+            # era (ex.: 'faceit') — só ganha os stats do parser por cima. Sem isso,
+            # o ingest gravava source='upload' incondicionalmente e a Partida
+            # perdia a identidade: o badge de plataforma sumia, origemPartida
+            # virava "MANUAL" e a competição passava a marcar como origem não
+            # verificada (ver spec, seção 5).
+            source_do_upload = "upload"
+            if match_alvo_id:
+                dados = dbmod.dados_da_partida_alvo(conn, match_alvo_id)
+                if dados is None:
+                    raise DemoNaoConfereError("a partida deste envio não existe mais")
+                alvo = {
+                    "match_id": match_alvo_id, "map": dados["map"], "steam_ids": dados["steam_ids"],
+                    "score_a": dados["score_a"], "score_b": dados["score_b"],
+                }
+                source_do_upload = dados["source"]
+
             with tempfile.TemporaryDirectory() as tmp:
                 tmp = Path(tmp)
                 print(f"  {upload_id}: baixando do R2 ({arquivo_r2_key})")
-                dados = storage_r2.download_bytes(
+                dados_dem = storage_r2.download_bytes(
                     client, config.r2_bucket, arquivo_r2_key, max_bytes=_MAX_UPLOAD_BYTES,
                 )
                 dem_path = tmp / "demo.dem"
-                dem_path.write_bytes(dados)
+                dem_path.write_bytes(dados_dem)
 
                 match_id = ingest_demo(
                     config, conn, dem_path,
-                    share_code=share_code, source="upload", upload=True,
+                    share_code=share_code, source=source_do_upload, upload=True,
                     played_at=played_at, plataforma_manual=plataforma_manual,
+                    alvo=alvo,
                 )
                 dbmod.atualizar_upload_pendente(conn, upload_id, "concluido", match_id=match_id)
                 print(f"  {upload_id}: concluido ({match_id})")
@@ -439,6 +512,23 @@ def cmd_processar_uploads_pendentes(config, conn):
                 # Apaga o staging só em sucesso — numa falha o arquivo continua no R2
                 # pro reprocessamento futuro reaproveitar sem o jogador subir de novo.
                 storage_r2.delete_object(client, config.r2_bucket, arquivo_r2_key)
+        except DemoNaoConfereError as e:
+            # Falha DEFINITIVA (mapa/roster errado): guardar o staging só ocuparia
+            # espaço pra sempre, já que nenhum retry vai mudar o resultado. O status
+            # 'falhou' já foi gravado acima — se o delete_object falhar (R2 fora do
+            # ar), isso não pode derrubar o resto da fila (o for de cima processando
+            # os outros envios pendentes da rodada); o arquivo órfão fica pro
+            # cmd_limpar_uploads_orfaos limpar depois.
+            conn.rollback()
+            dbmod.atualizar_upload_pendente(conn, upload_id, "falhou", erro=str(e)[:500])
+            try:
+                storage_r2.delete_object(client, config.r2_bucket, arquivo_r2_key)
+            except Exception as e_del:  # noqa: BLE001
+                print(
+                    f"  {upload_id}: aviso — staging não foi apagado do R2 ({e_del}); "
+                    "cmd_limpar_uploads_orfaos vai limpar depois"
+                )
+            print(f"  {upload_id}: RECUSADO ({e})")
         except Exception as e:  # noqa: BLE001
             conn.rollback()
             dbmod.atualizar_upload_pendente(conn, upload_id, "falhou", erro=str(e)[:500])
@@ -601,6 +691,7 @@ def cmd_reprocess(config, conn, match_id=None, since=None):
                 dbmod.store_parsed(
                     conn, parsed, share_code=share_code, source=source or "valve_mm",
                     demo_url=demo_url, replay_url=replay_url, prefer_new_played_at=False,
+                    tem_demo=True,
                 )
                 with conn.cursor() as cur2:
                     cur2.execute("update matches set reprocessed_at = now() where id = %s", (mid,))
@@ -642,7 +733,8 @@ def _upload_replay(client, bucket, rkey, replay_json):
         )
 
 
-def _finalizar_ingest(config, conn, parsed, replay_json, dem_path_upload, share_code, source, upload, played_at):
+def _finalizar_ingest(config, conn, parsed, replay_json, dem_path_upload, share_code,
+                      source, upload, played_at, match_id_alvo=None):
     """Cauda comum de ingest_demo/ingest_demo_multiparte: arquiva demo+replay no R2 (se
     configurado) e grava no banco. Devolve match_id. `dem_path_upload` é o .dem cujos
     bytes brutos sobem pro R2 (partida de arquivo único: o próprio; partida fundida de
@@ -669,6 +761,8 @@ def _finalizar_ingest(config, conn, parsed, replay_json, dem_path_upload, share_
         conn, parsed, share_code=share_code, source=source,
         demo_url=demo_url, replay_url=replay_url,
         prefer_new_played_at=bool(played_at),
+        tem_demo=True,
+        match_id_alvo=match_id_alvo,
     )
 
 
@@ -689,7 +783,8 @@ def _atualizar_avatares(config, conn, steam_ids):
         print(f"aviso: avatares Steam não atualizados ({e})")
 
 
-def ingest_demo(config, conn, path, share_code=None, source="upload", upload=True, played_at=None, plataforma_manual=None):
+def ingest_demo(config, conn, path, share_code=None, source="upload", upload=True,
+                played_at=None, plataforma_manual=None, alvo=None):
     """Parseia um .dem, arquiva no R2 (se configurado) e grava no banco. Devolve match_id.
 
     `played_at` (ISO 8601, opcional): quando o operador sabe a hora real da Partida,
@@ -700,10 +795,17 @@ def ingest_demo(config, conn, path, share_code=None, source="upload", upload=Tru
     `plataforma_manual` (opcional, 'faceit'|'gamers_club'|'xplay_gg'): rótulo informativo
     de qual plataforma sem integração oficial o jogador escolheu no upload manual (ver
     site/server/src/routes/upload.js) — não vem da demo, só metadado do fluxo de envio.
+
+    `alvo` (opcional): {"match_id", "map", "steam_ids"} da Partida que este envio
+    diz enriquecer. Quando informado, a Demo é validada contra ela ANTES de
+    qualquer trabalho caro (Replay 2D) e os dados são gravados NAQUELA linha, sem
+    passar pela dedupe por fingerprint.
     """
     parsed = parsemod.parse_demo(path)
     parsed["players"] = transform.fill_kd_from_kills(parsed["players"], parsed["kills"])
     parsed = transform.enrich(parsed)
+    if alvo is not None:
+        _validar_demo_contra_alvo(parsed, alvo)
     if played_at:
         parsed["played_at"] = played_at
     parsed["plataforma_manual"] = plataforma_manual
@@ -729,7 +831,31 @@ def ingest_demo(config, conn, path, share_code=None, source="upload", upload=Tru
     except Exception as e:  # noqa: BLE001
         print(f"aviso: replay 2D / clutch não gerado ({e})")
 
-    match_id = _finalizar_ingest(config, conn, parsed, replay_json, path, share_code, source, upload, played_at)
+    try:
+        match_id = _finalizar_ingest(
+            config, conn, parsed, replay_json, path, share_code, source, upload, played_at,
+            match_id_alvo=alvo["match_id"] if alvo else None,
+        )
+    except Exception as e:  # noqa: BLE001
+        # Cenário recorrente (ver spec): a mesma demo já tinha sido enviada antes
+        # pela página genérica "Enviar Demo" e criou uma Partida duplicata
+        # carregando esse fingerprint (matches.fingerprint é único). Ao enriquecer
+        # a linha da Partida alvo com essa mesma demo, o UPDATE colide nesse
+        # índice — sem tratar, o Jogador via a mensagem crua do psycopg no banner
+        # (o except genérico não sabia que era definitivo, então mantinha o .dem
+        # de 300MB no R2 pra sempre esperando um retry que nunca ia resolver).
+        # Detecta pelo SQLSTATE (23505 = unique_violation), não pela classe
+        # psycopg.errors.UniqueViolation — importar psycopg no topo do módulo
+        # quebra o job de testes do CI, que instala só dev-requirements.txt
+        # (sem psycopg; ver db.py e storage_r2.py pro mesmo padrão de import
+        # preguiçoso). Só converte pra falha DEFINITIVA quando há alvo: fora
+        # desse caminho (cmd_fetch/processar-fila-pro/envio genérico), uma
+        # colisão de fingerprint só acontece numa corrida entre execuções
+        # concorrentes — é TRANSITÓRIA, e converter aqui apagaria do R2 o
+        # .dem de 300MB que devia sobreviver pro retry.
+        if alvo is not None and getattr(e, "sqlstate", None) == "23505":
+            raise DemoNaoConfereError("esta demo já foi processada em outra partida") from e
+        raise
     _atualizar_avatares(config, conn, [p["steam_id64"] for p in parsed.get("players", [])])
     return match_id
 

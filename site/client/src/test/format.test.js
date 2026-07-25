@@ -1,6 +1,6 @@
 // site/client/src/test/format.test.js
 import { describe, it, expect } from 'vitest'
-import { contadorRegressivo, dataHora, datetimeLocalBrasiliaParaIso, paraDatetimeLocalBrasilia } from '../lib/format.js'
+import { contadorRegressivo, dataHora, datetimeLocalBrasiliaParaIso, origemPartida, paraDatetimeLocalBrasilia } from '../lib/format.js'
 
 describe('dataHora', () => {
   it('sempre renderiza no horario de Brasilia, independente do fuso do dispositivo', () => {
@@ -24,5 +24,19 @@ describe('dataHora', () => {
 
   it('formata o contador regressivo', () => {
     expect(contadorRegressivo('2026-07-25T00:00:01Z', new Date('2026-07-24T00:00:00Z').getTime())).toBe('1d 00:00:01')
+  })
+})
+
+describe('origemPartida', () => {
+  it('upload manual continua MANUAL', () => {
+    expect(origemPartida('upload', true).label).toBe('MANUAL')
+  })
+
+  it('partida automática com demo parseada é AUTO', () => {
+    expect(origemPartida('valve_mm', true).label).toBe('AUTO')
+  })
+
+  it('partida sem demo (stats-only da API) é SEM DEMO', () => {
+    expect(origemPartida('faceit', false).label).toBe('SEM DEMO')
   })
 })

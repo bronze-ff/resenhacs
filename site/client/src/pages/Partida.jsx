@@ -6,6 +6,7 @@ import { Avatar, MapIcon, SectionHeader, Select, ResultChip, PlataformaBadge, St
 import ReplayViewer from '../components/ReplayViewer.jsx'
 import MapaCalor from '../components/MapaCalor.jsx'
 import SeletorClipesCompeticao from '../components/SeletorClipesCompeticao.jsx'
+import EnviarDemoDaPartida from '../components/EnviarDemoDaPartida.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { useTransicaoModal } from '../lib/useTransicaoModal.js'
 
@@ -1354,10 +1355,10 @@ export default function Partida() {
             <h2 className="font-display text-2xl font-bold uppercase tracking-wide text-texto">{nomeMapa(m.map)}</h2>
             <PlataformaBadge source={m.source} plataformaManual={m.plataformaManual} />
             <span
-              title={origemPartida(m.source).title}
+              title={origemPartida(m.source, m.temDemo).title}
               className="panel-cut-sm border border-borda bg-superficie px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-widest text-texto-fraco"
             >
-              {origemPartida(m.source).label}
+              {origemPartida(m.source, m.temDemo).label}
             </span>
           </div>
           <p className="font-mono text-sm text-texto-fraco">{dataHora(m.playedAt)}</p>
@@ -1373,6 +1374,8 @@ export default function Partida() {
             : ' Provavelmente por desistência/desconexão de algum jogador (não deu pra identificar quem com certeza).'}
         </div>
       )}
+
+      <EnviarDemoDaPartida partida={m} euSteamId={jogador?.steamId} onEnviado={carregar} />
 
       <BarraAbas abas={ABAS} ativa={abaAtiva} onSelecionar={setAbaAtiva} />
 

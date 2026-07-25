@@ -144,12 +144,23 @@ class FakeCursor:
         # (None = partida inédita, caminho do insert).
         if self._last.startswith("select id from matches where fingerprint"):
             return self.conn.fingerprint_row
+        if self._last.startswith("select map, source, score_a, score_b from matches where id"):
+            return (
+                None if getattr(self.conn, "alvo_map", None) is None
+                else (
+                    self.conn.alvo_map, getattr(self.conn, "alvo_source", "faceit"),
+                    getattr(self.conn, "alvo_score_a", None), getattr(self.conn, "alvo_score_b", None),
+                )
+            )
         return ["00000000-0000-0000-0000-000000000001"]
 
     def fetchall(self):
         if self._last.startswith("select id, hltv_url, arquivo_r2_key from partidas_pro_fila"):
             return self.conn.fila_rows
-        if self._last.startswith("select id, adicionado_por, arquivo_r2_key, share_code, played_at, plataforma_manual from uploads_pendentes"):
+        if self._last.startswith(
+            "select id, adicionado_por, arquivo_r2_key, share_code, played_at, "
+            "plataforma_manual, match_alvo_id from uploads_pendentes"
+        ):
             return self.conn.uploads_rows
         if self._last.startswith("select id, arquivo_r2_key from uploads_pendentes"):
             return self.conn.uploads_falhos_rows
@@ -157,6 +168,8 @@ class FakeCursor:
             return [(s,) for s in self.conn.avatares_frescos]
         if "distinct mp.steam_id64" in self._last:
             return [(s,) for s in self.conn.match_players_sem_avatar]
+        if self._last.startswith("select steam_id64 from match_players where match_id"):
+            return [("A",), ("B",)]
         return []
 
 
@@ -222,14 +235,14 @@ def test_store_parsed_grava_ended_early_e_abandoned_by():
     parsed["abandoned_by"] = "76561199447162948"
     db.store_parsed(conn, parsed, share_code="CSGO-x", source="valve_mm")
     match_call = next(c for c in conn.calls if c[0].startswith("insert into matches"))
-    assert match_call[1][-3:-1] == (True, "76561199447162948")
+    assert match_call[1][-4:-2] == (True, "76561199447162948")
 
 
 def test_store_parsed_sem_ended_early_grava_false_e_none_por_padrao():
     conn = FakeConn()
     db.store_parsed(conn, _parsed(), share_code="CSGO-x", source="valve_mm")
     match_call = next(c for c in conn.calls if c[0].startswith("insert into matches"))
-    assert match_call[1][-3:-1] == (False, None)
+    assert match_call[1][-4:-2] == (False, None)
 
 
 def test_store_parsed_dedupe_por_fingerprint_atualiza_ended_early_tambem():
@@ -240,7 +253,7 @@ def test_store_parsed_dedupe_por_fingerprint_atualiza_ended_early_tambem():
     parsed["abandoned_by"] = "765"
     db.store_parsed(conn, parsed, share_code="CSGO-x", source="valve_mm")
     match_call = next(c for c in conn.calls if c[0].startswith("update matches set share_code"))
-    assert match_call[1][-4:-2] == (True, "765")
+    assert match_call[1][-6:-4] == (True, "765")
 
 
 def test_store_parsed_grava_plataforma_manual():
@@ -249,7 +262,84 @@ def test_store_parsed_grava_plataforma_manual():
     parsed["plataforma_manual"] = "gamers_club"
     db.store_parsed(conn, parsed, share_code="CSGO-x", source="upload")
     match_call = next(c for c in conn.calls if c[0].startswith("insert into matches"))
-    assert match_call[1][-1] == "gamers_club"
+    assert match_call[1][-2] == "gamers_club"
+
+
+def test_store_parsed_grava_tem_demo_quando_veio_de_demo_parseada():
+    conn = FakeConn()
+    db.store_parsed(conn, _parsed(), share_code="CSGO-x", source="upload", tem_demo=True)
+    match_call = next(c for c in conn.calls if c[0].startswith("insert into matches"))
+    assert match_call[1][-1] is True
+    assert "tem_demo" in match_call[0]
+
+
+def test_store_parsed_sem_tem_demo_grava_false_por_padrao():
+    # Caminho stats-only da FACEIT (main.cmd_sincronizar_faceit) não passa tem_demo.
+    conn = FakeConn()
+    db.store_parsed(conn, _parsed(), share_code="CSGO-x", source="faceit")
+    match_call = next(c for c in conn.calls if c[0].startswith("insert into matches"))
+    assert match_call[1][-1] is False
+
+
+def test_store_parsed_nunca_rebaixa_tem_demo_para_false():
+    # Re-sync stats-only de uma Partida que JÁ foi enriquecida por demo não pode
+    # apagar tem_demo — o SQL usa 'or', nunca sobrescreve cru.
+    conn = FakeConn()
+    db.store_parsed(conn, _parsed(), share_code="CSGO-x", source="faceit")
+    match_call = next(c for c in conn.calls if c[0].startswith("insert into matches"))
+    assert "tem_demo = matches.tem_demo or excluded.tem_demo" in match_call[0]
+
+
+def test_store_parsed_com_match_id_alvo_atualiza_a_linha_informada():
+    # Enriquecer uma Partida FACEIT stats-only: o K/D do parser quase nunca bate
+    # exatamente com o da API, então a dedupe por fingerprint NÃO pode decidir —
+    # o alvo é explícito.
+    alvo = "22222222-2222-2222-2222-222222222222"
+    conn = FakeConn()
+    mid = db.store_parsed(conn, _parsed(), source="upload", tem_demo=True, match_id_alvo=alvo)
+
+    assert mid == alvo
+    sqls = [c[0] for c in conn.calls]
+    assert not any(s.startswith("select id from matches where fingerprint") for s in sqls)
+    assert not any(s.startswith("insert into matches") for s in sqls)
+    update = next(c for c in conn.calls if c[0].startswith("update matches set share_code"))
+    assert update[1][-1] == alvo
+
+
+def test_store_parsed_com_match_id_alvo_recalcula_o_fingerprint():
+    # Sem isso a Partida ficaria com a digital dos stats VELHOS (da API) e uma
+    # ingestão futura da mesma partida criaria uma duplicata.
+    alvo = "22222222-2222-2222-2222-222222222222"
+    conn = FakeConn()
+    db.store_parsed(conn, _parsed(), source="upload", tem_demo=True, match_id_alvo=alvo)
+    update = next(c for c in conn.calls if c[0].startswith("update matches set share_code"))
+    assert "fingerprint = %s" in update[0]
+    assert db.match_fingerprint(_parsed()) in update[1]
+
+
+def test_store_parsed_sem_alvo_continua_deduplicando_por_fingerprint():
+    # Regressão: o envio genérico (página "Enviar Demo") não muda de comportamento.
+    conn = FakeConn()
+    db.store_parsed(conn, _parsed(), share_code="CSGO-x", source="upload")
+    sqls = [c[0] for c in conn.calls]
+    assert any(s.startswith("select id from matches where fingerprint") for s in sqls)
+
+
+def test_enriquecer_partida_alvo_preserva_elo_e_faceit_match_id():
+    # A Partida alvo é FACEIT: faceit_elo_before/after (match_players) e
+    # faceit_match_id (matches) NÃO vêm da demo e não podem ser apagados ao
+    # sobrescrever os stats. Hoje isso é garantido por omissão (nenhum dos dois
+    # aparece no on-conflict/update) — este teste trava o comportamento pra que
+    # incluí-los no futuro seja uma decisão consciente, não um acidente.
+    alvo = "22222222-2222-2222-2222-222222222222"
+    conn = FakeConn()
+    db.store_parsed(conn, _parsed(), source="upload", tem_demo=True, match_id_alvo=alvo)
+
+    update_match = next(c for c in conn.calls if c[0].startswith("update matches set share_code"))
+    assert "faceit_match_id" not in update_match[0]
+    insert_players = next(c for c in conn.calls if c[0].startswith("insert into match_players"))
+    assert "faceit_elo_before" not in insert_players[0]
+    assert "faceit_elo_after" not in insert_players[0]
 
 
 def test_store_parsed_limpa_jogador_e_round_orfao_no_reprocess():
@@ -286,6 +376,38 @@ def test_store_parsed_grava_premier_rating_em_match_players():
     db.store_parsed(conn, parsed, share_code="CSGO-x", source="upload")
     insert = next(c for c in conn.calls if c[0].startswith("insert into match_players"))
     assert insert[1][-2:] == (5200, 5242)
+
+
+# ---- dados_da_partida_alvo ----
+
+def test_dados_da_partida_alvo_devolve_mapa_steam_ids_e_source():
+    conn = FakeConn()
+    conn.alvo_map = "de_inferno"
+    conn.alvo_source = "faceit"
+    dados = db.dados_da_partida_alvo(conn, "m-alvo")
+    assert dados == {
+        "map": "de_inferno", "steam_ids": {"A", "B"}, "source": "faceit",
+        "score_a": None, "score_b": None,
+    }
+
+
+def test_dados_da_partida_alvo_devolve_score_a_e_score_b():
+    # Placar entra na validação (main._validar_demo_contra_alvo) pra fechar o
+    # buraco de duas Partidas do mesmo lobby/mapa/noite com roster idêntico.
+    conn = FakeConn()
+    conn.alvo_map = "de_inferno"
+    conn.alvo_source = "faceit"
+    conn.alvo_score_a = 13
+    conn.alvo_score_b = 7
+    dados = db.dados_da_partida_alvo(conn, "m-alvo")
+    assert dados["score_a"] == 13
+    assert dados["score_b"] == 7
+
+
+def test_dados_da_partida_alvo_devolve_none_quando_a_partida_sumiu():
+    conn = FakeConn()
+    conn.alvo_map = None
+    assert db.dados_da_partida_alvo(conn, "m-sumida") is None
 
 
 def test_todas_as_queries_de_store_parsed_tem_placeholders_e_params_alinhados():

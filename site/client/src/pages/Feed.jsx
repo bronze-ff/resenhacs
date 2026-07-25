@@ -57,7 +57,7 @@ function contextoPartida(m) {
 // preenchido + ícone já comunicam isso sozinhos.
 function CardPartida({ m }) {
   const resultado = resultadoDoGrupo(m)
-  const origem = origemPartida(m.source)
+  const origem = origemPartida(m.source, m.temDemo)
   const { a, b } = orientarPlacar(m.scoreA, m.scoreB, resultado)
   const contexto = contextoPartida(m)
 

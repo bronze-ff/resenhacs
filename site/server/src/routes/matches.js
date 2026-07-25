@@ -76,7 +76,7 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
     }
     const { rows } = await db.query(
       `select m.id, m.map, m.played_at, m.score_a, m.score_b, m.status, m.source,
-         m.team_a_name, m.team_b_name, m.plataforma_manual,
+         m.team_a_name, m.team_b_name, m.plataforma_manual, m.tem_demo,
          coalesce(json_agg(json_build_object('steamId', mp.steam_id64, 'nick', mp.nick, 'won', mp.won))
            filter (where mp.is_tracked), '[]') as tracked,
          mvp.mvp
@@ -110,6 +110,7 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
         scoreA: m.score_a,
         scoreB: m.score_b,
         source: m.source,
+        temDemo: m.tem_demo,
         plataformaManual: m.plataforma_manual,
         teamAName: m.team_a_name,
         teamBName: m.team_b_name,
@@ -151,7 +152,7 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
     const { id } = req.params
     const matchQ = await db.query(
       `select mt.id, mt.map, mt.played_at, mt.score_a, mt.score_b, mt.source, mt.status, mt.demo_url, mt.replay_url,
-              mt.ended_early, mt.abandoned_by_steam_id64, mt.plataforma_manual,
+              mt.ended_early, mt.abandoned_by_steam_id64, mt.plataforma_manual, mt.tem_demo,
               coalesce(ap.nick, amp.nick) as abandoned_by_nick
        from matches mt
        left join players ap on ap.steam_id64 = mt.abandoned_by_steam_id64
@@ -162,7 +163,7 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
     if (matchQ.rows.length === 0) return res.status(404).json({ erro: 'Partida não encontrada' })
     const m = matchQ.rows[0]
 
-    const [players, rounds, highlights, clips, econ, weapons, allstarClips] = await Promise.all([
+    const [players, rounds, highlights, clips, econ, weapons, allstarClips, demoUploads] = await Promise.all([
       db.query(
         `select mp.steam_id64, mp.nick, mp.team, mp.kills, mp.deaths, mp.assists, mp.headshot_kills,
                 mp.damage, mp.rounds_played, mp.rating, mp.kast_pct, mp.won, mp.is_tracked, mp.team_kills,
@@ -217,6 +218,16 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
          from allstar_clips where match_id = $1`,
         [id],
       ),
+      // Estado do envio de Demo amarrado a esta Partida (botão "Enviar demo desta
+      // partida"). Só o mais recente importa: o índice único parcial garante no
+      // máximo um ativo, e um 'falhou' antigo já foi substituído por um novo envio.
+      db.query(
+        `select status, erro, adicionado_por
+         from uploads_pendentes
+         where match_alvo_id = $1 and status in ('pendente', 'processando', 'falhou')
+         order by adicionado_em desc limit 1`,
+        [id],
+      ),
     ])
     const armasPorJogador = new Map()
     for (const w of weapons.rows) {
@@ -249,6 +260,7 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
       scoreA: m.score_a,
       scoreB: m.score_b,
       source: m.source,
+      temDemo: m.tem_demo,
       plataformaManual: m.plataforma_manual,
       status: m.status,
       // O R2 é privado de propósito (dados reais dos participantes) — nunca expor a
@@ -263,6 +275,14 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
       abandonedBy: m.abandoned_by_steam_id64
         ? { steamId: m.abandoned_by_steam_id64, nick: m.abandoned_by_nick }
         : null,
+      demoUpload: (() => {
+        const u = demoUploads.rows[0]
+        if (!u) return null
+        const meu = u.adicionado_por === req.player.steamId
+        // O motivo da falha só interessa (e só é de quem) enviou — pros outros a
+        // Partida só está incompleta, não falhou nada "deles".
+        return { status: u.status, erro: meu ? u.erro : null, enviadoPorVoce: meu }
+      })(),
       players: players.rows.map((p) => ({
         steamId: p.steam_id64,
         nick: p.nick,

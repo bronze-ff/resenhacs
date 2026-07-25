@@ -271,6 +271,54 @@ describe('GET /api/matches/:id', () => {
   })
 })
 
+describe('GET /api/matches/:id — temDemo e demoUpload', () => {
+  // Cookie autenticado como '765' (não o STEAM_ID do topo do arquivo) — os fixtures
+  // abaixo comparam adicionado_por diretamente contra esse steamId pra exercitar a
+  // regra "erro só aparece pra quem enviou" nos dois sentidos (dono e não-dono).
+  const cookie = `resenha_token=${signToken({ steamId: '765', isSuperAdmin: false }, config.jwtSecret)}`
+
+  function appComPartida({ match, uploads }) {
+    return appWith([
+      ['from matches mt', [{
+        id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9,
+        source: 'valve_mm', status: 'parsed', demo_url: null, replay_url: null,
+        ended_early: false, abandoned_by_steam_id64: null, abandoned_by_nick: null,
+        plataforma_manual: null, tem_demo: false,
+        ...match,
+      }]],
+      ['from match_players mp', []],
+      ['from uploads_pendentes', uploads],
+    ])
+  }
+
+  it('detalhe: expõe temDemo e o estado do envio de demo', async () => {
+    const { app } = appComPartida({
+      match: { tem_demo: false },
+      uploads: [{ status: 'processando', erro: null, adicionado_por: '765' }],
+    })
+    const res = await request(app).get('/api/matches/m1').set('Cookie', cookie)
+    expect(res.status).toBe(200)
+    expect(res.body.temDemo).toBe(false)
+    expect(res.body.demoUpload).toEqual({ status: 'processando', erro: null, enviadoPorVoce: true })
+  })
+
+  it('detalhe: erro do envio só aparece pra quem enviou', async () => {
+    const { app } = appComPartida({
+      match: { tem_demo: false },
+      uploads: [{ status: 'falhou', erro: 'o mapa da demo não confere', adicionado_por: '999' }],
+    })
+    const res = await request(app).get('/api/matches/m1').set('Cookie', cookie)
+    expect(res.body.demoUpload).toEqual({ status: 'falhou', erro: null, enviadoPorVoce: false })
+  })
+
+  it('detalhe: sem envio, demoUpload é null', async () => {
+    const { app } = appComPartida({ match: { tem_demo: true }, uploads: [] })
+    const res = await request(app).get('/api/matches/m1').set('Cookie', cookie)
+    expect(res.body.temDemo).toBe(true)
+    expect(res.body.demoUpload).toBeNull()
+  })
+})
+
 describe('GET /api/matches/:id/lado/:filtro', () => {
   it('sem login: 401', async () => {
     const { app } = appWith([])

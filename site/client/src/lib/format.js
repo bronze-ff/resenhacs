@@ -79,11 +79,18 @@ export function dataHora(iso) {
   return `${d.toLocaleDateString('pt-BR', tz)} ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', ...tz })}`
 }
 
-// Tag de origem da Partida: baixada pelo bot (valve_mm) ou enviada manualmente (upload).
-export function origemPartida(source) {
-  return source === 'upload'
-    ? { label: 'MANUAL', title: 'Demo enviada manualmente' }
-    : { label: 'AUTO', title: 'Baixada automaticamente pelo Coletor' }
+// Tag de origem da Partida. `temDemo` distingue a Partida COMPLETA (veio de um .dem
+// parseado) da stats-only, montada só com o que a API da plataforma devolve — que não
+// tem ADR, KAST, rating, rounds nem Replay 2D. Ver matches.tem_demo.
+export function origemPartida(source, temDemo = true) {
+  if (source === 'upload') return { label: 'MANUAL', title: 'Demo enviada manualmente' }
+  if (!temDemo) {
+    return {
+      label: 'SEM DEMO',
+      title: 'Só as estatísticas da plataforma — envie a demo pra completar (ADR, KAST, rating, replay)',
+    }
+  }
+  return { label: 'AUTO', title: 'Baixada automaticamente pelo Coletor' }
 }
 
 // Verde/vermelho/neutro para rating estilo HLTV.

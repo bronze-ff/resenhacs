@@ -124,7 +124,7 @@ describe('POST /api/upload/upload-url', () => {
     expect(res.body.key).toMatch(/^uploads-pendentes\/.+\.dem$/)
     const insert = db.query.mock.calls.find((c) => c[0].includes('insert into uploads_pendentes'))
     expect(insert[0]).not.toContain('group_id')
-    expect(insert[1]).toEqual(['765', res.body.key, 'CSGO-aaaaa-bbbbb-ccccc-ddddd-eeeee', playedAt, null])
+    expect(insert[1]).toEqual(['765', res.body.key, 'CSGO-aaaaa-bbbbb-ccccc-ddddd-eeeee', playedAt, null, null])
     expect(presignUpload).toHaveBeenCalledWith(expect.anything(), 'resenha-demos', res.body.key, 'application/octet-stream')
   })
 
@@ -146,7 +146,7 @@ describe('POST /api/upload/upload-url', () => {
       .send({ filename: 'x.dem', plataformaManual: 'gamers_club' })
     expect(res.status).toBe(200)
     const insert = db.query.mock.calls.find((c) => c[0].includes('insert into uploads_pendentes'))
-    expect(insert[1]).toEqual(['765', res.body.key, null, null, 'gamers_club'])
+    expect(insert[1]).toEqual(['765', res.body.key, null, null, 'gamers_club', null])
   })
 
   // ---- finding #2 da auditoria: teto de tamanho (defesa em profundidade client-side) ----
@@ -192,5 +192,113 @@ describe('POST /api/upload/upload-url', () => {
       .set('Cookie', cookie)
       .send({ filename: 'x.dem' })
     expect(res.status).toBe(200)
+  })
+
+  // ---- envio amarrado a uma Partida (matchId) ----
+
+  const UUID = '11111111-1111-1111-1111-111111111111'
+
+  it('matchId que não é uuid: 400', async () => {
+    const { app } = appWith([])
+    const res = await request(app)
+      .post('/api/upload/upload-url')
+      .set('Cookie', cookie)
+      .send({ filename: 'x.dem', matchId: 'nao-e-uuid' })
+    expect(res.status).toBe(400)
+  })
+
+  it('matchId de partida onde o jogador não jogou: 403', async () => {
+    const { app, db } = appWith([['from matches m where m.id', [{ id: UUID, tem_demo: false, source: 'faceit', participou: false }]]])
+    presignUpload.mockClear()
+    const res = await request(app)
+      .post('/api/upload/upload-url')
+      .set('Cookie', cookie)
+      .send({ filename: 'x.dem', matchId: UUID })
+    expect(res.status).toBe(403)
+    expect(res.body.erro).toMatch(/jogou/i)
+    expect(presignUpload).not.toHaveBeenCalled()
+    expect(db.query.mock.calls.some((c) => c[0].includes('insert into uploads_pendentes'))).toBe(false)
+  })
+
+  it('matchId inexistente: 403 (não revela que a partida existe ou não)', async () => {
+    const naoJogou = appWith([['from matches m where m.id', [{ id: UUID, tem_demo: false, source: 'faceit', participou: false }]]])
+    const resNaoJogou = await request(naoJogou.app)
+      .post('/api/upload/upload-url')
+      .set('Cookie', cookie)
+      .send({ filename: 'x.dem', matchId: UUID })
+
+    const inexistente = appWith([['from matches m where m.id', []]])
+    const resInexistente = await request(inexistente.app)
+      .post('/api/upload/upload-url')
+      .set('Cookie', cookie)
+      .send({ filename: 'x.dem', matchId: UUID })
+
+    expect(resInexistente.status).toBe(403)
+    // Mesmo status E mesmo corpo — senão o 403 vira oráculo por causa da mensagem.
+    expect(resInexistente.body).toEqual(resNaoJogou.body)
+  })
+
+  it('partida que já tem demo processada: 409', async () => {
+    const { app, db } = appWith([['from matches m where m.id', [{ id: UUID, tem_demo: true, source: 'faceit', participou: true }]]])
+    presignUpload.mockClear()
+    const res = await request(app)
+      .post('/api/upload/upload-url')
+      .set('Cookie', cookie)
+      .send({ filename: 'x.dem', matchId: UUID })
+    expect(res.status).toBe(409)
+    expect(res.body.erro).toMatch(/j[áa] tem demo/i)
+    expect(presignUpload).not.toHaveBeenCalled()
+    expect(db.query.mock.calls.some((c) => c[0].includes('insert into uploads_pendentes'))).toBe(false)
+  })
+
+  it('partida que não é faceit stats-only: 409', async () => {
+    const { app } = appWith([['from matches m where m.id', [{ id: UUID, tem_demo: false, source: 'valve_mm', participou: true }]]])
+    const res = await request(app)
+      .post('/api/upload/upload-url')
+      .set('Cookie', cookie)
+      .send({ filename: 'x.dem', matchId: UUID })
+    expect(res.status).toBe(409)
+  })
+
+  it('caminho feliz: grava match_alvo_id e ignora shareCode/playedAt/plataforma do cliente', async () => {
+    const { app, db } = appWith([
+      ['from matches m where m.id', [{ id: UUID, tem_demo: false, source: 'faceit', participou: true }]],
+      ['insert into uploads_pendentes', [{ id: 'u1' }]],
+    ])
+    const res = await request(app)
+      .post('/api/upload/upload-url')
+      .set('Cookie', cookie)
+      .send({
+        filename: 'x.dem',
+        matchId: UUID,
+        shareCode: 'CSGO-aaaaa-bbbbb-ccccc-ddddd-eeeee',
+        plataformaManual: 'gamers_club',
+      })
+    expect(res.status).toBe(200)
+    const insert = db.query.mock.calls.find((c) => c[0].includes('insert into uploads_pendentes'))
+    expect(insert[0]).toContain('match_alvo_id')
+    // herda tudo da Partida: nada de share code / plataforma vindos do cliente
+    expect(insert[1]).toEqual(['765', res.body.key, null, null, null, UUID])
+  })
+
+  it('envio já em andamento pra essa partida (unique violation): 409', async () => {
+    const db = {
+      query: vi.fn().mockImplementation((sql) => {
+        if (sql.includes('from matches m where m.id')) {
+          return Promise.resolve({ rows: [{ id: UUID, tem_demo: false, source: 'faceit', participou: true }] })
+        }
+        if (sql.includes('insert into uploads_pendentes')) {
+          return Promise.reject(Object.assign(new Error('duplicate key'), { code: '23505' }))
+        }
+        return Promise.resolve({ rows: [] })
+      }),
+    }
+    const app = createApp({ config, db, r2Client: { send: vi.fn() } })
+    const res = await request(app)
+      .post('/api/upload/upload-url')
+      .set('Cookie', cookie)
+      .send({ filename: 'x.dem', matchId: UUID })
+    expect(res.status).toBe(409)
+    expect(res.body.erro).toMatch(/em andamento/i)
   })
 })

@@ -20,16 +20,26 @@ def match_fingerprint(parsed):
     return hashlib.sha256(base.encode("utf-8")).hexdigest()[:32]
 
 
-def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status, prefer_new_played_at=False):
+def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status,
+                  prefer_new_played_at=False, tem_demo=False, match_id_alvo=None):
     fingerprint = match_fingerprint(parsed)
 
-    # Dedupe por conteúdo ANTES do insert: se a mesma partida já existe (chegou pelo
-    # outro caminho), atualiza a linha existente em vez de criar uma duplicata — o
-    # conflito de share_code sozinho não pega upload manual feito sem share code.
-    cur.execute("select id from matches where fingerprint = %s", (fingerprint,))
-    row = cur.fetchone()
-    if row:
-        match_id = row[0]
+    # `match_id_alvo` vem do envio de Demo amarrado a uma Partida específica (ver
+    # site/server/src/routes/upload.js e cmd_processar_uploads_pendentes): o vínculo
+    # é explícito e já foi validado (mapa + os 10 steam ids), então a dedupe por
+    # conteúdo não decide nada aqui — o K/D do parser quase nunca bate exatamente
+    # com o da API da FACEIT, e deixar o fingerprint decidir criaria uma duplicata.
+    if match_id_alvo is not None:
+        match_id = match_id_alvo
+    else:
+        # Dedupe por conteúdo ANTES do insert: se a mesma partida já existe (chegou pelo
+        # outro caminho), atualiza a linha existente em vez de criar uma duplicata — o
+        # conflito de share_code sozinho não pega upload manual feito sem share code.
+        cur.execute("select id from matches where fingerprint = %s", (fingerprint,))
+        row = cur.fetchone()
+        match_id = row[0] if row else None
+
+    if match_id is not None:
         if share_code:
             # Um placeholder 'pending' do discover pode estar segurando esse share code
             # em outra linha; absorve (é só um marcador, sem stats filhos).
@@ -47,7 +57,8 @@ def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status,
               status = %s, team_a_name = coalesce(%s, team_a_name),
               team_b_name = coalesce(%s, team_b_name),
               ended_early = %s, abandoned_by_steam_id64 = %s,
-              plataforma_manual = coalesce(%s, plataforma_manual)
+              plataforma_manual = coalesce(%s, plataforma_manual),
+              tem_demo = tem_demo or %s, fingerprint = %s
             where id = %s
             """,
             (
@@ -65,6 +76,8 @@ def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status,
                 parsed.get("ended_early", False),
                 parsed.get("abandoned_by"),
                 parsed.get("plataforma_manual"),
+                tem_demo,
+                fingerprint,
                 match_id,
             ),
         )
@@ -81,8 +94,8 @@ def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status,
     )
     cur.execute(
         f"""
-        insert into matches (share_code, source, map, score_a, score_b, played_at, demo_url, replay_url, status, fingerprint, team_a_name, team_b_name, ended_early, abandoned_by_steam_id64, plataforma_manual)
-        values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        insert into matches (share_code, source, map, score_a, score_b, played_at, demo_url, replay_url, status, fingerprint, team_a_name, team_b_name, ended_early, abandoned_by_steam_id64, plataforma_manual, tem_demo)
+        values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         on conflict (share_code) do update set
           source = excluded.source, map = excluded.map,
           score_a = excluded.score_a, score_b = excluded.score_b,
@@ -95,7 +108,8 @@ def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status,
           team_b_name = coalesce(excluded.team_b_name, matches.team_b_name),
           ended_early = excluded.ended_early,
           abandoned_by_steam_id64 = excluded.abandoned_by_steam_id64,
-          plataforma_manual = coalesce(excluded.plataforma_manual, matches.plataforma_manual)
+          plataforma_manual = coalesce(excluded.plataforma_manual, matches.plataforma_manual),
+          tem_demo = matches.tem_demo or excluded.tem_demo
         returning id
         """,
         (
@@ -114,6 +128,7 @@ def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status,
             parsed.get("ended_early", False),
             parsed.get("abandoned_by"),
             parsed.get("plataforma_manual"),
+            tem_demo,
         ),
     )
     return cur.fetchone()[0]
@@ -404,11 +419,23 @@ def _write_lineups(cur, match_id, lineups):
 
 
 def store_parsed(conn, parsed, share_code=None, source="valve_mm", demo_url=None,
-                 replay_url=None, status="parsed", prefer_new_played_at=False):
-    """Grava a Partida inteira numa transação. Devolve o match_id (uuid)."""
+                 replay_url=None, status="parsed", prefer_new_played_at=False,
+                 tem_demo=False, match_id_alvo=None):
+    """Grava a Partida inteira numa transação. Devolve o match_id (uuid).
+
+    `tem_demo`: True só quando os dados vieram do parse de um .dem de verdade
+    (ingest_demo/reprocess). O caminho stats-only da FACEIT deixa False — é o que
+    o site usa pra saber que a Partida está incompleta e oferecer o envio da Demo.
+
+    `match_id_alvo`: quando informado, grava direto nessa Partida em vez de
+    deduplicar por fingerprint — usado pra amarrar a Demo enviada a uma Partida
+    FACEIT stats-only já existente (o K/D do parser quase nunca bate exatamente
+    com o da API, então a dedupe por conteúdo não pode decidir aqui).
+    """
     with conn.cursor() as cur:
         match_id = _insert_match(
-            cur, share_code, source, parsed, demo_url, replay_url, status, prefer_new_played_at,
+            cur, share_code, source, parsed, demo_url, replay_url, status,
+            prefer_new_played_at, tem_demo, match_id_alvo,
         )
         _write_players(cur, match_id, parsed.get("players", []))
         _write_rounds(cur, match_id, parsed.get("rounds", []))
@@ -552,10 +579,39 @@ def listar_uploads_pendentes(conn):
     par simplificado de listar_fila_pro_pendente: um .dem só por item, sem .rar/multi-mapa."""
     with conn.cursor() as cur:
         cur.execute(
-            "select id, adicionado_por, arquivo_r2_key, share_code, played_at, plataforma_manual "
+            "select id, adicionado_por, arquivo_r2_key, share_code, played_at, "
+            "plataforma_manual, match_alvo_id "
             "from uploads_pendentes where status = 'pendente' order by adicionado_em"
         )
         return cur.fetchall()
+
+
+def dados_da_partida_alvo(conn, match_id):
+    """Mapa + placar + steam ids dos Participantes da Partida que um envio de
+    Demo diz enriquecer — os lados da validação estrita feita antes de gravar
+    (ver main._validar_demo_contra_alvo) — mais o `source` ORIGINAL da Partida.
+
+    O `source` é devolvido pra que quem chama grave a Demo mantendo a identidade
+    da Partida (ex.: 'faceit' continua 'faceit' depois de enriquecida) — sem
+    isso, o enriquecimento sobrescrevia source com 'upload' e a Partida perdia
+    o badge de plataforma, virava "MANUAL" na UI e contava como origem não
+    verificada em competição. None se a Partida não existe mais.
+
+    `score_a`/`score_b` fecham um buraco da validação por mapa+roster: duas
+    Partidas do MESMO lobby, no MESMO mapa, na mesma noite têm roster idêntico
+    — sem o placar, a validação aceitaria a demo de uma no lugar da outra."""
+    with conn.cursor() as cur:
+        cur.execute("select map, source, score_a, score_b from matches where id = %s", (match_id,))
+        row = cur.fetchone()
+        if row is None:
+            return None
+        mapa, source, score_a, score_b = row
+        cur.execute("select steam_id64 from match_players where match_id = %s", (match_id,))
+        steam_ids = {r[0] for r in cur.fetchall()}
+    return {
+        "map": mapa, "steam_ids": steam_ids, "source": source,
+        "score_a": score_a, "score_b": score_b,
+    }
 
 
 def atualizar_upload_pendente(conn, upload_id, status, match_id=None, erro=None):
