@@ -10,6 +10,7 @@ const PLAYED_AT_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?(\.\d+)?([+-]\d{2}:
 // gente puxa automático) — é só um rótulo informativo que o próprio jogador escolhe.
 const PLATAFORMAS_MANUAIS = new Set(['faceit', 'gamers_club', 'xplay_gg'])
 const TOLERANCIA_DIAS = 3
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 // Auditoria finding #2: nenhuma camada media o tamanho do .dem antes do upload. O PUT
 // presignado atual (PutObjectCommand simples) não dá pra travar com uma condição real de
@@ -82,12 +83,56 @@ export function createUploadRouter({ db, requireAuth, r2Client, r2Bucket }) {
       return res.status(400).json({ erro: 'Plataforma inválida' })
     }
 
+    // Envio amarrado a uma Partida específica (botão "Enviar demo desta partida" na
+    // página da Partida): o vínculo é explícito, então dá pra exigir prova de
+    // participação e checar elegibilidade antes de gastar 300MB de upload.
+    const matchId = String(req.body?.matchId ?? '').trim()
+    if (matchId) {
+      if (!UUID_RE.test(matchId)) return res.status(400).json({ erro: 'Partida inválida' })
+      const { rows } = await db.query(
+        `select m.tem_demo, m.source,
+                exists (
+                  select 1 from match_players mp
+                  where mp.match_id = m.id and mp.steam_id64 = $2
+                ) as participou
+         from matches m where m.id = $1`,
+        [matchId, req.player.steamId],
+      )
+      const alvo = rows[0]
+      // Partida inexistente e partida onde ele não jogou dão a MESMA resposta —
+      // senão o 404/403 vira um oráculo de "esta partida existe".
+      if (!alvo || !alvo.participou) {
+        return res.status(403).json({ erro: 'Só quem jogou esta partida pode enviar a demo dela' })
+      }
+      if (alvo.tem_demo) {
+        return res.status(409).json({ erro: 'Esta partida já tem demo processada' })
+      }
+      if (alvo.source !== 'faceit') {
+        return res.status(409).json({ erro: 'Esta partida não aceita envio de demo' })
+      }
+    }
+
     const key = `uploads-pendentes/${crypto.randomUUID()}.dem`
-    const { rows } = await db.query(
-      `insert into uploads_pendentes (adicionado_por, arquivo_r2_key, share_code, played_at, plataforma_manual)
-       values ($1, $2, $3, $4, $5) returning id`,
-      [req.player.steamId, key, shareCode || null, playedAt || null, plataformaManual || null],
-    )
+    // Com alvo, os metadados vêm da própria Partida — nada de share code, data ou
+    // plataforma digitados pelo cliente (menos superfície pra dado mentiroso).
+    const params = matchId
+      ? [req.player.steamId, key, null, null, null, matchId]
+      : [req.player.steamId, key, shareCode || null, playedAt || null, plataformaManual || null, null]
+    let rows
+    try {
+      ;({ rows } = await db.query(
+        `insert into uploads_pendentes (adicionado_por, arquivo_r2_key, share_code, played_at, plataforma_manual, match_alvo_id)
+         values ($1, $2, $3, $4, $5, $6) returning id`,
+        params,
+      ))
+    } catch (e) {
+      // uploads_pendentes_alvo_ativo_idx: um envio ativo por Partida (a trava é do
+      // banco, não do aplicativo — dois cliques simultâneos não passam pelos dois).
+      if (e?.code === '23505') {
+        return res.status(409).json({ erro: 'Já existe um envio em andamento pra esta partida' })
+      }
+      throw e
+    }
     const uploadUrl = await presignUpload(r2Client, r2Bucket, key, 'application/octet-stream')
     res.json({ id: rows[0].id, uploadUrl, key })
   })
