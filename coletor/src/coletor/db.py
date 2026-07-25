@@ -579,10 +579,26 @@ def listar_uploads_pendentes(conn):
     par simplificado de listar_fila_pro_pendente: um .dem só por item, sem .rar/multi-mapa."""
     with conn.cursor() as cur:
         cur.execute(
-            "select id, adicionado_por, arquivo_r2_key, share_code, played_at, plataforma_manual "
+            "select id, adicionado_por, arquivo_r2_key, share_code, played_at, "
+            "plataforma_manual, match_alvo_id "
             "from uploads_pendentes where status = 'pendente' order by adicionado_em"
         )
         return cur.fetchall()
+
+
+def dados_da_partida_alvo(conn, match_id):
+    """Mapa + steam ids dos Participantes da Partida que um envio de Demo diz
+    enriquecer — os dois lados da validação estrita feita antes de gravar
+    (ver main._validar_demo_contra_alvo). None se a Partida não existe mais."""
+    with conn.cursor() as cur:
+        cur.execute("select map from matches where id = %s", (match_id,))
+        row = cur.fetchone()
+        if row is None:
+            return None
+        mapa = row[0]
+        cur.execute("select steam_id64 from match_players where match_id = %s", (match_id,))
+        steam_ids = {r[0] for r in cur.fetchall()}
+    return {"map": mapa, "steam_ids": steam_ids}
 
 
 def atualizar_upload_pendente(conn, upload_id, status, match_id=None, erro=None):

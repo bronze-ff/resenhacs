@@ -144,12 +144,17 @@ class FakeCursor:
         # (None = partida inédita, caminho do insert).
         if self._last.startswith("select id from matches where fingerprint"):
             return self.conn.fingerprint_row
+        if self._last.startswith("select map from matches where id"):
+            return None if getattr(self.conn, "alvo_map", None) is None else (self.conn.alvo_map,)
         return ["00000000-0000-0000-0000-000000000001"]
 
     def fetchall(self):
         if self._last.startswith("select id, hltv_url, arquivo_r2_key from partidas_pro_fila"):
             return self.conn.fila_rows
-        if self._last.startswith("select id, adicionado_por, arquivo_r2_key, share_code, played_at, plataforma_manual from uploads_pendentes"):
+        if self._last.startswith(
+            "select id, adicionado_por, arquivo_r2_key, share_code, played_at, "
+            "plataforma_manual, match_alvo_id from uploads_pendentes"
+        ):
             return self.conn.uploads_rows
         if self._last.startswith("select id, arquivo_r2_key from uploads_pendentes"):
             return self.conn.uploads_falhos_rows
@@ -157,6 +162,8 @@ class FakeCursor:
             return [(s,) for s in self.conn.avatares_frescos]
         if "distinct mp.steam_id64" in self._last:
             return [(s,) for s in self.conn.match_players_sem_avatar]
+        if self._last.startswith("select steam_id64 from match_players where match_id"):
+            return [("A",), ("B",)]
         return []
 
 
@@ -363,6 +370,21 @@ def test_store_parsed_grava_premier_rating_em_match_players():
     db.store_parsed(conn, parsed, share_code="CSGO-x", source="upload")
     insert = next(c for c in conn.calls if c[0].startswith("insert into match_players"))
     assert insert[1][-2:] == (5200, 5242)
+
+
+# ---- dados_da_partida_alvo ----
+
+def test_dados_da_partida_alvo_devolve_mapa_e_steam_ids():
+    conn = FakeConn()
+    conn.alvo_map = "de_inferno"
+    dados = db.dados_da_partida_alvo(conn, "m-alvo")
+    assert dados == {"map": "de_inferno", "steam_ids": {"A", "B"}}
+
+
+def test_dados_da_partida_alvo_devolve_none_quando_a_partida_sumiu():
+    conn = FakeConn()
+    conn.alvo_map = None
+    assert db.dados_da_partida_alvo(conn, "m-sumida") is None
 
 
 def test_todas_as_queries_de_store_parsed_tem_placeholders_e_params_alinhados():

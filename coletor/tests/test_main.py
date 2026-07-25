@@ -591,7 +591,8 @@ class _UploadsCursor:
 
     def fetchall(self):
         if self._last.startswith(
-            "select id, adicionado_por, arquivo_r2_key, share_code, played_at, plataforma_manual from uploads_pendentes"
+            "select id, adicionado_por, arquivo_r2_key, share_code, played_at, "
+            "plataforma_manual, match_alvo_id from uploads_pendentes"
         ):
             return self.conn.upload_rows
         return []
@@ -615,7 +616,7 @@ class _UploadsConn:
 
 
 def test_processar_uploads_pendentes_baixa_do_r2_e_apaga_em_sucesso(monkeypatch):
-    conn = _UploadsConn([("u1", "765", "uploads-pendentes/abc.dem", None, None, "gamers_club")])
+    conn = _UploadsConn([("u1", "765", "uploads-pendentes/abc.dem", None, None, "gamers_club", None)])
     config = _config_com_r2()
 
     monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
@@ -631,7 +632,8 @@ def test_processar_uploads_pendentes_baixa_do_r2_e_apaga_em_sucesso(monkeypatch)
     )
     ingests = []
 
-    def _ingest_fake(cfg, cn, dem_path, share_code=None, source=None, upload=None, played_at=None, plataforma_manual=None):
+    def _ingest_fake(cfg, cn, dem_path, share_code=None, source=None, upload=None, played_at=None,
+                     plataforma_manual=None, alvo=None):
         ingests.append((dem_path.name, source, upload, plataforma_manual))
         return "m1"
 
@@ -649,7 +651,7 @@ def test_processar_uploads_pendentes_baixa_do_r2_e_apaga_em_sucesso(monkeypatch)
 
 
 def test_processar_uploads_pendentes_mantem_staging_no_r2_quando_falha(monkeypatch):
-    conn = _UploadsConn([("u1", "765", "uploads-pendentes/abc.dem", None, None, None)])
+    conn = _UploadsConn([("u1", "765", "uploads-pendentes/abc.dem", None, None, None, None)])
     config = _config_com_r2()
 
     monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
@@ -669,7 +671,7 @@ def test_processar_uploads_pendentes_mantem_staging_no_r2_quando_falha(monkeypat
 # ---- finding #2 da auditoria: teto de tamanho barra download de upload gigante ----
 
 def test_processar_uploads_pendentes_marca_falhou_quando_objeto_excede_o_teto(monkeypatch):
-    conn = _UploadsConn([("u1", "765", "uploads-pendentes/abc.dem", None, None, None)])
+    conn = _UploadsConn([("u1", "765", "uploads-pendentes/abc.dem", None, None, None, None)])
     config = _config_com_r2()
 
     monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
@@ -720,6 +722,79 @@ def test_processar_uploads_pendentes_passa_o_teto_de_tempo_configurado(monkeypat
     main.cmd_processar_uploads_pendentes(config, conn)
 
     assert chamadas == [{"minutos": main._TIMEOUT_PROCESSANDO_MINUTOS}]
+
+
+# ---- envio amarrado a uma Partida: valida mapa + roster antes de gravar ----
+
+def _alvo(mapa="de_inferno", ids=("A", "B")):
+    return {"match_id": "m-alvo", "map": mapa, "steam_ids": set(ids)}
+
+
+def test_validar_demo_contra_alvo_aceita_mapa_e_roster_iguais():
+    parsed = {"map": "de_inferno", "players": [{"steam_id64": "A"}, {"steam_id64": "B"}]}
+    main._validar_demo_contra_alvo(parsed, _alvo())  # não levanta
+
+
+def test_validar_demo_contra_alvo_recusa_mapa_diferente():
+    parsed = {"map": "de_mirage", "players": [{"steam_id64": "A"}, {"steam_id64": "B"}]}
+    with pytest.raises(main.DemoNaoConfereError, match="mapa"):
+        main._validar_demo_contra_alvo(parsed, _alvo())
+
+
+def test_validar_demo_contra_alvo_recusa_roster_diferente():
+    parsed = {"map": "de_inferno", "players": [{"steam_id64": "A"}, {"steam_id64": "Z"}]}
+    with pytest.raises(main.DemoNaoConfereError, match="jogadores"):
+        main._validar_demo_contra_alvo(parsed, _alvo())
+
+
+def test_processar_uploads_pendentes_com_alvo_passa_o_alvo_pro_ingest(monkeypatch):
+    conn = _UploadsConn([("u1", "765", "uploads-pendentes/abc.dem", None, None, None, "m-alvo")])
+    config = _config_com_r2()
+    monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
+    monkeypatch.setattr(main.storage_r2, "download_bytes", lambda client, bucket, key, **kw: b"dem-bytes")
+    monkeypatch.setattr(main.storage_r2, "delete_object", lambda client, bucket, key: None)
+    monkeypatch.setattr(
+        main.dbmod, "dados_da_partida_alvo",
+        lambda c, mid: {"map": "de_inferno", "steam_ids": {"A", "B"}},
+    )
+    recebidos = []
+
+    def _ingest_fake(cfg, cn, dem_path, alvo=None, **kw):
+        recebidos.append(alvo)
+        return "m-alvo"
+
+    monkeypatch.setattr(main, "ingest_demo", _ingest_fake)
+
+    total = main.cmd_processar_uploads_pendentes(config, conn)
+
+    assert total == 1
+    assert recebidos == [{"match_id": "m-alvo", "map": "de_inferno", "steam_ids": {"A", "B"}}]
+
+
+def test_processar_uploads_pendentes_demo_que_nao_confere_falha_e_apaga_do_r2(monkeypatch):
+    # Demo errada não fica certa na segunda tentativa — diferente da falha
+    # transitória (rede/parser), que mantém o staging pro retry.
+    conn = _UploadsConn([("u1", "765", "uploads-pendentes/abc.dem", None, None, None, "m-alvo")])
+    config = _config_com_r2()
+    monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
+    monkeypatch.setattr(main.storage_r2, "download_bytes", lambda client, bucket, key, **kw: b"dem-bytes")
+    deletes = []
+    monkeypatch.setattr(main.storage_r2, "delete_object", lambda client, bucket, key: deletes.append(key))
+    monkeypatch.setattr(
+        main.dbmod, "dados_da_partida_alvo",
+        lambda c, mid: {"map": "de_inferno", "steam_ids": {"A", "B"}},
+    )
+    monkeypatch.setattr(
+        main, "ingest_demo",
+        lambda *a, **kw: (_ for _ in ()).throw(main.DemoNaoConfereError("o mapa da demo não confere")),
+    )
+
+    total = main.cmd_processar_uploads_pendentes(config, conn)
+
+    assert total == 0
+    assert deletes == ["uploads-pendentes/abc.dem"]
+    update = next(c for c in conn.calls if c[0].startswith("update uploads_pendentes") and c[1][0] == "falhou")
+    assert "mapa" in update[1][2]
 
 
 # ---- cmd_sincronizar_faceit ----
