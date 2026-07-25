@@ -240,7 +240,7 @@ def test_store_parsed_dedupe_por_fingerprint_atualiza_ended_early_tambem():
     parsed["abandoned_by"] = "765"
     db.store_parsed(conn, parsed, share_code="CSGO-x", source="valve_mm")
     match_call = next(c for c in conn.calls if c[0].startswith("update matches set share_code"))
-    assert match_call[1][-5:-3] == (True, "765")
+    assert match_call[1][-6:-4] == (True, "765")
 
 
 def test_store_parsed_grava_plataforma_manual():
@@ -275,6 +275,58 @@ def test_store_parsed_nunca_rebaixa_tem_demo_para_false():
     db.store_parsed(conn, _parsed(), share_code="CSGO-x", source="faceit")
     match_call = next(c for c in conn.calls if c[0].startswith("insert into matches"))
     assert "tem_demo = matches.tem_demo or excluded.tem_demo" in match_call[0]
+
+
+def test_store_parsed_com_match_id_alvo_atualiza_a_linha_informada():
+    # Enriquecer uma Partida FACEIT stats-only: o K/D do parser quase nunca bate
+    # exatamente com o da API, então a dedupe por fingerprint NÃO pode decidir —
+    # o alvo é explícito.
+    alvo = "22222222-2222-2222-2222-222222222222"
+    conn = FakeConn()
+    mid = db.store_parsed(conn, _parsed(), source="upload", tem_demo=True, match_id_alvo=alvo)
+
+    assert mid == alvo
+    sqls = [c[0] for c in conn.calls]
+    assert not any(s.startswith("select id from matches where fingerprint") for s in sqls)
+    assert not any(s.startswith("insert into matches") for s in sqls)
+    update = next(c for c in conn.calls if c[0].startswith("update matches set share_code"))
+    assert update[1][-1] == alvo
+
+
+def test_store_parsed_com_match_id_alvo_recalcula_o_fingerprint():
+    # Sem isso a Partida ficaria com a digital dos stats VELHOS (da API) e uma
+    # ingestão futura da mesma partida criaria uma duplicata.
+    alvo = "22222222-2222-2222-2222-222222222222"
+    conn = FakeConn()
+    db.store_parsed(conn, _parsed(), source="upload", tem_demo=True, match_id_alvo=alvo)
+    update = next(c for c in conn.calls if c[0].startswith("update matches set share_code"))
+    assert "fingerprint = %s" in update[0]
+    assert db.match_fingerprint(_parsed()) in update[1]
+
+
+def test_store_parsed_sem_alvo_continua_deduplicando_por_fingerprint():
+    # Regressão: o envio genérico (página "Enviar Demo") não muda de comportamento.
+    conn = FakeConn()
+    db.store_parsed(conn, _parsed(), share_code="CSGO-x", source="upload")
+    sqls = [c[0] for c in conn.calls]
+    assert any(s.startswith("select id from matches where fingerprint") for s in sqls)
+
+
+def test_enriquecer_partida_alvo_preserva_elo_e_faceit_match_id():
+    # A Partida alvo é FACEIT: faceit_elo_before/after (match_players) e
+    # faceit_match_id (matches) NÃO vêm da demo e não podem ser apagados ao
+    # sobrescrever os stats. Hoje isso é garantido por omissão (nenhum dos dois
+    # aparece no on-conflict/update) — este teste trava o comportamento pra que
+    # incluí-los no futuro seja uma decisão consciente, não um acidente.
+    alvo = "22222222-2222-2222-2222-222222222222"
+    conn = FakeConn()
+    db.store_parsed(conn, _parsed(), source="upload", tem_demo=True, match_id_alvo=alvo)
+
+    update_match = next(c for c in conn.calls if c[0].startswith("update matches set share_code"))
+    assert "faceit_match_id" not in update_match[0]
+    insert_players = next(c for c in conn.calls if c[0].startswith("insert into match_players"))
+    assert "faceit_elo_before" not in insert_players[0]
+    assert "faceit_elo_after" not in insert_players[0]
 
 
 def test_store_parsed_limpa_jogador_e_round_orfao_no_reprocess():

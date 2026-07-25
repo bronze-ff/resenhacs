@@ -21,16 +21,25 @@ def match_fingerprint(parsed):
 
 
 def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status,
-                  prefer_new_played_at=False, tem_demo=False):
+                  prefer_new_played_at=False, tem_demo=False, match_id_alvo=None):
     fingerprint = match_fingerprint(parsed)
 
-    # Dedupe por conteúdo ANTES do insert: se a mesma partida já existe (chegou pelo
-    # outro caminho), atualiza a linha existente em vez de criar uma duplicata — o
-    # conflito de share_code sozinho não pega upload manual feito sem share code.
-    cur.execute("select id from matches where fingerprint = %s", (fingerprint,))
-    row = cur.fetchone()
-    if row:
-        match_id = row[0]
+    # `match_id_alvo` vem do envio de Demo amarrado a uma Partida específica (ver
+    # site/server/src/routes/upload.js e cmd_processar_uploads_pendentes): o vínculo
+    # é explícito e já foi validado (mapa + os 10 steam ids), então a dedupe por
+    # conteúdo não decide nada aqui — o K/D do parser quase nunca bate exatamente
+    # com o da API da FACEIT, e deixar o fingerprint decidir criaria uma duplicata.
+    if match_id_alvo is not None:
+        match_id = match_id_alvo
+    else:
+        # Dedupe por conteúdo ANTES do insert: se a mesma partida já existe (chegou pelo
+        # outro caminho), atualiza a linha existente em vez de criar uma duplicata — o
+        # conflito de share_code sozinho não pega upload manual feito sem share code.
+        cur.execute("select id from matches where fingerprint = %s", (fingerprint,))
+        row = cur.fetchone()
+        match_id = row[0] if row else None
+
+    if match_id is not None:
         if share_code:
             # Um placeholder 'pending' do discover pode estar segurando esse share code
             # em outra linha; absorve (é só um marcador, sem stats filhos).
@@ -49,7 +58,7 @@ def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status,
               team_b_name = coalesce(%s, team_b_name),
               ended_early = %s, abandoned_by_steam_id64 = %s,
               plataforma_manual = coalesce(%s, plataforma_manual),
-              tem_demo = tem_demo or %s
+              tem_demo = tem_demo or %s, fingerprint = %s
             where id = %s
             """,
             (
@@ -68,6 +77,7 @@ def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status,
                 parsed.get("abandoned_by"),
                 parsed.get("plataforma_manual"),
                 tem_demo,
+                fingerprint,
                 match_id,
             ),
         )
@@ -410,17 +420,22 @@ def _write_lineups(cur, match_id, lineups):
 
 def store_parsed(conn, parsed, share_code=None, source="valve_mm", demo_url=None,
                  replay_url=None, status="parsed", prefer_new_played_at=False,
-                 tem_demo=False):
+                 tem_demo=False, match_id_alvo=None):
     """Grava a Partida inteira numa transação. Devolve o match_id (uuid).
 
     `tem_demo`: True só quando os dados vieram do parse de um .dem de verdade
     (ingest_demo/reprocess). O caminho stats-only da FACEIT deixa False — é o que
     o site usa pra saber que a Partida está incompleta e oferecer o envio da Demo.
+
+    `match_id_alvo`: quando informado, grava direto nessa Partida em vez de
+    deduplicar por fingerprint — usado pra amarrar a Demo enviada a uma Partida
+    FACEIT stats-only já existente (o K/D do parser quase nunca bate exatamente
+    com o da API, então a dedupe por conteúdo não pode decidir aqui).
     """
     with conn.cursor() as cur:
         match_id = _insert_match(
             cur, share_code, source, parsed, demo_url, replay_url, status,
-            prefer_new_played_at, tem_demo,
+            prefer_new_played_at, tem_demo, match_id_alvo,
         )
         _write_players(cur, match_id, parsed.get("players", []))
         _write_rounds(cur, match_id, parsed.get("rounds", []))
