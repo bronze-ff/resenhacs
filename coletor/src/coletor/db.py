@@ -20,7 +20,8 @@ def match_fingerprint(parsed):
     return hashlib.sha256(base.encode("utf-8")).hexdigest()[:32]
 
 
-def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status, prefer_new_played_at=False):
+def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status,
+                  prefer_new_played_at=False, tem_demo=False):
     fingerprint = match_fingerprint(parsed)
 
     # Dedupe por conteúdo ANTES do insert: se a mesma partida já existe (chegou pelo
@@ -47,7 +48,8 @@ def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status,
               status = %s, team_a_name = coalesce(%s, team_a_name),
               team_b_name = coalesce(%s, team_b_name),
               ended_early = %s, abandoned_by_steam_id64 = %s,
-              plataforma_manual = coalesce(%s, plataforma_manual)
+              plataforma_manual = coalesce(%s, plataforma_manual),
+              tem_demo = tem_demo or %s
             where id = %s
             """,
             (
@@ -65,6 +67,7 @@ def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status,
                 parsed.get("ended_early", False),
                 parsed.get("abandoned_by"),
                 parsed.get("plataforma_manual"),
+                tem_demo,
                 match_id,
             ),
         )
@@ -81,8 +84,8 @@ def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status,
     )
     cur.execute(
         f"""
-        insert into matches (share_code, source, map, score_a, score_b, played_at, demo_url, replay_url, status, fingerprint, team_a_name, team_b_name, ended_early, abandoned_by_steam_id64, plataforma_manual)
-        values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        insert into matches (share_code, source, map, score_a, score_b, played_at, demo_url, replay_url, status, fingerprint, team_a_name, team_b_name, ended_early, abandoned_by_steam_id64, plataforma_manual, tem_demo)
+        values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         on conflict (share_code) do update set
           source = excluded.source, map = excluded.map,
           score_a = excluded.score_a, score_b = excluded.score_b,
@@ -95,7 +98,8 @@ def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status,
           team_b_name = coalesce(excluded.team_b_name, matches.team_b_name),
           ended_early = excluded.ended_early,
           abandoned_by_steam_id64 = excluded.abandoned_by_steam_id64,
-          plataforma_manual = coalesce(excluded.plataforma_manual, matches.plataforma_manual)
+          plataforma_manual = coalesce(excluded.plataforma_manual, matches.plataforma_manual),
+          tem_demo = matches.tem_demo or excluded.tem_demo
         returning id
         """,
         (
@@ -114,6 +118,7 @@ def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status,
             parsed.get("ended_early", False),
             parsed.get("abandoned_by"),
             parsed.get("plataforma_manual"),
+            tem_demo,
         ),
     )
     return cur.fetchone()[0]
@@ -404,11 +409,18 @@ def _write_lineups(cur, match_id, lineups):
 
 
 def store_parsed(conn, parsed, share_code=None, source="valve_mm", demo_url=None,
-                 replay_url=None, status="parsed", prefer_new_played_at=False):
-    """Grava a Partida inteira numa transação. Devolve o match_id (uuid)."""
+                 replay_url=None, status="parsed", prefer_new_played_at=False,
+                 tem_demo=False):
+    """Grava a Partida inteira numa transação. Devolve o match_id (uuid).
+
+    `tem_demo`: True só quando os dados vieram do parse de um .dem de verdade
+    (ingest_demo/reprocess). O caminho stats-only da FACEIT deixa False — é o que
+    o site usa pra saber que a Partida está incompleta e oferecer o envio da Demo.
+    """
     with conn.cursor() as cur:
         match_id = _insert_match(
-            cur, share_code, source, parsed, demo_url, replay_url, status, prefer_new_played_at,
+            cur, share_code, source, parsed, demo_url, replay_url, status,
+            prefer_new_played_at, tem_demo,
         )
         _write_players(cur, match_id, parsed.get("players", []))
         _write_rounds(cur, match_id, parsed.get("rounds", []))

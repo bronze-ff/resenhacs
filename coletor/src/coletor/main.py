@@ -601,6 +601,7 @@ def cmd_reprocess(config, conn, match_id=None, since=None):
                 dbmod.store_parsed(
                     conn, parsed, share_code=share_code, source=source or "valve_mm",
                     demo_url=demo_url, replay_url=replay_url, prefer_new_played_at=False,
+                    tem_demo=True,
                 )
                 with conn.cursor() as cur2:
                     cur2.execute("update matches set reprocessed_at = now() where id = %s", (mid,))
@@ -669,6 +670,7 @@ def _finalizar_ingest(config, conn, parsed, replay_json, dem_path_upload, share_
         conn, parsed, share_code=share_code, source=source,
         demo_url=demo_url, replay_url=replay_url,
         prefer_new_played_at=bool(played_at),
+        tem_demo=True,
     )
 
 

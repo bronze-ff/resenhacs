@@ -222,14 +222,14 @@ def test_store_parsed_grava_ended_early_e_abandoned_by():
     parsed["abandoned_by"] = "76561199447162948"
     db.store_parsed(conn, parsed, share_code="CSGO-x", source="valve_mm")
     match_call = next(c for c in conn.calls if c[0].startswith("insert into matches"))
-    assert match_call[1][-3:-1] == (True, "76561199447162948")
+    assert match_call[1][-4:-2] == (True, "76561199447162948")
 
 
 def test_store_parsed_sem_ended_early_grava_false_e_none_por_padrao():
     conn = FakeConn()
     db.store_parsed(conn, _parsed(), share_code="CSGO-x", source="valve_mm")
     match_call = next(c for c in conn.calls if c[0].startswith("insert into matches"))
-    assert match_call[1][-3:-1] == (False, None)
+    assert match_call[1][-4:-2] == (False, None)
 
 
 def test_store_parsed_dedupe_por_fingerprint_atualiza_ended_early_tambem():
@@ -240,7 +240,7 @@ def test_store_parsed_dedupe_por_fingerprint_atualiza_ended_early_tambem():
     parsed["abandoned_by"] = "765"
     db.store_parsed(conn, parsed, share_code="CSGO-x", source="valve_mm")
     match_call = next(c for c in conn.calls if c[0].startswith("update matches set share_code"))
-    assert match_call[1][-4:-2] == (True, "765")
+    assert match_call[1][-5:-3] == (True, "765")
 
 
 def test_store_parsed_grava_plataforma_manual():
@@ -249,7 +249,32 @@ def test_store_parsed_grava_plataforma_manual():
     parsed["plataforma_manual"] = "gamers_club"
     db.store_parsed(conn, parsed, share_code="CSGO-x", source="upload")
     match_call = next(c for c in conn.calls if c[0].startswith("insert into matches"))
-    assert match_call[1][-1] == "gamers_club"
+    assert match_call[1][-2] == "gamers_club"
+
+
+def test_store_parsed_grava_tem_demo_quando_veio_de_demo_parseada():
+    conn = FakeConn()
+    db.store_parsed(conn, _parsed(), share_code="CSGO-x", source="upload", tem_demo=True)
+    match_call = next(c for c in conn.calls if c[0].startswith("insert into matches"))
+    assert match_call[1][-1] is True
+    assert "tem_demo" in match_call[0]
+
+
+def test_store_parsed_sem_tem_demo_grava_false_por_padrao():
+    # Caminho stats-only da FACEIT (main.cmd_sincronizar_faceit) não passa tem_demo.
+    conn = FakeConn()
+    db.store_parsed(conn, _parsed(), share_code="CSGO-x", source="faceit")
+    match_call = next(c for c in conn.calls if c[0].startswith("insert into matches"))
+    assert match_call[1][-1] is False
+
+
+def test_store_parsed_nunca_rebaixa_tem_demo_para_false():
+    # Re-sync stats-only de uma Partida que JÁ foi enriquecida por demo não pode
+    # apagar tem_demo — o SQL usa 'or', nunca sobrescreve cru.
+    conn = FakeConn()
+    db.store_parsed(conn, _parsed(), share_code="CSGO-x", source="faceit")
+    match_call = next(c for c in conn.calls if c[0].startswith("insert into matches"))
+    assert "tem_demo = matches.tem_demo or excluded.tem_demo" in match_call[0]
 
 
 def test_store_parsed_limpa_jogador_e_round_orfao_no_reprocess():
