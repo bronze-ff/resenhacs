@@ -6,6 +6,7 @@ import EnviarDemoDaPartida from '../components/EnviarDemoDaPartida.jsx'
 const partidaBase = {
   id: '11111111-1111-1111-1111-111111111111',
   map: 'de_inferno',
+  source: 'faceit',
   temDemo: false,
   demoUpload: null,
   players: [{ steamId: '765' }, { steamId: '999' }],
@@ -35,6 +36,13 @@ describe('EnviarDemoDaPartida', () => {
   it('mostra o botão pra quem jogou numa partida sem demo', () => {
     render(<EnviarDemoDaPartida partida={partidaBase} euSteamId="765" />)
     expect(screen.getByRole('button', { name: /enviar demo desta partida/i })).toBeInTheDocument()
+  })
+
+  it('não aparece numa partida que não é FACEIT (servidor recusaria com 409)', () => {
+    const { container } = render(
+      <EnviarDemoDaPartida partida={{ ...partidaBase, source: 'valve_mm' }} euSteamId="765" />,
+    )
+    expect(container).toBeEmptyDOMElement()
   })
 
   it('com envio em andamento: mostra o aviso e nenhum botão', () => {

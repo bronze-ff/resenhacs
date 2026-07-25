@@ -144,8 +144,11 @@ class FakeCursor:
         # (None = partida inédita, caminho do insert).
         if self._last.startswith("select id from matches where fingerprint"):
             return self.conn.fingerprint_row
-        if self._last.startswith("select map from matches where id"):
-            return None if getattr(self.conn, "alvo_map", None) is None else (self.conn.alvo_map,)
+        if self._last.startswith("select map, source from matches where id"):
+            return (
+                None if getattr(self.conn, "alvo_map", None) is None
+                else (self.conn.alvo_map, getattr(self.conn, "alvo_source", "faceit"))
+            )
         return ["00000000-0000-0000-0000-000000000001"]
 
     def fetchall(self):
@@ -374,11 +377,12 @@ def test_store_parsed_grava_premier_rating_em_match_players():
 
 # ---- dados_da_partida_alvo ----
 
-def test_dados_da_partida_alvo_devolve_mapa_e_steam_ids():
+def test_dados_da_partida_alvo_devolve_mapa_steam_ids_e_source():
     conn = FakeConn()
     conn.alvo_map = "de_inferno"
+    conn.alvo_source = "faceit"
     dados = db.dados_da_partida_alvo(conn, "m-alvo")
-    assert dados == {"map": "de_inferno", "steam_ids": {"A", "B"}}
+    assert dados == {"map": "de_inferno", "steam_ids": {"A", "B"}, "source": "faceit"}
 
 
 def test_dados_da_partida_alvo_devolve_none_quando_a_partida_sumiu():

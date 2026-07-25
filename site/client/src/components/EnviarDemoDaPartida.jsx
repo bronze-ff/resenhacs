@@ -34,7 +34,11 @@ export default function EnviarDemoDaPartida({ partida, euSteamId, onEnviado }) {
     }
   }, [envio, envioNoEnvio, enviadoAgora])
 
-  if (!joguei || partida.temDemo) return null
+  // O servidor só emite a URL pré-assinada quando source === 'faceit' (única
+  // origem stats-only sem demo hoje — ver site/server/src/routes/upload.js); sem
+  // essa checagem aqui, o Jogador via o botão numa Partida Premier e só tomava o
+  // 409 depois de escolher o arquivo inteiro.
+  if (!joguei || partida.temDemo || partida.source !== 'faceit') return null
 
   if (emAndamento || aguardandoRefetch) {
     return (

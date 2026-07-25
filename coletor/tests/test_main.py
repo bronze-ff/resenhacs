@@ -4,6 +4,7 @@ import sys
 import types
 from pathlib import Path
 
+import psycopg
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -747,6 +748,22 @@ def test_validar_demo_contra_alvo_recusa_roster_diferente():
         main._validar_demo_contra_alvo(parsed, _alvo())
 
 
+def test_validar_demo_contra_alvo_pula_o_portao_de_mapa_quando_a_partida_alvo_nao_tem_mapa():
+    # Caminho stats-only da FACEIT (faceit.montar_parsed_stats_only) grava
+    # matches.map = "" quando a API não devolve o mapa — sem esse skip, a Partida
+    # nunca poderia ser enriquecida (recusaria toda demo, qualquer que fosse o
+    # mapa). O roster (os 10 steam ids) já é prova suficiente.
+    parsed = {"map": "de_dust2", "players": [{"steam_id64": "A"}, {"steam_id64": "B"}]}
+    main._validar_demo_contra_alvo(parsed, _alvo(mapa=""))  # não levanta
+
+
+def test_validar_demo_contra_alvo_com_mapa_vazio_ainda_recusa_roster_diferente():
+    # O skip é só do portão de MAPA — o roster continua obrigatório.
+    parsed = {"map": "de_dust2", "players": [{"steam_id64": "A"}, {"steam_id64": "Z"}]}
+    with pytest.raises(main.DemoNaoConfereError, match="jogadores"):
+        main._validar_demo_contra_alvo(parsed, _alvo(mapa=""))
+
+
 def _fake_parsed(mapa, steam_ids):
     return {
         "map": mapa,
@@ -816,6 +833,42 @@ def test_ingest_demo_com_alvo_que_bate_grava_no_match_id_alvo(monkeypatch, tmp_p
     assert gravados["match_id_alvo"] == "m-alvo"
 
 
+def test_ingest_demo_com_fingerprint_ja_usado_por_outra_partida_vira_falha_definitiva(monkeypatch, tmp_path):
+    # Cenário real (recorrente, ver spec): a mesma demo já foi enviada antes pela
+    # página genérica "Enviar Demo" e criou uma Partida duplicada carregando esse
+    # fingerprint. Enriquecer a linha da Partida alvo com essa mesma demo colide
+    # no índice único de matches.fingerprint (23505/UniqueViolation) — isso não
+    # pode cair no except Exception genérico do chamador (banner com a mensagem
+    # crua do psycopg + arquivo de 300MB preso no R2 pra sempre); precisa virar
+    # DemoNaoConfereError, a mesma falha DEFINITIVA que já apaga o staging.
+    dem_path = tmp_path / "demo.dem"
+    dem_path.write_bytes(b"fake-demo-bytes")
+    config = _config_com_r2()
+
+    monkeypatch.setattr(main.parsemod, "parse_demo", lambda path: _fake_parsed("de_inferno", ["A", "B"]))
+    monkeypatch.setattr(main.transform, "fill_kd_from_kills", lambda players, kills: players)
+    monkeypatch.setattr(main.transform, "enrich", lambda parsed: parsed)
+    monkeypatch.setattr(main.parsemod, "extract_replay", lambda path: {"ticks": [], "kills": [], "rounds": []})
+    monkeypatch.setattr(main.replaymod, "build_replay", lambda *a, **kw: {"rounds": []})
+    monkeypatch.setattr(main.transform, "attach_replay_frames", lambda highlights, rounds: highlights)
+    monkeypatch.setattr(main, "_montar_lineups", lambda *a, **kw: [])
+    monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
+    monkeypatch.setattr(main.storage_r2, "demo_key", lambda match_id: "demos/x.dem.bz2")
+    monkeypatch.setattr(main.storage_r2, "upload_bytes", lambda *a, **kw: None)
+    monkeypatch.setattr(main, "_upload_replay", lambda *a, **kw: None)
+
+    def _store_parsed_colide(conn, parsed, **kw):
+        raise psycopg.errors.UniqueViolation(
+            'duplicate key value violates unique constraint "idx_matches_fingerprint"'
+        )
+
+    monkeypatch.setattr(main.dbmod, "store_parsed", _store_parsed_colide)
+
+    alvo = {"match_id": "m-alvo", "map": "de_inferno", "steam_ids": {"A", "B"}}
+    with pytest.raises(main.DemoNaoConfereError, match="já foi processada em outra partida"):
+        main.ingest_demo(config, conn=None, path=dem_path, alvo=alvo)
+
+
 def test_processar_uploads_pendentes_com_alvo_passa_o_alvo_pro_ingest(monkeypatch):
     conn = _UploadsConn([("u1", "765", "uploads-pendentes/abc.dem", None, None, None, "m-alvo")])
     config = _config_com_r2()
@@ -824,7 +877,7 @@ def test_processar_uploads_pendentes_com_alvo_passa_o_alvo_pro_ingest(monkeypatc
     monkeypatch.setattr(main.storage_r2, "delete_object", lambda client, bucket, key: None)
     monkeypatch.setattr(
         main.dbmod, "dados_da_partida_alvo",
-        lambda c, mid: {"map": "de_inferno", "steam_ids": {"A", "B"}},
+        lambda c, mid: {"map": "de_inferno", "steam_ids": {"A", "B"}, "source": "faceit"},
     )
     recebidos = []
 
@@ -840,6 +893,60 @@ def test_processar_uploads_pendentes_com_alvo_passa_o_alvo_pro_ingest(monkeypatc
     assert recebidos == [{"match_id": "m-alvo", "map": "de_inferno", "steam_ids": {"A", "B"}}]
 
 
+def test_processar_uploads_pendentes_com_alvo_mantem_o_source_original(monkeypatch):
+    # CRITICAL: enriquecer uma Partida FACEIT com a demo enviada não pode virar
+    # source='upload' — senão o badge de plataforma some, origemPartida vira
+    # "MANUAL" e a competição marca o clipe como origem não verificada (ver spec,
+    # seção 5). Antes desta correção, cmd_processar_uploads_pendentes sempre
+    # chamava ingest_demo com source="upload" fixo, mesmo com alvo presente.
+    conn = _UploadsConn([("u1", "765", "uploads-pendentes/abc.dem", None, None, None, "m-alvo")])
+    config = _config_com_r2()
+    monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
+    monkeypatch.setattr(main.storage_r2, "download_bytes", lambda client, bucket, key, **kw: b"dem-bytes")
+    monkeypatch.setattr(main.storage_r2, "delete_object", lambda client, bucket, key: None)
+    monkeypatch.setattr(
+        main.dbmod, "dados_da_partida_alvo",
+        lambda c, mid: {"map": "de_inferno", "steam_ids": {"A", "B"}, "source": "faceit"},
+    )
+    recebidos = []
+
+    def _ingest_fake(cfg, cn, dem_path, source=None, alvo=None, **kw):
+        recebidos.append(source)
+        return "m-alvo"
+
+    monkeypatch.setattr(main, "ingest_demo", _ingest_fake)
+
+    main.cmd_processar_uploads_pendentes(config, conn)
+
+    assert recebidos == ["faceit"]
+
+
+def test_processar_uploads_pendentes_sem_alvo_continua_usando_upload(monkeypatch):
+    # Regressão: o envio genérico (sem match_alvo_id) não muda de comportamento.
+    conn = _UploadsConn([("u1", "765", "uploads-pendentes/abc.dem", None, None, None, None)])
+    config = _config_com_r2()
+    monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
+    monkeypatch.setattr(main.storage_r2, "download_bytes", lambda client, bucket, key, **kw: b"dem-bytes")
+    monkeypatch.setattr(main.storage_r2, "delete_object", lambda client, bucket, key: None)
+    dados_da_partida_alvo_chamado = []
+    monkeypatch.setattr(
+        main.dbmod, "dados_da_partida_alvo",
+        lambda c, mid: dados_da_partida_alvo_chamado.append(mid),
+    )
+    recebidos = []
+
+    def _ingest_fake(cfg, cn, dem_path, source=None, alvo=None, **kw):
+        recebidos.append((source, alvo))
+        return "m1"
+
+    monkeypatch.setattr(main, "ingest_demo", _ingest_fake)
+
+    main.cmd_processar_uploads_pendentes(config, conn)
+
+    assert dados_da_partida_alvo_chamado == []
+    assert recebidos == [("upload", None)]
+
+
 def test_processar_uploads_pendentes_demo_que_nao_confere_falha_e_apaga_do_r2(monkeypatch):
     # Demo errada não fica certa na segunda tentativa — diferente da falha
     # transitória (rede/parser), que mantém o staging pro retry.
@@ -851,7 +958,7 @@ def test_processar_uploads_pendentes_demo_que_nao_confere_falha_e_apaga_do_r2(mo
     monkeypatch.setattr(main.storage_r2, "delete_object", lambda client, bucket, key: deletes.append(key))
     monkeypatch.setattr(
         main.dbmod, "dados_da_partida_alvo",
-        lambda c, mid: {"map": "de_inferno", "steam_ids": {"A", "B"}},
+        lambda c, mid: {"map": "de_inferno", "steam_ids": {"A", "B"}, "source": "faceit"},
     )
     monkeypatch.setattr(
         main, "ingest_demo",

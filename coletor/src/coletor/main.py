@@ -23,6 +23,8 @@ import bz2
 import json
 import urllib.request
 
+import psycopg
+
 from . import db as dbmod
 from . import parse as parsemod
 from . import replay as replaymod
@@ -405,8 +407,17 @@ def _validar_demo_contra_alvo(parsed, alvo):
     """Validação estrita do envio amarrado a uma Partida: mapa igual E os mesmos
     Participantes. O roster da Partida FACEIT vem da API oficial, então 10 steam
     ids batendo é prova de que é a Partida certa — sem depender de K/D (que o
-    parser conta diferente da API) nem de horário (o .dem não guarda data)."""
-    if parsed.get("map") != alvo["map"]:
+    parser conta diferente da API) nem de horário (o .dem não guarda data).
+
+    Portão de mapa pulado quando `alvo["map"]` está vazio/nulo: o caminho
+    stats-only da FACEIT (faceit.montar_parsed_stats_only) grava matches.map = ""
+    quando a API não devolve o mapa — recusar por mapa vazio trancaria essa
+    Partida pra sempre, sem nenhum jeito de enriquecer (o arquivo seria sempre
+    apagado do R2 na validação). O cliente já trata esse caso (o pré-check
+    de mapa deixa passar quando o mapa da Partida está vazio); aqui, o conjunto
+    EXATO dos 10 steam ids já é prova suficiente de que é a Partida certa.
+    """
+    if alvo["map"] and parsed.get("map") != alvo["map"]:
         raise DemoNaoConfereError(
             f"o mapa da demo ({parsed.get('map')}) não confere com o desta partida ({alvo['map']})"
         )
@@ -442,11 +453,19 @@ def cmd_processar_uploads_pendentes(config, conn):
         dbmod.atualizar_upload_pendente(conn, upload_id, "processando")
         try:
             alvo = None
+            # Com alvo, a Partida enriquecida CONTINUA sendo a mesma Partida que já
+            # era (ex.: 'faceit') — só ganha os stats do parser por cima. Sem isso,
+            # o ingest gravava source='upload' incondicionalmente e a Partida
+            # perdia a identidade: o badge de plataforma sumia, origemPartida
+            # virava "MANUAL" e a competição passava a marcar como origem não
+            # verificada (ver spec, seção 5).
+            source_do_upload = "upload"
             if match_alvo_id:
                 dados = dbmod.dados_da_partida_alvo(conn, match_alvo_id)
                 if dados is None:
                     raise DemoNaoConfereError("a partida deste envio não existe mais")
-                alvo = {"match_id": match_alvo_id, **dados}
+                alvo = {"match_id": match_alvo_id, "map": dados["map"], "steam_ids": dados["steam_ids"]}
+                source_do_upload = dados["source"]
 
             with tempfile.TemporaryDirectory() as tmp:
                 tmp = Path(tmp)
@@ -459,7 +478,7 @@ def cmd_processar_uploads_pendentes(config, conn):
 
                 match_id = ingest_demo(
                     config, conn, dem_path,
-                    share_code=share_code, source="upload", upload=True,
+                    share_code=share_code, source=source_do_upload, upload=True,
                     played_at=played_at, plataforma_manual=plataforma_manual,
                     alvo=alvo,
                 )
@@ -788,10 +807,21 @@ def ingest_demo(config, conn, path, share_code=None, source="upload", upload=Tru
     except Exception as e:  # noqa: BLE001
         print(f"aviso: replay 2D / clutch não gerado ({e})")
 
-    match_id = _finalizar_ingest(
-        config, conn, parsed, replay_json, path, share_code, source, upload, played_at,
-        match_id_alvo=alvo["match_id"] if alvo else None,
-    )
+    try:
+        match_id = _finalizar_ingest(
+            config, conn, parsed, replay_json, path, share_code, source, upload, played_at,
+            match_id_alvo=alvo["match_id"] if alvo else None,
+        )
+    except psycopg.errors.UniqueViolation as e:
+        # Cenário recorrente (ver spec): a mesma demo já tinha sido enviada antes
+        # pela página genérica "Enviar Demo" e criou uma Partida duplicata
+        # carregando esse fingerprint (matches.fingerprint é único). Ao enriquecer
+        # a linha da Partida alvo com essa mesma demo, o UPDATE colide nesse
+        # índice — sem tratar, o Jogador via a mensagem crua do psycopg no banner
+        # (o except genérico não sabe que é definitivo, então mantinha o .dem de
+        # 300MB no R2 pra sempre esperando um retry que nunca ia resolver).
+        # DemoNaoConfereError é falha DEFINITIVA: quem trata apaga o staging.
+        raise DemoNaoConfereError("esta demo já foi processada em outra partida") from e
     _atualizar_avatares(config, conn, [p["steam_id64"] for p in parsed.get("players", [])])
     return match_id
 
