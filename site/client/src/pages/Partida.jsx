@@ -1354,10 +1354,10 @@ export default function Partida() {
             <h2 className="font-display text-2xl font-bold uppercase tracking-wide text-texto">{nomeMapa(m.map)}</h2>
             <PlataformaBadge source={m.source} plataformaManual={m.plataformaManual} />
             <span
-              title={origemPartida(m.source).title}
+              title={origemPartida(m.source, m.temDemo).title}
               className="panel-cut-sm border border-borda bg-superficie px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-widest text-texto-fraco"
             >
-              {origemPartida(m.source).label}
+              {origemPartida(m.source, m.temDemo).label}
             </span>
           </div>
           <p className="font-mono text-sm text-texto-fraco">{dataHora(m.playedAt)}</p>
