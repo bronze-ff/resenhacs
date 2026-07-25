@@ -71,6 +71,25 @@ describe('EnviarDemoDaPartida', () => {
     expect(global.fetch).not.toHaveBeenCalled()
   })
 
+  it('cabeçalho sem nome de mapa nenhum deixa o envio seguir', async () => {
+    render(<EnviarDemoDaPartida partida={partidaBase} euSteamId="765" />)
+    await userEvent.click(screen.getByRole('button', { name: /enviar demo desta partida/i }))
+    const input = screen.getByLabelText(/arquivo/i)
+    await userEvent.upload(input, arquivo('demo.dem', 'PBDEMS2 sem nome de mapa nenhum aqui'))
+    await waitFor(() => expect(screen.getByText(/demo\.dem/i)).toBeInTheDocument())
+    expect(screen.queryByText(/mapa desconhecido/i)).toBeNull()
+    expect(screen.getByRole('button', { name: /^enviar$/i })).not.toBeDisabled()
+  })
+
+  it('partida sem mapa registrado (stats-only) deixa o envio seguir mesmo com mapa no cabeçalho', async () => {
+    render(<EnviarDemoDaPartida partida={{ ...partidaBase, map: '' }} euSteamId="765" />)
+    await userEvent.click(screen.getByRole('button', { name: /enviar demo desta partida/i }))
+    const input = screen.getByLabelText(/arquivo/i)
+    await userEvent.upload(input, arquivo('demo.dem', 'PBDEMS2 xxxx de_mirage xxxx'))
+    await waitFor(() => expect(screen.getByText(/demo\.dem/i)).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: /^enviar$/i })).not.toBeDisabled()
+  })
+
   it('caminho feliz: pede a url e faz o PUT no R2', async () => {
     global.fetch
       .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'u1', uploadUrl: 'https://r2/put' }) })

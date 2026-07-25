@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { mapaDoCabecalho } from '../lib/demoHeader.js'
+import { mapaDoCabecalho, cabecalhoDivergeDoMapa } from '../lib/demoHeader.js'
 import { nomeMapa } from '../lib/format.js'
 
 // Envio da Demo de uma Partida FACEIT stats-only, amarrado a ELA (matchId) — o
@@ -11,17 +11,27 @@ export default function EnviarDemoDaPartida({ partida, euSteamId, onEnviado }) {
   const [arquivo, setArquivo] = useState(null)
   const [erro, setErro] = useState(null)
   const [enviando, setEnviando] = useState(false)
+  const [enviadoAgora, setEnviadoAgora] = useState(false)
+  const [envioNoEnvio, setEnvioNoEnvio] = useState(null)
 
   const joguei = (partida.players ?? []).some((p) => p.steamId === euSteamId)
   const envio = partida.demoUpload
   const emAndamento = envio?.status === 'pendente' || envio?.status === 'processando'
+  // Enquanto o refetch do detalhe (rota pesada) não chega, o servidor ainda reporta o
+  // envio de ANTES do PUT — sem isso o botão "Enviar demo" reaparece como se o upload
+  // de 100-300MB não tivesse ido a lugar nenhum, e o Jogador sobe de novo (o servidor
+  // devolve 409, mas o segundo upload já aconteceu). Comparamos com o envio no momento
+  // do sucesso: quando o refetch trouxer algo diferente, essa flag deixa de valer.
+  const aguardandoRefetch = enviadoAgora && JSON.stringify(envio) === envioNoEnvio
 
   if (!joguei || partida.temDemo) return null
 
-  if (emAndamento) {
+  if (emAndamento || aguardandoRefetch) {
     return (
       <div className="panel-cut-sm border border-borda bg-superficie px-3 py-2 font-mono text-xs text-texto-fraco">
-        Demo em processamento — os dados completos aparecem em até 30 minutos.
+        {aguardandoRefetch && !emAndamento
+          ? 'Envio recebido! Processando em até 30 minutos — os dados completos aparecem no Feed quando terminar.'
+          : 'Demo em processamento — os dados completos aparecem em até 30 minutos.'}
       </div>
     )
   }
@@ -32,11 +42,13 @@ export default function EnviarDemoDaPartida({ partida, euSteamId, onEnviado }) {
     if (!f) return
     if (!f.name.toLowerCase().endsWith('.dem')) {
       setErro('Só arquivos .dem são aceitos.')
+      setArquivo(null)
       return
     }
-    const mapa = await mapaDoCabecalho(f)
-    if (mapa && mapa !== partida.map) {
+    if (await cabecalhoDivergeDoMapa(f, partida.map)) {
+      const mapa = await mapaDoCabecalho(f)
       setErro(`Essa demo é de ${nomeMapa(mapa)} e esta partida foi em ${nomeMapa(partida.map)}.`)
+      setArquivo(null)
       return
     }
     setArquivo(f)
@@ -66,6 +78,8 @@ export default function EnviarDemoDaPartida({ partida, euSteamId, onEnviado }) {
         setErro('Falha ao enviar o arquivo pro armazenamento')
         return
       }
+      setEnvioNoEnvio(JSON.stringify(envio))
+      setEnviadoAgora(true)
       setAberto(false)
       setArquivo(null)
       onEnviado?.()
@@ -80,7 +94,7 @@ export default function EnviarDemoDaPartida({ partida, euSteamId, onEnviado }) {
     <div className="space-y-2">
       {envio?.status === 'falhou' && envio.enviadoPorVoce && (
         <div className="panel-cut-sm border border-perigo/40 bg-perigo/10 px-3 py-2 font-mono text-xs text-perigo">
-          O envio anterior foi recusado: {envio.erro} Você pode enviar outra demo.
+          O envio anterior foi recusado: {envio.erro}. Você pode enviar outra demo.
         </div>
       )}
 
