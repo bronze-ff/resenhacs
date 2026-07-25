@@ -4,7 +4,6 @@ import sys
 import types
 from pathlib import Path
 
-import psycopg
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -833,6 +832,15 @@ def test_ingest_demo_com_alvo_que_bate_grava_no_match_id_alvo(monkeypatch, tmp_p
     assert gravados["match_id_alvo"] == "m-alvo"
 
 
+class _ViolacaoUnicaFake(Exception):
+    """Imita psycopg.errors.UniqueViolation carregando `sqlstate`, sem precisar
+    importar psycopg de verdade — o pacote não está em dev-requirements.txt
+    (só o necessário pra rodar os testes no CI) e um import de topo quebraria
+    a coleta do pytest com ModuleNotFoundError."""
+
+    sqlstate = "23505"
+
+
 def test_ingest_demo_com_fingerprint_ja_usado_por_outra_partida_vira_falha_definitiva(monkeypatch, tmp_path):
     # Cenário real (recorrente, ver spec): a mesma demo já foi enviada antes pela
     # página genérica "Enviar Demo" e criou uma Partida duplicada carregando esse
@@ -858,7 +866,7 @@ def test_ingest_demo_com_fingerprint_ja_usado_por_outra_partida_vira_falha_defin
     monkeypatch.setattr(main, "_upload_replay", lambda *a, **kw: None)
 
     def _store_parsed_colide(conn, parsed, **kw):
-        raise psycopg.errors.UniqueViolation(
+        raise _ViolacaoUnicaFake(
             'duplicate key value violates unique constraint "idx_matches_fingerprint"'
         )
 
@@ -867,6 +875,39 @@ def test_ingest_demo_com_fingerprint_ja_usado_por_outra_partida_vira_falha_defin
     alvo = {"match_id": "m-alvo", "map": "de_inferno", "steam_ids": {"A", "B"}}
     with pytest.raises(main.DemoNaoConfereError, match="já foi processada em outra partida"):
         main.ingest_demo(config, conn=None, path=dem_path, alvo=alvo)
+
+
+def test_ingest_demo_sem_alvo_com_colisao_de_fingerprint_permanece_transitoria(monkeypatch, tmp_path):
+    # MINOR (achado #2): fora do fluxo com alvo (cmd_fetch, processar-fila-pro,
+    # envio genérico "Enviar Demo"), uma colisão de fingerprint só é possível
+    # numa corrida entre execuções concorrentes — falha TRANSITÓRIA, que deve
+    # preservar o .dem de 300MB no R2 pro retry. Convertê-la em
+    # DemoNaoConfereError (falha DEFINITIVA) apagaria o staging à toa.
+    dem_path = tmp_path / "demo.dem"
+    dem_path.write_bytes(b"fake-demo-bytes")
+    config = _config_com_r2()
+
+    monkeypatch.setattr(main.parsemod, "parse_demo", lambda path: _fake_parsed("de_inferno", ["A", "B"]))
+    monkeypatch.setattr(main.transform, "fill_kd_from_kills", lambda players, kills: players)
+    monkeypatch.setattr(main.transform, "enrich", lambda parsed: parsed)
+    monkeypatch.setattr(main.parsemod, "extract_replay", lambda path: {"ticks": [], "kills": [], "rounds": []})
+    monkeypatch.setattr(main.replaymod, "build_replay", lambda *a, **kw: {"rounds": []})
+    monkeypatch.setattr(main.transform, "attach_replay_frames", lambda highlights, rounds: highlights)
+    monkeypatch.setattr(main, "_montar_lineups", lambda *a, **kw: [])
+    monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
+    monkeypatch.setattr(main.storage_r2, "demo_key", lambda match_id: "demos/x.dem.bz2")
+    monkeypatch.setattr(main.storage_r2, "upload_bytes", lambda *a, **kw: None)
+    monkeypatch.setattr(main, "_upload_replay", lambda *a, **kw: None)
+
+    def _store_parsed_colide(conn, parsed, **kw):
+        raise _ViolacaoUnicaFake(
+            'duplicate key value violates unique constraint "idx_matches_fingerprint"'
+        )
+
+    monkeypatch.setattr(main.dbmod, "store_parsed", _store_parsed_colide)
+
+    with pytest.raises(_ViolacaoUnicaFake):
+        main.ingest_demo(config, conn=None, path=dem_path, alvo=None)
 
 
 def test_processar_uploads_pendentes_com_alvo_passa_o_alvo_pro_ingest(monkeypatch):

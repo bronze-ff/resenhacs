@@ -23,8 +23,6 @@ import bz2
 import json
 import urllib.request
 
-import psycopg
-
 from . import db as dbmod
 from . import parse as parsemod
 from . import replay as replaymod
@@ -812,16 +810,26 @@ def ingest_demo(config, conn, path, share_code=None, source="upload", upload=Tru
             config, conn, parsed, replay_json, path, share_code, source, upload, played_at,
             match_id_alvo=alvo["match_id"] if alvo else None,
         )
-    except psycopg.errors.UniqueViolation as e:
+    except Exception as e:  # noqa: BLE001
         # Cenário recorrente (ver spec): a mesma demo já tinha sido enviada antes
         # pela página genérica "Enviar Demo" e criou uma Partida duplicata
         # carregando esse fingerprint (matches.fingerprint é único). Ao enriquecer
         # a linha da Partida alvo com essa mesma demo, o UPDATE colide nesse
         # índice — sem tratar, o Jogador via a mensagem crua do psycopg no banner
-        # (o except genérico não sabe que é definitivo, então mantinha o .dem de
-        # 300MB no R2 pra sempre esperando um retry que nunca ia resolver).
-        # DemoNaoConfereError é falha DEFINITIVA: quem trata apaga o staging.
-        raise DemoNaoConfereError("esta demo já foi processada em outra partida") from e
+        # (o except genérico não sabia que era definitivo, então mantinha o .dem
+        # de 300MB no R2 pra sempre esperando um retry que nunca ia resolver).
+        # Detecta pelo SQLSTATE (23505 = unique_violation), não pela classe
+        # psycopg.errors.UniqueViolation — importar psycopg no topo do módulo
+        # quebra o job de testes do CI, que instala só dev-requirements.txt
+        # (sem psycopg; ver db.py e storage_r2.py pro mesmo padrão de import
+        # preguiçoso). Só converte pra falha DEFINITIVA quando há alvo: fora
+        # desse caminho (cmd_fetch/processar-fila-pro/envio genérico), uma
+        # colisão de fingerprint só acontece numa corrida entre execuções
+        # concorrentes — é TRANSITÓRIA, e converter aqui apagaria do R2 o
+        # .dem de 300MB que devia sobreviver pro retry.
+        if alvo is not None and getattr(e, "sqlstate", None) == "23505":
+            raise DemoNaoConfereError("esta demo já foi processada em outra partida") from e
+        raise
     _atualizar_avatares(config, conn, [p["steam_id64"] for p in parsed.get("players", [])])
     return match_id
 
