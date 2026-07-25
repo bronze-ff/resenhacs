@@ -747,6 +747,75 @@ def test_validar_demo_contra_alvo_recusa_roster_diferente():
         main._validar_demo_contra_alvo(parsed, _alvo())
 
 
+def _fake_parsed(mapa, steam_ids):
+    return {
+        "map": mapa,
+        "players": [{"steam_id64": sid} for sid in steam_ids],
+        "kills": [], "rounds": [], "highlights": [],
+    }
+
+
+def test_ingest_demo_com_alvo_que_nao_bate_nao_chama_extract_replay(monkeypatch, tmp_path):
+    # A validação (_validar_demo_contra_alvo) precisa rodar DEPOIS de transform.enrich
+    # e ANTES de parsemod.extract_replay — o Replay 2D é a parte cara do pipeline e não
+    # deve ser gasta numa demo que vai ser recusada. Um teste que só chama o helper
+    # isolado (test_validar_demo_contra_alvo_*) não pega uma regressão de POSIÇÃO —
+    # por isso este chama ingest_demo de verdade.
+    dem_path = tmp_path / "demo.dem"
+    dem_path.write_bytes(b"fake-demo-bytes")
+    config = _config_com_r2()
+
+    monkeypatch.setattr(main.parsemod, "parse_demo", lambda path: _fake_parsed("de_dust2", ["Z"]))
+    monkeypatch.setattr(main.transform, "fill_kd_from_kills", lambda players, kills: players)
+    monkeypatch.setattr(main.transform, "enrich", lambda parsed: parsed)
+    chamadas_extract = []
+    monkeypatch.setattr(
+        main.parsemod, "extract_replay",
+        lambda path: chamadas_extract.append(path) or {"ticks": [], "kills": [], "rounds": []},
+    )
+
+    alvo = {"match_id": "m-alvo", "map": "de_inferno", "steam_ids": {"A", "B"}}
+
+    with pytest.raises(main.DemoNaoConfereError):
+        main.ingest_demo(config, conn=None, path=dem_path, alvo=alvo)
+
+    assert chamadas_extract == []  # Replay 2D não foi gasto numa demo recusada
+
+
+def test_ingest_demo_com_alvo_que_bate_grava_no_match_id_alvo(monkeypatch, tmp_path):
+    dem_path = tmp_path / "demo.dem"
+    dem_path.write_bytes(b"fake-demo-bytes")
+    config = _config_com_r2()
+
+    monkeypatch.setattr(main.parsemod, "parse_demo", lambda path: _fake_parsed("de_inferno", ["A", "B"]))
+    monkeypatch.setattr(main.transform, "fill_kd_from_kills", lambda players, kills: players)
+    monkeypatch.setattr(main.transform, "enrich", lambda parsed: parsed)
+    monkeypatch.setattr(main.parsemod, "extract_replay", lambda path: {"ticks": [], "kills": [], "rounds": []})
+    monkeypatch.setattr(main.replaymod, "build_replay", lambda *a, **kw: {"rounds": []})
+    monkeypatch.setattr(main.transform, "attach_replay_frames", lambda highlights, rounds: highlights)
+    monkeypatch.setattr(main, "_montar_lineups", lambda *a, **kw: [])
+    monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
+    monkeypatch.setattr(main.storage_r2, "demo_key", lambda match_id: "demos/x.dem.bz2")
+    monkeypatch.setattr(main.storage_r2, "upload_bytes", lambda *a, **kw: None)
+    monkeypatch.setattr(main, "_upload_replay", lambda *a, **kw: None)
+
+    gravados = {}
+
+    def _store_parsed(conn, parsed, **kw):
+        gravados.update(kw)
+        return "m-alvo"
+
+    monkeypatch.setattr(main.dbmod, "store_parsed", _store_parsed)
+
+    alvo = {"match_id": "m-alvo", "map": "de_inferno", "steam_ids": {"A", "B"}}
+    match_id = main.ingest_demo(config, conn=None, path=dem_path, alvo=alvo)
+
+    assert match_id == "m-alvo"
+    # Hoje nada verificava que a Demo é gravada NAQUELA linha (match_id_alvo) —
+    # sem isso, um envio amarrado a uma Partida podia cair na dedupe por fingerprint.
+    assert gravados["match_id_alvo"] == "m-alvo"
+
+
 def test_processar_uploads_pendentes_com_alvo_passa_o_alvo_pro_ingest(monkeypatch):
     conn = _UploadsConn([("u1", "765", "uploads-pendentes/abc.dem", None, None, None, "m-alvo")])
     config = _config_com_r2()

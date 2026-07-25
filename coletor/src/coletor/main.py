@@ -410,7 +410,7 @@ def _validar_demo_contra_alvo(parsed, alvo):
         raise DemoNaoConfereError(
             f"o mapa da demo ({parsed.get('map')}) não confere com o desta partida ({alvo['map']})"
         )
-    ids_demo = {p["steam_id64"] for p in parsed.get("players", [])}
+    ids_demo = {p.get("steam_id64") for p in parsed.get("players", [])}
     if ids_demo != alvo["steam_ids"]:
         raise DemoNaoConfereError("os jogadores da demo não são os desta partida")
 
@@ -471,10 +471,20 @@ def cmd_processar_uploads_pendentes(config, conn):
                 storage_r2.delete_object(client, config.r2_bucket, arquivo_r2_key)
         except DemoNaoConfereError as e:
             # Falha DEFINITIVA (mapa/roster errado): guardar o staging só ocuparia
-            # espaço pra sempre, já que nenhum retry vai mudar o resultado.
+            # espaço pra sempre, já que nenhum retry vai mudar o resultado. O status
+            # 'falhou' já foi gravado acima — se o delete_object falhar (R2 fora do
+            # ar), isso não pode derrubar o resto da fila (o for de cima processando
+            # os outros envios pendentes da rodada); o arquivo órfão fica pro
+            # cmd_limpar_uploads_orfaos limpar depois.
             conn.rollback()
             dbmod.atualizar_upload_pendente(conn, upload_id, "falhou", erro=str(e)[:500])
-            storage_r2.delete_object(client, config.r2_bucket, arquivo_r2_key)
+            try:
+                storage_r2.delete_object(client, config.r2_bucket, arquivo_r2_key)
+            except Exception as e_del:  # noqa: BLE001
+                print(
+                    f"  {upload_id}: aviso — staging não foi apagado do R2 ({e_del}); "
+                    "cmd_limpar_uploads_orfaos vai limpar depois"
+                )
             print(f"  {upload_id}: RECUSADO ({e})")
         except Exception as e:  # noqa: BLE001
             conn.rollback()
