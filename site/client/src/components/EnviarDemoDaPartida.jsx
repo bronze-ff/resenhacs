@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { mapaDoCabecalho, cabecalhoDivergeDoMapa } from '../lib/demoHeader.js'
 import { nomeMapa } from '../lib/format.js'
 
@@ -23,6 +23,16 @@ export default function EnviarDemoDaPartida({ partida, euSteamId, onEnviado }) {
   // devolve 409, mas o segundo upload já aconteceu). Comparamos com o envio no momento
   // do sucesso: quando o refetch trouxer algo diferente, essa flag deixa de valer.
   const aguardandoRefetch = enviadoAgora && JSON.stringify(envio) === envioNoEnvio
+
+  // Uma vez que o refetch trouxer um `envio` diferente do snapshot, a flag deixou de
+  // valer pra sempre — sem isso, se o envio saísse da janela de status e voltasse a
+  // ficar igual ao snapshot mais tarde (ex.: volta a `null` com `temDemo` ainda falso),
+  // o banner "Envio recebido!" reapareceria e esconderia o botão pelo resto da visita.
+  useEffect(() => {
+    if (enviadoAgora && JSON.stringify(envio) !== envioNoEnvio) {
+      setEnviadoAgora(false)
+    }
+  }, [envio, envioNoEnvio, enviadoAgora])
 
   if (!joguei || partida.temDemo) return null
 

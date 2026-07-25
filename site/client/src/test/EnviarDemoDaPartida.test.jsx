@@ -108,5 +108,41 @@ describe('EnviarDemoDaPartida', () => {
     expect(JSON.parse(global.fetch.mock.calls[0][1].body).matchId).toBe(partidaBase.id)
     expect(global.fetch.mock.calls[1][0]).toBe('https://r2/put')
     expect(global.fetch.mock.calls[1][1].method).toBe('PUT')
+    expect(screen.getByText(/envio recebido/i)).toBeInTheDocument()
+  })
+
+  it('vazamento de byte no cabeçalho (de_infernor) não barra demo legítima', async () => {
+    global.fetch
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'u1', uploadUrl: 'https://r2/put' }) })
+      .mockResolvedValueOnce({ ok: true })
+    render(<EnviarDemoDaPartida partida={partidaBase} euSteamId="765" />)
+    await userEvent.click(screen.getByRole('button', { name: /enviar demo desta partida/i }))
+    const input = screen.getByLabelText(/arquivo/i)
+    // protobuf não tem strings null-terminated: o byte seguinte a "de_inferno" pode
+    // cair na classe de caracteres da regex e virar "de_infernorXX" no match.
+    await userEvent.upload(input, arquivo('demo.dem', 'PBDEMS2 xxxx de_infernorXX xxxx'))
+    await waitFor(() => expect(screen.getByText(/demo\.dem/i)).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: /^enviar$/i })).not.toBeDisabled()
+
+    await userEvent.click(screen.getByRole('button', { name: /^enviar$/i }))
+
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled())
+    expect(global.fetch.mock.calls[0][0]).toBe('/api/upload/upload-url')
+  })
+
+  it('arquivo rejeitado não deixa o anterior armado', async () => {
+    render(<EnviarDemoDaPartida partida={partidaBase} euSteamId="765" />)
+    await userEvent.click(screen.getByRole('button', { name: /enviar demo desta partida/i }))
+    const input = screen.getByLabelText(/arquivo/i)
+    await userEvent.upload(input, arquivo('valido.dem', 'PBDEMS2 xxxx de_inferno xxxx'))
+    await waitFor(() => expect(screen.getByText(/valido\.dem/i)).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: /^enviar$/i })).not.toBeDisabled()
+
+    await userEvent.upload(input, arquivo('errado.dem', 'PBDEMS2 xxxx de_mirage xxxx'))
+    await waitFor(() => expect(screen.getByText(/mirage/i)).toBeInTheDocument())
+
+    expect(screen.queryByText(/valido\.dem/i)).toBeNull()
+    expect(screen.getByRole('button', { name: /^enviar$/i })).toBeDisabled()
+    expect(global.fetch).not.toHaveBeenCalled()
   })
 })
