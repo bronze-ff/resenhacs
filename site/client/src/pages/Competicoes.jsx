@@ -4,19 +4,87 @@ import { SectionHeader, Card, Badge } from '../components/ui'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { contadorRegressivo, dataHora } from '../lib/format.js'
 import SeletorClipesCompeticao from '../components/SeletorClipesCompeticao.jsx'
+import CardClipeCompeticao from '../components/CardClipeCompeticao.jsx'
 
-function Leaderboard({ leaderboard, minimoParaRankear }) {
+function Leaderboard({ leaderboard, minimoParaRankear, competicaoId, clipeAberto, onAbrirClipe, viewerSteamId }) {
   const qualificados = leaderboard.filter((l) => l.qualificado)
   const naoQualificados = leaderboard.filter((l) => !l.qualificado)
+  const [expandido, setExpandido] = useState(null)
+  // Cache por steamId: recolher e expandir de novo não refaz a busca. Erro NÃO
+  // entra nesse cache (ver erroPorJogador abaixo) — só sucesso é reaproveitável,
+  // senão uma falha de rede vira permanente até recarregar a página.
+  const [clipesPorJogador, setClipesPorJogador] = useState({})
+  const [erroPorJogador, setErroPorJogador] = useState({})
+
+  function alternar(steamId) {
+    if (expandido === steamId) {
+      setExpandido(null)
+      return
+    }
+    setExpandido(steamId)
+    if (clipesPorJogador[steamId]) return
+    setErroPorJogador((atual) => ({ ...atual, [steamId]: null }))
+    // Busca só na primeira expansão — carregar os Clipes de todos só pra mostrar
+    // o ranking seria desperdício.
+    fetch(`/api/competicoes/${competicaoId}/jogador/${steamId}/clipes`)
+      .then((res) => {
+        if (!res.ok) {
+          setErroPorJogador((atual) => ({ ...atual, [steamId]: 'Falha ao carregar os clipes desse jogador. Tente novamente.' }))
+          return
+        }
+        return res.json().then((body) => {
+          setClipesPorJogador((atual) => ({ ...atual, [steamId]: body.clipes ?? [] }))
+          setErroPorJogador((atual) => ({ ...atual, [steamId]: null }))
+        })
+      })
+      .catch(() => {
+        setErroPorJogador((atual) => ({ ...atual, [steamId]: 'Falha ao carregar os clipes desse jogador. Tente novamente.' }))
+      })
+  }
+
   return (
     <div className="space-y-3">
       <div className="panel-cut border border-borda">
         {qualificados.map((l, i) => (
-          <div key={l.steamId} className="flex items-center gap-3 border-b border-borda px-3 py-2 last:border-b-0">
-            <span className="font-mono text-texto-fraco">{i + 1}º</span>
-            {l.avatarUrl && <img src={l.avatarUrl} alt="" className="panel-cut-sm h-6 w-6 border border-borda object-cover" />}
-            <span className="flex-1 font-mono text-texto">{l.nick}</span>
-            <span className="font-display font-bold text-destaque tabular-nums">{l.total}</span>
+          <div key={l.steamId} className="border-b border-borda last:border-b-0">
+            <button
+              type="button"
+              onClick={() => alternar(l.steamId)}
+              aria-expanded={expandido === l.steamId}
+              aria-controls={`leaderboard-painel-${l.steamId}`}
+              className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-superficie-alta"
+            >
+              <span className="font-mono text-texto-fraco">{i + 1}º</span>
+              {l.avatarUrl && <img src={l.avatarUrl} alt="" className="panel-cut-sm h-6 w-6 border border-borda object-cover" />}
+              <span className="flex-1 font-mono text-texto">{l.nick}</span>
+              <span className="font-display font-bold text-destaque tabular-nums">{l.total}</span>
+            </button>
+
+            {expandido === l.steamId && (
+              <div id={`leaderboard-painel-${l.steamId}`} className="px-3 pb-3">
+                {erroPorJogador[l.steamId] ? (
+                  <p className="font-mono text-xs text-perigo">{erroPorJogador[l.steamId]}</p>
+                ) : clipesPorJogador[l.steamId] === undefined ? (
+                  <p className="font-mono text-xs text-texto-fraco">Carregando…</p>
+                ) : clipesPorJogador[l.steamId].length === 0 ? (
+                  <p className="font-mono text-xs text-texto-fraco">Nenhum clipe pra mostrar.</p>
+                ) : (
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {clipesPorJogador[l.steamId].map((c) => (
+                      <CardClipeCompeticao
+                        key={c.id}
+                        clipe={c}
+                        chave={`lb:${c.id}`}
+                        aberto={clipeAberto === `lb:${c.id}`}
+                        onAbrir={onAbrirClipe}
+                        viewerSteamId={viewerSteamId}
+                        location="leaderboardCompeticao"
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -33,6 +101,9 @@ function CardCompeticao({ comp, viewerSteamId, onTradelinkEnviado }) {
   const [tradelink, setTradelink] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [seletorAberto, setSeletorAberto] = useState(false)
+  // Um player tocando por vez em toda a tela: o estado mora aqui, acima do feed e
+  // do leaderboard, senão dois vídeos tocariam com áudio ao mesmo tempo.
+  const [clipeAberto, setClipeAberto] = useState(null)
   const [agora, setAgora] = useState(Date.now())
   useEffect(() => {
     const intervalo = window.setInterval(() => setAgora(Date.now()), 1000)
@@ -150,7 +221,14 @@ function CardCompeticao({ comp, viewerSteamId, onTradelinkEnviado }) {
       {!naoComecou && (
         <div className="mt-4">
           <h3 className="mb-2 font-display text-sm font-semibold uppercase tracking-wide text-texto-fraco">Leaderboard</h3>
-          <Leaderboard leaderboard={comp.leaderboard} minimoParaRankear={comp.minimoParaRankear} />
+          <Leaderboard
+            leaderboard={comp.leaderboard}
+            minimoParaRankear={comp.minimoParaRankear}
+            competicaoId={comp.id}
+            clipeAberto={clipeAberto}
+            onAbrirClipe={setClipeAberto}
+            viewerSteamId={viewerSteamId}
+          />
         </div>
       )}
 
@@ -159,12 +237,16 @@ function CardCompeticao({ comp, viewerSteamId, onTradelinkEnviado }) {
           <h3 className="mb-2 font-display text-sm font-semibold uppercase tracking-wide text-texto-fraco">Enviados recentemente</h3>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {comp.clipesRecentes.map((c) => (
-              <div key={c.id} className="panel-cut-sm border border-borda p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-mono text-xs text-texto">{c.nick}</span>
-                  <span className="font-display font-bold text-destaque">{c.pontuacao.total}</span>
-                </div>
-              </div>
+              <CardClipeCompeticao
+                key={c.id}
+                clipe={c}
+                autor
+                chave={`feed:${c.id}`}
+                aberto={clipeAberto === `feed:${c.id}`}
+                onAbrir={setClipeAberto}
+                viewerSteamId={viewerSteamId}
+                location="feedCompeticao"
+              />
             ))}
           </div>
         </div>

@@ -1,28 +1,8 @@
 // site/client/src/components/SeletorClipesCompeticao.jsx
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { nomeMapa, dataHora } from '../lib/format.js'
-import { PlayerClipe, SnapshotPlaceholder, nomeDoKind } from './ui/PlayerClipe.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
-
-// Breakdown como TEXTO, não tooltip: a decisão "qual clipe vale mais" é tomada
-// aqui, e no celular não existe hover. Só entram os componentes que somaram.
-function partesDaPontuacao(p) {
-  const partes = []
-  if (p.kills > 0) partes.push(`${p.kills} kills ${p.pontosKills}`)
-  if (p.headshots > 0) partes.push(`${p.headshots} hs ${p.pontosHeadshots}`)
-  if (p.armas > 0) partes.push(`${p.armas} armas ${p.pontosArmas}`)
-  if (p.clutch) partes.push(`clutch ${p.clutch} ${p.pontosClutch}`)
-  return partes
-}
-
-// Sem Highlight correspondente (kind nulo) o rótulo cai pro número de kills, que
-// é mais informativo que o "MOMENTO" genérico quando o Jogador está escolhendo.
-function rotuloDaJogada(clipe) {
-  if (clipe.kind) return nomeDoKind(clipe.kind)
-  const kills = clipe.pontuacao?.kills
-  return kills > 0 ? `${kills} KILLS` : 'MOMENTO'
-}
+import CardClipeCompeticao from './CardClipeCompeticao.jsx'
 
 // Tela de seleção compartilhada — acionada tanto pelo botão "Enviar clipe" da aba
 // Competições quanto pelo atalho "Enviar pra competição →" dentro de Partida > Clipes.
@@ -61,7 +41,13 @@ export default function SeletorClipesCompeticao({ competicaoId, onFechar, onEnvi
         }
         return res.json()
       })
-      .then((body) => { setClipes(body.clipes ?? []); setLimites(body.limites ?? null) })
+      .then((body) => {
+        // O card compartilhado exige `id`; /elegiveis devolve `allstarClipId` por
+        // contrato anterior. Normaliza aqui, na fronteira, em vez de o card
+        // aceitar duas chaves.
+        setClipes((body.clipes ?? []).map((c) => ({ ...c, id: c.allstarClipId })))
+        setLimites(body.limites ?? null)
+      })
       .catch(() => {
         setErro('Falha ao carregar os clipes elegíveis. Tente novamente.')
         setClipes([]); setLimites(null)
@@ -123,72 +109,23 @@ export default function SeletorClipesCompeticao({ competicaoId, onFechar, onEnvi
         ) : (
           <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
             {clipes.map((c) => (
-              <div key={c.allstarClipId} className="panel-cut-sm border border-borda p-3">
-                {clipeAberto === c.allstarClipId ? (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => setClipeAberto(null)}
-                      className="mt-3 font-mono text-xs uppercase text-texto-fraco hover:text-texto"
-                    >
-                      fechar
-                    </button>
-                    <PlayerClipe
-                      clipUrl={c.clipUrl}
-                      viewerSteamId={jogador?.steamId}
-                      titulo={`${nomeMapa(c.map)} round ${c.roundNumber}`}
-                      location="selecaoCompeticao"
-                    />
-                  </>
-                ) : c.clipSnapshotUrl ? (
+              <CardClipeCompeticao
+                key={c.id}
+                clipe={c}
+                aberto={clipeAberto === c.id}
+                onAbrir={setClipeAberto}
+                viewerSteamId={jogador?.steamId}
+                location="selecaoCompeticao"
+                acao={
                   <button
-                    type="button"
-                    onClick={() => setClipeAberto(clipeAberto === c.allstarClipId ? null : c.allstarClipId)}
-                    aria-label={`Assistir clipe de ${nomeMapa(c.map)} round ${c.roundNumber}`}
-                    className="relative mt-3 block aspect-video w-full border border-borda"
+                    onClick={() => enviar(c.allstarClipId)}
+                    disabled={c.jaEnviado || enviando === c.allstarClipId || Boolean(motivoBloqueio)}
+                    className="panel-cut-sm mt-2 min-h-10 w-full border border-borda px-3 font-mono text-xs uppercase text-texto-fraco hover:border-destaque/50 hover:text-destaque disabled:opacity-50 lg:min-h-0"
                   >
-                    <img src={c.clipSnapshotUrl} alt="" className="h-full w-full object-cover" />
-                    <span className="absolute inset-0 flex items-center justify-center bg-fundo/40 font-mono text-xs uppercase tracking-widest text-texto">
-                      ▶ assistir
-                    </span>
+                    {c.jaEnviado ? 'já enviado' : motivoBloqueio ? motivoBloqueio : enviando === c.allstarClipId ? '…' : 'enviar'}
                   </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setClipeAberto(clipeAberto === c.allstarClipId ? null : c.allstarClipId)}
-                    aria-label={`Assistir clipe de ${nomeMapa(c.map)} round ${c.roundNumber}`}
-                    className="block w-full"
-                  >
-                    <SnapshotPlaceholder />
-                  </button>
-                )}
-
-                <div className="mt-3 flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <span className="panel-cut-sm border border-destaque/40 bg-destaque/10 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-widest text-destaque">
-                      {rotuloDaJogada(c)}
-                    </span>
-                    <p className="mt-1 font-mono text-xs text-texto-fraco">
-                      {nomeMapa(c.map)} · {dataHora(c.playedAt)} · round {c.roundNumber}
-                    </p>
-                  </div>
-                  <span className="font-display text-lg font-bold text-destaque">{c.pontuacao.total}</span>
-                </div>
-
-                {partesDaPontuacao(c.pontuacao).length > 0 && (
-                  <p className="mt-1 font-mono text-[11px] text-texto-fraco">
-                    {partesDaPontuacao(c.pontuacao).join(' · ')}
-                  </p>
-                )}
-
-                <button
-                  onClick={() => enviar(c.allstarClipId)}
-                  disabled={c.jaEnviado || enviando === c.allstarClipId || Boolean(motivoBloqueio)}
-                  className="panel-cut-sm mt-2 min-h-10 w-full border border-borda px-3 font-mono text-xs uppercase text-texto-fraco hover:border-destaque/50 hover:text-destaque disabled:opacity-50 lg:min-h-0"
-                >
-                  {c.jaEnviado ? 'já enviado' : motivoBloqueio ? motivoBloqueio : enviando === c.allstarClipId ? '…' : 'enviar'}
-                </button>
-              </div>
+                }
+              />
             ))}
           </div>
         )}

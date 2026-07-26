@@ -1,6 +1,6 @@
 // site/client/src/test/Competicoes.test.jsx
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { AuthProvider } from '../auth/AuthContext.jsx'
 import Competicoes from '../pages/Competicoes.jsx'
 
@@ -48,6 +48,187 @@ describe('Competicoes', () => {
     render(<Competicoes />)
     await waitFor(() => expect(screen.getByText('troya')).toBeInTheDocument())
     expect(screen.getByText(/ainda n[ãa]o qualificado/i)).toBeInTheDocument()
+  })
+
+  // Monta a resposta da competição e a dos clipes de um Jogador na mesma função,
+  // despachando por URL — a página busca /api/competicoes no mount e
+  // /jogador/:steamId/clipes só quando o leaderboard expande.
+  function mockCompeticaoComClipesDoJogador(clipes) {
+    return vi.fn().mockImplementation((url) => {
+      if (String(url).includes('/jogador/999/clipes')) {
+        return Promise.resolve({ ok: true, json: async () => ({ clipes }) })
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          ativa: {
+            id: 'comp1', nome: 'Semana 1', premioDescricao: 'Skin',
+            dataFim: new Date(Date.now() + 86400000).toISOString(),
+            limiteDiario: 2, limiteTotal: 10, minimoParaRankear: 3, clipesRecentes: [],
+            leaderboard: [{ steamId: '999', nick: 'adversario', avatarUrl: null, total: 148, qualificado: true }],
+          },
+          encerradas: [],
+        }),
+      })
+    })
+  }
+
+  const chamadasDeClipes = () =>
+    global.fetch.mock.calls.filter(([url]) => String(url).includes('/jogador/999/clipes')).length
+
+  it('expandir um Jogador do leaderboard busca e mostra os clipes dele', async () => {
+    global.fetch = mockCompeticaoComClipesDoJogador([{
+      id: 'c1', clipUrl: 'https://allstar/c1', clipSnapshotUrl: null,
+      map: 'de_mirage', playedAt: '2026-07-25T03:37:00Z', roundNumber: 7, kind: 'quad',
+      pontuacao: { kills: 4, pontosKills: 80, total: 80 },
+    }])
+    render(<Competicoes />)
+
+    await waitFor(() => expect(screen.getByText('adversario')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /adversario/i }))
+
+    await waitFor(() => expect(screen.getByText('QUAD KILL')).toBeInTheDocument())
+    expect(screen.getByText(/Mirage/)).toBeInTheDocument()
+  })
+
+  it('recolher e expandir de novo nao refaz a busca', async () => {
+    global.fetch = mockCompeticaoComClipesDoJogador([])
+    render(<Competicoes />)
+    await waitFor(() => expect(screen.getByText('adversario')).toBeInTheDocument())
+
+    const linha = screen.getByRole('button', { name: /adversario/i })
+    fireEvent.click(linha)
+    await waitFor(() => expect(chamadasDeClipes()).toBe(1))
+    fireEvent.click(linha)   // recolhe
+    fireEvent.click(linha)   // expande de novo
+    expect(chamadasDeClipes()).toBe(1)
+  })
+
+  it('o mesmo clipe no feed E na expansao do leaderboard: abrir no feed toca so um player', async () => {
+    // Clipe 'c1' aparece nas duas listas (o Clipe de um jogador bem colocado quase
+    // sempre está no feed e na expansão da linha dele) — abrir no feed não pode
+    // montar o <PlayerClipe> do card do leaderboard também.
+    const clipe = {
+      id: 'c1', clipUrl: 'https://allstar/c1', clipSnapshotUrl: null,
+      map: 'de_mirage', playedAt: '2026-07-25T03:37:00Z', roundNumber: 7, kind: 'quad',
+      pontuacao: { kills: 4, pontosKills: 80, total: 80 },
+    }
+    global.fetch = vi.fn().mockImplementation((url) => {
+      if (String(url).includes('/jogador/999/clipes')) {
+        return Promise.resolve({ ok: true, json: async () => ({ clipes: [clipe] }) })
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          ativa: {
+            id: 'comp1', nome: 'Semana 1', premioDescricao: 'Skin',
+            dataFim: new Date(Date.now() + 86400000).toISOString(),
+            limiteDiario: 2, limiteTotal: 10, minimoParaRankear: 3,
+            leaderboard: [{ steamId: '999', nick: 'adversario', avatarUrl: null, total: 148, qualificado: true }],
+            clipesRecentes: [{ ...clipe, nick: 'adversario', avatarUrl: null }],
+          },
+          encerradas: [],
+        }),
+      })
+    })
+    render(<Competicoes />)
+
+    // 'adversario' aparece duas vezes de cara: no autor do card do feed e no
+    // nick da linha do leaderboard.
+    await waitFor(() => expect(screen.getAllByText('adversario')).toHaveLength(2))
+    // Expande o leaderboard pra montar o card de lá também (mesmo clipe, segunda cópia).
+    fireEvent.click(screen.getByRole('button', { name: /adversario/i }))
+    await waitFor(() => expect(screen.getAllByText('QUAD KILL')).toHaveLength(2))
+
+    // Abre o player pelo card do feed. O Leaderboard é renderizado ANTES da seção
+    // "Enviados recentemente" em Competicoes.jsx, então o card do leaderboard vem
+    // primeiro no DOM — a ocorrência do feed é a segunda "assistir", índice [1].
+    fireEvent.click(screen.getAllByRole('button', { name: /assistir/i })[1])
+    await waitFor(() => expect(document.querySelectorAll('iframe')).toHaveLength(1))
+  })
+
+  it('falha ao buscar clipes de um jogador: mostra erro (nao "nenhum clipe") e reexpandir tenta de novo', async () => {
+    let chamadas = 0
+    global.fetch = vi.fn().mockImplementation((url) => {
+      if (String(url).includes('/jogador/999/clipes')) {
+        chamadas += 1
+        return Promise.resolve({ ok: false, status: 500, json: async () => ({}) })
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          ativa: {
+            id: 'comp1', nome: 'Semana 1', premioDescricao: 'Skin',
+            dataFim: new Date(Date.now() + 86400000).toISOString(),
+            limiteDiario: 2, limiteTotal: 10, minimoParaRankear: 3, clipesRecentes: [],
+            leaderboard: [{ steamId: '999', nick: 'adversario', avatarUrl: null, total: 148, qualificado: true }],
+          },
+          encerradas: [],
+        }),
+      })
+    })
+    render(<Competicoes />)
+
+    await waitFor(() => expect(screen.getByText('adversario')).toBeInTheDocument())
+    const linha = screen.getByRole('button', { name: /adversario/i })
+    fireEvent.click(linha)
+
+    await waitFor(() => expect(screen.getByText(/falha ao carregar/i)).toBeInTheDocument())
+    expect(screen.queryByText(/nenhum clipe pra mostrar/i)).not.toBeInTheDocument()
+    expect(chamadas).toBe(1)
+
+    fireEvent.click(linha) // recolhe
+    fireEvent.click(linha) // reexpande — como o erro não foi cacheado, tenta de novo
+    await waitFor(() => expect(chamadas).toBe(2))
+  })
+
+  it('falha na 1a busca e sucesso na reexpansao: a mensagem de erro some e da lugar aos clipes', async () => {
+    // Regressão: o handler de sucesso só gravava clipesPorJogador, sem limpar
+    // erroPorJogador — um erro registrado por uma requisição atrasada (ou por uma
+    // tentativa anterior) ficava preso pra sempre em cima de dados já cacheados,
+    // porque o early-return do cache de sucesso nunca mais deixa o efeito rodar
+    // de novo pra limpar o erro.
+    let chamadas = 0
+    global.fetch = vi.fn().mockImplementation((url) => {
+      if (String(url).includes('/jogador/999/clipes')) {
+        chamadas += 1
+        if (chamadas === 1) return Promise.resolve({ ok: false, status: 500, json: async () => ({}) })
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            clipes: [{
+              id: 'c1', clipUrl: 'https://allstar/c1', clipSnapshotUrl: null,
+              map: 'de_mirage', playedAt: '2026-07-25T03:37:00Z', roundNumber: 7, kind: 'quad',
+              pontuacao: { kills: 4, pontosKills: 80, total: 80 },
+            }],
+          }),
+        })
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          ativa: {
+            id: 'comp1', nome: 'Semana 1', premioDescricao: 'Skin',
+            dataFim: new Date(Date.now() + 86400000).toISOString(),
+            limiteDiario: 2, limiteTotal: 10, minimoParaRankear: 3, clipesRecentes: [],
+            leaderboard: [{ steamId: '999', nick: 'adversario', avatarUrl: null, total: 148, qualificado: true }],
+          },
+          encerradas: [],
+        }),
+      })
+    })
+    render(<Competicoes />)
+
+    await waitFor(() => expect(screen.getByText('adversario')).toBeInTheDocument())
+    const linha = screen.getByRole('button', { name: /adversario/i })
+
+    fireEvent.click(linha) // 1a expansão: falha
+    await waitFor(() => expect(screen.getByText(/falha ao carregar/i)).toBeInTheDocument())
+
+    fireEvent.click(linha) // recolhe
+    fireEvent.click(linha) // 2a expansão: sucesso
+    await waitFor(() => expect(screen.getByText('QUAD KILL')).toBeInTheDocument())
+    expect(screen.queryByText(/falha ao carregar/i)).not.toBeInTheDocument()
   })
 
   it('competicao encerrada com vencedor e tradelink liberado pro proprio vencedor', async () => {
@@ -207,5 +388,35 @@ describe('Competicoes', () => {
     await waitFor(() => expect(screen.getByText('Semana 1')).toBeInTheDocument())
     expect(screen.getByText(/jogadas dentro do per[íi]odo/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /enviar clipe/i })).toBeInTheDocument()
+  })
+
+  it('o feed mostra o clipe de outro Jogador com contexto e deixa assistir', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        ativa: {
+          id: 'comp1', nome: 'Semana 1', premioDescricao: 'Skin',
+          dataFim: new Date(Date.now() + 86400000).toISOString(),
+          limiteDiario: 2, limiteTotal: 10, minimoParaRankear: 3, leaderboard: [],
+          clipesRecentes: [{
+            id: 'c1', nick: 'adversario', avatarUrl: null,
+            clipUrl: 'https://allstar/c1', clipSnapshotUrl: 'https://allstar/c1.jpg',
+            map: 'de_inferno', playedAt: '2026-07-25T03:37:00Z', roundNumber: 18, kind: 'ace',
+            pontuacao: { kills: 5, pontosKills: 120, total: 120 },
+          }],
+        },
+        encerradas: [],
+      }),
+    })
+    render(<Competicoes />)
+
+    await waitFor(() => expect(screen.getByText('adversario')).toBeInTheDocument())
+    expect(screen.getByText('ACE')).toBeInTheDocument()
+    expect(screen.getByText(/Inferno/)).toBeInTheDocument()
+    expect(screen.getByText(/round 18/)).toBeInTheDocument()
+
+    expect(document.querySelector('iframe')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /assistir/i }))
+    expect(document.querySelector('iframe')).toBeTruthy()
   })
 })

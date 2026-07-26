@@ -76,13 +76,26 @@ async function calcularOuLerVencedor(db, comp) {
 // entre competições (mesma regra global: leaderboard/atividade sempre por competicao_id).
 // allstar_clips guarda match_id direto (migração 0042) — nunca usar join (inner) com
 // highlights aqui, mesma razão de buscarLeaderboard acima.
+// O join com highlights é LEFT LATERAL com limit 1: LEFT porque Clipe do fluxo
+// novo tem highlight_id nulo e sumiria; lateral+limit porque o mesmo Jogador pode
+// ter dois Highlights no mesmo round (ace + clutch), o que duplicaria o Clipe.
 async function buscarClipesRecentes(db, competicaoId) {
   const { rows } = await db.query(
     `select ac.id, ac.clip_url, ac.clip_snapshot_url, ac.pontuacao_total, ac.pontuacao_detalhe,
+            ac.round_number,
             cs.steam_id64, coalesce(p.nick, mp.nick) as nick, coalesce(p.avatar_url, sa.avatar_url) as avatar_url,
-            cs.enviado_em
+            cs.enviado_em, m.map, m.played_at, h.kind
      from competicao_submissoes cs
      join allstar_clips ac on ac.id = cs.allstar_clip_id
+     join matches m on m.id = ac.match_id
+     left join lateral (
+       select h.kind from highlights h
+       where h.match_id = ac.match_id
+         and h.steam_id64 = ac.steam_id64
+         and h.round_number = ac.round_number
+       order by h.kind
+       limit 1
+     ) h on true
      left join players p on p.steam_id64 = cs.steam_id64
      left join match_players mp on mp.match_id = ac.match_id and mp.steam_id64 = cs.steam_id64
      left join steam_avatares sa on sa.steam_id64 = cs.steam_id64
@@ -94,6 +107,7 @@ async function buscarClipesRecentes(db, competicaoId) {
   return rows.map((r) => ({
     id: r.id, clipUrl: r.clip_url, clipSnapshotUrl: r.clip_snapshot_url,
     steamId: r.steam_id64, nick: r.nick, avatarUrl: r.avatar_url,
+    map: r.map, playedAt: r.played_at, roundNumber: r.round_number, kind: r.kind ?? null,
     pontuacao: r.pontuacao_detalhe ?? { total: r.pontuacao_total ?? 0 },
   }))
 }
@@ -339,6 +353,66 @@ export function createCompeticoesRouter({ db, requireAuth }) {
         total, limiteTotal: comp.limite_total,
         minimoParaRankear: comp.minimo_para_rankear,
       },
+    })
+  })
+
+  // Clipes de um Jogador nesta Competição — alimenta a expansão de uma linha do
+  // leaderboard. requireAuth só, igual ao GET /api/competicoes, que já devolve o
+  // feed com as mesmas URLs de Clipe.
+  //
+  // O mapeamento é campo a campo DE PROPÓSITO: buscarSubmissoesDoJogador (usada
+  // pela tela de admin) devolve origemNaoVerificada e plataformaManual, que são
+  // conferência de admin e não podem chegar aos competidores. Espalhar o objeto
+  // faria um campo sensível acrescentado amanhã vazar sozinho.
+  router.get('/:id/jogador/:steamId/clipes', requireAuth, async (req, res) => {
+    if (!UUID_RE.test(req.params.id)) return res.status(404).json({ erro: 'competição não encontrada' })
+    const steamId = String(req.params.steamId)
+    if (!/^\d{1,20}$/.test(steamId)) return res.status(404).json({ erro: 'jogador não encontrado' })
+
+    const { rows: compRows } = await db.query('select id from competicoes where id = $1', [req.params.id])
+    if (!compRows.length) return res.status(404).json({ erro: 'competição não encontrada' })
+
+    // LEFT LATERAL com limit 1: LEFT porque Clipe do fluxo novo tem highlight_id
+    // nulo e sumiria com INNER; lateral+limit porque highlights não tem unique em
+    // (match_id, steam_id64, round_number) e o mesmo Jogador pode ter ace E
+    // clutch_1v4 no mesmo round, o que duplicaria a linha.
+    //
+    // limit 100 é defesa em profundidade: o número real de Clipes já é limitado por
+    // competicoes.limite_total (default 10), mas esse valor é editável por admin sem
+    // teto superior — um limit explícito e generoso evita que a query cresça sem fim.
+    const { rows } = await db.query(
+      `select ac.id, ac.clip_url, ac.clip_snapshot_url, ac.pontuacao_total, ac.pontuacao_detalhe,
+              ac.round_number, m.map, m.played_at, h.kind
+       from competicao_submissoes cs
+       join allstar_clips ac on ac.id = cs.allstar_clip_id
+       join matches m on m.id = ac.match_id
+       left join lateral (
+         select h.kind from highlights h
+         where h.match_id = ac.match_id
+           and h.steam_id64 = ac.steam_id64
+           and h.round_number = ac.round_number
+         order by h.kind
+         limit 1
+       ) h on true
+       where cs.competicao_id = $1 and cs.steam_id64 = $2
+       order by cs.enviado_em desc
+       limit 100`,
+      [compRows[0].id, steamId],
+    )
+    res.json({
+      // nick/avatarUrl são omitidos de propósito (diferente de buscarClipesRecentes
+      // acima): o autor já está na linha do leaderboard que o jogador expandiu pra
+      // chegar aqui, então repetir o nick em cada Clipe seria redundante.
+      clipes: rows.map((r) => ({
+        id: r.id,
+        clipUrl: r.clip_url,
+        clipSnapshotUrl: r.clip_snapshot_url,
+        map: r.map,
+        playedAt: r.played_at,
+        roundNumber: r.round_number,
+        kind: r.kind ?? null,
+        pontuacao: r.pontuacao_detalhe ?? { total: r.pontuacao_total ?? 0 },
+      })),
     })
   })
 

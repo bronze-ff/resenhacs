@@ -130,6 +130,80 @@ describe('GET /api/competicoes', () => {
     const comp = res.body.encerradas[0]
     expect(comp.vencedorSubmissoes).toBeUndefined()
   })
+
+  it('clipes recentes trazem o contexto da jogada', async () => {
+    const agora = new Date()
+    const playedAt = new Date('2026-07-25T00:37:00Z')
+    const { app } = appWith([
+      ['from competicoes', [{
+        id: 'comp1', nome: 'Teste', descricao: '', premio_descricao: 'Skin',
+        data_inicio: new Date(agora.getTime() - 86400000),
+        data_fim: new Date(agora.getTime() + 86400000),
+        limite_diario: 2, limite_total: 10, minimo_para_rankear: 3,
+        vencedor_steam_id64: null,
+      }]],
+      ['from competicao_submissoes cs', [{
+        id: 'c1', clip_url: 'https://allstar/c1', clip_snapshot_url: 'https://allstar/c1.jpg',
+        steam_id64: '765', nick: 'bronze', avatar_url: null,
+        map: 'de_inferno', played_at: playedAt, round_number: 18, kind: 'clutch_1v3',
+        pontuacao_total: 111, pontuacao_detalhe: { kills: 3, total: 111 },
+      }]],
+    ])
+    const res = await request(app).get('/api/competicoes').set('Cookie', cookieJogador)
+
+    const clipe = res.body.ativa.clipesRecentes[0]
+    expect(clipe.map).toBe('de_inferno')
+    expect(clipe.playedAt).toBe(playedAt.toISOString())
+    expect(clipe.roundNumber).toBe(18)
+    expect(clipe.kind).toBe('clutch_1v3')
+    expect(clipe.nick).toBe('bronze')
+    expect(clipe.clipUrl).toBe('https://allstar/c1')
+  })
+
+  it('clipe recente sem Highlight correspondente continua na lista, com kind nulo', async () => {
+    const agora = new Date()
+    const { app } = appWith([
+      ['from competicoes', [{
+        id: 'comp1', nome: 'Teste', descricao: '', premio_descricao: 'Skin',
+        data_inicio: new Date(agora.getTime() - 86400000),
+        data_fim: new Date(agora.getTime() + 86400000),
+        limite_diario: 2, limite_total: 10, minimo_para_rankear: 3,
+        vencedor_steam_id64: null,
+      }]],
+      ['from competicao_submissoes cs', [{
+        id: 'c1', clip_url: 'https://allstar/c1', clip_snapshot_url: null,
+        steam_id64: '765', nick: 'bronze', avatar_url: null,
+        map: 'de_dust2', played_at: new Date(), round_number: 4, kind: null,
+        pontuacao_total: 30, pontuacao_detalhe: null,
+      }]],
+    ])
+    const res = await request(app).get('/api/competicoes').set('Cookie', cookieJogador)
+
+    expect(res.body.ativa.clipesRecentes).toHaveLength(1)
+    expect(res.body.ativa.clipesRecentes[0].kind).toBeNull()
+    expect(res.body.ativa.clipesRecentes[0].pontuacao).toEqual({ total: 30 })
+  })
+
+  it('o feed usa left join lateral com limit 1 (Jogador com dois Highlights no mesmo round)', async () => {
+    const agora = new Date()
+    const { app, db } = appWith([
+      ['from competicoes', [{
+        id: 'comp1', nome: 'Teste', descricao: '', premio_descricao: 'Skin',
+        data_inicio: new Date(agora.getTime() - 86400000),
+        data_fim: new Date(agora.getTime() + 86400000),
+        limite_diario: 2, limite_total: 10, minimo_para_rankear: 3,
+        vencedor_steam_id64: null,
+      }]],
+    ])
+    await request(app).get('/api/competicoes').set('Cookie', cookieJogador)
+    // buscarLeaderboard também casa com 'from competicao_submissoes cs' e roda antes
+    // de buscarClipesRecentes na mesma requisição — pega a ÚLTIMA ocorrência, que é a
+    // query do feed (a do leaderboard não tem lateral nem limit).
+    const chamadas = db.query.mock.calls.filter((c) => c[0].includes('from competicao_submissoes cs'))
+    const q = chamadas[chamadas.length - 1][0]
+    expect(q).toContain('left join lateral')
+    expect(q).toContain('limit 1')
+  })
 })
 
 describe('POST /api/competicoes/admin', () => {
@@ -682,5 +756,85 @@ describe('PUT /api/competicoes/:id/confirmar-vencedor', () => {
     const res2 = await request(app).put(`/api/competicoes/${COMP_ID}/confirmar-vencedor`).set('Cookie', cookieAdmin)
     expect(res1.status).toBe(200)
     expect(res2.status).toBe(200)
+  })
+})
+
+describe('GET /api/competicoes/:id/jogador/:steamId/clipes', () => {
+  const ID = '11111111-1111-1111-1111-111111111111'
+
+  it('sem login: 401', async () => {
+    const { app } = appWith([])
+    expect((await request(app).get(`/api/competicoes/${ID}/jogador/765/clipes`)).status).toBe(401)
+  })
+
+  it('id de steamId invalido (nao numerico): 404', async () => {
+    const { app } = appWith([['from competicoes', [{ id: 'comp1' }]]])
+    const res = await request(app).get(`/api/competicoes/${ID}/jogador/abc/clipes`).set('Cookie', cookieJogador)
+    expect(res.status).toBe(404)
+  })
+
+  it('competicao inexistente: 404', async () => {
+    const { app } = appWith([])
+    const res = await request(app).get(`/api/competicoes/${ID}/jogador/765/clipes`).set('Cookie', cookieJogador)
+    expect(res.status).toBe(404)
+    expect(res.body.erro).toBe('competição não encontrada')
+  })
+
+  it('id nao-uuid: 404', async () => {
+    const { app } = appWith([['from competicoes', [{ id: 'comp1' }]]])
+    const res = await request(app).get('/api/competicoes/nao-uuid/jogador/765/clipes').set('Cookie', cookieJogador)
+    expect(res.status).toBe(404)
+    expect(res.body.erro).toBe('competição não encontrada')
+  })
+
+  it('devolve os clipes daquele Jogador com o contexto da jogada', async () => {
+    const playedAt = new Date('2026-07-25T00:37:00Z')
+    const { app, db } = appWith([
+      ['from competicoes', [{ id: 'comp1' }]],
+      ['from competicao_submissoes cs', [{
+        id: 'c1', clip_url: 'https://allstar/c1', clip_snapshot_url: 'https://allstar/c1.jpg',
+        map: 'de_inferno', played_at: playedAt, round_number: 18, kind: 'ace',
+        pontuacao_total: 111, pontuacao_detalhe: { kills: 3, total: 111 },
+      }]],
+    ])
+    // steamId da URL (888) é diferente do steamId da sessão (cookieJogador é 765) — se a
+    // rota usasse req.player.steamId em vez de req.params.steamId, o teste passaria
+    // igual, mas a expansão do leaderboard mostraria os clipes errados na tela.
+    const res = await request(app).get(`/api/competicoes/${ID}/jogador/888/clipes`).set('Cookie', cookieJogador)
+
+    expect(res.status).toBe(200)
+    expect(res.body.clipes).toEqual([{
+      id: 'c1', clipUrl: 'https://allstar/c1', clipSnapshotUrl: 'https://allstar/c1.jpg',
+      map: 'de_inferno', playedAt: playedAt.toISOString(), roundNumber: 18, kind: 'ace',
+      pontuacao: { kills: 3, total: 111 },
+    }])
+    // escopo: a query filtra pela competição e pelo steamId da URL, nunca pelo da sessão
+    const [, params] = db.query.mock.calls.find((c) => c[0].includes('from competicao_submissoes cs'))
+    expect(params).toEqual(['comp1', '888'])
+  })
+
+  it('NAO devolve os campos de conferencia do admin', async () => {
+    // origemNaoVerificada e plataformaManual existem pra o admin checar o vencedor
+    // antes de liberar o premio — exibir isso pros competidores foi decidido contra.
+    // O mock devolve source/plataforma_manual (snake_case, como viria do Postgres) —
+    // travar o shape inteiro da resposta (em vez de só os campos camelCase) garante
+    // que um spread acidental da linha crua (que vazaria `source`/`plataforma_manual`)
+    // também quebre o teste.
+    const { app } = appWith([
+      ['from competicoes', [{ id: 'comp1' }]],
+      ['from competicao_submissoes cs', [{
+        id: 'c1', clip_url: 'https://allstar/c1', clip_snapshot_url: null,
+        map: 'de_dust2', played_at: new Date(), round_number: 4, kind: null,
+        pontuacao_total: 30, pontuacao_detalhe: null,
+        source: 'upload', plataforma_manual: 'faceit',
+      }]],
+    ])
+    const res = await request(app).get(`/api/competicoes/${ID}/jogador/765/clipes`).set('Cookie', cookieJogador)
+
+    expect(res.status).toBe(200)
+    expect(Object.keys(res.body.clipes[0]).sort()).toEqual(
+      ['clipSnapshotUrl', 'clipUrl', 'id', 'kind', 'map', 'playedAt', 'pontuacao', 'roundNumber'],
+    )
+    expect(res.body.clipes[0].pontuacao).toEqual({ total: 30 })
   })
 })
