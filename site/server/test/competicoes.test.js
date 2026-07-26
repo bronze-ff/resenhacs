@@ -307,36 +307,69 @@ describe('GET /api/competicoes/:id/elegiveis', () => {
     expect(res.status).toBe(404)
   })
 
-  it('lista so os clipes PROPRIOS, Processed, com partida dentro do periodo', async () => {
-    const { app, db } = appWith([
-      ['from competicoes where id', [{ id: 'comp1', data_inicio: '2026-07-23T00:00:00Z', data_fim: '2026-07-30T00:00:00Z' }]],
-      ['from allstar_clips ac', [
-        { id: 'clip1', match_id: 'm1', round_number: 9, map: 'de_dust2', pontuacao_total: 100, ja_enviado: false },
-      ]],
+  const ID = '11111111-1111-1111-1111-111111111111'
+
+  function appComElegiveis(clipes) {
+    const agora = new Date()
+    return appWith([
+      ['from competicoes', [{
+        id: 'comp1',
+        data_inicio: new Date(agora.getTime() - 86400000),
+        data_fim: new Date(agora.getTime() + 86400000),
+        limite_diario: 2, limite_total: 10, minimo_para_rankear: 3,
+      }]],
+      ['from allstar_clips', clipes],
+      ['from competicao_submissoes', [{ hoje: '1', total: '4' }]],
     ])
-    const res = await request(app).get(`/api/competicoes/${'a'.repeat(8)}-${'a'.repeat(4)}-${'a'.repeat(4)}-${'a'.repeat(4)}-${'a'.repeat(12)}/elegiveis`).set('Cookie', cookieJogador)
+  }
+
+  it('devolve clipes e limites, com contexto do clipe', async () => {
+    const playedAt = new Date('2026-07-25T00:37:00Z')
+    const { app } = appComElegiveis([{
+      id: 'c1', match_id: 'm1', round_number: 18, map: 'de_inferno',
+      played_at: playedAt, kind: 'clutch_1v3',
+      clip_url: 'https://allstar/c1?x=1', clip_snapshot_url: 'https://allstar/c1.jpg',
+      pontuacao_total: 111, pontuacao_detalhe: { kills: 3, total: 111 },
+      ja_enviado: false,
+    }])
+    const res = await request(app).get(`/api/competicoes/${ID}/elegiveis`).set('Cookie', cookieJogador)
+
     expect(res.status).toBe(200)
-    expect(res.body[0].allstarClipId).toBe('clip1')
-    const [sql, params] = db.query.mock.calls.find(([s]) => s.includes('from allstar_clips ac'))
-    expect(params).toContain('765') // steamId do cookie, nunca outro
+    expect(res.body.clipes).toHaveLength(1)
+    expect(res.body.clipes[0]).toEqual({
+      allstarClipId: 'c1', matchId: 'm1', roundNumber: 18, map: 'de_inferno',
+      playedAt: playedAt.toISOString(), kind: 'clutch_1v3',
+      clipUrl: 'https://allstar/c1?x=1', clipSnapshotUrl: 'https://allstar/c1.jpg',
+      pontuacao: { kills: 3, total: 111 }, jaEnviado: false,
+    })
+    expect(res.body.limites).toEqual({
+      hoje: 1, limiteDiario: 2, total: 4, limiteTotal: 10, minimoParaRankear: 3,
+    })
   })
 
-  it('nao faz join (inner) com highlights - clipe do fluxo por-jogador (highlight_id nulo) nao pode sumir', async () => {
-    // Regressao: allstar_clips guarda match_id/steam_id64/round_number direto desde a
-    // migracao 0042 (clipe virou "por jogador+partida"). Um `join highlights h on h.id
-    // = ac.highlight_id` excluiria silenciosamente todo clipe gerado por esse fluxo
-    // (highlight_id fica nulo pra eles) - ja foi um bug real aqui.
-    const { app, db } = appWith([
-      ['from competicoes where id', [{ id: 'comp1', data_inicio: '2026-07-23T00:00:00Z', data_fim: '2026-07-30T00:00:00Z' }]],
-      ['from allstar_clips ac', [
-        { id: 'clip1', match_id: 'm1', round_number: null, map: 'de_dust2', pontuacao_total: 100, ja_enviado: false },
-      ]],
-    ])
-    const res = await request(app).get(`/api/competicoes/${'a'.repeat(8)}-${'a'.repeat(4)}-${'a'.repeat(4)}-${'a'.repeat(4)}-${'a'.repeat(12)}/elegiveis`).set('Cookie', cookieJogador)
-    expect(res.status).toBe(200)
-    expect(res.body[0].allstarClipId).toBe('clip1')
-    const [sql] = db.query.mock.calls.find(([s]) => s.includes('from allstar_clips ac'))
-    expect(sql).not.toContain('join highlights')
+  it('clipe sem highlight correspondente continua na lista, com kind nulo', async () => {
+    // Regressão: clipes do fluxo novo têm highlight_id nulo. Um join INNER faria
+    // eles sumirem da lista de elegíveis.
+    const { app } = appComElegiveis([{
+      id: 'c1', match_id: 'm1', round_number: 18, map: 'de_inferno',
+      played_at: new Date(), kind: null,
+      clip_url: 'https://allstar/c1', clip_snapshot_url: null,
+      pontuacao_total: 30, pontuacao_detalhe: null, ja_enviado: false,
+    }])
+    const res = await request(app).get(`/api/competicoes/${ID}/elegiveis`).set('Cookie', cookieJogador)
+
+    expect(res.body.clipes).toHaveLength(1)
+    expect(res.body.clipes[0].kind).toBeNull()
+    expect(res.body.clipes[0].pontuacao).toEqual({ total: 30 })
+  })
+
+  it('o join com highlights e LEFT e colapsa em uma linha por clipe', async () => {
+    const { app, db } = appComElegiveis([])
+    await request(app).get(`/api/competicoes/${ID}/elegiveis`).set('Cookie', cookieJogador)
+    const q = db.query.mock.calls.find((c) => c[0].includes('from allstar_clips'))[0]
+    expect(q).toContain('left join lateral')
+    // sem o limit 1, um round com ace E clutch duplicaria o clipe na lista
+    expect(q).toContain('limit 1')
   })
 })
 

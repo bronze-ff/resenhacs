@@ -296,30 +296,50 @@ export function createCompeticoesRouter({ db, requireAuth }) {
   router.get('/:id/elegiveis', requireAuth, async (req, res) => {
     if (!UUID_RE.test(req.params.id)) return res.status(404).json({ erro: 'competição não encontrada' })
     const { rows: compRows } = await db.query(
-      'select id, data_inicio, data_fim from competicoes where id = $1',
+      'select id, data_inicio, data_fim, limite_diario, limite_total, minimo_para_rankear from competicoes where id = $1',
       [req.params.id],
     )
     if (!compRows.length) return res.status(404).json({ erro: 'competição não encontrada' })
     const comp = compRows[0]
     // allstar_clips guarda match_id/steam_id64/round_number direto (migração 0042) —
-    // nunca usar join (inner) com highlights aqui, ou clipes gerados pelo fluxo novo
-    // (highlight_id nulo) sumiriam da lista de elegíveis.
+    // o join com highlights é LEFT LATERAL, nunca inner: clipes gerados pelo fluxo
+    // novo (highlight_id nulo) sumiriam da lista, e o mesmo Jogador pode ter DOIS
+    // highlights no mesmo round (ace + clutch), o que duplicaria a linha do Clipe.
     const { rows } = await db.query(
       `select ac.id, ac.match_id, ac.round_number, ac.pontuacao_total, ac.pontuacao_detalhe,
-              m.map,
+              ac.clip_url, ac.clip_snapshot_url,
+              m.map, m.played_at, h.kind,
               exists (select 1 from competicao_submissoes cs where cs.competicao_id = $1 and cs.allstar_clip_id = ac.id) as ja_enviado
        from allstar_clips ac
        join matches m on m.id = ac.match_id
+       left join lateral (
+         select h.kind from highlights h
+         where h.match_id = ac.match_id
+           and h.steam_id64 = ac.steam_id64
+           and h.round_number = ac.round_number
+         order by h.kind
+         limit 1
+       ) h on true
        where ac.steam_id64 = $2 and ac.status = 'Processed'
          and m.played_at >= $3 and m.played_at <= $4
        order by m.played_at desc`,
       [comp.id, req.player.steamId, comp.data_inicio, comp.data_fim],
     )
-    res.json(rows.map((r) => ({
-      allstarClipId: r.id, matchId: r.match_id, roundNumber: r.round_number,
-      map: r.map, pontuacao: r.pontuacao_detalhe ?? { total: r.pontuacao_total ?? 0 },
-      jaEnviado: r.ja_enviado,
-    })))
+    const { hoje, total } = await contarSubmissoes(db, comp.id, req.player.steamId)
+    res.json({
+      clipes: rows.map((r) => ({
+        allstarClipId: r.id, matchId: r.match_id, roundNumber: r.round_number,
+        map: r.map, playedAt: r.played_at, kind: r.kind ?? null,
+        clipUrl: r.clip_url, clipSnapshotUrl: r.clip_snapshot_url,
+        pontuacao: r.pontuacao_detalhe ?? { total: r.pontuacao_total ?? 0 },
+        jaEnviado: r.ja_enviado,
+      })),
+      limites: {
+        hoje, limiteDiario: comp.limite_diario,
+        total, limiteTotal: comp.limite_total,
+        minimoParaRankear: comp.minimo_para_rankear,
+      },
+    })
   })
 
   router.post('/:id/submissoes', limiteEstrito, requireAuth, async (req, res) => {
