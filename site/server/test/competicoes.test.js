@@ -9,7 +9,7 @@ const cookieAdmin = `resenha_token=${signToken({ steamId: '999', isSuperAdmin: t
 
 function appWith(handlers) {
   const db = {
-    query: vi.fn().mockImplementation((sql) => {
+    query: vi.fn().mockImplementation((sql, params) => {
       if (sql.includes('is_super_admin from players')) return Promise.resolve({ rows: [{ is_super_admin: true }] })
       for (const [needle, rows] of handlers) if (sql.includes(needle)) return Promise.resolve({ rows })
       return Promise.resolve({ rows: [] })
@@ -366,10 +366,12 @@ describe('GET /api/competicoes/:id/elegiveis', () => {
   it('o join com highlights e LEFT e colapsa em uma linha por clipe', async () => {
     const { app, db } = appComElegiveis([])
     await request(app).get(`/api/competicoes/${ID}/elegiveis`).set('Cookie', cookieJogador)
-    const q = db.query.mock.calls.find((c) => c[0].includes('from allstar_clips'))[0]
-    expect(q).toContain('left join lateral')
+    const [sql, params] = db.query.mock.calls.find((c) => c[0].includes('from allstar_clips'))
+    expect(sql).toContain('left join lateral')
     // sem o limit 1, um round com ace E clutch duplicaria o clipe na lista
-    expect(q).toContain('limit 1')
+    expect(sql).toContain('limit 1')
+    // Seguranca: garante que filtra por steamId do token (req.player.steamId), nunca por outro
+    expect(params).toContain('765')
   })
 })
 
