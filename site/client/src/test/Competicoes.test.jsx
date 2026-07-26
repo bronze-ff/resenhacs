@@ -1,6 +1,6 @@
 // site/client/src/test/Competicoes.test.jsx
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { AuthProvider } from '../auth/AuthContext.jsx'
 import Competicoes from '../pages/Competicoes.jsx'
 
@@ -207,5 +207,35 @@ describe('Competicoes', () => {
     await waitFor(() => expect(screen.getByText('Semana 1')).toBeInTheDocument())
     expect(screen.getByText(/jogadas dentro do per[íi]odo/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /enviar clipe/i })).toBeInTheDocument()
+  })
+
+  it('o feed mostra o clipe de outro Jogador com contexto e deixa assistir', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        ativa: {
+          id: 'comp1', nome: 'Semana 1', premioDescricao: 'Skin',
+          dataFim: new Date(Date.now() + 86400000).toISOString(),
+          limiteDiario: 2, limiteTotal: 10, minimoParaRankear: 3, leaderboard: [],
+          clipesRecentes: [{
+            id: 'c1', nick: 'adversario', avatarUrl: null,
+            clipUrl: 'https://allstar/c1', clipSnapshotUrl: 'https://allstar/c1.jpg',
+            map: 'de_inferno', playedAt: '2026-07-25T03:37:00Z', roundNumber: 18, kind: 'ace',
+            pontuacao: { kills: 5, pontosKills: 120, total: 120 },
+          }],
+        },
+        encerradas: [],
+      }),
+    })
+    render(<Competicoes />)
+
+    await waitFor(() => expect(screen.getByText('adversario')).toBeInTheDocument())
+    expect(screen.getByText('ACE')).toBeInTheDocument()
+    expect(screen.getByText(/Inferno/)).toBeInTheDocument()
+    expect(screen.getByText(/round 18/)).toBeInTheDocument()
+
+    expect(document.querySelector('iframe')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /assistir/i }))
+    expect(document.querySelector('iframe')).toBeTruthy()
   })
 })

@@ -4,6 +4,7 @@ import { SectionHeader, Card, Badge } from '../components/ui'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { contadorRegressivo, dataHora } from '../lib/format.js'
 import SeletorClipesCompeticao from '../components/SeletorClipesCompeticao.jsx'
+import CardClipeCompeticao from '../components/CardClipeCompeticao.jsx'
 
 function Leaderboard({ leaderboard, minimoParaRankear }) {
   const qualificados = leaderboard.filter((l) => l.qualificado)
@@ -33,6 +34,9 @@ function CardCompeticao({ comp, viewerSteamId, onTradelinkEnviado }) {
   const [tradelink, setTradelink] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [seletorAberto, setSeletorAberto] = useState(false)
+  // Um player tocando por vez em toda a tela: o estado mora aqui, acima do feed e
+  // do leaderboard, senão dois vídeos tocariam com áudio ao mesmo tempo.
+  const [clipeAberto, setClipeAberto] = useState(null)
   const [agora, setAgora] = useState(Date.now())
   useEffect(() => {
     const intervalo = window.setInterval(() => setAgora(Date.now()), 1000)
@@ -159,12 +163,15 @@ function CardCompeticao({ comp, viewerSteamId, onTradelinkEnviado }) {
           <h3 className="mb-2 font-display text-sm font-semibold uppercase tracking-wide text-texto-fraco">Enviados recentemente</h3>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {comp.clipesRecentes.map((c) => (
-              <div key={c.id} className="panel-cut-sm border border-borda p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-mono text-xs text-texto">{c.nick}</span>
-                  <span className="font-display font-bold text-destaque">{c.pontuacao.total}</span>
-                </div>
-              </div>
+              <CardClipeCompeticao
+                key={c.id}
+                clipe={c}
+                autor
+                aberto={clipeAberto === c.id}
+                onAbrir={setClipeAberto}
+                viewerSteamId={viewerSteamId}
+                location="feedCompeticao"
+              />
             ))}
           </div>
         </div>
