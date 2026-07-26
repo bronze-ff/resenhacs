@@ -140,8 +140,10 @@ describe('Competicoes', () => {
     fireEvent.click(screen.getByRole('button', { name: /adversario/i }))
     await waitFor(() => expect(screen.getAllByText('QUAD KILL')).toHaveLength(2))
 
-    // Abre o player pelo card do feed (primeira ocorrência de "assistir").
-    fireEvent.click(screen.getAllByRole('button', { name: /assistir/i })[0])
+    // Abre o player pelo card do feed. O Leaderboard é renderizado ANTES da seção
+    // "Enviados recentemente" em Competicoes.jsx, então o card do leaderboard vem
+    // primeiro no DOM — a ocorrência do feed é a segunda "assistir", índice [1].
+    fireEvent.click(screen.getAllByRole('button', { name: /assistir/i })[1])
     await waitFor(() => expect(document.querySelectorAll('iframe')).toHaveLength(1))
   })
 
@@ -178,6 +180,55 @@ describe('Competicoes', () => {
     fireEvent.click(linha) // recolhe
     fireEvent.click(linha) // reexpande — como o erro não foi cacheado, tenta de novo
     await waitFor(() => expect(chamadas).toBe(2))
+  })
+
+  it('falha na 1a busca e sucesso na reexpansao: a mensagem de erro some e da lugar aos clipes', async () => {
+    // Regressão: o handler de sucesso só gravava clipesPorJogador, sem limpar
+    // erroPorJogador — um erro registrado por uma requisição atrasada (ou por uma
+    // tentativa anterior) ficava preso pra sempre em cima de dados já cacheados,
+    // porque o early-return do cache de sucesso nunca mais deixa o efeito rodar
+    // de novo pra limpar o erro.
+    let chamadas = 0
+    global.fetch = vi.fn().mockImplementation((url) => {
+      if (String(url).includes('/jogador/999/clipes')) {
+        chamadas += 1
+        if (chamadas === 1) return Promise.resolve({ ok: false, status: 500, json: async () => ({}) })
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            clipes: [{
+              id: 'c1', clipUrl: 'https://allstar/c1', clipSnapshotUrl: null,
+              map: 'de_mirage', playedAt: '2026-07-25T03:37:00Z', roundNumber: 7, kind: 'quad',
+              pontuacao: { kills: 4, pontosKills: 80, total: 80 },
+            }],
+          }),
+        })
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          ativa: {
+            id: 'comp1', nome: 'Semana 1', premioDescricao: 'Skin',
+            dataFim: new Date(Date.now() + 86400000).toISOString(),
+            limiteDiario: 2, limiteTotal: 10, minimoParaRankear: 3, clipesRecentes: [],
+            leaderboard: [{ steamId: '999', nick: 'adversario', avatarUrl: null, total: 148, qualificado: true }],
+          },
+          encerradas: [],
+        }),
+      })
+    })
+    render(<Competicoes />)
+
+    await waitFor(() => expect(screen.getByText('adversario')).toBeInTheDocument())
+    const linha = screen.getByRole('button', { name: /adversario/i })
+
+    fireEvent.click(linha) // 1a expansão: falha
+    await waitFor(() => expect(screen.getByText(/falha ao carregar/i)).toBeInTheDocument())
+
+    fireEvent.click(linha) // recolhe
+    fireEvent.click(linha) // 2a expansão: sucesso
+    await waitFor(() => expect(screen.getByText('QUAD KILL')).toBeInTheDocument())
+    expect(screen.queryByText(/falha ao carregar/i)).not.toBeInTheDocument()
   })
 
   it('competicao encerrada com vencedor e tradelink liberado pro proprio vencedor', async () => {

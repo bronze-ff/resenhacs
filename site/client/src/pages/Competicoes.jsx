@@ -32,7 +32,10 @@ function Leaderboard({ leaderboard, minimoParaRankear, competicaoId, clipeAberto
           setErroPorJogador((atual) => ({ ...atual, [steamId]: 'Falha ao carregar os clipes desse jogador. Tente novamente.' }))
           return
         }
-        return res.json().then((body) => setClipesPorJogador((atual) => ({ ...atual, [steamId]: body.clipes ?? [] })))
+        return res.json().then((body) => {
+          setClipesPorJogador((atual) => ({ ...atual, [steamId]: body.clipes ?? [] }))
+          setErroPorJogador((atual) => ({ ...atual, [steamId]: null }))
+        })
       })
       .catch(() => {
         setErroPorJogador((atual) => ({ ...atual, [steamId]: 'Falha ao carregar os clipes desse jogador. Tente novamente.' }))
