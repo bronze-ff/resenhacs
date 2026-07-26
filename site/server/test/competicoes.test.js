@@ -431,6 +431,30 @@ describe('POST /api/competicoes/:id/submissoes', () => {
     expect(res.status).toBe(400)
     expect(res.body.erro).toMatch(/per[íi]odo/i)
   })
+
+  it('a contagem do dia usa o fuso de Brasilia, nao o do servidor', async () => {
+    const agora = new Date()
+    const { app, db } = appWith([
+      ['from competicoes', [{
+        id: 'comp1',
+        data_inicio: new Date(agora.getTime() - 86400000),
+        data_fim: new Date(agora.getTime() + 86400000),
+        limite_diario: 2, limite_total: 10,
+      }]],
+      ['from allstar_clips', [{ id: 'c1', played_at: agora }]],
+      ['from competicao_submissoes', [{ hoje: '0', total: '0' }]],
+    ])
+    await request(app)
+      .post('/api/competicoes/11111111-1111-1111-1111-111111111111/submissoes')
+      .set('Cookie', cookieJogador)
+      .send({ allstarClipId: '22222222-2222-2222-2222-222222222222' })
+
+    const contagem = db.query.mock.calls.find((c) => c[0].includes('count(*) filter'))
+    expect(contagem[0]).toContain("at time zone 'America/Sao_Paulo'")
+    // os DOIS lados da comparação precisam do at time zone — converter só um
+    // compararia data de Brasília com data UTC, que é o bug original ao contrário.
+    expect(contagem[0].match(/at time zone 'America\/Sao_Paulo'/g)).toHaveLength(2)
+  })
 })
 
 describe('leaderboard isolado por competicao', () => {

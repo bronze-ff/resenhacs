@@ -125,6 +125,28 @@ async function buscarSubmissoesDoJogador(db, competicaoId, steamId64) {
   }))
 }
 
+// Submissões do Jogador nesta Competição: no dia e no total. Fonte ÚNICA — o limite
+// aplicado no POST /submissoes e o contador exibido no seletor de clipes saem daqui,
+// senão a tela prometeria um envio que o servidor recusa.
+//
+// O fuso é explícito nos dois lados: `now()::date` sozinho usa o fuso do servidor
+// Postgres (UTC), o que fazia o limite diário virar às 21h de Brasília — um clipe
+// enviado às 22h contava como do dia seguinte.
+async function contarSubmissoes(db, competicaoId, steamId) {
+  const { rows } = await db.query(
+    `select
+       count(*) filter (
+         where (enviado_em at time zone 'America/Sao_Paulo')::date
+             = (now() at time zone 'America/Sao_Paulo')::date
+       ) as hoje,
+       count(*) as total
+     from competicao_submissoes
+     where competicao_id = $1 and steam_id64 = $2`,
+    [competicaoId, steamId],
+  )
+  return { hoje: Number(rows[0].hoje), total: Number(rows[0].total) }
+}
+
 export function createCompeticoesRouter({ db, requireAuth }) {
   const router = Router()
   const requireSuperAdmin = createRequireSuperAdmin(db)
@@ -334,17 +356,9 @@ export function createCompeticoesRouter({ db, requireAuth }) {
       return res.status(400).json({ erro: 'a partida desse clipe está fora do período da competição' })
     }
 
-    const { rows: contagemRows } = await db.query(
-      `select
-         count(*) filter (where enviado_em::date = now()::date) as hoje,
-         count(*) as total
-       from competicao_submissoes
-       where competicao_id = $1 and steam_id64 = $2`,
-      [comp.id, req.player.steamId],
-    )
-    const { hoje, total } = contagemRows[0]
-    if (Number(hoje) >= comp.limite_diario) return res.status(400).json({ erro: `limite diário de ${comp.limite_diario} clipes atingido` })
-    if (Number(total) >= comp.limite_total) return res.status(400).json({ erro: `limite total de ${comp.limite_total} clipes atingido` })
+    const { hoje, total } = await contarSubmissoes(db, comp.id, req.player.steamId)
+    if (hoje >= comp.limite_diario) return res.status(400).json({ erro: `limite diário de ${comp.limite_diario} clipes atingido` })
+    if (total >= comp.limite_total) return res.status(400).json({ erro: `limite total de ${comp.limite_total} clipes atingido` })
 
     await db.query(
       'insert into competicao_submissoes (competicao_id, allstar_clip_id, steam_id64) values ($1, $2, $3) on conflict do nothing',
