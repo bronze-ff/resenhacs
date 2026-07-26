@@ -125,6 +125,28 @@ async function buscarSubmissoesDoJogador(db, competicaoId, steamId64) {
   }))
 }
 
+// Submissões do Jogador nesta Competição: no dia e no total. Fonte ÚNICA — o limite
+// aplicado no POST /submissoes e o contador exibido no seletor de clipes saem daqui,
+// senão a tela prometeria um envio que o servidor recusa.
+//
+// O fuso é explícito nos dois lados: `now()::date` sozinho usa o fuso do servidor
+// Postgres (UTC), o que fazia o limite diário virar às 21h de Brasília — um clipe
+// enviado às 22h contava como do dia seguinte.
+async function contarSubmissoes(db, competicaoId, steamId) {
+  const { rows } = await db.query(
+    `select
+       count(*) filter (
+         where (enviado_em at time zone 'America/Sao_Paulo')::date
+             = (now() at time zone 'America/Sao_Paulo')::date
+       ) as hoje,
+       count(*) as total
+     from competicao_submissoes
+     where competicao_id = $1 and steam_id64 = $2`,
+    [competicaoId, steamId],
+  )
+  return { hoje: Number(rows[0].hoje), total: Number(rows[0].total) }
+}
+
 export function createCompeticoesRouter({ db, requireAuth }) {
   const router = Router()
   const requireSuperAdmin = createRequireSuperAdmin(db)
@@ -274,30 +296,50 @@ export function createCompeticoesRouter({ db, requireAuth }) {
   router.get('/:id/elegiveis', requireAuth, async (req, res) => {
     if (!UUID_RE.test(req.params.id)) return res.status(404).json({ erro: 'competição não encontrada' })
     const { rows: compRows } = await db.query(
-      'select id, data_inicio, data_fim from competicoes where id = $1',
+      'select id, data_inicio, data_fim, limite_diario, limite_total, minimo_para_rankear from competicoes where id = $1',
       [req.params.id],
     )
     if (!compRows.length) return res.status(404).json({ erro: 'competição não encontrada' })
     const comp = compRows[0]
     // allstar_clips guarda match_id/steam_id64/round_number direto (migração 0042) —
-    // nunca usar join (inner) com highlights aqui, ou clipes gerados pelo fluxo novo
-    // (highlight_id nulo) sumiriam da lista de elegíveis.
+    // o join com highlights é LEFT LATERAL, nunca inner: clipes gerados pelo fluxo
+    // novo (highlight_id nulo) sumiriam da lista, e o mesmo Jogador pode ter DOIS
+    // highlights no mesmo round (ace + clutch), o que duplicaria a linha do Clipe.
     const { rows } = await db.query(
       `select ac.id, ac.match_id, ac.round_number, ac.pontuacao_total, ac.pontuacao_detalhe,
-              m.map,
+              ac.clip_url, ac.clip_snapshot_url,
+              m.map, m.played_at, h.kind,
               exists (select 1 from competicao_submissoes cs where cs.competicao_id = $1 and cs.allstar_clip_id = ac.id) as ja_enviado
        from allstar_clips ac
        join matches m on m.id = ac.match_id
+       left join lateral (
+         select h.kind from highlights h
+         where h.match_id = ac.match_id
+           and h.steam_id64 = ac.steam_id64
+           and h.round_number = ac.round_number
+         order by h.kind
+         limit 1
+       ) h on true
        where ac.steam_id64 = $2 and ac.status = 'Processed'
          and m.played_at >= $3 and m.played_at <= $4
        order by m.played_at desc`,
       [comp.id, req.player.steamId, comp.data_inicio, comp.data_fim],
     )
-    res.json(rows.map((r) => ({
-      allstarClipId: r.id, matchId: r.match_id, roundNumber: r.round_number,
-      map: r.map, pontuacao: r.pontuacao_detalhe ?? { total: r.pontuacao_total ?? 0 },
-      jaEnviado: r.ja_enviado,
-    })))
+    const { hoje, total } = await contarSubmissoes(db, comp.id, req.player.steamId)
+    res.json({
+      clipes: rows.map((r) => ({
+        allstarClipId: r.id, matchId: r.match_id, roundNumber: r.round_number,
+        map: r.map, playedAt: r.played_at, kind: r.kind ?? null,
+        clipUrl: r.clip_url, clipSnapshotUrl: r.clip_snapshot_url,
+        pontuacao: r.pontuacao_detalhe ?? { total: r.pontuacao_total ?? 0 },
+        jaEnviado: r.ja_enviado,
+      })),
+      limites: {
+        hoje, limiteDiario: comp.limite_diario,
+        total, limiteTotal: comp.limite_total,
+        minimoParaRankear: comp.minimo_para_rankear,
+      },
+    })
   })
 
   router.post('/:id/submissoes', limiteEstrito, requireAuth, async (req, res) => {
@@ -334,17 +376,9 @@ export function createCompeticoesRouter({ db, requireAuth }) {
       return res.status(400).json({ erro: 'a partida desse clipe está fora do período da competição' })
     }
 
-    const { rows: contagemRows } = await db.query(
-      `select
-         count(*) filter (where enviado_em::date = now()::date) as hoje,
-         count(*) as total
-       from competicao_submissoes
-       where competicao_id = $1 and steam_id64 = $2`,
-      [comp.id, req.player.steamId],
-    )
-    const { hoje, total } = contagemRows[0]
-    if (Number(hoje) >= comp.limite_diario) return res.status(400).json({ erro: `limite diário de ${comp.limite_diario} clipes atingido` })
-    if (Number(total) >= comp.limite_total) return res.status(400).json({ erro: `limite total de ${comp.limite_total} clipes atingido` })
+    const { hoje, total } = await contarSubmissoes(db, comp.id, req.player.steamId)
+    if (hoje >= comp.limite_diario) return res.status(400).json({ erro: `limite diário de ${comp.limite_diario} clipes atingido` })
+    if (total >= comp.limite_total) return res.status(400).json({ erro: `limite total de ${comp.limite_total} clipes atingido` })
 
     await db.query(
       'insert into competicao_submissoes (competicao_id, allstar_clip_id, steam_id64) values ($1, $2, $3) on conflict do nothing',
