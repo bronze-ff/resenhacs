@@ -376,6 +376,10 @@ export function createCompeticoesRouter({ db, requireAuth }) {
     // nulo e sumiria com INNER; lateral+limit porque highlights não tem unique em
     // (match_id, steam_id64, round_number) e o mesmo Jogador pode ter ace E
     // clutch_1v4 no mesmo round, o que duplicaria a linha.
+    //
+    // limit 100 é defesa em profundidade: o número real de Clipes já é limitado por
+    // competicoes.limite_total (default 10), mas esse valor é editável por admin sem
+    // teto superior — um limit explícito e generoso evita que a query cresça sem fim.
     const { rows } = await db.query(
       `select ac.id, ac.clip_url, ac.clip_snapshot_url, ac.pontuacao_total, ac.pontuacao_detalhe,
               ac.round_number, m.map, m.played_at, h.kind
@@ -391,7 +395,8 @@ export function createCompeticoesRouter({ db, requireAuth }) {
          limit 1
        ) h on true
        where cs.competicao_id = $1 and cs.steam_id64 = $2
-       order by cs.enviado_em desc`,
+       order by cs.enviado_em desc
+       limit 100`,
       [compRows[0].id, steamId],
     )
     res.json({

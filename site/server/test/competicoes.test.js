@@ -767,16 +767,24 @@ describe('GET /api/competicoes/:id/jogador/:steamId/clipes', () => {
     expect((await request(app).get(`/api/competicoes/${ID}/jogador/765/clipes`)).status).toBe(401)
   })
 
+  it('id de steamId invalido (nao numerico): 404', async () => {
+    const { app } = appWith([['from competicoes', [{ id: 'comp1' }]]])
+    const res = await request(app).get(`/api/competicoes/${ID}/jogador/abc/clipes`).set('Cookie', cookieJogador)
+    expect(res.status).toBe(404)
+  })
+
   it('competicao inexistente: 404', async () => {
     const { app } = appWith([])
     const res = await request(app).get(`/api/competicoes/${ID}/jogador/765/clipes`).set('Cookie', cookieJogador)
     expect(res.status).toBe(404)
+    expect(res.body.erro).toBe('competição não encontrada')
   })
 
   it('id nao-uuid: 404', async () => {
     const { app } = appWith([['from competicoes', [{ id: 'comp1' }]]])
     const res = await request(app).get('/api/competicoes/nao-uuid/jogador/765/clipes').set('Cookie', cookieJogador)
     expect(res.status).toBe(404)
+    expect(res.body.erro).toBe('competição não encontrada')
   })
 
   it('devolve os clipes daquele Jogador com o contexto da jogada', async () => {
@@ -789,7 +797,10 @@ describe('GET /api/competicoes/:id/jogador/:steamId/clipes', () => {
         pontuacao_total: 111, pontuacao_detalhe: { kills: 3, total: 111 },
       }]],
     ])
-    const res = await request(app).get(`/api/competicoes/${ID}/jogador/765/clipes`).set('Cookie', cookieJogador)
+    // steamId da URL (888) é diferente do steamId da sessão (cookieJogador é 765) — se a
+    // rota usasse req.player.steamId em vez de req.params.steamId, o teste passaria
+    // igual, mas a expansão do leaderboard mostraria os clipes errados na tela.
+    const res = await request(app).get(`/api/competicoes/${ID}/jogador/888/clipes`).set('Cookie', cookieJogador)
 
     expect(res.status).toBe(200)
     expect(res.body.clipes).toEqual([{
@@ -797,14 +808,18 @@ describe('GET /api/competicoes/:id/jogador/:steamId/clipes', () => {
       map: 'de_inferno', playedAt: playedAt.toISOString(), roundNumber: 18, kind: 'ace',
       pontuacao: { kills: 3, total: 111 },
     }])
-    // escopo: a query filtra pela competição e pelo steamId da URL
+    // escopo: a query filtra pela competição e pelo steamId da URL, nunca pelo da sessão
     const [, params] = db.query.mock.calls.find((c) => c[0].includes('from competicao_submissoes cs'))
-    expect(params).toEqual(['comp1', '765'])
+    expect(params).toEqual(['comp1', '888'])
   })
 
   it('NAO devolve os campos de conferencia do admin', async () => {
     // origemNaoVerificada e plataformaManual existem pra o admin checar o vencedor
     // antes de liberar o premio — exibir isso pros competidores foi decidido contra.
+    // O mock devolve source/plataforma_manual (snake_case, como viria do Postgres) —
+    // travar o shape inteiro da resposta (em vez de só os campos camelCase) garante
+    // que um spread acidental da linha crua (que vazaria `source`/`plataforma_manual`)
+    // também quebre o teste.
     const { app } = appWith([
       ['from competicoes', [{ id: 'comp1' }]],
       ['from competicao_submissoes cs', [{
@@ -816,8 +831,10 @@ describe('GET /api/competicoes/:id/jogador/:steamId/clipes', () => {
     ])
     const res = await request(app).get(`/api/competicoes/${ID}/jogador/765/clipes`).set('Cookie', cookieJogador)
 
-    expect(res.body.clipes[0]).not.toHaveProperty('origemNaoVerificada')
-    expect(res.body.clipes[0]).not.toHaveProperty('plataformaManual')
+    expect(res.status).toBe(200)
+    expect(Object.keys(res.body.clipes[0]).sort()).toEqual(
+      ['clipSnapshotUrl', 'clipUrl', 'id', 'kind', 'map', 'playedAt', 'pontuacao', 'roundNumber'],
+    )
     expect(res.body.clipes[0].pontuacao).toEqual({ total: 30 })
   })
 })
