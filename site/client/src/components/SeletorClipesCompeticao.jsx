@@ -1,5 +1,6 @@
 // site/client/src/components/SeletorClipesCompeticao.jsx
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { nomeMapa } from '../lib/format.js'
 
 // Tela de seleção compartilhada — acionada tanto pelo botão "Enviar clipe" da aba
@@ -8,6 +9,7 @@ import { nomeMapa } from '../lib/format.js'
 // competição — GET /api/competicoes/:id/elegiveis já filtra isso no servidor).
 export default function SeletorClipesCompeticao({ competicaoId, onFechar, onEnviado }) {
   const [clipes, setClipes] = useState(null)
+  const [limites, setLimites] = useState(null)
   const [enviando, setEnviando] = useState(null)
   const [erro, setErro] = useState(null)
   const [visivel, setVisivel] = useState(false)
@@ -21,12 +23,25 @@ export default function SeletorClipesCompeticao({ competicaoId, onFechar, onEnvi
 
   function carregar() {
     fetch(`/api/competicoes/${competicaoId}/elegiveis`)
-      .then((res) => (res.ok ? res.json() : []))
-      .then(setClipes)
-      .catch(() => setClipes([]))
+      .then((res) => (res.ok ? res.json() : { clipes: [], limites: null }))
+      .then((body) => { setClipes(body.clipes ?? []); setLimites(body.limites ?? null) })
+      .catch(() => { setClipes([]); setLimites(null) })
   }
 
   useEffect(carregar, [competicaoId])
+
+  // O modal cobre a tela inteira: sem travar o scroll, rolar dentro dele leva a
+  // página de trás junto; sem o Esc, a única saída é o clique no backdrop.
+  useEffect(() => {
+    function aoTeclar(e) { if (e.key === 'Escape') fechar() }
+    document.addEventListener('keydown', aoTeclar)
+    const anterior = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', aoTeclar)
+      document.body.style.overflow = anterior
+    }
+  }, [])
 
   async function enviar(allstarClipId) {
     setEnviando(allstarClipId)
@@ -41,7 +56,11 @@ export default function SeletorClipesCompeticao({ competicaoId, onFechar, onEnvi
     }
   }
 
-  return (
+  // Portal pro body de propósito: na aba Competições este seletor é montado dentro
+  // de um <Card>, cuja classe panel-cut é um clip-path — e clip-path RECORTA os
+  // descendentes, inclusive os position:fixed. Sem o portal o modal aparece
+  // truncado na caixa do card. O portal imuniza qualquer ponto de montagem futuro.
+  return createPortal(
     <div
       className={`fixed inset-0 z-50 flex items-center justify-center bg-fundo/80 p-4 transition-opacity duration-200 ${visivel ? 'opacity-100' : 'opacity-0'}`}
       onClick={fechar}
@@ -76,6 +95,7 @@ export default function SeletorClipesCompeticao({ competicaoId, onFechar, onEnvi
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
