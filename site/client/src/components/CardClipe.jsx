@@ -3,46 +3,8 @@
 // perfil do jogador (mesma interface, mesmo comportamento nas duas telas).
 import { Link } from 'react-router-dom'
 import { Card, Badge } from './ui'
+import { PlayerClipe, SnapshotPlaceholder, nomeDoKind } from './ui/PlayerClipe.jsx'
 import { nomeMapa, dataHora } from '../lib/format.js'
-
-const NOME_KIND = {
-  ace: 'ACE', quad: 'QUAD KILL', triple: 'TRIPLE KILL',
-  clutch_1v5: 'CLUTCH 1v5', clutch_1v4: 'CLUTCH 1v4', clutch_1v3: 'CLUTCH 1v3',
-  clutch_1v2: 'CLUTCH 1v2', clutch_1v1: 'CLUTCH 1v1',
-}
-
-// kind vem null quando o round que a Allstar escolheu (gerar clipe por JOGADOR, não
-// mais por highlight) não bate com nenhum highlight nosso pra esse jogador/round — só
-// afeta o rótulo exibido, a pontuação (clipesScore.js) não depende de kind.
-function nomeDoKind(kind) {
-  if (!kind) return 'MOMENTO'
-  return NOME_KIND[kind] ?? kind
-}
-
-function SnapshotPlaceholder() {
-  return (
-    <div className="mt-3 flex aspect-video w-full items-center justify-center border border-borda bg-superficie-alta text-texto-fraco">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-8 w-8">
-        <rect x="3" y="5" width="18" height="14" rx="1" />
-        <path d="M9 9L15 12L9 15V9Z" fill="currentColor" stroke="none" />
-      </svg>
-    </div>
-  )
-}
-
-function PlayerClipe({ clipUrl, viewerSteamId, titulo }) {
-  return (
-    <div className="mt-3 aspect-video w-full">
-      <iframe
-        src={`${clipUrl}&UID=${viewerSteamId ?? ''}&location=melhoresClipes`}
-        allow="autoplay; encrypted-media; picture-in-picture; clipboard-write; fullscreen"
-        allowFullScreen
-        className="h-full w-full border border-borda"
-        title={titulo ?? 'Clipe Allstar'}
-      />
-    </div>
-  )
-}
 
 // Tooltip explica o calculo — mesma logica de transparencia da spec (Competicoes
 // tambem mostra o detalhamento), aqui e so leitura sobre o clipe.
