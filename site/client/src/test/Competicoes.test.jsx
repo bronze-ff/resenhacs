@@ -104,6 +104,82 @@ describe('Competicoes', () => {
     expect(chamadasDeClipes()).toBe(1)
   })
 
+  it('o mesmo clipe no feed E na expansao do leaderboard: abrir no feed toca so um player', async () => {
+    // Clipe 'c1' aparece nas duas listas (o Clipe de um jogador bem colocado quase
+    // sempre está no feed e na expansão da linha dele) — abrir no feed não pode
+    // montar o <PlayerClipe> do card do leaderboard também.
+    const clipe = {
+      id: 'c1', clipUrl: 'https://allstar/c1', clipSnapshotUrl: null,
+      map: 'de_mirage', playedAt: '2026-07-25T03:37:00Z', roundNumber: 7, kind: 'quad',
+      pontuacao: { kills: 4, pontosKills: 80, total: 80 },
+    }
+    global.fetch = vi.fn().mockImplementation((url) => {
+      if (String(url).includes('/jogador/999/clipes')) {
+        return Promise.resolve({ ok: true, json: async () => ({ clipes: [clipe] }) })
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          ativa: {
+            id: 'comp1', nome: 'Semana 1', premioDescricao: 'Skin',
+            dataFim: new Date(Date.now() + 86400000).toISOString(),
+            limiteDiario: 2, limiteTotal: 10, minimoParaRankear: 3,
+            leaderboard: [{ steamId: '999', nick: 'adversario', avatarUrl: null, total: 148, qualificado: true }],
+            clipesRecentes: [{ ...clipe, nick: 'adversario', avatarUrl: null }],
+          },
+          encerradas: [],
+        }),
+      })
+    })
+    render(<Competicoes />)
+
+    // 'adversario' aparece duas vezes de cara: no autor do card do feed e no
+    // nick da linha do leaderboard.
+    await waitFor(() => expect(screen.getAllByText('adversario')).toHaveLength(2))
+    // Expande o leaderboard pra montar o card de lá também (mesmo clipe, segunda cópia).
+    fireEvent.click(screen.getByRole('button', { name: /adversario/i }))
+    await waitFor(() => expect(screen.getAllByText('QUAD KILL')).toHaveLength(2))
+
+    // Abre o player pelo card do feed (primeira ocorrência de "assistir").
+    fireEvent.click(screen.getAllByRole('button', { name: /assistir/i })[0])
+    await waitFor(() => expect(document.querySelectorAll('iframe')).toHaveLength(1))
+  })
+
+  it('falha ao buscar clipes de um jogador: mostra erro (nao "nenhum clipe") e reexpandir tenta de novo', async () => {
+    let chamadas = 0
+    global.fetch = vi.fn().mockImplementation((url) => {
+      if (String(url).includes('/jogador/999/clipes')) {
+        chamadas += 1
+        return Promise.resolve({ ok: false, status: 500, json: async () => ({}) })
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          ativa: {
+            id: 'comp1', nome: 'Semana 1', premioDescricao: 'Skin',
+            dataFim: new Date(Date.now() + 86400000).toISOString(),
+            limiteDiario: 2, limiteTotal: 10, minimoParaRankear: 3, clipesRecentes: [],
+            leaderboard: [{ steamId: '999', nick: 'adversario', avatarUrl: null, total: 148, qualificado: true }],
+          },
+          encerradas: [],
+        }),
+      })
+    })
+    render(<Competicoes />)
+
+    await waitFor(() => expect(screen.getByText('adversario')).toBeInTheDocument())
+    const linha = screen.getByRole('button', { name: /adversario/i })
+    fireEvent.click(linha)
+
+    await waitFor(() => expect(screen.getByText(/falha ao carregar/i)).toBeInTheDocument())
+    expect(screen.queryByText(/nenhum clipe pra mostrar/i)).not.toBeInTheDocument()
+    expect(chamadas).toBe(1)
+
+    fireEvent.click(linha) // recolhe
+    fireEvent.click(linha) // reexpande — como o erro não foi cacheado, tenta de novo
+    await waitFor(() => expect(chamadas).toBe(2))
+  })
+
   it('competicao encerrada com vencedor e tradelink liberado pro proprio vencedor', async () => {
     // AuthProvider real (mesmo padrão de Tour.test.jsx): o componente compara
     // jogador?.steamId (via /api/auth/me) com vencedorSteamId pra decidir se mostra o

@@ -10,8 +10,11 @@ function Leaderboard({ leaderboard, minimoParaRankear, competicaoId, clipeAberto
   const qualificados = leaderboard.filter((l) => l.qualificado)
   const naoQualificados = leaderboard.filter((l) => !l.qualificado)
   const [expandido, setExpandido] = useState(null)
-  // Cache por steamId: recolher e expandir de novo não refaz a busca.
+  // Cache por steamId: recolher e expandir de novo não refaz a busca. Erro NÃO
+  // entra nesse cache (ver erroPorJogador abaixo) — só sucesso é reaproveitável,
+  // senão uma falha de rede vira permanente até recarregar a página.
   const [clipesPorJogador, setClipesPorJogador] = useState({})
+  const [erroPorJogador, setErroPorJogador] = useState({})
 
   function alternar(steamId) {
     if (expandido === steamId) {
@@ -20,12 +23,20 @@ function Leaderboard({ leaderboard, minimoParaRankear, competicaoId, clipeAberto
     }
     setExpandido(steamId)
     if (clipesPorJogador[steamId]) return
+    setErroPorJogador((atual) => ({ ...atual, [steamId]: null }))
     // Busca só na primeira expansão — carregar os Clipes de todos só pra mostrar
     // o ranking seria desperdício.
     fetch(`/api/competicoes/${competicaoId}/jogador/${steamId}/clipes`)
-      .then((res) => (res.ok ? res.json() : { clipes: [] }))
-      .then((body) => setClipesPorJogador((atual) => ({ ...atual, [steamId]: body.clipes ?? [] })))
-      .catch(() => setClipesPorJogador((atual) => ({ ...atual, [steamId]: [] })))
+      .then((res) => {
+        if (!res.ok) {
+          setErroPorJogador((atual) => ({ ...atual, [steamId]: 'Falha ao carregar os clipes desse jogador. Tente novamente.' }))
+          return
+        }
+        return res.json().then((body) => setClipesPorJogador((atual) => ({ ...atual, [steamId]: body.clipes ?? [] })))
+      })
+      .catch(() => {
+        setErroPorJogador((atual) => ({ ...atual, [steamId]: 'Falha ao carregar os clipes desse jogador. Tente novamente.' }))
+      })
   }
 
   return (
@@ -37,6 +48,7 @@ function Leaderboard({ leaderboard, minimoParaRankear, competicaoId, clipeAberto
               type="button"
               onClick={() => alternar(l.steamId)}
               aria-expanded={expandido === l.steamId}
+              aria-controls={`leaderboard-painel-${l.steamId}`}
               className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-superficie-alta"
             >
               <span className="font-mono text-texto-fraco">{i + 1}º</span>
@@ -46,8 +58,10 @@ function Leaderboard({ leaderboard, minimoParaRankear, competicaoId, clipeAberto
             </button>
 
             {expandido === l.steamId && (
-              <div className="px-3 pb-3">
-                {clipesPorJogador[l.steamId] === undefined ? (
+              <div id={`leaderboard-painel-${l.steamId}`} className="px-3 pb-3">
+                {erroPorJogador[l.steamId] ? (
+                  <p className="font-mono text-xs text-perigo">{erroPorJogador[l.steamId]}</p>
+                ) : clipesPorJogador[l.steamId] === undefined ? (
                   <p className="font-mono text-xs text-texto-fraco">Carregando…</p>
                 ) : clipesPorJogador[l.steamId].length === 0 ? (
                   <p className="font-mono text-xs text-texto-fraco">Nenhum clipe pra mostrar.</p>
@@ -57,7 +71,8 @@ function Leaderboard({ leaderboard, minimoParaRankear, competicaoId, clipeAberto
                       <CardClipeCompeticao
                         key={c.id}
                         clipe={c}
-                        aberto={clipeAberto === c.id}
+                        chave={`lb:${c.id}`}
+                        aberto={clipeAberto === `lb:${c.id}`}
                         onAbrir={onAbrirClipe}
                         viewerSteamId={viewerSteamId}
                         location="leaderboardCompeticao"
@@ -223,7 +238,8 @@ function CardCompeticao({ comp, viewerSteamId, onTradelinkEnviado }) {
                 key={c.id}
                 clipe={c}
                 autor
-                aberto={clipeAberto === c.id}
+                chave={`feed:${c.id}`}
+                aberto={clipeAberto === `feed:${c.id}`}
                 onAbrir={setClipeAberto}
                 viewerSteamId={viewerSteamId}
                 location="feedCompeticao"

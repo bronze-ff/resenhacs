@@ -26,9 +26,15 @@ export function rotuloDaJogada(clipe) {
 }
 
 export default function CardClipeCompeticao({
-  clipe, autor = false, aberto, onAbrir, viewerSteamId, location = 'competicao', acao = null,
+  clipe, autor = false, aberto, onAbrir, viewerSteamId, location = 'competicao', acao = null, chave = clipe.id,
 }) {
-  const abrirOuFechar = () => onAbrir(aberto ? null : clipe.id)
+  // `chave` qualifica o toggle por seção (ex.: `feed:${id}` vs `lb:${id}`) — o
+  // mesmo Clipe de um Jogador bem colocado costuma aparecer tanto no feed quanto
+  // na expansão da linha dele no leaderboard, e comparar só clipe.id fazia os
+  // dois cards abrirem juntos (dois players tocando ao mesmo tempo). Default
+  // cai em clipe.id pra não quebrar o SeletorClipesCompeticao, que não repete
+  // o mesmo Clipe em duas listas simultâneas.
+  const abrirOuFechar = () => onAbrir(aberto ? null : chave)
   const rotuloAssistir = `Assistir clipe de ${nomeMapa(clipe.map)} round ${clipe.roundNumber}`
 
   return (

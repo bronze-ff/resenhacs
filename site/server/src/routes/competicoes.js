@@ -400,6 +400,9 @@ export function createCompeticoesRouter({ db, requireAuth }) {
       [compRows[0].id, steamId],
     )
     res.json({
+      // nick/avatarUrl são omitidos de propósito (diferente de buscarClipesRecentes
+      // acima): o autor já está na linha do leaderboard que o jogador expandiu pra
+      // chegar aqui, então repetir o nick em cada Clipe seria redundante.
       clipes: rows.map((r) => ({
         id: r.id,
         clipUrl: r.clip_url,
