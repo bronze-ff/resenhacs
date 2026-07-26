@@ -758,3 +758,66 @@ describe('PUT /api/competicoes/:id/confirmar-vencedor', () => {
     expect(res2.status).toBe(200)
   })
 })
+
+describe('GET /api/competicoes/:id/jogador/:steamId/clipes', () => {
+  const ID = '11111111-1111-1111-1111-111111111111'
+
+  it('sem login: 401', async () => {
+    const { app } = appWith([])
+    expect((await request(app).get(`/api/competicoes/${ID}/jogador/765/clipes`)).status).toBe(401)
+  })
+
+  it('competicao inexistente: 404', async () => {
+    const { app } = appWith([])
+    const res = await request(app).get(`/api/competicoes/${ID}/jogador/765/clipes`).set('Cookie', cookieJogador)
+    expect(res.status).toBe(404)
+  })
+
+  it('id nao-uuid: 404', async () => {
+    const { app } = appWith([['from competicoes', [{ id: 'comp1' }]]])
+    const res = await request(app).get('/api/competicoes/nao-uuid/jogador/765/clipes').set('Cookie', cookieJogador)
+    expect(res.status).toBe(404)
+  })
+
+  it('devolve os clipes daquele Jogador com o contexto da jogada', async () => {
+    const playedAt = new Date('2026-07-25T00:37:00Z')
+    const { app, db } = appWith([
+      ['from competicoes', [{ id: 'comp1' }]],
+      ['from competicao_submissoes cs', [{
+        id: 'c1', clip_url: 'https://allstar/c1', clip_snapshot_url: 'https://allstar/c1.jpg',
+        map: 'de_inferno', played_at: playedAt, round_number: 18, kind: 'ace',
+        pontuacao_total: 111, pontuacao_detalhe: { kills: 3, total: 111 },
+      }]],
+    ])
+    const res = await request(app).get(`/api/competicoes/${ID}/jogador/765/clipes`).set('Cookie', cookieJogador)
+
+    expect(res.status).toBe(200)
+    expect(res.body.clipes).toEqual([{
+      id: 'c1', clipUrl: 'https://allstar/c1', clipSnapshotUrl: 'https://allstar/c1.jpg',
+      map: 'de_inferno', playedAt: playedAt.toISOString(), roundNumber: 18, kind: 'ace',
+      pontuacao: { kills: 3, total: 111 },
+    }])
+    // escopo: a query filtra pela competição e pelo steamId da URL
+    const [, params] = db.query.mock.calls.find((c) => c[0].includes('from competicao_submissoes cs'))
+    expect(params).toEqual(['comp1', '765'])
+  })
+
+  it('NAO devolve os campos de conferencia do admin', async () => {
+    // origemNaoVerificada e plataformaManual existem pra o admin checar o vencedor
+    // antes de liberar o premio — exibir isso pros competidores foi decidido contra.
+    const { app } = appWith([
+      ['from competicoes', [{ id: 'comp1' }]],
+      ['from competicao_submissoes cs', [{
+        id: 'c1', clip_url: 'https://allstar/c1', clip_snapshot_url: null,
+        map: 'de_dust2', played_at: new Date(), round_number: 4, kind: null,
+        pontuacao_total: 30, pontuacao_detalhe: null,
+        source: 'upload', plataforma_manual: 'faceit',
+      }]],
+    ])
+    const res = await request(app).get(`/api/competicoes/${ID}/jogador/765/clipes`).set('Cookie', cookieJogador)
+
+    expect(res.body.clipes[0]).not.toHaveProperty('origemNaoVerificada')
+    expect(res.body.clipes[0]).not.toHaveProperty('plataformaManual')
+    expect(res.body.clipes[0].pontuacao).toEqual({ total: 30 })
+  })
+})

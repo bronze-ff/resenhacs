@@ -356,6 +356,58 @@ export function createCompeticoesRouter({ db, requireAuth }) {
     })
   })
 
+  // Clipes de um Jogador nesta Competição — alimenta a expansão de uma linha do
+  // leaderboard. requireAuth só, igual ao GET /api/competicoes, que já devolve o
+  // feed com as mesmas URLs de Clipe.
+  //
+  // O mapeamento é campo a campo DE PROPÓSITO: buscarSubmissoesDoJogador (usada
+  // pela tela de admin) devolve origemNaoVerificada e plataformaManual, que são
+  // conferência de admin e não podem chegar aos competidores. Espalhar o objeto
+  // faria um campo sensível acrescentado amanhã vazar sozinho.
+  router.get('/:id/jogador/:steamId/clipes', requireAuth, async (req, res) => {
+    if (!UUID_RE.test(req.params.id)) return res.status(404).json({ erro: 'competição não encontrada' })
+    const steamId = String(req.params.steamId)
+    if (!/^\d{1,20}$/.test(steamId)) return res.status(404).json({ erro: 'jogador não encontrado' })
+
+    const { rows: compRows } = await db.query('select id from competicoes where id = $1', [req.params.id])
+    if (!compRows.length) return res.status(404).json({ erro: 'competição não encontrada' })
+
+    // LEFT LATERAL com limit 1: LEFT porque Clipe do fluxo novo tem highlight_id
+    // nulo e sumiria com INNER; lateral+limit porque highlights não tem unique em
+    // (match_id, steam_id64, round_number) e o mesmo Jogador pode ter ace E
+    // clutch_1v4 no mesmo round, o que duplicaria a linha.
+    const { rows } = await db.query(
+      `select ac.id, ac.clip_url, ac.clip_snapshot_url, ac.pontuacao_total, ac.pontuacao_detalhe,
+              ac.round_number, m.map, m.played_at, h.kind
+       from competicao_submissoes cs
+       join allstar_clips ac on ac.id = cs.allstar_clip_id
+       join matches m on m.id = ac.match_id
+       left join lateral (
+         select h.kind from highlights h
+         where h.match_id = ac.match_id
+           and h.steam_id64 = ac.steam_id64
+           and h.round_number = ac.round_number
+         order by h.kind
+         limit 1
+       ) h on true
+       where cs.competicao_id = $1 and cs.steam_id64 = $2
+       order by cs.enviado_em desc`,
+      [compRows[0].id, steamId],
+    )
+    res.json({
+      clipes: rows.map((r) => ({
+        id: r.id,
+        clipUrl: r.clip_url,
+        clipSnapshotUrl: r.clip_snapshot_url,
+        map: r.map,
+        playedAt: r.played_at,
+        roundNumber: r.round_number,
+        kind: r.kind ?? null,
+        pontuacao: r.pontuacao_detalhe ?? { total: r.pontuacao_total ?? 0 },
+      })),
+    })
+  })
+
   router.post('/:id/submissoes', limiteEstrito, requireAuth, async (req, res) => {
     if (!UUID_RE.test(req.params.id)) return res.status(404).json({ erro: 'competição não encontrada' })
     const allstarClipId = String(req.body?.allstarClipId ?? '')
