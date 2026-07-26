@@ -6,18 +6,67 @@ import { contadorRegressivo, dataHora } from '../lib/format.js'
 import SeletorClipesCompeticao from '../components/SeletorClipesCompeticao.jsx'
 import CardClipeCompeticao from '../components/CardClipeCompeticao.jsx'
 
-function Leaderboard({ leaderboard, minimoParaRankear }) {
+function Leaderboard({ leaderboard, minimoParaRankear, competicaoId, clipeAberto, onAbrirClipe, viewerSteamId }) {
   const qualificados = leaderboard.filter((l) => l.qualificado)
   const naoQualificados = leaderboard.filter((l) => !l.qualificado)
+  const [expandido, setExpandido] = useState(null)
+  // Cache por steamId: recolher e expandir de novo não refaz a busca.
+  const [clipesPorJogador, setClipesPorJogador] = useState({})
+
+  function alternar(steamId) {
+    if (expandido === steamId) {
+      setExpandido(null)
+      return
+    }
+    setExpandido(steamId)
+    if (clipesPorJogador[steamId]) return
+    // Busca só na primeira expansão — carregar os Clipes de todos só pra mostrar
+    // o ranking seria desperdício.
+    fetch(`/api/competicoes/${competicaoId}/jogador/${steamId}/clipes`)
+      .then((res) => (res.ok ? res.json() : { clipes: [] }))
+      .then((body) => setClipesPorJogador((atual) => ({ ...atual, [steamId]: body.clipes ?? [] })))
+      .catch(() => setClipesPorJogador((atual) => ({ ...atual, [steamId]: [] })))
+  }
+
   return (
     <div className="space-y-3">
       <div className="panel-cut border border-borda">
         {qualificados.map((l, i) => (
-          <div key={l.steamId} className="flex items-center gap-3 border-b border-borda px-3 py-2 last:border-b-0">
-            <span className="font-mono text-texto-fraco">{i + 1}º</span>
-            {l.avatarUrl && <img src={l.avatarUrl} alt="" className="panel-cut-sm h-6 w-6 border border-borda object-cover" />}
-            <span className="flex-1 font-mono text-texto">{l.nick}</span>
-            <span className="font-display font-bold text-destaque tabular-nums">{l.total}</span>
+          <div key={l.steamId} className="border-b border-borda last:border-b-0">
+            <button
+              type="button"
+              onClick={() => alternar(l.steamId)}
+              aria-expanded={expandido === l.steamId}
+              className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-superficie-alta"
+            >
+              <span className="font-mono text-texto-fraco">{i + 1}º</span>
+              {l.avatarUrl && <img src={l.avatarUrl} alt="" className="panel-cut-sm h-6 w-6 border border-borda object-cover" />}
+              <span className="flex-1 font-mono text-texto">{l.nick}</span>
+              <span className="font-display font-bold text-destaque tabular-nums">{l.total}</span>
+            </button>
+
+            {expandido === l.steamId && (
+              <div className="px-3 pb-3">
+                {clipesPorJogador[l.steamId] === undefined ? (
+                  <p className="font-mono text-xs text-texto-fraco">Carregando…</p>
+                ) : clipesPorJogador[l.steamId].length === 0 ? (
+                  <p className="font-mono text-xs text-texto-fraco">Nenhum clipe pra mostrar.</p>
+                ) : (
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {clipesPorJogador[l.steamId].map((c) => (
+                      <CardClipeCompeticao
+                        key={c.id}
+                        clipe={c}
+                        aberto={clipeAberto === c.id}
+                        onAbrir={onAbrirClipe}
+                        viewerSteamId={viewerSteamId}
+                        location="leaderboardCompeticao"
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -154,7 +203,14 @@ function CardCompeticao({ comp, viewerSteamId, onTradelinkEnviado }) {
       {!naoComecou && (
         <div className="mt-4">
           <h3 className="mb-2 font-display text-sm font-semibold uppercase tracking-wide text-texto-fraco">Leaderboard</h3>
-          <Leaderboard leaderboard={comp.leaderboard} minimoParaRankear={comp.minimoParaRankear} />
+          <Leaderboard
+            leaderboard={comp.leaderboard}
+            minimoParaRankear={comp.minimoParaRankear}
+            competicaoId={comp.id}
+            clipeAberto={clipeAberto}
+            onAbrirClipe={setClipeAberto}
+            viewerSteamId={viewerSteamId}
+          />
         </div>
       )}
 

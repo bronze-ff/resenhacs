@@ -50,6 +50,60 @@ describe('Competicoes', () => {
     expect(screen.getByText(/ainda n[ãa]o qualificado/i)).toBeInTheDocument()
   })
 
+  // Monta a resposta da competição e a dos clipes de um Jogador na mesma função,
+  // despachando por URL — a página busca /api/competicoes no mount e
+  // /jogador/:steamId/clipes só quando o leaderboard expande.
+  function mockCompeticaoComClipesDoJogador(clipes) {
+    return vi.fn().mockImplementation((url) => {
+      if (String(url).includes('/jogador/999/clipes')) {
+        return Promise.resolve({ ok: true, json: async () => ({ clipes }) })
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          ativa: {
+            id: 'comp1', nome: 'Semana 1', premioDescricao: 'Skin',
+            dataFim: new Date(Date.now() + 86400000).toISOString(),
+            limiteDiario: 2, limiteTotal: 10, minimoParaRankear: 3, clipesRecentes: [],
+            leaderboard: [{ steamId: '999', nick: 'adversario', avatarUrl: null, total: 148, qualificado: true }],
+          },
+          encerradas: [],
+        }),
+      })
+    })
+  }
+
+  const chamadasDeClipes = () =>
+    global.fetch.mock.calls.filter(([url]) => String(url).includes('/jogador/999/clipes')).length
+
+  it('expandir um Jogador do leaderboard busca e mostra os clipes dele', async () => {
+    global.fetch = mockCompeticaoComClipesDoJogador([{
+      id: 'c1', clipUrl: 'https://allstar/c1', clipSnapshotUrl: null,
+      map: 'de_mirage', playedAt: '2026-07-25T03:37:00Z', roundNumber: 7, kind: 'quad',
+      pontuacao: { kills: 4, pontosKills: 80, total: 80 },
+    }])
+    render(<Competicoes />)
+
+    await waitFor(() => expect(screen.getByText('adversario')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /adversario/i }))
+
+    await waitFor(() => expect(screen.getByText('QUAD KILL')).toBeInTheDocument())
+    expect(screen.getByText(/Mirage/)).toBeInTheDocument()
+  })
+
+  it('recolher e expandir de novo nao refaz a busca', async () => {
+    global.fetch = mockCompeticaoComClipesDoJogador([])
+    render(<Competicoes />)
+    await waitFor(() => expect(screen.getByText('adversario')).toBeInTheDocument())
+
+    const linha = screen.getByRole('button', { name: /adversario/i })
+    fireEvent.click(linha)
+    await waitFor(() => expect(chamadasDeClipes()).toBe(1))
+    fireEvent.click(linha)   // recolhe
+    fireEvent.click(linha)   // expande de novo
+    expect(chamadasDeClipes()).toBe(1)
+  })
+
   it('competicao encerrada com vencedor e tradelink liberado pro proprio vencedor', async () => {
     // AuthProvider real (mesmo padrão de Tour.test.jsx): o componente compara
     // jogador?.steamId (via /api/auth/me) com vencedorSteamId pra decidir se mostra o
