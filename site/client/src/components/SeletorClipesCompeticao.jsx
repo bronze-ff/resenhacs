@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { nomeMapa, dataHora } from '../lib/format.js'
 import { PlayerClipe, SnapshotPlaceholder, nomeDoKind } from './ui/PlayerClipe.jsx'
+import { useAuth } from '../auth/AuthContext.jsx'
 
 // Breakdown como TEXTO, não tooltip: a decisão "qual clipe vale mais" é tomada
 // aqui, e no celular não existe hover. Só entram os componentes que somaram.
@@ -28,6 +29,7 @@ function rotuloDaJogada(clipe) {
 // Lista só os clipes elegíveis (já gerados, Processed, partida dentro do período da
 // competição — GET /api/competicoes/:id/elegiveis já filtra isso no servidor).
 export default function SeletorClipesCompeticao({ competicaoId, onFechar, onEnviado }) {
+  const { jogador } = useAuth()
   const [clipes, setClipes] = useState(null)
   const [limites, setLimites] = useState(null)
   const [enviando, setEnviando] = useState(null)
@@ -52,9 +54,18 @@ export default function SeletorClipesCompeticao({ competicaoId, onFechar, onEnvi
 
   function carregar() {
     fetch(`/api/competicoes/${competicaoId}/elegiveis`)
-      .then((res) => (res.ok ? res.json() : { clipes: [], limites: null }))
+      .then((res) => {
+        if (!res.ok) {
+          setErro('Falha ao carregar os clipes elegíveis. Tente novamente.')
+          return { clipes: [], limites: null }
+        }
+        return res.json()
+      })
       .then((body) => { setClipes(body.clipes ?? []); setLimites(body.limites ?? null) })
-      .catch(() => { setClipes([]); setLimites(null) })
+      .catch(() => {
+        setErro('Falha ao carregar os clipes elegíveis. Tente novamente.')
+        setClipes([]); setLimites(null)
+      })
   }
 
   useEffect(carregar, [competicaoId])
@@ -114,15 +125,25 @@ export default function SeletorClipesCompeticao({ competicaoId, onFechar, onEnvi
             {clipes.map((c) => (
               <div key={c.allstarClipId} className="panel-cut-sm border border-borda p-3">
                 {clipeAberto === c.allstarClipId ? (
-                  <PlayerClipe
-                    clipUrl={c.clipUrl}
-                    titulo={`${nomeMapa(c.map)} round ${c.roundNumber}`}
-                    location="selecaoCompeticao"
-                  />
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setClipeAberto(null)}
+                      className="mt-3 font-mono text-xs uppercase text-texto-fraco hover:text-texto"
+                    >
+                      fechar
+                    </button>
+                    <PlayerClipe
+                      clipUrl={c.clipUrl}
+                      viewerSteamId={jogador?.steamId}
+                      titulo={`${nomeMapa(c.map)} round ${c.roundNumber}`}
+                      location="selecaoCompeticao"
+                    />
+                  </>
                 ) : c.clipSnapshotUrl ? (
                   <button
                     type="button"
-                    onClick={() => setClipeAberto(c.allstarClipId)}
+                    onClick={() => setClipeAberto(clipeAberto === c.allstarClipId ? null : c.allstarClipId)}
                     aria-label={`Assistir clipe de ${nomeMapa(c.map)} round ${c.roundNumber}`}
                     className="relative mt-3 block aspect-video w-full border border-borda"
                   >
@@ -134,7 +155,7 @@ export default function SeletorClipesCompeticao({ competicaoId, onFechar, onEnvi
                 ) : (
                   <button
                     type="button"
-                    onClick={() => setClipeAberto(c.allstarClipId)}
+                    onClick={() => setClipeAberto(clipeAberto === c.allstarClipId ? null : c.allstarClipId)}
                     aria-label={`Assistir clipe de ${nomeMapa(c.map)} round ${c.roundNumber}`}
                     className="block w-full"
                   >

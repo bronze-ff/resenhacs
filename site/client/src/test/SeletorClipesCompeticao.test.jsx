@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import SeletorClipesCompeticao from '../components/SeletorClipesCompeticao.jsx'
+import { AuthProvider } from '../auth/AuthContext.jsx'
 
 afterEach(() => { vi.restoreAllMocks() })
 
@@ -149,5 +150,62 @@ describe('SeletorClipesCompeticao', () => {
     await waitFor(() => expect(screen.getByText(/1 de 2 enviados hoje/i)).toBeInTheDocument())
     expect(screen.getByText(/4 de 10 no total/i)).toBeInTheDocument()
     expect(screen.getByText(/mínimo 3 pra rankear/i)).toBeInTheDocument()
+  })
+
+  it('repassa o viewerSteamId do jogador logado pro PlayerClipe (atribuicao de viewer na Allstar)', async () => {
+    global.fetch = vi.fn().mockImplementation((url) => {
+      if (typeof url === 'string' && url.includes('/api/auth/me')) {
+        return Promise.resolve({ ok: true, json: async () => ({ steamId: '765', nick: 'bronze', isSuperAdmin: false }) })
+      }
+      return Promise.resolve({ ok: true, json: async () => respostaElegiveis([CLIPE_COMPLETO]) })
+    })
+    render(
+      <AuthProvider>
+        <SeletorClipesCompeticao competicaoId="comp1" onFechar={() => {}} onEnviado={() => {}} />
+      </AuthProvider>,
+    )
+    await waitFor(() => screen.getByRole('button', { name: /assistir/i }))
+    fireEvent.click(screen.getByRole('button', { name: /assistir/i }))
+    await waitFor(() => expect(document.querySelector('iframe')).toBeTruthy())
+    const iframe = document.querySelector('iframe')
+    expect(iframe.src).toContain('UID=765')
+  })
+
+  it('erro ao carregar (401/404/500) mostra mensagem de erro visivel, nao so o vazio silencioso', async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 401, json: async () => ({}) })
+    render(<SeletorClipesCompeticao competicaoId="comp1" onFechar={() => {}} onEnviado={() => {}} />)
+    await waitFor(() => expect(screen.getByText(/falha ao carregar/i)).toBeInTheDocument())
+    // cabeçalho de limites some (limites null), mas agora o Jogador sabe que foi erro,
+    // não que simplesmente não tem clipe — mesmo a lista caindo em vazio junto.
+  })
+
+  it('falha de rede ao carregar tambem mostra mensagem de erro visivel', async () => {
+    global.fetch = vi.fn().mockRejectedValue(new Error('network down'))
+    render(<SeletorClipesCompeticao competicaoId="comp1" onFechar={() => {}} onEnviado={() => {}} />)
+    await waitFor(() => expect(screen.getByText(/falha ao carregar/i)).toBeInTheDocument())
+  })
+
+  it('lista realmente vazia (resposta ok) continua mostrando so a mensagem de vazio, sem erro', async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => respostaElegiveis([]) })
+    render(<SeletorClipesCompeticao competicaoId="comp1" onFechar={() => {}} onEnviado={() => {}} />)
+    await waitFor(() => expect(screen.getByText(/nenhum clipe elegível ainda/i)).toBeInTheDocument())
+    expect(screen.queryByText(/falha ao carregar/i)).toBeNull()
+  })
+
+  it('fechar o player pelo botao dedicado volta a mostrar o thumbnail (toggle)', async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => respostaElegiveis([CLIPE_COMPLETO]) })
+    render(<SeletorClipesCompeticao competicaoId="comp1" onFechar={() => {}} onEnviado={() => {}} />)
+    await waitFor(() => screen.getByRole('button', { name: /assistir/i }))
+
+    fireEvent.click(screen.getByRole('button', { name: /assistir/i }))
+    expect(document.querySelectorAll('iframe')).toHaveLength(1)
+    // com o player aberto, o botão de thumbnail some — só resta o botão de fechar
+    // dedicado (a única forma de voltar sem abrir outro clipe ou fechar o modal)
+    expect(screen.queryByRole('button', { name: /assistir/i })).toBeNull()
+
+    const botoesFechar = screen.getAllByRole('button', { name: /^fechar$/i })
+    fireEvent.click(botoesFechar[botoesFechar.length - 1])
+    expect(document.querySelectorAll('iframe')).toHaveLength(0)
+    expect(screen.getByRole('button', { name: /assistir/i })).toBeInTheDocument()
   })
 })
