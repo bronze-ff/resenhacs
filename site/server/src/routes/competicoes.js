@@ -76,13 +76,26 @@ async function calcularOuLerVencedor(db, comp) {
 // entre competições (mesma regra global: leaderboard/atividade sempre por competicao_id).
 // allstar_clips guarda match_id direto (migração 0042) — nunca usar join (inner) com
 // highlights aqui, mesma razão de buscarLeaderboard acima.
+// O join com highlights é LEFT LATERAL com limit 1: LEFT porque Clipe do fluxo
+// novo tem highlight_id nulo e sumiria; lateral+limit porque o mesmo Jogador pode
+// ter dois Highlights no mesmo round (ace + clutch), o que duplicaria o Clipe.
 async function buscarClipesRecentes(db, competicaoId) {
   const { rows } = await db.query(
     `select ac.id, ac.clip_url, ac.clip_snapshot_url, ac.pontuacao_total, ac.pontuacao_detalhe,
+            ac.round_number,
             cs.steam_id64, coalesce(p.nick, mp.nick) as nick, coalesce(p.avatar_url, sa.avatar_url) as avatar_url,
-            cs.enviado_em
+            cs.enviado_em, m.map, m.played_at, h.kind
      from competicao_submissoes cs
      join allstar_clips ac on ac.id = cs.allstar_clip_id
+     join matches m on m.id = ac.match_id
+     left join lateral (
+       select h.kind from highlights h
+       where h.match_id = ac.match_id
+         and h.steam_id64 = ac.steam_id64
+         and h.round_number = ac.round_number
+       order by h.kind
+       limit 1
+     ) h on true
      left join players p on p.steam_id64 = cs.steam_id64
      left join match_players mp on mp.match_id = ac.match_id and mp.steam_id64 = cs.steam_id64
      left join steam_avatares sa on sa.steam_id64 = cs.steam_id64
@@ -94,6 +107,7 @@ async function buscarClipesRecentes(db, competicaoId) {
   return rows.map((r) => ({
     id: r.id, clipUrl: r.clip_url, clipSnapshotUrl: r.clip_snapshot_url,
     steamId: r.steam_id64, nick: r.nick, avatarUrl: r.avatar_url,
+    map: r.map, playedAt: r.played_at, roundNumber: r.round_number, kind: r.kind ?? null,
     pontuacao: r.pontuacao_detalhe ?? { total: r.pontuacao_total ?? 0 },
   }))
 }
