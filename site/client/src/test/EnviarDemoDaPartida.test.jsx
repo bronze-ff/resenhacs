@@ -138,6 +138,25 @@ describe('EnviarDemoDaPartida', () => {
     expect(global.fetch.mock.calls[0][0]).toBe('/api/upload/upload-url')
   })
 
+  it('limpa o input ao rejeitar extensão inválida, permitindo escolher o mesmo arquivo de novo', async () => {
+    const user = userEvent.setup({ applyAccept: false })
+    render(<EnviarDemoDaPartida partida={partidaBase} euSteamId="765" />)
+    await user.click(screen.getByRole('button', { name: /enviar demo desta partida/i }))
+    const input = screen.getByLabelText(/arquivo/i)
+    await user.upload(input, arquivo('demo.txt', 'não é uma demo'))
+    await waitFor(() => expect(screen.getByText(/só arquivos \.dem são aceitos/i)).toBeInTheDocument())
+    expect(input.value).toBe('')
+  })
+
+  it('limpa o input ao rejeitar mapa divergente, permitindo escolher o mesmo arquivo de novo', async () => {
+    render(<EnviarDemoDaPartida partida={partidaBase} euSteamId="765" />)
+    await userEvent.click(screen.getByRole('button', { name: /enviar demo desta partida/i }))
+    const input = screen.getByLabelText(/arquivo/i)
+    await userEvent.upload(input, arquivo('demo.dem', 'PBDEMS2 xxxx de_mirage xxxx'))
+    await waitFor(() => expect(screen.getByText(/mirage/i)).toBeInTheDocument())
+    expect(input.value).toBe('')
+  })
+
   it('arquivo rejeitado não deixa o anterior armado', async () => {
     render(<EnviarDemoDaPartida partida={partidaBase} euSteamId="765" />)
     await userEvent.click(screen.getByRole('button', { name: /enviar demo desta partida/i }))

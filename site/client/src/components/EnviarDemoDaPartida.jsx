@@ -50,19 +50,26 @@ export default function EnviarDemoDaPartida({ partida, euSteamId, onEnviado }) {
     )
   }
 
-  async function escolher(lista) {
+  // `input` é o elemento do <input type="file">: recebido à parte da FileList pra
+  // podermos limpar o value nos caminhos de rejeição. Sem isso, escolher de novo o
+  // MESMO arquivo (mesmo path) não muda o value do input, o browser não dispara
+  // change, e a tela trava na mensagem de erro anterior mesmo depois de trocar de
+  // arquivo no seletor do SO e voltar a escolher o original.
+  async function escolher(lista, input) {
     setErro(null)
     const f = lista?.[0]
     if (!f) return
     if (!f.name.toLowerCase().endsWith('.dem')) {
       setErro('Só arquivos .dem são aceitos.')
       setArquivo(null)
+      if (input) input.value = ''
       return
     }
     if (await cabecalhoDivergeDoMapa(f, partida.map)) {
       const mapa = await mapaDoCabecalho(f)
       setErro(`Essa demo é de ${nomeMapa(mapa)} e esta partida foi em ${nomeMapa(partida.map)}.`)
       setArquivo(null)
+      if (input) input.value = ''
       return
     }
     setArquivo(f)
@@ -133,7 +140,7 @@ export default function EnviarDemoDaPartida({ partida, euSteamId, onEnviado }) {
             id="demo-da-partida"
             type="file"
             accept=".dem"
-            onChange={(e) => escolher(e.target.files)}
+            onChange={(e) => escolher(e.target.files, e.target)}
             className="block w-full font-mono text-xs text-texto-fraco"
           />
           {arquivo && <p className="font-mono text-xs text-texto-fraco">{arquivo.name}</p>}
