@@ -255,6 +255,76 @@ describe('GET /api/matches/:id', () => {
     expect(res.body.abandonedBy).toBeNull()
   })
 
+  it('devolve o mvp com steamId, nick, rating e avatarUrl', async () => {
+    const { app } = appWith([
+      ['from matches mt', [{
+        id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9,
+        source: 'valve_mm', status: 'parsed', demo_url: null,
+        mvp: { steamId: '765', nick: 'fih', rating: '1.35', avatarUrl: 'https://avatars.steamstatic.com/fih.jpg' },
+      }]],
+      ['from match_players mp', []],
+    ])
+    const res = await request(app).get('/api/matches/m1').set('Cookie', cookie)
+    expect(res.status).toBe(200)
+    expect(res.body.mvp).toEqual({
+      steamId: '765', nick: 'fih', rating: 1.35, avatarUrl: 'https://avatars.steamstatic.com/fih.jpg',
+    })
+  })
+
+  it('usa exatamente o MESMO critério de MVP do Feed (uma query só, compartilhada)', async () => {
+    // O MVP do detalhe TEM que bater com o chip do card no Feed — se as duas rotas
+    // tiverem cópias separadas do lateral, elas divergem na primeira mudança.
+    const { app, db } = appWith([['from matches mt', [{ id: 'm1', status: 'parsed' }]], ['from matches m', []]])
+    await request(app).get('/api/matches/m1').set('Cookie', cookie)
+    await request(app).get('/api/matches').set('Cookie', cookie)
+    const lateral = (sql) => sql
+      .slice(sql.indexOf('left join lateral'), sql.indexOf(') mvp on true'))
+      // única diferença legítima: o alias da partida (mt no detalhe, m no feed)
+      .replace(/mp3\.match_id = mt?\.id/, 'mp3.match_id = <partida>.id')
+    const sqlDetalhe = db.query.mock.calls.find(([s]) => s.includes('from matches mt'))[0]
+    const sqlFeed = db.query.mock.calls.find(([s]) => s.includes('from matches m\n'))[0]
+    expect(lateral(sqlDetalhe)).toContain('mp3.is_tracked')
+    expect(lateral(sqlDetalhe)).toBe(lateral(sqlFeed))
+  })
+
+  it('empate de rating desempata por kills (ordem no lateral, não no JS)', async () => {
+    // A ordenação roda no Postgres (o db aqui é mockado), então o teste garante as duas
+    // pontas: o critério de desempate está na query, e a linha escolhida por ele é a que
+    // sai na resposta — aqui 'clutcher' e 'fih' empatam em 1.20 e o de 30 kills ganha.
+    const { app, db } = appWith([
+      ['from matches mt', [{
+        id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9,
+        source: 'valve_mm', status: 'parsed', demo_url: null,
+        mvp: { steamId: '999', nick: 'clutcher', rating: '1.20', avatarUrl: null },
+      }]],
+      ['from match_players mp', [
+        { steam_id64: '999', nick: 'clutcher', team: 'A', kills: 30, deaths: 10, assists: 4, headshot_kills: 10, damage: 3000, rounds_played: 22, rating: '1.20', won: true, is_tracked: true, avatar_url: null },
+        { steam_id64: '765', nick: 'fih', team: 'A', kills: 21, deaths: 12, assists: 6, headshot_kills: 9, damage: 2400, rounds_played: 22, rating: '1.20', won: true, is_tracked: true, avatar_url: null },
+      ]],
+    ])
+    const res = await request(app).get('/api/matches/m1').set('Cookie', cookie)
+    expect(res.body.mvp).toMatchObject({ steamId: '999', nick: 'clutcher', rating: 1.2 })
+    const sql = db.query.mock.calls.find(([s]) => s.includes('from matches mt'))[0]
+    expect(sql).toContain('order by mp3.rating desc nulls last, mp3.kills desc')
+    // Sem o limit 1 o lateral multiplicaria a linha da partida (ver competicoes.js).
+    expect(sql).toContain('limit 1')
+  })
+
+  it('partida sem jogador is_tracked devolve mvp null', async () => {
+    const { app } = appWith([
+      ['from matches mt', [{
+        id: 'm1', map: 'de_mirage', played_at: null, score_a: 13, score_b: 9,
+        source: 'valve_mm', status: 'parsed', demo_url: null, mvp: null,
+      }]],
+      ['from match_players mp', [
+        { steam_id64: '999', nick: 'adversario', team: 'B', kills: 10, deaths: 15, assists: 2, headshot_kills: 3, damage: 1200, rounds_played: 22, rating: '0.85', won: false, is_tracked: false, avatar_url: null },
+      ]],
+    ])
+    const res = await request(app).get('/api/matches/m1').set('Cookie', cookie)
+    expect(res.status).toBe(200)
+    expect(res.body.mvp).toBeNull()
+  })
+
   it('replayUrl aponta pro proxy do servidor, nunca pra URL crua do R2', async () => {
     const { app } = appWith([
       ['from matches mt', [{
