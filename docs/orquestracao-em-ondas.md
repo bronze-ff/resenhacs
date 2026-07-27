@@ -269,10 +269,22 @@ pro lado errado por meia hora. Um erro de sintaxe aborta o script inteiro antes
 de executar qualquer linha: **se as primeiras linhas rodaram, o erro que você
 está lendo não é do seu script.**
 
-**Ligue "Wait for setup to complete before starting agent".** Vem desligado. Com
-ele desligado o agente começa enquanto as dependências ainda instalam — roda os
-testes, vê módulo faltando, e tenta consertar. É o erro que faz você achar que o
-modelo é ruim.
+**"Wait for setup to complete before starting agent": tentador, e quebrado no
+Windows.** A promessa é boa — sem ela o agente começa enquanto as dependências
+ainda instalam, roda os testes, vê módulo faltando e tenta consertar. Mas a
+opção é implementada como um wrapper que espera um arquivo-marcador cujo
+caminho vem de variável de ambiente; no Windows essa variável chega vazia e o
+wrapper falha **antes de lançar o agente**. Sintoma: worktree criada, setup
+concluído, e nenhum agente — com um erro de shell que não menciona setup nem
+agente.
+
+Deixe desligada até confirmar que funciona na sua plataforma. O custo real é
+pequeno: a instalação leva segundos, e nesse tempo o agente está lendo código,
+não rodando teste.
+
+A regra geral, que vale além deste botão: **funcionalidade de sequenciamento do
+harness é a primeira suspeita quando o agente não sobe.** Ela roda antes de
+tudo, e quando falha o erro aparece descolado da causa.
 
 **Base ref = `origin/main`**, pra que todo filho seja cortado de main fresca:
 
@@ -325,7 +337,7 @@ Nunca estreie o harness numa onda de vários tickets. **Um worktree, um ticket
 real e pequeno, ponta a ponta.** A corrida é o teste, não o resultado —
 verifique:
 
-1. O setup rodou até o fim **antes** de o agente começar?
+1. O agente **subiu sozinho**, sem você digitar nada?
 2. O agente rodou os testes sem reclamar de dependência faltando?
 3. O agente trabalhou do início ao fim **sem parar pra pedir permissão**?
 4. O PR saiu apontando pra `main`?
