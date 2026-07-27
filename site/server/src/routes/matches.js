@@ -20,6 +20,36 @@ function categoriaArma(weapon) {
   return CATEGORIA_ARMA[weapon] ?? 'Outras'
 }
 
+// MVP da Partida: melhor rating entre os Jogadores rastreados (is_tracked), desempate
+// por kills. UM só lugar de propósito — o Feed (GET /) e o detalhe (GET /:id) precisam
+// mostrar exatamente o mesmo MVP pra mesma Partida, e duas cópias do critério divergem
+// com o tempo.
+//
+// Dois detalhes que já morderam este projeto:
+// - `limit 1` não é cosmético: sem ele o lateral devolve N linhas e MULTIPLICA a linha da
+//   partida (mesmo motivo documentado em competicoes.js).
+// - jsonb (não json): o `group by m.id, mvp.mvp` do Feed exige operador de igualdade, que
+//   o tipo json não tem — com json o Postgres rejeita a query inteira.
+function lateralMvp(aliasPartida) {
+  return `left join lateral (
+         select jsonb_build_object(
+           'steamId', mp3.steam_id64, 'nick', mp3.nick, 'rating', mp3.rating,
+           'avatarUrl', coalesce(p3.avatar_url, sa3.avatar_url)
+         ) as mvp
+         from match_players mp3
+         left join players p3 on p3.steam_id64 = mp3.steam_id64
+         left join steam_avatares sa3 on sa3.steam_id64 = mp3.steam_id64
+         where mp3.match_id = ${aliasPartida}.id and mp3.is_tracked
+         order by mp3.rating desc nulls last, mp3.kills desc
+         limit 1
+       ) mvp on true`
+}
+
+// rating vem como numeric (string) do driver — o client espera número.
+function mvpDaLinha(mvp) {
+  return mvp ? { ...mvp, rating: mvp.rating === null ? null : Number(mvp.rating) } : null
+}
+
 export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, config }) {
   const router = Router()
 
@@ -82,20 +112,7 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
          mvp.mvp
        from matches m
        left join match_players mp on mp.match_id = m.id
-       left join lateral (
-         -- jsonb (não json): o GROUP BY m.id, mvp.mvp exige operador de igualdade,
-         -- que o tipo json não tem — com json o Postgres rejeita a query inteira.
-         select jsonb_build_object(
-           'steamId', mp3.steam_id64, 'nick', mp3.nick, 'rating', mp3.rating,
-           'avatarUrl', coalesce(p3.avatar_url, sa3.avatar_url)
-         ) as mvp
-         from match_players mp3
-         left join players p3 on p3.steam_id64 = mp3.steam_id64
-         left join steam_avatares sa3 on sa3.steam_id64 = mp3.steam_id64
-         where mp3.match_id = m.id and mp3.is_tracked
-         order by mp3.rating desc nulls last, mp3.kills desc
-         limit 1
-       ) mvp on true
+       ${lateralMvp('m')}
        where ${cond.join(' and ')}
        group by m.id, mvp.mvp
        order by m.played_at desc nulls last, m.created_at desc
@@ -115,7 +132,7 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
         teamAName: m.team_a_name,
         teamBName: m.team_b_name,
         tracked: m.tracked,
-        mvp: m.mvp ? { ...m.mvp, rating: m.mvp.rating === null ? null : Number(m.mvp.rating) } : null,
+        mvp: mvpDaLinha(m.mvp),
       })),
     )
   })
@@ -153,10 +170,12 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
     const matchQ = await db.query(
       `select mt.id, mt.map, mt.played_at, mt.score_a, mt.score_b, mt.source, mt.status, mt.demo_url, mt.replay_url,
               mt.ended_early, mt.abandoned_by_steam_id64, mt.plataforma_manual, mt.tem_demo,
-              coalesce(ap.nick, amp.nick) as abandoned_by_nick
+              coalesce(ap.nick, amp.nick) as abandoned_by_nick,
+              mvp.mvp
        from matches mt
        left join players ap on ap.steam_id64 = mt.abandoned_by_steam_id64
        left join match_players amp on amp.match_id = mt.id and amp.steam_id64 = mt.abandoned_by_steam_id64
+       ${lateralMvp('mt')}
        where mt.id = $1 and ${partidaVisivelExpr('mt', '$2')}`,
       [id, req.player.steamId],
     )
@@ -263,6 +282,9 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
       temDemo: m.tem_demo,
       plataformaManual: m.plataforma_manual,
       status: m.status,
+      // Mesmo MVP que o card dessa Partida mostra no Feed (mesmo lateral, ver lateralMvp).
+      // null quando ninguém do grupo (is_tracked) jogou — a página não mostra o destaque.
+      mvp: mvpDaLinha(m.mvp),
       // O R2 é privado de propósito (dados reais dos participantes) — nunca expor a
       // URL bruta do bucket. O client busca via esses paths, autenticados e
       // proxiados pelo próprio servidor (ver rotas /:id/demo e /:id/replay abaixo).

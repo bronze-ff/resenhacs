@@ -132,6 +132,24 @@ function NomeJogador({ p, mostrarTagGrupo = true, className = '' }) {
   )
 }
 
+// Destaque do MVP da Partida — mesmo dado (e mesmo critério) do chip que o card dessa
+// Partida mostra no Feed: melhor rating entre os Jogadores do grupo, desempate por kills.
+// Sem MVP (nenhum jogador rastreado) ou sem rating (partida antiga, sem o dado): não
+// renderiza nada — nada de espaço vazio nem de "—" pra um destaque que não existe.
+function DestaqueMvp({ mvp }) {
+  if (!mvp || mvp.rating == null) return null
+  return (
+    <div className="panel-cut-sm flex items-center gap-2 border border-borda bg-superficie px-3 py-2 font-mono text-sm">
+      <span className="text-[10px] uppercase tracking-widest text-destaque">MVP</span>
+      <Avatar p={mvp} size={28} />
+      <Link to={`/jogador/${mvp.steamId}`} className="min-w-0 truncate text-texto transition-colors hover:text-destaque">
+        {mvp.nick || mvp.steamId}
+      </Link>
+      <span className={`tabular-nums ${corRating(mvp.rating)}`}>{mvp.rating.toFixed(2)}</span>
+    </div>
+  )
+}
+
 // Seta que gira 90° quando aberto — mesmo ícone pros dois estados, só rotaciona.
 function SetaExpandir({ aberto }) {
   return (
@@ -1363,7 +1381,10 @@ export default function Partida() {
           </div>
           <p className="font-mono text-sm text-texto-fraco">{dataHora(m.playedAt)}</p>
         </div>
-        <ResultChip resultado={resultadoGrupo} a={placar.a} b={placar.b} size="normal" />
+        <div className="flex flex-wrap items-center gap-3">
+          <DestaqueMvp mvp={m.mvp} />
+          <ResultChip resultado={resultadoGrupo} a={placar.a} b={placar.b} size="normal" />
+        </div>
       </div>
 
       {m.endedEarly && (
