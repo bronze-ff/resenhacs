@@ -1,4 +1,8 @@
-```markdown
+---
+name: resenhacs
+description: Padroes de desenvolvimento deste repositorio — convencoes de codigo, migrations, testes e fluxo de branch/PR. Use ao implementar feature, refatorar ou criar migration no resenhacs.
+---
+
 # resenhacs Development Patterns
 
 > Auto-generated skill from repository analysis
@@ -194,4 +198,3 @@ import { Friends } from './pages/Friends.jsx';
 | /remove-feature    | Remove a deprecated feature from backend and frontend         |
 | /refactor-model    | Refactor a core model or access pattern across the codebase  |
 | /new-client-page   | Add or remove a client page/component with routing and tests  |
-```
