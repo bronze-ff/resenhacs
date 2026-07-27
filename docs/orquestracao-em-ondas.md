@@ -177,6 +177,111 @@ demais numa tarefa de vários passos gasta 2-3× mais turnos e sai mais caro.
 
 ---
 
+## Dois fornecedores com cotas assimétricas
+
+Situação comum: você assina um plano generoso de um fornecedor e um plano
+barato de outro (por exemplo, Claude num plano 5x e Codex/OpenAI no plano de
+entrada). A pergunta não é "qual modelo é melhor" — é **onde gastar o recurso
+escasso**.
+
+### A regra: o escasso revisa, o abundante implementa
+
+É o inverso do que a intuição sugere (e do fluxo que popularizou esse padrão,
+onde o modelo de outro fornecedor implementava). Três razões:
+
+**1. A assimetria de consumo é de ordem de grandeza.** Implementar é dezenas de
+turnos, contexto grande, muita saída. Revisar é um diff pra dentro, achados pra
+fora. Com limite baixo, implementação queima a cota em poucos tickets.
+
+**2. O modo de falha decide.** Cota estourada no meio de uma implementação
+deixa worktree sujo, branch pela metade, e você só descobre olhando um terminal
+parado — recuperação manual. Cota estourada no meio de uma review custa uma
+segunda opinião; o trabalho está intacto.
+
+**3. Revisor da mesma família compartilha ponto cego com quem escreveu.** É o
+argumento técnico, e é o mais forte: um revisor de outro fornecedor erra em
+lugares diferentes. É exatamente aí que a cota escassa compra mais.
+
+### A alocação
+
+| Papel | Fornecedor | Por quê |
+|---|---|---|
+| Orquestrador | **Abundante** | Sessão longa, muitos turnos |
+| Implementador | **Abundante** | Onde a cota é consumida |
+| Review cruzada por ticket | **Escasso** | Barato por chamada, ponto cego diferente, falha sem destruir trabalho |
+| Review final da branch | **Abundante** | Vê o conjunto; é onde o Critical aparece |
+
+Se ainda quiser o escasso implementando: **um ticket por onda, nunca a onda
+toda**. Assim um estouro de cota custa um ticket, não quatro.
+
+### O comando da review cruzada
+
+O Codex tem subcomando de review não-interativo — roda no worktree do ticket,
+depois do commit, e os achados voltam pro worker que ainda está vivo lá:
+
+```bash
+codex review --base main "Revise este diff. Foque em correção, regressão, teste faltando e regra do repositório violada. Para cada achado: arquivo:linha, o cenário concreto de falha, e sua confiança. Não filtre por severidade — um passo seguinte faz a triagem."
+```
+
+Duas afinações que esticam um plano barato:
+
+- **Baixe o esforço.** Pra review de diff pequeno, `medium` rende igual a
+  `high` e consome bem menos. No Codex: `-c model_reasoning_effort="medium"`.
+- **Confirme o modelo que o seu plano expõe** antes de fixá-lo em qualquer
+  automação. Modelo indisponível não dá erro claro: o terminal sobe e morre
+  vazio. Rode o CLI interativo uma vez e veja a lista.
+
+---
+
+## Configurar o Orca por projeto
+
+Worktree é **checkout limpo**: sem `node_modules`, sem venv, e sem nada que
+esteja no `.gitignore`. Sem setup, o agente começa num repositório onde nada
+roda e gasta turnos "consertando" um problema que não existe.
+
+**Setup Script** (Settings → Worktree hooks). Use `$ORCA_ROOT_PATH` — é o
+caminho do checkout principal, feito exatamente pra copiar arquivo compartilhado
+pra dentro do worktree:
+
+```powershell
+npm ci --prefix <dir-do-front>
+npm ci --prefix <dir-do-back>
+Copy-Item "$ORCA_ROOT_PATH\<caminho>\.env" "<caminho>\.env"
+```
+
+A linha do `.env` é a que ninguém lembra e é a que mais custa: arquivo ignorado
+pelo git não existe no worktree novo, e o sintoma (servidor não sobe, teste
+falha por variável ausente) não parece ter relação com isso.
+
+**Ligue "Wait for setup to complete before starting agent".** Vem desligado. Com
+ele desligado o agente começa enquanto as dependências ainda instalam — roda os
+testes, vê módulo faltando, e tenta consertar. É o erro que faz você achar que o
+modelo é ruim.
+
+**Base ref = `origin/main`**, pra que todo filho seja cortado de main fresca:
+
+```bash
+orca repo set-base-ref --repo id:$(orca worktree current --json | jq -r .repoId) --ref origin/main --json
+```
+
+**Não** ponha no setup o que só alguns tickets precisam (criar venv de Python,
+baixar fixtures pesadas). Roda em *todo* worktree e cobra minutos por onda.
+
+### Antes da primeira onda: teste de fumaça
+
+Nunca estreie o harness numa onda de vários tickets. **Um worktree, um ticket
+real e pequeno, ponta a ponta.** A corrida é o teste, não o resultado —
+verifique:
+
+1. O setup rodou até o fim **antes** de o agente começar?
+2. O agente rodou os testes sem reclamar de dependência faltando?
+3. O PR saiu apontando pra `main`?
+
+Passando os três, o harness está de pé. Rode a review cruzada nesse mesmo
+worktree pra validar a segunda metade do fluxo.
+
+---
+
 ## Fase 0 — Ler o projeto
 
 1. `get_project` (por URL ou nome), com `includeMilestones: true`. **Leia a
