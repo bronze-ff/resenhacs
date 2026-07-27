@@ -267,6 +267,42 @@ orca repo set-base-ref --repo id:$(orca worktree current --json | jq -r .repoId)
 **Não** ponha no setup o que só alguns tickets precisam (criar venv de Python,
 baixar fixtures pesadas). Roda em *todo* worktree e cobra minutos por onda.
 
+**Instale a skill de orquestração** (Settings → agentes). Sem ela o agente não
+sabe que despacho de tarefa, espera por `worker_done`, DAG e pergunta bloqueante
+existem — ele lê o pedido de orquestração como texto e tenta fazer tudo sozinho.
+Reinstale quando o Orca atualizar.
+
+**Permissões em modo irrestrito.** Fora dele, Claude Code e Codex CLI param e
+perguntam a cada ação. Tolerável quando você está olhando o terminal; fatal como
+subagente de uma onda — ele trava esperando um "sim" que ninguém vai dar, e você
+só descobre olhando um terminal parado. O isolamento aqui não é a permissão, é a
+worktree: checkout separado, e o portão real é o PR.
+
+### Nomeie o agente de cada subagente no prompt
+
+O orquestrador **não** herda sua política de modelos. Se o prompt não disser
+qual agente abrir, ele escolhe — e escolhe errado, normalmente o default global,
+o que manda implementação pro fornecedor de cota escassa e queima o plano numa
+onda. Escreva no prompt da onda, explícito:
+
+> Abra cada worktree de implementação com <agente abundante>. Não abra
+> <agente escasso> pra implementar; ele só entra na review cruzada, depois do
+> commit, no mesmo worktree.
+
+A alocação da seção anterior só existe se estiver escrita aqui.
+
+### Ticket como prompt: worktree a partir da URL
+
+Com o rastreador de issues conectado ao Orca, o campo "criar a partir de" aceita
+a URL do ticket direto. Isso inverte onde o trabalho é escrito: em vez de você
+redigir o prompt na hora de criar cada worktree, você escreve o ticket com o
+contrato acima e a onda vira **uma lista de URLs**. A skill do rastreador deixa
+o agente ler o issue, mover o status e anexar o link do PR ao terminar, sem
+vaivém manual.
+
+O contrato do ticket deixa de ser recomendação e passa a ser o prompt literal —
+o que estiver vago no ticket volta como código vago.
+
 ### Antes da primeira onda: teste de fumaça
 
 Nunca estreie o harness numa onda de vários tickets. **Um worktree, um ticket
@@ -275,10 +311,18 @@ verifique:
 
 1. O setup rodou até o fim **antes** de o agente começar?
 2. O agente rodou os testes sem reclamar de dependência faltando?
-3. O PR saiu apontando pra `main`?
+3. O agente trabalhou do início ao fim **sem parar pra pedir permissão**?
+4. O PR saiu apontando pra `main`?
 
-Passando os três, o harness está de pé. Rode a review cruzada nesse mesmo
-worktree pra validar a segunda metade do fluxo.
+Passando os quatro, o harness de um agente está de pé. Rode a review cruzada
+nesse mesmo worktree pra validar a segunda metade do fluxo.
+
+Só então teste a orquestração — e teste **com dois tickets independentes**, não
+com um. Um ticket não exercita nada do que pode quebrar: o que você quer ver é
+se o orquestrador abriu o agente certo pra cada um (não o default), se os dois
+worktrees não se atropelaram, e se ele esperou os dois terminarem antes de
+concluir. Falhar aqui com dois tickets custa dois worktrees; falhar com oito
+custa a tarde.
 
 ---
 
