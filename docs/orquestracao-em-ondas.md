@@ -239,19 +239,35 @@ Worktree é **checkout limpo**: sem `node_modules`, sem venv, e sem nada que
 esteja no `.gitignore`. Sem setup, o agente começa num repositório onde nada
 roda e gasta turnos "consertando" um problema que não existe.
 
-**Setup Script** (Settings → Worktree hooks). Use `$ORCA_ROOT_PATH` — é o
-caminho do checkout principal, feito exatamente pra copiar arquivo compartilhado
-pra dentro do worktree:
+**Setup Script** (Settings → Worktree hooks). A linha do `.env` é a que ninguém
+lembra e é a que mais custa: arquivo ignorado pelo git não existe no worktree
+novo, e o sintoma (servidor não sobe, teste falha por variável ausente) não
+parece ter relação com isso.
 
-```powershell
+**Descubra em qual shell o hook roda antes de escrever qualquer coisa.** No
+Windows o setup roda em **cmd**, mesmo com o terminal configurado como
+PowerShell — e o Orca anuncia as variáveis dele como `$ORCA_ROOT_PATH`, sintaxe
+que o cmd não entende (lá é `%VAR%`). O gerenciador de pacotes roda igual em
+qualquer shell, então as primeiras linhas passam e você acredita que o script
+está bom; só a última falha, e a mensagem ("não é reconhecido como comando…")
+não diz "shell errado".
+
+Receita que não depende nem do shell nem das variáveis do Orca — o próprio git
+sabe onde fica o checkout principal, porque numa worktree `--git-common-dir`
+aponta pro `.git` do repositório de origem:
+
+```
 npm ci --prefix <dir-do-front>
 npm ci --prefix <dir-do-back>
-Copy-Item "$ORCA_ROOT_PATH\<caminho>\.env" "<caminho>\.env"
+powershell -NoProfile -Command "$root = Split-Path (git rev-parse --path-format=absolute --git-common-dir); Copy-Item $root\<caminho>\.env <caminho>\.env"
 ```
 
-A linha do `.env` é a que ninguém lembra e é a que mais custa: arquivo ignorado
-pelo git não existe no worktree novo, e o sintoma (servidor não sobe, teste
-falha por variável ausente) não parece ter relação com isso.
+**Leia a aba de saída do hook, não a do terminal.** O terminal do agente pode
+mostrar erro de outra origem — no caso real que gerou esta seção, um
+`ParserError` que convivia com um `npm ci` bem-sucedido e mandou o diagnóstico
+pro lado errado por meia hora. Um erro de sintaxe aborta o script inteiro antes
+de executar qualquer linha: **se as primeiras linhas rodaram, o erro que você
+está lendo não é do seu script.**
 
 **Ligue "Wait for setup to complete before starting agent".** Vem desligado. Com
 ele desligado o agente começa enquanto as dependências ainda instalam — roda os
