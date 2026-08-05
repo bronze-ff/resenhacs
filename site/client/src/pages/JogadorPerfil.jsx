@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { nomeMapa, dataHora, corRating, nomeArma, TIPO_COMPRA } from '../lib/format.js'
-import { Card, SectionHeader, StatTile, RatingBadge, DataTable, MapIcon, Badge, Select, PremierBadge, PlataformaBadge, FaceitEloBadge, SteamIcon, FaceitIcon } from '../components/ui'
+import { Card, SectionHeader, StatTile, RatingBadge, DataTable, MapIcon, Badge, Select, PlataformaBadge, SteamIcon, FaceitIcon, faixaPremier, nivelDoElo, corChipDoNivel, TEXTO_POR_NIVEL } from '../components/ui'
 import LinhaEvolucao from '../components/LinhaEvolucao.jsx'
 import FiltroPeriodo from '../components/FiltroPeriodo.jsx'
 import TagEstilo from '../components/TagEstilo.jsx'
@@ -21,6 +21,45 @@ function Stat({ rotulo, valor, cor, rating }) {
         <div className={`truncate text-sm font-semibold tabular-nums ${cor ?? 'text-texto'}`}>{valor}</div>
       )}
     </div>
+  )
+}
+
+// Hero de rating de comunidade (Premier / FACEIT) — o "ponto" do jogador em destaque
+// de verdade, não só um chip no header: número grande na cor da faixa, saldo das
+// últimas partidas e a linha de evolução. Some inteiro quando não há valor (mesma
+// regra dos badges: quem nunca jogou Premier/FACEIT não vê "sem dado" ocupando espaço).
+function CardRatingComunidade({ rotulo, icone, corValor, valor, chipExtra, evolucao }) {
+  if (valor == null) return null
+  // Saldo do período coberto pela evolução (último − primeiro), não da última partida só.
+  const delta = evolucao.length >= 2 ? Math.round(evolucao[evolucao.length - 1].valor - evolucao[0].valor) : null
+  return (
+    <Card className="relative p-4">
+      <div className="absolute left-0 top-0 h-[2px] w-6 bg-destaque/60" />
+      <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.15em] text-texto-fraco">
+        {icone}
+        {rotulo}
+      </div>
+      <div className="mt-1.5 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <span className={`font-display text-4xl font-bold tabular-nums display-tight ${corValor}`}>
+          {Math.round(valor)}
+        </span>
+        {chipExtra}
+        {delta != null && delta !== 0 && (
+          <span className={`font-mono text-sm font-semibold tabular-nums ${delta > 0 ? 'text-sucesso' : 'text-perigo'}`}>
+            {delta > 0 ? '+' : ''}{delta}
+            <span className="ml-1 font-normal text-texto-fraco">nas últimas {evolucao.length} partidas</span>
+          </span>
+        )}
+      </div>
+      {evolucao.length >= 2 && (
+        <div className="mt-3">
+          <LinhaEvolucao
+            pontos={evolucao.map((e) => ({ label: dataHora(e.playedAt), valor: e.valor }))}
+            formatoValor={(v) => String(Math.round(v))}
+          />
+        </div>
+      )}
+    </Card>
   )
 }
 
@@ -222,6 +261,11 @@ export default function JogadorPerfil() {
 
   const { jogador, stats, porMapa, recentes, sinergia, evolucao, badges, estilo, destaques, armas, economia, premierAtual } = data
   const clipes = data.clipes ?? []
+  // ?? []/null: payloads antigos em cache (ou fixtures de teste) podem não ter os campos novos.
+  const evolucaoPremier = data.evolucaoPremier ?? []
+  const evolucaoFaceit = data.evolucaoFaceit ?? []
+  const faceitEloAtual = data.faceitEloAtual ?? jogador.faceitElo ?? null
+  const nivelFaceit = faceitEloAtual != null ? (jogador.faceitSkillLevel ?? nivelDoElo(faceitEloAtual)) : null
 
   return (
     <div className="space-y-6">
@@ -237,8 +281,8 @@ export default function JogadorPerfil() {
                 {jogador.nick || jogador.steamId}
               </h2>
               <TagEstilo estilo={estilo} />
-              <PremierBadge valor={premierAtual} size="normal" />
-              <FaceitEloBadge elo={jogador.faceitElo} level={jogador.faceitSkillLevel} />
+              {/* Premier/FACEIT saíram daqui de propósito: viraram o hero logo abaixo
+                  (CardRatingComunidade) — o mesmo número duas vezes na mesma dobra é ruído. */}
             </div>
             <p className="font-mono text-sm text-texto-fraco">{stats.partidas} partidas · {stats.winrate}% de vitória</p>
           </div>
@@ -277,6 +321,32 @@ export default function JogadorPerfil() {
           </Link>
         </div>
       </div>
+
+      {/* 1b. Hero de rating de comunidade — o ponto do Premier e o ELO da FACEIT em
+          destaque, antes dos tiles (é o número que a resenha mais cita). */}
+      {(premierAtual != null || faceitEloAtual != null) && (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <CardRatingComunidade
+            rotulo="Premier — CS Rating"
+            icone={<SteamIcon className="h-3.5 w-3.5 shrink-0" />}
+            corValor={premierAtual != null ? faixaPremier(premierAtual).cor : ''}
+            valor={premierAtual}
+            evolucao={evolucaoPremier}
+          />
+          <CardRatingComunidade
+            rotulo="FACEIT — ELO"
+            icone={<FaceitIcon className="h-3.5 w-3.5 shrink-0" />}
+            corValor={nivelFaceit != null ? (TEXTO_POR_NIVEL[nivelFaceit] ?? TEXTO_POR_NIVEL[1]) : ''}
+            valor={faceitEloAtual}
+            chipExtra={nivelFaceit != null && (
+              <span className={`panel-cut-sm border px-2 py-0.5 font-mono text-xs font-bold uppercase ${corChipDoNivel(nivelFaceit)}`}>
+                Nível {nivelFaceit}
+              </span>
+            )}
+            evolucao={evolucaoFaceit}
+          />
+        </div>
+      )}
 
       {/* 2. Tiles de stats principais — o que mais se consulta de cara. */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">

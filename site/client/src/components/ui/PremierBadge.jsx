@@ -14,7 +14,9 @@ const FAIXAS = [
   { max: 30000, cor: 'text-perigo', bg: 'bg-perigo/10', border: 'border-perigo/40' },
   { max: Infinity, cor: AMARELO.texto, bg: AMARELO.fundo, border: AMARELO.borda },
 ]
-function faixaDe(valor) {
+// Exportada pro hero do perfil (JogadorPerfil) pintar o número grande com a MESMA
+// faixa do badge — duas tabelas de cor divergiriam na primeira mudança do jogo.
+export function faixaPremier(valor) {
   return FAIXAS.find((f) => valor < f.max) ?? FAIXAS[FAIXAS.length - 1]
 }
 
@@ -24,7 +26,7 @@ function faixaDe(valor) {
 // quem lia os dois lado a lado. Ver ResultChip.jsx.
 export default function PremierBadge({ valor, size = 'compacto' }) {
   if (valor == null) return null
-  const f = faixaDe(valor)
+  const f = faixaPremier(valor)
   const grande = size === 'normal'
   return (
     <Chip

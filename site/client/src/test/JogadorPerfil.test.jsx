@@ -33,6 +33,42 @@ function renderPerfil(payload) {
 
 beforeEach(() => { vi.restoreAllMocks() })
 
+describe('JogadorPerfil — hero de rating de comunidade (Premier/FACEIT)', () => {
+  it('mostra o CS Rating do Premier em destaque com o saldo das últimas partidas', async () => {
+    renderPerfil({
+      ...PERFIL_BASE,
+      premierAtual: 16250,
+      evolucaoPremier: [
+        { playedAt: '2026-08-01T00:00:00Z', valor: 15900 },
+        { playedAt: '2026-08-04T00:00:00Z', valor: 16250 },
+      ],
+    })
+    // "16250" aparece 2x de propósito: o número grande do hero E o teto do eixo do gráfico.
+    expect((await screen.findAllByText('16250')).length).toBeGreaterThan(0)
+    expect(screen.getByText(/premier — cs rating/i)).toBeInTheDocument()
+    // saldo do período coberto pela evolução: 16250 − 15900
+    expect(screen.getByText('+350')).toBeInTheDocument()
+  })
+
+  it('mostra o ELO FACEIT com o chip de nível', async () => {
+    renderPerfil({
+      ...PERFIL_BASE,
+      jogador: { ...PERFIL_BASE.jogador, faceitSkillLevel: 7 },
+      faceitEloAtual: 1425,
+      evolucaoFaceit: [],
+    })
+    expect(await screen.findByText('1425')).toBeInTheDocument()
+    expect(screen.getByText(/nível 7/i)).toBeInTheDocument()
+  })
+
+  it('sem Premier nem FACEIT: o hero não aparece (nada de "sem dado")', async () => {
+    renderPerfil(PERFIL_BASE)
+    await waitFor(() => expect(screen.getAllByText(/bronze/i).length).toBeGreaterThan(0))
+    expect(screen.queryByText(/premier — cs rating/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/faceit — elo/i)).not.toBeInTheDocument()
+  })
+})
+
 describe('JogadorPerfil — seção Clipes', () => {
   it('mostra a seção com o clipe e o link "Ver todos" filtrado no jogador', async () => {
     renderPerfil({

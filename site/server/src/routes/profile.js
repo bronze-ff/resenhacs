@@ -439,11 +439,13 @@ export function createProfileRouter({ db, requireAuth }) {
     const destaquesVisivel = visivelWhere(req.player.steamId, destaquesParams)
     const premierParams = [steamId]
     const premierVisivel = visivelWhere(req.player.steamId, premierParams)
+    const faceitParams = [steamId]
+    const faceitVisivel = visivelWhere(req.player.steamId, faceitParams)
     const clipesParams = [steamId]
     const clipesPeriodo = periodoWhere(from, to, clipesParams)
     const clipesVisivel = visivelWhere(req.player.steamId, clipesParams)
 
-    const [stats, porMapa, recentes, sinergia, evolucao, statsGerais, sequencia, estilo, destaques, armas, economia, premierRow, clipes] = await Promise.all([
+    const [stats, porMapa, recentes, sinergia, evolucao, statsGerais, sequencia, estilo, destaques, armas, economia, premierRow, faceitRow, clipes] = await Promise.all([
       statsAgregados(db, steamId, from, to, req.player.steamId),
       db.query(
         `select m.map, count(*)::int as partidas,
@@ -496,12 +498,23 @@ export function createProfileRouter({ db, requireAuth }) {
       ),
       armasDoJogador(db, steamId, from, to, req.player.steamId),
       economiaDoJogador(db, steamId, from, to, req.player.steamId),
+      // Uma query só serve o rating ATUAL (rows[0], mais recente) e a EVOLUÇÃO do hero
+      // do perfil (rows invertidas pra ordem cronológica) — sempre no histórico inteiro
+      // visível, sem filtro de período (mesma convenção dos badges: rating de comunidade
+      // é estado de carreira, não recorte).
       db.query(
-        `select mp.premier_rating_after
+        `select m.played_at, mp.premier_rating_after
          from match_players mp join matches m on m.id = mp.match_id
          where mp.steam_id64 = $1 and m.status = 'parsed' and mp.premier_rating_after is not null${premierVisivel}
-         order by m.played_at desc nulls last limit 1`,
+         order by m.played_at desc nulls last limit 20`,
         premierParams,
+      ),
+      db.query(
+        `select m.played_at, mp.faceit_elo_after
+         from match_players mp join matches m on m.id = mp.match_id
+         where mp.steam_id64 = $1 and m.status = 'parsed' and mp.faceit_elo_after is not null${faceitVisivel}
+         order by m.played_at desc nulls last limit 20`,
+        faceitParams,
       ),
       // Prévia dos melhores clipes do jogador pro perfil — mesmo shape da aba Clipes
       // (clipes.js), MESMA regra de visibilidade por amizade (clipe de partida que o
@@ -540,6 +553,14 @@ export function createProfileRouter({ db, requireAuth }) {
         faceitSkillLevel: jogador.faceit_skill_level ?? null,
       },
       premierAtual: premierRow.rows[0]?.premier_rating_after != null ? Number(premierRow.rows[0].premier_rating_after) : null,
+      // FACEIT tem duas fontes: o vínculo oficial da API (players.faceit_elo, atualizado
+      // no sync) manda quando existe; sem vínculo, cai pro elo da última partida ingerida.
+      faceitEloAtual: jogador.faceit_elo != null
+        ? Number(jogador.faceit_elo)
+        : faceitRow.rows[0]?.faceit_elo_after != null ? Number(faceitRow.rows[0].faceit_elo_after) : null,
+      // Ordem cronológica pro gráfico (a query vem desc pra cortar nos 20 mais recentes).
+      evolucaoPremier: premierRow.rows.slice().reverse().map((r) => ({ playedAt: r.played_at, valor: Number(r.premier_rating_after) })),
+      evolucaoFaceit: faceitRow.rows.slice().reverse().map((r) => ({ playedAt: r.played_at, valor: Number(r.faceit_elo_after) })),
       stats,
       evolucao,
       badges,

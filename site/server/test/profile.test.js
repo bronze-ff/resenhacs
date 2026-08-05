@@ -245,6 +245,74 @@ describe('GET /api/profile/:steamId', () => {
     expect(res.body.recentes[0]).toMatchObject({ premierBefore: null, premierAfter: null })
   })
 
+  // statsAgregados lê rows[0].partidas incondicionalmente — todo teste do perfil
+  // precisa deste handler mesmo quando o assunto é outro (senão: 500).
+  const STATS_VAZIOS = ['count(*)::int as partidas', [{
+    partidas: 0, vitorias: 0, kills: 0, deaths: 0, assists: 0, hs: 0, damage: 0, rounds: 0, rating: null,
+    he_thrown: 0, he_damage: 0, he_team_damage: 0, molotovs_thrown: 0, molotov_damage: 0, molotov_team_damage: 0,
+    flashes_thrown: 0, enemies_flashed: 0, enemy_flash_duration: '0', flash_assists: 0,
+    enemy_flash_landed_count: 0, enemy_flash_landed_duration_sum: '0',
+  }]]
+
+  it('devolve evolucaoPremier cronológica (a query desce, a resposta inverte) e premierAtual = o mais recente', async () => {
+    const { app, db } = appWith([
+      ['where p.steam_id64 = $1', [{ steam_id64: '765', nick: 'fih', avatar_url: null }]],
+      STATS_VAZIOS,
+      // Fixture na ordem da query (played_at desc): o mais recente primeiro.
+      ['mp.premier_rating_after is not null', [
+        { played_at: '2026-08-04T00:00:00.000Z', premier_rating_after: 16250 },
+        { played_at: '2026-08-01T00:00:00.000Z', premier_rating_after: 15900 },
+      ]],
+    ])
+    const res = await request(app).get('/api/profile/765').set('Cookie', cookie)
+    expect(res.status).toBe(200)
+    expect(res.body.premierAtual).toBe(16250)
+    expect(res.body.evolucaoPremier).toEqual([
+      { playedAt: '2026-08-01T00:00:00.000Z', valor: 15900 },
+      { playedAt: '2026-08-04T00:00:00.000Z', valor: 16250 },
+    ])
+    // A mesma query serve o atual e a evolução — limit 20, não mais limit 1.
+    const sql = db.query.mock.calls.find(([s]) => s.includes('mp.premier_rating_after is not null'))[0]
+    expect(sql).toContain('limit 20')
+  })
+
+  it('devolve evolucaoFaceit e faceitEloAtual do vínculo; sem vínculo, cai pro elo da última partida', async () => {
+    const comVinculo = appWith([
+      ['where p.steam_id64 = $1', [{ steam_id64: '765', nick: 'fih', avatar_url: null, faceit_nick: 'bronzeadoo', faceit_elo: 1425, faceit_skill_level: 7 }]],
+      STATS_VAZIOS,
+      ['mp.faceit_elo_after is not null', [
+        { played_at: '2026-08-04T00:00:00.000Z', faceit_elo_after: 1410 },
+        { played_at: '2026-08-01T00:00:00.000Z', faceit_elo_after: 1380 },
+      ]],
+    ])
+    const res = await request(comVinculo.app).get('/api/profile/765').set('Cookie', cookie)
+    // Com vínculo FACEIT, o elo "oficial" da API manda (pode ser mais fresco que a última demo).
+    expect(res.body.faceitEloAtual).toBe(1425)
+    expect(res.body.evolucaoFaceit).toEqual([
+      { playedAt: '2026-08-01T00:00:00.000Z', valor: 1380 },
+      { playedAt: '2026-08-04T00:00:00.000Z', valor: 1410 },
+    ])
+
+    const semVinculo = appWith([
+      ['where p.steam_id64 = $1', [{ steam_id64: '765', nick: 'fih', avatar_url: null, faceit_nick: null, faceit_elo: null, faceit_skill_level: null }]],
+      STATS_VAZIOS,
+      ['mp.faceit_elo_after is not null', [{ played_at: '2026-08-04T00:00:00.000Z', faceit_elo_after: 1410 }]],
+    ])
+    const res2 = await request(semVinculo.app).get('/api/profile/765').set('Cookie', cookie)
+    expect(res2.body.faceitEloAtual).toBe(1410)
+  })
+
+  it('sem partida FACEIT nem vínculo: faceitEloAtual null e evolucaoFaceit vazia', async () => {
+    const { app } = appWith([
+      ['where p.steam_id64 = $1', [{ steam_id64: '765', nick: 'fih', avatar_url: null }]],
+      STATS_VAZIOS,
+    ])
+    const res = await request(app).get('/api/profile/765').set('Cookie', cookie)
+    expect(res.body.faceitEloAtual).toBeNull()
+    expect(res.body.evolucaoFaceit).toEqual([])
+    expect(res.body.evolucaoPremier).toEqual([])
+  })
+
   it('inclui clipes do jogador (6 melhores por pontuacao) com shape da aba Clipes', async () => {
     const { app } = appWith([
       ['where p.steam_id64 = $1', [{ steam_id64: '765', nick: 'bronze', avatar_url: 'https://a/av.jpg' }]],
