@@ -1,0 +1,59 @@
+name: Site
+
+# CI do site (client + server) — até 2026-08-05 NÃO existia: o único workflow era o do
+# Coletor (que roda só pytest), então as ~58 suítes de vitest do site nunca rodavam em
+# PR, e o Dependabot mergeava bumps de site/* sem teste nenhum. Este workflow fecha
+# esse buraco. Roda em PR e em push na main, filtrado por path pra não gastar minuto
+# à toa em mudança que só toca coletor/bot/docs.
+on:
+  pull_request:
+    paths: ['site/**', '.github/workflows/site.yml']
+  push:
+    branches: [main]
+    paths: ['site/**', '.github/workflows/site.yml']
+
+# Escopo mínimo do GITHUB_TOKEN — só checkout, mesma razão do coletor.yml.
+permissions:
+  contents: read
+
+# PR atualizada cancela a run anterior da mesma PR (diferente do coletor, que serializa
+# sem cancelar — lá o motivo é a sessão única do bot; aqui é só não desperdiçar minuto).
+concurrency:
+  group: site-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Dois jobs (não um): client e server têm node_modules e caches independentes e
+  # rodam em paralelo — o tempo total da PR vira o do mais lento, não a soma.
+  server:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: site/server
+    steps:
+      # Actions pinadas por SHA (não por tag mutável) — mesma regra do coletor.yml.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: site/server/package-lock.json
+      - run: npm ci
+      - run: npm test
+
+  client:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: site/client
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: site/client/package-lock.json
+      - run: npm ci
+      - run: npm test

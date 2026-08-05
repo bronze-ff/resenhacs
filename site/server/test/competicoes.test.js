@@ -452,6 +452,18 @@ describe('GET /api/competicoes/:id/elegiveis', () => {
 describe('POST /api/competicoes/:id/submissoes', () => {
   const COMP_ID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
   const CLIP_ID = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
+  // Datas RELATIVAS a agora, nunca absolutas: fixtures com '2026-07-01'..'2026-08-01'
+  // apodreceram quando o calendário passou de 01/08 — a rota devolvia 400 "encerrada"
+  // antes de chegar no caso que cada teste queria exercitar (4 testes quebraram em
+  // 2026-08-05 sem nenhuma mudança de código).
+  const DIA = 86400000
+  const compAtiva = {
+    id: COMP_ID,
+    data_inicio: new Date(Date.now() - 7 * DIA).toISOString(),
+    data_fim: new Date(Date.now() + 7 * DIA).toISOString(),
+    limite_diario: 2, limite_total: 10,
+  }
+  const jogadaDentroDoPeriodo = new Date(Date.now() - 2 * DIA).toISOString()
 
   it('sem login: 401', async () => {
     const { app } = appWith([])
@@ -460,7 +472,7 @@ describe('POST /api/competicoes/:id/submissoes', () => {
 
   it('clipe nao existe ou nao e do proprio jogador: 404', async () => {
     const { app } = appWith([
-      ['from competicoes where id', [{ id: COMP_ID, data_inicio: '2026-07-01', data_fim: '2026-08-01', limite_diario: 2, limite_total: 10 }]],
+      ['from competicoes where id', [compAtiva]],
       ['from allstar_clips ac', []], // clipe nao encontrado (ou de outro steamId — mesma query já filtra)
     ])
     const res = await request(app).post(`/api/competicoes/${COMP_ID}/submissoes`).set('Cookie', cookieJogador).send({ allstarClipId: CLIP_ID })
@@ -483,10 +495,10 @@ describe('POST /api/competicoes/:id/submissoes', () => {
     const db = {
       query: vi.fn().mockImplementation((sql, params) => {
         if (sql.includes('from competicoes where id')) {
-          return Promise.resolve({ rows: [{ id: COMP_ID, data_inicio: '2026-07-01', data_fim: '2026-08-01', limite_diario: 2, limite_total: 10 }] })
+          return Promise.resolve({ rows: [compAtiva] })
         }
         if (sql.includes('from allstar_clips ac')) {
-          return Promise.resolve({ rows: [{ id: CLIP_ID, steam_id64: '765', status: 'Processed', played_at: '2026-07-22T10:00:00Z' }] })
+          return Promise.resolve({ rows: [{ id: CLIP_ID, steam_id64: '765', status: 'Processed', played_at: jogadaDentroDoPeriodo }] })
         }
         if (sql.includes('count(*) filter')) return Promise.resolve({ rows: [{ hoje: 0, total: 0 }] })
         if (sql.includes('insert into competicao_submissoes')) { gravados.push(params); return Promise.resolve({ rows: [] }) }
@@ -508,10 +520,10 @@ describe('POST /api/competicoes/:id/submissoes', () => {
     const db = {
       query: vi.fn().mockImplementation((sql) => {
         if (sql.includes('from competicoes where id')) {
-          return Promise.resolve({ rows: [{ id: COMP_ID, data_inicio: '2026-07-01', data_fim: '2026-08-01', limite_diario: 2, limite_total: 10 }] })
+          return Promise.resolve({ rows: [compAtiva] })
         }
         if (sql.includes('from allstar_clips ac')) {
-          return Promise.resolve({ rows: [{ id: CLIP_ID, steam_id64: '765', status: 'Processed', played_at: '2026-07-22T10:00:00Z' }] })
+          return Promise.resolve({ rows: [{ id: CLIP_ID, steam_id64: '765', status: 'Processed', played_at: jogadaDentroDoPeriodo }] })
         }
         if (sql.includes('count(*) filter')) return Promise.resolve({ rows: [{ hoje: 2, total: 5 }] })
         return Promise.resolve({ rows: [] })
@@ -527,10 +539,12 @@ describe('POST /api/competicoes/:id/submissoes', () => {
     const db = {
       query: vi.fn().mockImplementation((sql) => {
         if (sql.includes('from competicoes where id')) {
-          return Promise.resolve({ rows: [{ id: COMP_ID, data_inicio: '2026-07-23', data_fim: '2026-07-30', limite_diario: 2, limite_total: 10 }] })
+          return Promise.resolve({ rows: [compAtiva] })
         }
         if (sql.includes('from allstar_clips ac')) {
-          return Promise.resolve({ rows: [{ id: CLIP_ID, steam_id64: '765', status: 'Processed', played_at: '2026-07-01T10:00:00Z' }] })
+          // Jogada ANTES do início da competição (30 dias atrás vs início há 7) — o
+          // caso exercitado é "partida fora do período", com a competição ainda ativa.
+          return Promise.resolve({ rows: [{ id: CLIP_ID, steam_id64: '765', status: 'Processed', played_at: new Date(Date.now() - 30 * DIA).toISOString() }] })
         }
         return Promise.resolve({ rows: [] })
       }),
