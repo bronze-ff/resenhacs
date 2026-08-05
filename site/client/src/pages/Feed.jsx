@@ -7,6 +7,16 @@ import { Avatar, Card, SectionHeader, Badge, MapIcon, Select, ResultChip, Plataf
 
 const MAPAS = ['de_anubis', 'de_ancient', 'de_cache', 'de_dust2', 'de_inferno', 'de_mirage', 'de_nuke', 'de_overpass', 'de_train', 'de_vertigo']
 
+// Plataformas filtráveis — mesmo universo do PlataformaBadge: Premier (valve_mm) e
+// FACEIT vêm da integração automática; Gamers Club e XPLAY.GG só existem como rótulo
+// manual do Enviar Demo. O servidor resolve o cruzamento source × plataforma_manual.
+const PLATAFORMAS = [
+  ['premier', 'Premier'],
+  ['faceit', 'FACEIT'],
+  ['gamers_club', 'Gamers Club'],
+  ['xplay_gg', 'XPLAY.GG'],
+]
+
 // Resultado do ponto de vista do GRUPO (não do "Time A"): vitória/derrota quando todo
 // mundo do grupo estava no mesmo lado; 'misto' quando o grupo se dividiu nos dois times.
 // won é nullable no banco (empate — placar igual, ex.: 12:12 — não tem vencedor); só
@@ -203,6 +213,7 @@ export default function Feed() {
   const [ate, setAte] = useState('')
   const [mapa, setMapa] = useState('')
   const [origem, setOrigem] = useState('')
+  const [plataforma, setPlataforma] = useState('')
   const [resultado, setResultado] = useState('')
   // Filtro por participação (partidas em que o jogador jogou) — era "MVP", mas o nome e
   // a semântica confundiam: o usuário escolhia o próprio nick esperando as partidas dele.
@@ -231,6 +242,7 @@ export default function Feed() {
     if (ate) qs.set('to', ate)
     if (mapa) qs.set('map', mapa)
     if (origem) qs.set('source', origem)
+    if (plataforma) qs.set('plataforma', plataforma)
     if (jogador) qs.set('jogador', jogador)
     qs.set('limit', String(TAMANHO_PAGINA))
     qs.set('offset', String(offset))
@@ -259,7 +271,7 @@ export default function Feed() {
         setTemMais(false)
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [de, ate, mapa, origem, jogador, sessaoAtiva])
+  }, [de, ate, mapa, origem, plataforma, jogador, sessaoAtiva])
 
   function carregarMais() {
     if (carregandoMais || !partidas || sessaoAtiva) return
@@ -319,6 +331,13 @@ export default function Feed() {
             <Select value={jogador} onChange={(e) => setJogador(e.target.value)} className="w-full lg:w-auto" selectClassName="py-1.5 text-xs">
               <option value="">Todos os jogadores</option>
               {jogadores.map((j) => <option key={j.steamId} value={j.steamId}>{j.nick}</option>)}
+            </Select>
+            {/* col-span-2: terceiro select no grid mobile de 2 colunas — meia largura
+                órfã na segunda linha ficava visualmente quebrada; no lg vira flex e
+                o span é inerte. */}
+            <Select value={plataforma} onChange={(e) => setPlataforma(e.target.value)} className="col-span-2 w-full lg:col-span-1 lg:w-auto" selectClassName="py-1.5 text-xs">
+              <option value="">Todas as plataformas</option>
+              {PLATAFORMAS.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
             </Select>
           </div>
         </div>

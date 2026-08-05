@@ -86,6 +86,53 @@ describe('GET /api/matches', () => {
     expect(sql).not.toContain('jogador_filter')
   })
 
+  it('filtra por plataforma=premier (só matchmaking da Valve)', async () => {
+    const { app, db } = appWith([['from matches m', []]])
+    const res = await request(app).get('/api/matches?plataforma=premier').set('Cookie', cookie)
+    expect(res.status).toBe(200)
+    const sql = db.query.mock.calls.find(([s]) => s.includes('from matches m'))[0]
+    expect(sql).toContain("m.source = 'valve_mm'")
+    expect(sql).not.toContain('plataforma_manual =')
+  })
+
+  it('plataforma=faceit pega integração automática E upload manual rotulado', async () => {
+    // FACEIT existe nos dois mundos: source='faceit' (integração oficial) e
+    // plataforma_manual='faceit' (demo enviada à mão) — o filtro une os dois.
+    const { app, db } = appWith([['from matches m', []]])
+    const res = await request(app).get('/api/matches?plataforma=faceit').set('Cookie', cookie)
+    expect(res.status).toBe(200)
+    const sql = db.query.mock.calls.find(([s]) => s.includes('from matches m'))[0]
+    expect(sql).toContain("(m.source = 'faceit' or m.plataforma_manual = 'faceit')")
+  })
+
+  it('filtra por plataforma=gamers_club e xplay_gg (só via rótulo manual)', async () => {
+    for (const p of ['gamers_club', 'xplay_gg']) {
+      const { app, db } = appWith([['from matches m', []]])
+      const res = await request(app).get(`/api/matches?plataforma=${p}`).set('Cookie', cookie)
+      expect(res.status).toBe(200)
+      const sql = db.query.mock.calls.find(([s]) => s.includes('from matches m'))[0]
+      expect(sql).toContain(`m.plataforma_manual = '${p}'`)
+    }
+  })
+
+  it('ignora plataforma desconhecida (não vaza pro SQL)', async () => {
+    const { app, db } = appWith([['from matches m', []]])
+    const res = await request(app).get("/api/matches?plataforma=x';drop--").set('Cookie', cookie)
+    expect(res.status).toBe(200)
+    const sql = db.query.mock.calls.find(([s]) => s.includes('from matches m'))[0]
+    expect(sql).not.toContain('drop')
+    expect(sql).not.toContain('plataforma_manual =')
+  })
+
+  it('plataforma compõe com o filtro source (Auto/Manual) sem conflito', async () => {
+    const { app, db } = appWith([['from matches m', []]])
+    await request(app).get('/api/matches?source=upload&plataforma=gamers_club').set('Cookie', cookie)
+    const [sql, params] = db.query.mock.calls.find(([s]) => s.includes('from matches m'))
+    expect(sql).toContain('m.source = $')
+    expect(sql).toContain("m.plataforma_manual = 'gamers_club'")
+    expect(params).toContain('upload')
+  })
+
   it('aceita limit e offset e os manda como params parametrizados', async () => {
     const { app, db } = appWith([['from matches m', []]])
     const res = await request(app).get('/api/matches?limit=5&offset=10').set('Cookie', cookie)
