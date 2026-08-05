@@ -50,6 +50,18 @@ function mvpDaLinha(mvp) {
   return mvp ? { ...mvp, rating: mvp.rating === null ? null : Number(mvp.rating) } : null
 }
 
+// Filtro por plataforma/comunidade, cruzando as DUAS origens do dado: `source`
+// (integração automática — valve_mm/faceit) e `plataforma_manual` (rótulo que o
+// jogador escolhe no Enviar Demo — ver migração 0041). FACEIT aparece nos dois
+// mundos, então o filtro dela une os dois. Lookup fixo por chave: valor fora da
+// lista é simplesmente ignorado (nada do query string entra no SQL).
+const PLATAFORMA_COND = {
+  premier: "m.source = 'valve_mm'",
+  faceit: "(m.source = 'faceit' or m.plataforma_manual = 'faceit')",
+  gamers_club: "m.plataforma_manual = 'gamers_club'",
+  xplay_gg: "m.plataforma_manual = 'xplay_gg'",
+}
+
 export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, config }) {
   const router = Router()
 
@@ -61,7 +73,7 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
     const cond = ["m.status = 'parsed'"]
     const params = [req.player.steamId]
     cond.push(partidaVisivelExpr('m', `$${params.length}`))
-    const { from, to, map, source, jogador, ids } = req.query
+    const { from, to, map, source, plataforma, jogador, ids } = req.query
     if (ids) {
       const lista = String(ids).split(',').filter((s) => /^[0-9a-f-]{36}$/i.test(s))
       if (lista.length === 0) return res.json([])
@@ -92,6 +104,11 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
     if (!ids && (source === 'valve_mm' || source === 'upload')) {
       params.push(source)
       cond.push(`m.source = $${params.length}`)
+    }
+    // Object.hasOwn (não lookup direto): sem ele, ?plataforma=constructor acharia a
+    // chave herdada do Object.prototype e empurraria lixo pro SQL.
+    if (!ids && typeof plataforma === 'string' && Object.hasOwn(PLATAFORMA_COND, plataforma)) {
+      cond.push(PLATAFORMA_COND[plataforma])
     }
     // Filtro por PARTICIPAÇÃO (partidas em que o jogador jogou) — era por MVP calculado,
     // mas isso confundia: o usuário escolhia o próprio nick esperando ver as partidas

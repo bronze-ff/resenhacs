@@ -39,3 +39,24 @@ describe('Feed — filtro por jogador', () => {
     expect(urls.some((u) => u.includes('mvp='))).toBe(false)
   })
 })
+
+describe('Feed — filtro por plataforma', () => {
+  it('dropdown "Todas as plataformas" filtra via ?plataforma= (ex.: Gamers Club)', async () => {
+    render(<MemoryRouter><Feed /></MemoryRouter>)
+    const trigger = await screen.findByText('Todas as plataformas')
+    fireEvent.click(trigger)
+    const opcao = await screen.findByRole('option', { name: /gamers club/i })
+    fireEvent.click(opcao)
+    await waitFor(() => {
+      expect(urls.some((u) => u.includes('/api/matches?') && u.includes('plataforma=gamers_club'))).toBe(true)
+    })
+  })
+
+  it('oferece Premier, FACEIT, Gamers Club e XPLAY.GG', async () => {
+    render(<MemoryRouter><Feed /></MemoryRouter>)
+    fireEvent.click(await screen.findByText('Todas as plataformas'))
+    for (const nome of [/premier/i, /faceit/i, /gamers club/i, /xplay\.gg/i]) {
+      expect(await screen.findByRole('option', { name: nome })).toBeInTheDocument()
+    }
+  })
+})
