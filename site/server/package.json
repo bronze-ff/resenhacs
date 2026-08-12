@@ -18,7 +18,7 @@
     "express": "^5.2.1",
     "express-rate-limit": "^8.6.0",
     "jsonwebtoken": "^9.0.2",
-    "pg": "^8.13.1"
+    "pg": "^8.23.0"
   },
   "devDependencies": {
     "supertest": "^7.0.0",
