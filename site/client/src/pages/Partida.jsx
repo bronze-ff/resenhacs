@@ -981,18 +981,28 @@ function BotaoJogadorClipe({ p, selecionado, onClick }) {
 // Submitted -> "gerando…"; Error -> permite tentar de novo; Processed -> player
 // embutido do Allstar, mesmo layout (vídeo + info ao lado) do resto do sistema.
 function PainelClipeJogador({ jogador, clip, pedindo, erro, aberto, onAbrir, onGerar, viewerSteamId, m, placar, podeEnviarCompeticao, onAbrirSeletorCompeticao }) {
+  // demo_url nulo (cleanup de 14 dias, ou Partida que nunca teve .dem): o servidor
+  // responde 404. Esconde a ação em vez de deixar o clique falhar.
+  const semDemo = !m.demoUrl
+  const avisoSemDemo = (
+    <span className="font-mono text-xs text-texto-fraco">
+      Demo não arquivada — não dá pra gerar clipe nem baixar o .dem.
+    </span>
+  )
   if (!clip) {
     return (
       <div className="mt-4 panel-cut-sm border border-borda bg-superficie p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <span className="font-mono text-sm text-texto">{jogador.nick || jogador.steamId}</span>
-          <button
-            onClick={onGerar}
-            disabled={pedindo}
-            className="panel-cut-sm border border-borda bg-superficie px-3 py-2 font-mono text-xs uppercase text-texto-fraco transition-colors hover:border-destaque/60 hover:text-destaque disabled:opacity-50"
-          >
-            {pedindo ? '…' : '🎬 gerar melhor clipe da partida'}
-          </button>
+          {semDemo ? avisoSemDemo : (
+            <button
+              onClick={onGerar}
+              disabled={pedindo}
+              className="panel-cut-sm border border-borda bg-superficie px-3 py-2 font-mono text-xs uppercase text-texto-fraco transition-colors hover:border-destaque/60 hover:text-destaque disabled:opacity-50"
+            >
+              {pedindo ? '…' : '🎬 gerar melhor clipe da partida'}
+            </button>
+          )}
         </div>
         {erro && <p className="mt-2 font-mono text-xs text-perigo">{erro}</p>}
       </div>
@@ -1009,13 +1019,17 @@ function PainelClipeJogador({ jogador, clip, pedindo, erro, aberto, onAbrir, onG
     return (
       <div className="mt-4 panel-cut-sm border border-borda bg-superficie p-4">
         <p className="font-mono text-sm text-perigo">Falha ao gerar o clipe de {jogador.nick || jogador.steamId}.</p>
-        <button
-          onClick={onGerar}
-          disabled={pedindo}
-          className="mt-2 panel-cut-sm border border-borda bg-superficie px-3 py-2 font-mono text-xs uppercase text-texto-fraco transition-colors hover:border-destaque/60 hover:text-destaque disabled:opacity-50"
-        >
-          {pedindo ? '…' : 'tentar de novo'}
-        </button>
+        {semDemo ? (
+          <p className="mt-2">{avisoSemDemo}</p>
+        ) : (
+          <button
+            onClick={onGerar}
+            disabled={pedindo}
+            className="mt-2 panel-cut-sm border border-borda bg-superficie px-3 py-2 font-mono text-xs uppercase text-texto-fraco transition-colors hover:border-destaque/60 hover:text-destaque disabled:opacity-50"
+          >
+            {pedindo ? '…' : 'tentar de novo'}
+          </button>
+        )}
         {erro && <p className="mt-2 font-mono text-xs text-perigo">{erro}</p>}
       </div>
     )

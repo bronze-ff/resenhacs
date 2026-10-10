@@ -510,6 +510,16 @@ describe('POST /api/matches/:id/jogador/:steamId/clipe', () => {
     expect(res.status).toBe(404)
   })
 
+  it('demo_url nulo: 404 e não pede clipe', async () => {
+    const { app } = appWith(
+      [['from match_players mp', [{ steam_id64: STEAM_ID, nick: 'bronze', demo_url: null }]]],
+      { config: configComAllstar, r2Client: {} },
+    )
+    const res = await request(app).post(`/api/matches/m1/jogador/${STEAM_ID}/clipe`).set('Cookie', cookie)
+    expect(res.status).toBe(404)
+    expect(res.body.erro).toMatch(/não arquivada/i)
+  })
+
   it('jogador comum (fora da allowlist) pode gerar o PRÓPRIO clipe', async () => {
     // Qualquer Jogador autenticado pode gerar o clipe dele mesmo — a allowlist só
     // restringe pedir clipe de OUTRO jogador. Cookie = STEAM_ID, alvo = STEAM_ID.
