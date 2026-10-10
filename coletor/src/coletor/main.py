@@ -33,6 +33,10 @@ from . import storage_r2
 from . import transform
 from .config import Config
 
+# Janela em que o .dem bruto fica no R2 (ADR-0006). O workflow passa o mesmo número
+# em `cleanup --days`. replay.json, uploads e curso-mira/ não entram nessa conta.
+RETENCAO_DEMO_DIAS = 14
+
 
 def cmd_discover(config, conn):
     config.require("steam_api_key")
@@ -227,13 +231,11 @@ def cmd_fetch(config, conn, since=None, bot_dir=None, node_bin="node"):
     return total
 
 
-def cmd_cleanup(config, conn, days=90):
+def cmd_cleanup(config, conn, days=RETENCAO_DEMO_DIAS):
     """Apaga do R2 o .dem BRUTO (não o replay.json, que a UI usa pra sempre) de Partidas
-    já processadas há mais de `days` dias. Decisão do usuário: bug de parser corrigido
-    depois exige reprocessar a demo original (aconteceu 3x só nesta fase do projeto) —
-    por isso a janela de 90 dias, não deleção imediata. replay_url continua intacto;
-    só demo_url vira NULL (a rota /:id/demo já devolve 404 nesse caso, mesmo tratamento
-    de "sem demo" que já existia)."""
+    com played_at há mais de `days` dias. ADR-0006: 14 dias, pra o bucket resenha-demos
+    caber perto do free tier do R2. replay_url continua intacto; só demo_url vira NULL
+    (a rota /:id/demo e o pedido de clipe Allstar já devolvem 404 nesse caso)."""
     import datetime
 
     limite = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=days)
@@ -607,8 +609,8 @@ def _montar_lineups(rdata, replay_json, mapa, source):
 
 
 def cmd_reprocess(config, conn, match_id=None, since=None):
-    """Reprocessa Partida(s) já gravadas cujo .dem ainda está no R2 (janela de 90 dias
-    do cleanup) — baixa de novo, roda o parser ATUAL (com fixes já aplicados) e regrava
+    """Reprocessa Partida(s) já gravadas cujo .dem ainda está no R2 (janela de
+    RETENCAO_DEMO_DIAS do cleanup) — baixa de novo, roda o parser ATUAL e regrava
     stats + replay.json no MESMO match_id (store_parsed é idempotente por fingerprint,
     e aqui nem precisa disso: já sabemos o id). Não usa ingest_demo: aquele resolve a
     key do R2 por share_code/hash de path, que pra upload manual sem share_code muda a
@@ -1107,7 +1109,10 @@ def main(argv=None):
     p_fetch.add_argument("--bot-dir", default=None, help="Caminho da pasta bot/ (default: ../bot ao lado de coletor/).")
     p_fetch.add_argument("--node", default="node", help="Executável do Node (default: node no PATH).")
     p_cleanup = sub.add_parser("cleanup", help="Apaga do R2 o .dem bruto de Partidas processadas há mais de N dias (mantém o replay.json).")
-    p_cleanup.add_argument("--days", type=int, default=90, help="Idade mínima em dias (default: 90).")
+    p_cleanup.add_argument(
+        "--days", type=int, default=RETENCAO_DEMO_DIAS,
+        help=f"Idade mínima em dias (default: {RETENCAO_DEMO_DIAS}).",
+    )
     p_reproc = sub.add_parser(
         "reprocess",
         help="Re-roda o parser atual em cima do .dem já arquivado no R2 (bug corrigido depois do ingest original) e regrava stats/replay.json.",

@@ -1,4 +1,5 @@
 import bz2
+import datetime
 import gzip
 import json
 import sys
@@ -55,6 +56,98 @@ def test_cmd_avatares_faz_backfill_dos_steam_ids_de_match_players(monkeypatch):
     total = main.cmd_avatares(config, conn=None)
     assert total == 1
     assert gravados == {"111": "https://x/1.jpg"}
+
+
+class _CleanupCursor:
+    def __init__(self, conn):
+        self.conn = conn
+        self._last = ""
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def execute(self, sql, params=None):
+        self._last = " ".join(sql.split())
+        self.conn.calls.append((self._last, params))
+
+    def fetchall(self):
+        if self._last.startswith("select id, demo_url from matches"):
+            return self.conn.rows
+        return []
+
+
+class _CleanupConn:
+    def __init__(self, rows):
+        self.calls = []
+        self.commits = 0
+        self.rollbacks = 0
+        self.rows = rows
+
+    def cursor(self):
+        return _CleanupCursor(self)
+
+    def commit(self):
+        self.commits += 1
+
+    def rollback(self):
+        self.rollbacks += 1
+
+
+def _dias_ate_o_limite(params):
+    limite = params[0]
+    return (datetime.datetime.now(datetime.timezone.utc) - limite).total_seconds() / 86400
+
+
+def test_cmd_cleanup_default_corta_em_14_dias(monkeypatch):
+    assert main.RETENCAO_DEMO_DIAS == 14
+    conn = _CleanupConn([])
+    criado = []
+    monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: criado.append(1))
+    total = main.cmd_cleanup(_config_com_r2(), conn)
+    assert total == 0
+    assert criado == []
+    sql, params = conn.calls[0]
+    assert "demo_url is not null" in sql
+    assert "played_at <" in sql
+    assert 13.9 < _dias_ate_o_limite(params) < 14.1
+
+
+def test_cmd_cleanup_apaga_so_o_dem_bruto_e_zera_demo_url(monkeypatch):
+    url = "https://acc.r2.cloudflarestorage.com/resenha-demos/demos/m1.dem.bz2"
+    conn = _CleanupConn([("m1", url)])
+    apagados = []
+    monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "client")
+    monkeypatch.setattr(
+        main.storage_r2, "delete_object",
+        lambda client, bucket, key: apagados.append((bucket, key)),
+    )
+    total = main.cmd_cleanup(_config_com_r2(), conn, days=14)
+    assert total == 1
+    assert apagados == [("resenha-demos", "demos/m1.dem.bz2")]
+    updates = [c for c in conn.calls if c[0].startswith("update matches set demo_url")]
+    assert updates == [("update matches set demo_url = null where id = %s", ("m1",))]
+    assert conn.commits == 1
+    assert not any("replay" in c[0] for c in conn.calls)
+
+
+def test_cmd_cleanup_respeita_days_explicito():
+    conn = _CleanupConn([])
+    main.cmd_cleanup(_config_com_r2(), conn, days=90)
+    assert 89.9 < _dias_ate_o_limite(conn.calls[0][1]) < 90.1
+
+
+def test_cmd_cleanup_pula_url_fora_do_bucket(monkeypatch):
+    conn = _CleanupConn([("m1", "https://outro/bucket/x.dem.bz2")])
+    apagados = []
+    monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "client")
+    monkeypatch.setattr(main.storage_r2, "delete_object", lambda *a, **k: apagados.append(a))
+    total = main.cmd_cleanup(_config_com_r2(), conn, days=14)
+    assert total == 0
+    assert apagados == []
+    assert not any(c[0].startswith("update") for c in conn.calls)
 
 
 def test_cmd_avatares_sem_pendentes_nao_chama_steam_api(monkeypatch):

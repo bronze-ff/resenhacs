@@ -2,7 +2,7 @@
 // Escopo: o destaque do MVP na página da Partida (FIL-56) — o mesmo MVP que o card
 // dessa partida já mostra no Feed, que antes não aparecia em lugar nenhum no detalhe.
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import Partida from '../pages/Partida.jsx'
 
@@ -80,5 +80,48 @@ describe('Partida — destaque do MVP', () => {
     montar({ ...PARTIDA_BASE, mvp: { steamId: '765', nick: 'fih', rating: null, avatarUrl: null } })
     expect(await screen.findByText(/mirage/i)).toBeInTheDocument()
     await waitFor(() => expect(screen.queryByText('MVP')).toBeNull())
+  })
+})
+
+async function abrirClipeDoJogador(partida) {
+  montar(partida)
+  fireEvent.click(await screen.findByRole('button', { name: 'Clipes' }))
+  // O seletor de jogador e o <select> "Anexar clipe" expõem o mesmo nick.
+  const [seletor] = screen.getAllByRole('button', { name: /fih/i })
+  fireEvent.click(seletor)
+}
+
+describe('Partida — clipe sem demo arquivada', () => {
+  it('esconde gerar clipe quando demoUrl é nulo', async () => {
+    await abrirClipeDoJogador({ ...PARTIDA_BASE, demoUrl: null })
+    expect(screen.queryByRole('button', { name: /gerar melhor clipe/i })).toBeNull()
+    expect(screen.getByText(/demo não arquivada/i)).toBeInTheDocument()
+  })
+
+  it('mostra gerar clipe quando a demo ainda está no R2', async () => {
+    await abrirClipeDoJogador({ ...PARTIDA_BASE, demoUrl: '/api/matches/m1/demo' })
+    expect(screen.getByRole('button', { name: /gerar melhor clipe/i })).toBeEnabled()
+  })
+
+  it('não oferece tentar de novo quando a demo já saiu', async () => {
+    await abrirClipeDoJogador({
+      ...PARTIDA_BASE,
+      demoUrl: null,
+      players: [{ ...PARTIDA_BASE.players[0], allstarClip: { status: 'Error', clipUrl: null } }],
+    })
+    expect(screen.queryByRole('button', { name: /tentar de novo/i })).toBeNull()
+    expect(screen.getByText(/demo não arquivada/i)).toBeInTheDocument()
+  })
+
+  it('clipe já pronto continua assistível sem a demo', async () => {
+    await abrirClipeDoJogador({
+      ...PARTIDA_BASE,
+      demoUrl: null,
+      players: [{
+        ...PARTIDA_BASE.players[0],
+        allstarClip: { status: 'Processed', clipUrl: 'https://allstar.gg/iframe?clip=abc', roundNumber: 3 },
+      }],
+    })
+    expect(screen.getByRole('button', { name: /assistir/i })).toBeInTheDocument()
   })
 })

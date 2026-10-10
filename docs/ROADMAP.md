@@ -93,8 +93,8 @@ produção. O que ficou pra depois, por ordem de risco:
   pra ele — o caso comum, já que a partida termina antes desse evento no round que
   fecha o mapa. `win_reason` fica vazio nesse round (não há evento de razão de vitória
   disponível tão perto do fim). Só vale pra frente: partidas já gravadas continuam sem
-  o round decisivo até serem reprocessadas (`cmd_reprocess`, limitado à janela de 90
-  dias em que o `.dem` ainda está no R2).
+  o round decisivo até serem reprocessadas (`cmd_reprocess`, limitado à janela de 14
+  dias em que o `.dem` ainda está no R2 — ADR-0006).
 - ~~**Dois algoritmos de clutch divergentes**~~ — **resolvido 2026-07-20**: a divergência
   entre Highlights/Ranking já tinha sido corrigida antes (ambos usam
   `transform.clutch_outcomes`); a que restava era o anel do Replay 2D

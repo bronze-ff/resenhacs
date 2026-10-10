@@ -728,7 +728,8 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
     }
   })
 
-  // Idem para o .dem bruto (arquivado por completude — ADR-0002 — não usado pela UI ainda).
+  // .dem bruto. Some do R2 depois da janela de retenção (ADR-0006): demo_url nulo → 404.
+  // A UI não tem botão de download; a aba Clipes esconde "gerar clipe" nesse caso.
   router.get('/:id/demo', requireAuth, async (req, res) => {
     if (!r2Client) return res.status(503).json({ erro: 'Arquivamento (R2) não configurado' })
     const { rows } = await db.query(

@@ -1,4 +1,4 @@
-"""Arquivamento de demos no Cloudflare R2 (S3-compatível). Ver ADR-0002.
+"""Arquivamento de demos no Cloudflare R2 (S3-compatível). Ver ADR-0002 e ADR-0006.
 
 O cliente boto3 é injetado nas funções, então a lógica de chave/upload é testável
 com um fake. make_client() só é chamado em runtime.
