@@ -1,5 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { Readable } from 'node:stream'
+import http from 'node:http'
+import { gzipSync, gunzipSync } from 'node:zlib'
 import request from 'supertest'
 
 vi.mock('../src/r2.js', async (importOriginal) => {
@@ -680,6 +682,67 @@ describe('GET /api/matches/:id/replay', () => {
     expect(res.text).toBe('{"map":"de_anubis"}')
     const cmd = fakeR2.send.mock.calls[0][0]
     expect(cmd.input).toMatchObject({ Bucket: 'resenha-demos', Key: 'replays/701c.json' })
+  })
+
+  // O client (Partida.jsx / CardTaticaReplay) faz fetch(url).then(r => r.json()).
+  // Node fetch descomprime Content-Encoding gzip igual ao navegador. http.get não
+  // descomprime: confere que o back repassou o header e os bytes crus, sem recomprimir.
+  it('fetch().json() lê replay gzip e replay antigo cru', async () => {
+    const payload = { map: 'de_mirage', rounds: [{ round: 1, frameCount: 2 }] }
+    const cruAntigo = { map: 'de_dust2', rounds: [{ round: 1, frames: [] }] }
+    const gz = gzipSync(Buffer.from(JSON.stringify(payload)))
+    const cru = Buffer.from(JSON.stringify(cruAntigo))
+    let modo = 'gzip'
+    const fakeR2 = {
+      send: vi.fn().mockImplementation(async () => (
+        modo === 'gzip'
+          ? { ContentType: 'application/json', ContentEncoding: 'gzip', Body: Readable.from([gz]) }
+          : { ContentType: 'application/json', Body: Readable.from([cru]) }
+      )),
+    }
+    const { app } = appWith(
+      [['select replay_url', [{ replay_url: 'https://acc.r2.cloudflarestorage.com/resenha-demos/replays/701c.json' }]]],
+      { r2Client: fakeR2 },
+    )
+    const server = http.createServer(app)
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+    try {
+      const { port } = server.address()
+      const base = `http://127.0.0.1:${port}`
+      const lerFio = (path) => new Promise((resolve, reject) => {
+        const req = http.get(`${base}${path}`, { headers: { Cookie: cookie } }, (res) => {
+          const chunks = []
+          res.on('data', (c) => chunks.push(c))
+          res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks) }))
+        })
+        req.on('error', reject)
+      })
+
+      const fio = await lerFio('/api/matches/701c/replay')
+      expect(fio.status).toBe(200)
+      expect(fio.headers['content-encoding']).toBe('gzip')
+      expect(fio.body.equals(gz)).toBe(true)
+      expect(JSON.parse(gunzipSync(fio.body).toString())).toEqual(payload)
+      const viaFetch = await fetch(`${base}/api/matches/701c/replay`, { headers: { cookie } })
+      expect(viaFetch.status).toBe(200)
+      expect(await viaFetch.json()).toEqual(payload)
+
+      const roundFio = await lerFio('/api/matches/701c/replay/round/1')
+      expect(roundFio.headers['content-encoding']).toBe('gzip')
+      expect(roundFio.body.equals(gz)).toBe(true)
+      const roundFetch = await fetch(`${base}/api/matches/701c/replay/round/1`, { headers: { cookie } })
+      expect(await roundFetch.json()).toEqual(payload)
+
+      modo = 'cru'
+      const antigo = await lerFio('/api/matches/701c/replay')
+      expect(antigo.headers['content-encoding']).toBeUndefined()
+      expect(antigo.body.equals(cru)).toBe(true)
+      expect(JSON.parse(antigo.body.toString())).toEqual(cruAntigo)
+      const antigoFetch = await fetch(`${base}/api/matches/701c/replay`, { headers: { cookie } })
+      expect(await antigoFetch.json()).toEqual(cruAntigo)
+    } finally {
+      await new Promise((resolve) => server.close(resolve))
+    }
   })
 })
 
