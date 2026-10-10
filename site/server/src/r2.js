@@ -51,6 +51,10 @@ export async function presignDownload(client, bucket, key, expiresInSeconds = 72
 export async function streamObject(client, bucket, key, res) {
   const obj = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }))
   if (obj.ContentType) res.type(obj.ContentType)
+  // Repassa o Content-Encoding cru (replays novos: gzip). Não descomprime e não
+  // recomprime: o fetch().json() do navegador descomprime sozinho. Objeto antigo
+  // sem o header segue como JSON puro e continua parseando.
+  if (obj.ContentEncoding) res.set('Content-Encoding', obj.ContentEncoding)
   // pipeline (não .pipe): um 'error' do stream do R2 no meio da transferência de um
   // demo de ~200MB sem listener derrubaria o processo inteiro; aqui vira rejeição
   // que o caller (matches.js) já trata com 502.

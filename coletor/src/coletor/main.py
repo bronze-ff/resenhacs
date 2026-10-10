@@ -717,20 +717,33 @@ def _descomprimir_dem_arquivado(dados):
         return dados
 
 
+def _upload_json_gzip(client, bucket, key, payload):
+    """Grava JSON na mesma chave, com corpo gzip e ContentEncoding=gzip.
+
+    Content-Type continua application/json. O back repassa o Content-Encoding e o
+    fetch().json() do navegador descomprime. Objeto antigo sem o header segue cru.
+    """
+    cru = json.dumps(payload).encode("utf-8")
+    storage_r2.upload_bytes(
+        client, bucket, key, storage_r2.gzip_bytes(cru),
+        content_type="application/json", content_encoding="gzip",
+    )
+
+
 def _upload_replay(client, bucket, rkey, replay_json):
     """Sobe o replay quebrado em índice (pequeno, sem frames) + um objeto por round —
     streaming por round no client (FIL-54b): a Partida toca o round 1 sem esperar o
     replay inteiro baixar; os demais rounds são buscados sob demanda. `rkey` é a
     chave do índice (a mesma que `replay_url` sempre apontou — nenhuma mudança de
-    schema); os rounds vão pro mesmo prefixo, trocando ".json" por "/round-{n}.json"."""
+    schema); os rounds vão pro mesmo prefixo, trocando ".json" por "/round-{n}.json".
+
+    Índice e rounds saem gzip (mesma chave). O backfill `comprimir-replays` trata
+    os objetos gravados antes disso."""
     index, rounds = replaymod.split_for_storage(replay_json)
-    storage_r2.upload_bytes(client, bucket, rkey, json.dumps(index).encode("utf-8"), content_type="application/json")
+    _upload_json_gzip(client, bucket, rkey, index)
     base = rkey[: -len(".json")] if rkey.endswith(".json") else rkey
     for round_number, round_data in rounds.items():
-        storage_r2.upload_bytes(
-            client, bucket, f"{base}/round-{round_number}.json",
-            json.dumps(round_data).encode("utf-8"), content_type="application/json",
-        )
+        _upload_json_gzip(client, bucket, f"{base}/round-{round_number}.json", round_data)
 
 
 def _finalizar_ingest(config, conn, parsed, replay_json, dem_path_upload, share_code,
@@ -1048,6 +1061,29 @@ def cmd_sincronizar_faceit(config, conn, limite=10):
     return total
 
 
+def _imprimir_relatorio(texto, relatorio):
+    print(texto)
+    print(json.dumps(relatorio, ensure_ascii=False, indent=2))
+
+
+def cmd_inventario_r2(config):
+    """Só leitura: contagem e bytes por prefixo de topo + multipart incompletos."""
+    config.require("r2_account_id", "r2_access_key_id", "r2_secret_access_key")
+    client = storage_r2.make_client(config)
+    relatorio = storage_r2.inventariar(client, config.r2_bucket)
+    _imprimir_relatorio(storage_r2.formatar_inventario(relatorio), relatorio)
+    return relatorio
+
+
+def cmd_comprimir_replays(config, dry_run=True, limit=None):
+    """Backfill gzip dos replays. dry_run é o padrão — não grava sem --no-dry-run."""
+    config.require("r2_account_id", "r2_access_key_id", "r2_secret_access_key")
+    client = storage_r2.make_client(config)
+    relatorio = storage_r2.comprimir_replays(client, config.r2_bucket, dry_run=dry_run, limit=limit)
+    _imprimir_relatorio(storage_r2.formatar_comprimir(relatorio), relatorio)
+    return relatorio
+
+
 def main(argv=None):
     argv = argv if argv is not None else sys.argv[1:]
     ap = argparse.ArgumentParser(prog="coletor")
@@ -1103,8 +1139,43 @@ def main(argv=None):
         "sincronizar-faceit",
         help="FACEIT Fase B: descobre e ingere partidas 5v5 de membros vinculados + ELO.",
     )
+    sub.add_parser(
+        "inventario-r2",
+        help="Só leitura: conta objetos e bytes por prefixo de topo no bucket R2, mais multipart incompletos.",
+    )
+    p_gzip = sub.add_parser(
+        "comprimir-replays",
+        help="Backfill: regrava replays/ na mesma chave com gzip. Não apaga. Dry-run é o padrão.",
+    )
+    gzip_modo = p_gzip.add_mutually_exclusive_group()
+    gzip_modo.add_argument(
+        "--dry-run", dest="dry_run", action="store_true",
+        help="Simula: mede bytes antes/depois sem gravar (padrão).",
+    )
+    gzip_modo.add_argument(
+        "--no-dry-run", dest="dry_run", action="store_false",
+        help="Grava de verdade. Só substitui a chave depois do upload concluir.",
+    )
+    p_gzip.set_defaults(dry_run=True)
+    p_gzip.add_argument(
+        "--limit", type=int, default=None,
+        help="Máximo de objetos a comprimir nesta run (os já gzip não contam). Sem limite se omitido.",
+    )
 
     args = ap.parse_args(argv)
+    # Inventário e backfill só falam com o R2 — não abrem o banco.
+    if args.cmd in ("inventario-r2", "comprimir-replays"):
+        config = Config()
+        if args.cmd == "inventario-r2":
+            cmd_inventario_r2(config)
+            return
+        if args.limit is not None and args.limit < 0:
+            ap.error("--limit deve ser >= 0")
+        relatorio = cmd_comprimir_replays(config, dry_run=args.dry_run, limit=args.limit)
+        if relatorio["falhas"]:
+            sys.exit(1)
+        return
+
     config = Config()
     config.require("database_url")
     conn = dbmod.connect(config.database_url)

@@ -29,9 +29,11 @@ on:
         description: 'Backfill: buscar avatar Steam de todos os jogadores já vistos em alguma Partida (inclusive fora do grupo)'
         type: boolean
         default: false
+  pull_request:
+    paths: ['coletor/**', 'bot/**', '.github/workflows/coletor.yml', '.github/workflows/r2-replays.yml']
   push:
     branches: [main]
-    paths: ['coletor/**', 'bot/**', '.github/workflows/coletor.yml']
+    paths: ['coletor/**', 'bot/**', '.github/workflows/coletor.yml', '.github/workflows/r2-replays.yml']
 
 # Escopo mínimo do GITHUB_TOKEN (o default do GitHub é read/write em quase tudo) — este
 # workflow só faz checkout, não precisa escrever em conteúdo/PR/issues/etc.
@@ -39,9 +41,11 @@ permissions:
   contents: read
 
 # Evita duas rodadas simultâneas (a conta-bot só pode ter UMA sessão de CS2 por vez —
-# a Steam derruba a segunda com LoggedInElsewhere).
+# a Steam derruba a segunda com LoggedInElsewhere). Schedule, push e dispatch
+# compartilham `coletor`. PR fica num group por número: o teste não espera um
+# reprocess de produção (até 300 min) e não segura o Coletor agendado.
 concurrency:
-  group: coletor
+  group: ${{ github.event_name == 'pull_request' && format('coletor-pr-{0}', github.event.pull_request.number) || 'coletor' }}
   cancel-in-progress: false
 
 jobs:
@@ -50,6 +54,9 @@ jobs:
   # mesmo rodando 20s cada; um job só custa 1. Como isso roda de 30 em 30 min o dia
   # inteiro, esse é o maior fator de custo — vale mais que qualquer outra otimização.
   sincroniza:
+    # PR não pode disparar discover/fetch/cleanup: esse job usa os secrets de produção
+    # (banco, Steam, R2). Teste de PR fica no job `tests`.
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     # Reprocessar TODAS as Partidas (run manual) não cabe em 45 min — o timeout
     # curto derrubou o run 29278267027 no meio. 300 min só nesse caso; o job
@@ -214,8 +221,8 @@ jobs:
           STEAM_API_KEY: ${{ secrets.STEAM_API_KEY }}
         run: python -m coletor.main avatares
 
-  # Só em push/manual — rodar isso a cada 30 min sem mudança de código é dinheiro
-  # (minutos) jogado fora, e é a maior fatia do orçamento se ficasse no agendamento.
+  # Push, PR e dispatch — não no schedule. Rodar a cada 10 min sem mudança de código
+  # é minuto jogado fora, e é a maior fatia do orçamento se ficasse no agendamento.
   tests:
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest

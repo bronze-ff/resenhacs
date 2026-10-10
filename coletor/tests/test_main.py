@@ -1,4 +1,5 @@
 import bz2
+import gzip
 import json
 import sys
 import types
@@ -286,7 +287,9 @@ def test_upload_replay_sobe_indice_sem_frames_e_um_objeto_por_round(monkeypatch)
 
     def fake_upload_bytes(client, bucket, key, data, **kw):
         assert client is fake_client and bucket == "bucket"
-        uploads[key] = json.loads(data.decode("utf-8"))
+        assert kw.get("content_type") == "application/json"
+        assert kw.get("content_encoding") == "gzip"
+        uploads[key] = json.loads(gzip.decompress(data).decode("utf-8"))
 
     monkeypatch.setattr(main.storage_r2, "upload_bytes", fake_upload_bytes)
     replay_json = {
