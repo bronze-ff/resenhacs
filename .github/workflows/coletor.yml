@@ -41,9 +41,11 @@ permissions:
   contents: read
 
 # Evita duas rodadas simultâneas (a conta-bot só pode ter UMA sessão de CS2 por vez —
-# a Steam derruba a segunda com LoggedInElsewhere).
+# a Steam derruba a segunda com LoggedInElsewhere). Schedule, push e dispatch
+# compartilham `coletor`. PR fica num group por número: o teste não espera um
+# reprocess de produção (até 300 min) e não segura o Coletor agendado.
 concurrency:
-  group: coletor
+  group: ${{ github.event_name == 'pull_request' && format('coletor-pr-{0}', github.event.pull_request.number) || 'coletor' }}
   cancel-in-progress: false
 
 jobs:

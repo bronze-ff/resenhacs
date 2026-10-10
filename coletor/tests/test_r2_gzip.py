@@ -67,10 +67,14 @@ class _FakeR2:
     def head_object(self, Bucket, Key):
         self.heads.append(Key)
         obj = self.objetos[Key]
+        if "etag" not in obj and not obj.get("sem_etag"):
+            obj["etag"] = f'"{Key}"'
         head = {
             "ContentLength": len(obj["body"]),
             "ContentType": obj.get("content_type", "application/json"),
         }
+        if obj.get("etag"):
+            head["ETag"] = obj["etag"]
         if obj.get("content_encoding"):
             head["ContentEncoding"] = obj["content_encoding"]
         return head
@@ -83,11 +87,15 @@ class _FakeR2:
         self.puts.append(kw)
         if kw["Key"] in self.fail_put:
             raise RuntimeError("put falhou")
+        atual = self.objetos[kw["Key"]].get("etag")
+        if kw.get("IfMatch") != atual:
+            raise RuntimeError(f"precondition failed: IfMatch={kw.get('IfMatch')!r} atual={atual!r}")
         self.objetos[kw["Key"]] = {
             "key": kw["Key"],
             "body": kw["Body"],
             "content_type": kw.get("ContentType"),
             "content_encoding": kw.get("ContentEncoding"),
+            "etag": f'"gzip-{len(kw["Body"])}"',
         }
 
     def delete_object(self, **kw):
@@ -124,8 +132,14 @@ def test_upload_bytes_so_manda_content_encoding_quando_pedido():
     assert s3.puts[0]["Key"] == "k"
 
     s3 = Cap()
+    storage_r2.upload_bytes(s3, "b", "k", b"x", if_match='"abc"')
+    assert s3.puts[0]["IfMatch"] == '"abc"'
+    assert "ContentEncoding" not in s3.puts[0]
+
+    s3 = Cap()
     storage_r2.upload_bytes(s3, "b", "k", b"x")
     assert "ContentEncoding" not in s3.puts[0]
+    assert "IfMatch" not in s3.puts[0]
 
 
 def test_inventariar_soma_por_prefixo_paginado_e_multipart():
@@ -259,6 +273,7 @@ def test_comprimir_aplica_na_mesma_chave_e_segunda_run_pula():
         assert put["ContentEncoding"] == "gzip"
         assert put["ContentType"] == "application/json"
         assert put["Bucket"] == "resenha-demos"
+        assert put["IfMatch"] == f'"{put["Key"]}"'
     gravado = client.objetos["replays/a.json"]
     assert gravado["content_encoding"] == "gzip"
     assert gravado["content_type"] == "application/json"
@@ -314,6 +329,61 @@ def test_comprimir_put_que_falha_nao_apaga_e_segue():
     falha = next(o for o in rel["objetos"] if o["acao"] == "falha")
     assert falha["key"] == "replays/ruim.json"
     assert "put falhou" in falha["erro"]
+
+
+def test_comprimir_if_match_preserva_replay_regravado_no_meio():
+    """Coletor reprocessa a chave entre o GET e o PUT: If-Match recusa a cópia velha."""
+    cru = b'{"velho":true}' * 20
+    novo = b'{"reprocessado":true}' * 20
+    client = _FakeR2([_replay("replays/a.json", cru)])
+
+    def get_object(Bucket, Key):
+        body = client.objetos[Key]["body"]
+        client.gets.append(Key)
+        client.objetos[Key] = {
+            "key": Key,
+            "body": novo,
+            "content_type": "application/json",
+            "content_encoding": "gzip",
+            "etag": '"reprocessado"',
+        }
+        return {"Body": _Body(body)}
+
+    client.get_object = get_object
+    rel = storage_r2.comprimir_replays(client, "resenha-demos", dry_run=False)
+
+    assert rel["comprimidos"] == 0
+    assert rel["falhas"] == 1
+    assert client.deletes == []
+    assert client.puts[0]["IfMatch"] == '"replays/a.json"'
+    assert client.objetos["replays/a.json"]["body"] == novo
+    assert client.objetos["replays/a.json"]["etag"] == '"reprocessado"'
+    assert "precondition failed" in rel["objetos"][0]["erro"]
+
+
+def test_comprimir_sem_etag_nao_faz_put():
+    cru = b'{"a":1}' * 10
+    client = _FakeR2([_replay("replays/a.json", cru)])
+    client.objetos["replays/a.json"]["sem_etag"] = True
+    rel = storage_r2.comprimir_replays(client, "resenha-demos", dry_run=False)
+
+    assert rel["falhas"] == 1
+    assert rel["comprimidos"] == 0
+    assert client.puts == []
+    assert client.deletes == []
+    assert client.objetos["replays/a.json"]["body"] == cru
+    assert "HEAD sem ETag" in rel["objetos"][0]["erro"]
+
+
+def test_mensagem_falha_put_412_diz_que_o_objeto_novo_ficou():
+    class Precondition(Exception):
+        response = {
+            "Error": {"Code": "PreconditionFailed"},
+            "ResponseMetadata": {"HTTPStatusCode": 412},
+        }
+
+    assert "objeto novo foi preservado" in storage_r2._mensagem_falha_put(Precondition())
+    assert storage_r2._mensagem_falha_put(RuntimeError("put falhou")) == "put falhou"
 
 
 def test_comprimir_limit_negativo():

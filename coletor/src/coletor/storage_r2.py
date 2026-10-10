@@ -27,10 +27,15 @@ def gzip_bytes(data):
     return gzip.compress(data, mtime=0)
 
 
-def upload_bytes(client, bucket, key, data, content_type="application/octet-stream", content_encoding=None):
+def upload_bytes(client, bucket, key, data, content_type="application/octet-stream", content_encoding=None, if_match=None):
     params = {"Bucket": bucket, "Key": key, "Body": data, "ContentType": content_type}
     if content_encoding:
         params["ContentEncoding"] = content_encoding
+    # If-Match: o PUT só conclui se o ETag ainda for o do HEAD. O R2 responde 412
+    # se outra escrita (reprocess do Coletor) mudou o objeto no meio — aí o corpo
+    # novo fica, e este backfill não grava cópia velha por cima.
+    if if_match:
+        params["IfMatch"] = if_match
     client.put_object(**params)
     return key
 
@@ -226,6 +231,16 @@ def formatar_inventario(relatorio):
     return "\n".join(linhas)
 
 
+def _mensagem_falha_put(erro):
+    """412/PreconditionFailed é corrida de ETag: o objeto novo ficou intacto."""
+    resposta = getattr(erro, "response", None) or {}
+    codigo = (resposta.get("Error") or {}).get("Code")
+    status = (resposta.get("ResponseMetadata") or {}).get("HTTPStatusCode")
+    if codigo == "PreconditionFailed" or status == 412:
+        return "ETag mudou durante o backfill (If-Match); objeto novo foi preservado"
+    return str(erro)
+
+
 def _ja_gzip(encoding):
     if not encoding:
         return False
@@ -240,9 +255,9 @@ def comprimir_replays(client, bucket, dry_run=True, limit=None):
     é pulado (retomada idempotente) e não consome `limit`. `limit` conta só os que
     seriam/foram comprimidos.
 
-    Nunca apaga. O put_object só acontece depois do gzip conferido por roundtrip;
-    se o put falha, o objeto anterior permanece (o PUT do S3 só substitui quando
-    a escrita conclui).
+    Nunca apaga. O put_object só acontece depois do gzip conferido por roundtrip,
+    com If-Match no ETag do HEAD. Se o ETag mudou (reprocess concorrente) o R2
+    recusa o PUT e o objeto novo permanece. Sem ETag no HEAD, não regrava.
     """
     if limit is not None and limit < 0:
         raise ValueError("limit deve ser >= 0")
@@ -277,10 +292,14 @@ def comprimir_replays(client, bucket, dry_run=True, limit=None):
             if gzip.decompress(comprimido) != cru:
                 raise RuntimeError("roundtrip gzip não confere; objeto não foi regravado")
             if not dry_run:
+                etag = head.get("ETag")
+                if not etag:
+                    raise RuntimeError("HEAD sem ETag; não regravei")
                 upload_bytes(
                     client, bucket, key, comprimido,
                     content_type=head.get("ContentType") or "application/json",
                     content_encoding="gzip",
+                    if_match=etag,
                 )
             antes = len(cru)
             depois = len(comprimido)
@@ -295,7 +314,7 @@ def comprimir_replays(client, bucket, dry_run=True, limit=None):
             })
         except Exception as e:  # noqa: BLE001 — uma chave ruim não aborta o resto
             falhas += 1
-            objetos.append({"key": key, "acao": "falha", "erro": str(e)})
+            objetos.append({"key": key, "acao": "falha", "erro": _mensagem_falha_put(e)})
     return {
         "bucket": bucket,
         "prefixo": REPLAY_PREFIX,

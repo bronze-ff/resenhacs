@@ -2,8 +2,10 @@ name: R2 replays
 
 # Manual. Não roda no schedule nem em PR: inventario-r2 só lista o bucket;
 # comprimir-replays regrava replays/ na MESMA chave (gzip). Nenhum dos dois apaga
-# objeto. Dry-run é o padrão — desmarque pra gravar. Não dispare em paralelo com
-# um reprocess do Coletor: os dois escrevem a mesma chave.
+# objeto. Dry-run é o padrão — desmarque pra gravar.
+# O PUT manda If-Match com o ETag do HEAD: se o Coletor regravar a mesma chave
+# no meio, o R2 responde 412 e o replay novo fica. Este group só impede dois
+# backfills ao mesmo tempo — não entra na fila `coletor` (o backfill pode levar horas).
 on:
   workflow_dispatch:
     inputs:
