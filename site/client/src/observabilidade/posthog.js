@@ -7,9 +7,8 @@ const host = import.meta.env.VITE_POSTHOG_HOST
 
 let iniciado = false
 
-// Só no topo do evento. Um token (ou distinct_id, …) aninhado passa pela limpeza.
+// Só no topo do evento. `token` não entra aqui: só a chave do projeto fica intacta.
 const TRANSPORTE_TOPO = new Set([
-  'token',
   'distinct_id',
   '$session_id',
   '$window_id',
@@ -20,6 +19,16 @@ const TRANSPORTE_TOPO = new Set([
   '$lib_version',
   'uuid',
 ])
+
+function tokenDoProjeto(valor) {
+  const configurada = import.meta.env.VITE_POSTHOG_KEY
+  return typeof configurada === 'string' && configurada !== '' && valor === configurada
+}
+
+function isentoNoTopo(nome, valor) {
+  if (nome === 'token') return tokenDoProjeto(valor)
+  return TRANSPORTE_TOPO.has(nome)
+}
 
 // Mesma palavra do scrub. Chave aninhada com esse nome redige o valor inteiro.
 const PALAVRA = /(?<!re)senha|token|authorization|cookie/i
@@ -42,14 +51,14 @@ function chaveDeAtribuicao(chave) {
 }
 
 function limparValor(valor, chave, noTopo) {
-  if (noTopo && typeof chave === 'string' && TRANSPORTE_TOPO.has(chave)) return valor
+  if (noTopo && typeof chave === 'string' && isentoNoTopo(chave, valor)) return valor
   if (typeof chave === 'string' && PALAVRA.test(chave)) return REDACTED
   if (typeof valor === 'string') return redigirString(valor)
   if (Array.isArray(valor)) return valor.map((item) => limparValor(item, undefined, false))
   if (valor && typeof valor === 'object') {
     const saida = {}
     for (const [k, v] of Object.entries(valor)) {
-      if (noTopo && TRANSPORTE_TOPO.has(k)) {
+      if (noTopo && isentoNoTopo(k, v)) {
         saida[k] = v
         continue
       }

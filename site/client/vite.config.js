@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
@@ -41,6 +41,8 @@ function ambienteBuild(mode) {
 }
 
 export default defineConfig(async ({ mode }) => {
+  // .env não aparece em process.env. Sem isto, o define abaixo apaga VITE_* do arquivo.
+  const envArquivo = loadEnv(mode, process.cwd(), 'VITE_')
   const plugins = [
     react(),
     tailwindcss(),
@@ -92,14 +94,18 @@ export default defineConfig(async ({ mode }) => {
       sourcemaps: { filesToDeleteAfterUpload: ['./dist/**/*.map'] },
     }))
   }
+  const define = {}
+  if (!envArquivo.VITE_SENTRY_ENVIRONMENT) {
+    define['import.meta.env.VITE_SENTRY_ENVIRONMENT'] = JSON.stringify(ambienteBuild(mode))
+  }
+  if (!envArquivo.VITE_SENTRY_RELEASE) {
+    define['import.meta.env.VITE_SENTRY_RELEASE'] = JSON.stringify(
+      process.env.VITE_SENTRY_RELEASE || process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || '',
+    )
+  }
   return {
   plugins,
-  define: {
-    'import.meta.env.VITE_SENTRY_ENVIRONMENT': JSON.stringify(ambienteBuild(mode)),
-    'import.meta.env.VITE_SENTRY_RELEASE': JSON.stringify(
-      process.env.VITE_SENTRY_RELEASE || process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || '',
-    ),
-  },
+  define,
   build: { sourcemap: Boolean(token && org) },
   server: {
     proxy: { '/api': 'http://localhost:3001' },

@@ -35,12 +35,13 @@ Crie os projetos no Sentry e no PostHog antes de preencher. Sem as variáveis, o
 | `SENTRY_ENVIRONMENT` | Opcional na Vercel `resenhacs`. Se vazia, `VERCEL_ENV` vira `producao` ou `homologacao` | — |
 | `SENTRY_DSN` | Secret do repositório GitHub `bronze-ff/resenhacs` | Sentry `resenhacs-coletor` |
 | `SENTRY_ENVIRONMENT` | Não é secret. O job `sincroniza` do `coletor.yml` e o job do `r2-replays.yml` definem `producao` | — |
+| `SENTRY_RELEASE` | Opcional no ambiente do Coletor. Se vazia, o SDK usa `GITHUB_SHA` no Actions | Sentry `resenhacs-coletor` |
 
 O DSN do Coletor e o da API são secrets diferentes: cada um aponta para o projeto Sentry da sua parte. Não reutilize o DSN do browser no servidor.
 
 Source map: o upload é só no build da Vercel (`resenha`). O CI, inclusive `pull_request`, não recebe `SENTRY_AUTH_TOKEN`. O plugin do Vite só roda se `SENTRY_AUTH_TOKEN` e `SENTRY_ORG` existirem juntos. Faltando um dos dois, o build segue e não publica `.map`. A API é JavaScript sem bundle; o stack já tem linha, não há upload.
 
-No PostHog, o `before_send` apaga atribuição de campanha: chave que começa com `$utm_`, `utm_` ou `$initial_utm_`, `$session_entry_*`, `$gclid`/`gclid`, `$fbclid`/`fbclid`, `$msclkid`/`msclkid`, `$initial_referrer`, `$initial_referring_domain` e `$referring_domain`. O mesmo vale para a cópia em `$set` e `$set_once`, que saem por inteiro. Fora uma lista fechada no topo do evento (`token`, `distinct_id`, `$session_id`, `$window_id`, `$device_id`, `$insert_id`, `$time`, `$lib`, `$lib_version`, `uuid`), qualquer string com e-mail, CPF, CNPJ, telefone, placa ou `token`/`senha` é redigida por inteiro. Um `token` aninhado em `properties` não herda essa isenção.
+No PostHog, o `before_send` apaga atribuição de campanha: chave que começa com `$utm_`, `utm_` ou `$initial_utm_`, `$session_entry_*`, `$gclid`/`gclid`, `$fbclid`/`fbclid`, `$msclkid`/`msclkid`, `$initial_referrer`, `$initial_referring_domain` e `$referring_domain`. O mesmo vale para a cópia em `$set` e `$set_once`, que saem por inteiro. Fora uma lista fechada no topo do evento (`distinct_id`, `$session_id`, `$window_id`, `$device_id`, `$insert_id`, `$time`, `$lib`, `$lib_version`, `uuid`), qualquer string com e-mail, CPF, CNPJ, telefone, placa ou `token`/`senha` é redigida por inteiro. O `token` do topo só fica se for exatamente `VITE_POSTHOG_KEY`. Qualquer outro valor, inclusive `token` aninhado, passa pela limpeza.
 
 No painel do Sentry, em cada projeto: Data Scrubber ligado, Scrub IP addresses ligado, e regras de scrub para CPF, CNPJ, telefone, e-mail e placa. No PostHog: Discard client IP data ligado. Isso é proteção extra; o SDK já não manda header, cookie, body nem query.
 

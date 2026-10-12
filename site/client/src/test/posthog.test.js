@@ -64,7 +64,7 @@ describe('evento do PostHog', () => {
       },
     })
     expect(evento.uuid).toBe('token?nao-mexer#1')
-    expect(evento.token).toBe('phc_topo_nao_mexer')
+    expect(evento.token).toBe(REDACTED)
     expect(evento.distinct_id).toBe('76561198000000000')
     expect(evento.$session_id).toBe('sessao?q=1#f')
     expect(evento.$window_id).toBe('janela')
@@ -161,7 +161,7 @@ describe('evento do PostHog', () => {
         mapa: 'de_dust2',
       },
     })
-    expect(evento.token).toBe('phc_topo')
+    expect(evento.token).toBe(REDACTED)
     expect(evento.uuid).toBe('token-no-uuid')
     expect(evento.properties.token).toBe(REDACTED)
     expect(evento.properties.fixo).toBe(REDACTED)
@@ -169,6 +169,23 @@ describe('evento do PostHog', () => {
     expect(evento.properties.caixa.token).toBe(REDACTED)
     expect(evento.properties.caixa.nota).toBe('ok')
     expect(evento.properties.mapa).toBe('de_dust2')
+  })
+
+  it('preserva o token do topo só quando é a chave do projeto', () => {
+    vi.stubEnv('VITE_POSTHOG_KEY', 'phc_projeto')
+    try {
+      const igual = limparEventoPosthog({
+        token: 'phc_projeto',
+        properties: { token: 'phc_projeto' },
+      })
+      expect(igual.token).toBe('phc_projeto')
+      expect(igual.properties.token).toBe(REDACTED)
+
+      const outro = limparEventoPosthog({ token: 'nao-e-a-chave' })
+      expect(outro.token).toBe(REDACTED)
+    } finally {
+      vi.unstubAllEnvs()
+    }
   })
 
   it('before_send usa o limpador e a chave é lida de forma estática', () => {
