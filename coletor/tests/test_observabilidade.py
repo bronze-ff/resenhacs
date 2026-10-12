@@ -1,9 +1,14 @@
+import json
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from coletor.observabilidade import REDACTED, minimizar_evento, minimizar_span, before_breadcrumb
+from coletor.observabilidade import REDACTED, minimizar_evento, minimizar_span, before_breadcrumb, redigir_string
+from coletor.palavras import PADRAO, chave_sensivel
+
+RAIZ = Path(__file__).resolve().parents[2]
+CASOS = json.loads((RAIZ / "shared/observabilidade/casos-palavras.json").read_text(encoding="utf-8"))
 
 STEAM = "76561198000000000"
 
@@ -25,18 +30,48 @@ def test_request_fica_so_com_method_e_caminho():
     }
 
 
-def test_palavra_sensivel_redige_a_string_inteira_e_nao_mexe_no_sdk():
+def test_allowlist_do_topo_descarta_o_resto_e_percorre_o_sdk():
     sdk = {"name": "sentry-sdk", "packages": [{"name": "token-interno"}]}
     evento = minimizar_evento({
-        "event_id": "token-nao-mexer",
+        "event_id": "abc123",
         "sdk": sdk,
         "message": "falha lendo cookie da sessao",
         "extra": {"nota": "email a@b.com no texto"},
+        "logger": "coletor",
+        "profile": {"token": "x"},
+        "debug_meta": {"images": []},
+        "tags": {"nota": "email a@b.com no texto"},
+        "contexts": {"trace": {"trace_id": "abc"}, "os": {"name": "Linux"}},
     })
-    assert evento["event_id"] == "token-nao-mexer"
-    assert evento["sdk"] is sdk
+    assert evento["event_id"] == "abc123"
+    assert evento["sdk"] == {"name": "sentry-sdk", "packages": [{"name": REDACTED}]}
+    assert evento["sdk"] is not sdk
     assert evento["message"] == REDACTED
-    assert evento["extra"]["nota"] == REDACTED
+    assert "extra" not in evento
+    assert "logger" not in evento
+    assert "profile" not in evento
+    assert "debug_meta" not in evento
+    assert evento["tags"]["nota"] == REDACTED
+    assert evento["contexts"] == {"trace": {"trace_id": "abc"}}
+    assert minimizar_evento({"event_id": "token-nao-mexer"})["event_id"] == REDACTED
+
+
+def test_casos_compartilhados_e_padrao_igual_ao_javascript():
+    for amostra in CASOS["redige"]:
+        assert redigir_string(amostra) == REDACTED
+        assert minimizar_evento({"message": amostra})["message"] == REDACTED
+    for amostra in CASOS["intactos"]:
+        assert redigir_string(amostra) == amostra
+    for chave in CASOS["chavesSensiveis"]:
+        assert chave_sensivel(chave)
+        tags = minimizar_evento({"tags": {chave: "valor-limpo"}})["tags"]
+        assert tags.get(chave, REDACTED) == REDACTED
+    for chave in CASOS["chavesLivres"]:
+        assert not chave_sensivel(chave)
+    texto = (RAIZ / "site/server/src/observabilidade/palavras.js").read_text(encoding="utf-8")
+    inicio = texto.index("export const PALAVRA =\n  /") + len("export const PALAVRA =\n  /")
+    fim = texto.index("/i", inicio)
+    assert texto[inicio:fim] == PADRAO
 
 
 def test_telefone_fixo_e_celular():

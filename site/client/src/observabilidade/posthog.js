@@ -1,5 +1,5 @@
 import posthog from 'posthog-js'
-import { REDACTED, redigirString } from './scrub.js'
+import { REDACTED, chaveSensivel, redigirString } from './scrub.js'
 
 // Acesso estático. Sem a chave, o módulo não inicializa (dev e teste seguem no-op).
 const chave = import.meta.env.VITE_POSTHOG_KEY
@@ -30,9 +30,6 @@ function isentoNoTopo(nome, valor) {
   return TRANSPORTE_TOPO.has(nome)
 }
 
-// Mesma palavra do scrub. Chave aninhada com esse nome redige o valor inteiro.
-const PALAVRA = /(?<!re)senha|token|authorization|cookie/i
-
 const APAGAR = new Set(['$ip', '$set', '$set_once', 'email', 'nick', 'avatarUrl', 'faceitNick'])
 
 // Click id como o PostHog grava ($fbclid) e como a query chega (fbclid).
@@ -52,7 +49,7 @@ function chaveDeAtribuicao(chave) {
 
 function limparValor(valor, chave, noTopo) {
   if (noTopo && typeof chave === 'string' && isentoNoTopo(chave, valor)) return valor
-  if (typeof chave === 'string' && PALAVRA.test(chave)) return REDACTED
+  if (chaveSensivel(chave)) return REDACTED
   if (typeof valor === 'string') return redigirString(valor)
   if (Array.isArray(valor)) return valor.map((item) => limparValor(item, undefined, false))
   if (valor && typeof valor === 'object') {

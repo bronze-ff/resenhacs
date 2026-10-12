@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { minimizarBreadcrumb, minimizarEvento, minimizarSpan, REDACTED } from '../observabilidade/scrub.js'
+import { chaveSensivel, minimizarBreadcrumb, minimizarEvento, minimizarSpan, REDACTED, redigirString } from '../observabilidade/scrub.js'
+
+const casos = JSON.parse(readFileSync(join(process.cwd(), '../../shared/observabilidade/casos-palavras.json'), 'utf8'))
 
 const STEAM = '76561198000000000'
 
@@ -69,24 +71,69 @@ describe('scrub de observabilidade', () => {
   it('redige a string inteira quando sobra palavra sensível ou PII', () => {
     const evento = minimizarEvento({
       message: 'falha ao ler senha do jogador',
+      tags: { nota: 'cpf 529.982.247-25 no formulario' },
       extra: { nota: 'cpf 529.982.247-25 no formulario' },
     })
     expect(evento.message).toBe(REDACTED)
-    expect(evento.extra.nota).toBe(REDACTED)
+    expect(evento.tags.nota).toBe(REDACTED)
+    expect(evento.extra).toBeUndefined()
   })
 
-  it('não percorre campo de transporte do SDK', () => {
+  it('só conserva a allowlist do topo e percorre cada valor', () => {
     const sdk = { name: '@sentry/react', packages: [{ name: 'token-interno' }] }
     const evento = minimizarEvento({
-      event_id: 'token-nao-mexer',
+      event_id: 'abc123',
       sdk,
       span_id: 'cookie-span',
+      logger: 'auth',
+      profile: { token: 'x' },
+      debug_meta: { images: [{ code_file: 'segredo' }] },
       message: 'ok',
+      contexts: {
+        trace: { trace_id: 'abc', span_id: 'def' },
+        os: { name: 'Linux' },
+        device: { name: 'secret-phone' },
+      },
+      breadcrumbs: {
+        values: [
+          { category: 'console', message: 'senha' },
+          { category: 'ui', message: 'resenha', data: { token: 'x' }, logger: 'x' },
+        ],
+      },
     })
-    expect(evento.event_id).toBe('token-nao-mexer')
-    expect(evento.sdk).toBe(sdk)
-    expect(evento.span_id).toBe('cookie-span')
+    expect(evento.event_id).toBe('abc123')
+    expect(evento.sdk).toEqual({ name: '@sentry/react', packages: [{ name: REDACTED }] })
+    expect(evento.sdk).not.toBe(sdk)
+    expect(evento.span_id).toBeUndefined()
+    expect(evento.logger).toBeUndefined()
+    expect(evento.profile).toBeUndefined()
+    expect(evento.debug_meta).toBeUndefined()
     expect(evento.message).toBe('ok')
+    expect(evento.contexts).toEqual({ trace: { trace_id: 'abc', span_id: 'def' } })
+    expect(evento.breadcrumbs).toEqual({
+      values: [{ category: 'ui', message: 'resenha', data: { token: REDACTED }, logger: 'x' }],
+    })
+    expect(minimizarEvento({ event_id: 'token-nao-mexer' }).event_id).toBe(REDACTED)
+  })
+
+  it('aplica os casos compartilhados de palavra sensível', () => {
+    for (const amostra of casos.redige) {
+      expect(redigirString(amostra)).toBe(REDACTED)
+      expect(minimizarEvento({ message: amostra }).message).toBe(REDACTED)
+    }
+    for (const amostra of casos.intactos) {
+      expect(redigirString(amostra)).toBe(amostra)
+      expect(minimizarEvento({ message: amostra }).message).toBe(amostra)
+    }
+    for (const chave of casos.chavesSensiveis) {
+      expect(chaveSensivel(chave)).toBe(true)
+      const evento = minimizarEvento({ tags: { [chave]: 'valor-limpo' } })
+      expect(evento.tags[chave] ?? REDACTED).toBe(REDACTED)
+    }
+    for (const chave of casos.chavesLivres) {
+      expect(chaveSensivel(chave)).toBe(false)
+      expect(minimizarEvento({ tags: { [chave]: 'valor-limpo' } }).tags[chave]).toBe('valor-limpo')
+    }
   })
 
   it('user fica só com o id, e steam id de 17 dígitos passa', () => {
@@ -106,6 +153,7 @@ describe('scrub de observabilidade', () => {
       data: { 'http.query': 'codigo=1', 'http.url': 'https://api.exemplo.com/v1/jogadores?codigo=1' },
     })
     expect(span.span_id).toBe('abc')
+    expect(minimizarSpan({ span_id: 'cookie-span' }).span_id).toBe(REDACTED)
     expect(span.trace_id).toBe('def')
     expect(span.description).toBe('GET https://api.exemplo.com/v1/jogadores')
     expect(span.data['http.query']).toBeUndefined()
@@ -125,5 +173,8 @@ describe('scrub de observabilidade', () => {
     expect(sentry).toMatch(/import\.meta\.env\.VITE_SENTRY_DSN/)
     expect(posthog).toMatch(/import\.meta\.env\.VITE_POSTHOG_KEY/)
     expect(posthog).toMatch(/import\.meta\.env\.VITE_POSTHOG_HOST/)
+    const scrub = readFileSync(join(process.cwd(), 'src/observabilidade/scrub.js'), 'utf8')
+    expect(scrub).toMatch(/server\/src\/observabilidade\/scrub\.js/)
+    expect(scrub).not.toMatch(/const PALAVRA/)
   })
 })

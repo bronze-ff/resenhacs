@@ -1,7 +1,9 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { minimizarEvento, REDACTED } from '../src/observabilidade/scrub.js'
+import { chaveSensivel, minimizarEvento, REDACTED, redigirString } from '../src/observabilidade/scrub.js'
+
+const casos = JSON.parse(readFileSync(join(process.cwd(), '../../shared/observabilidade/casos-palavras.json'), 'utf8'))
 
 describe('scrub da API', () => {
   it('não manda header, cookie, body nem query', () => {
@@ -41,16 +43,46 @@ describe('scrub da API', () => {
     }
   })
 
-  it('palavra sensível redige a string inteira e não mexe no sdk', () => {
-    const sdk = { name: '@sentry/node' }
+  it('allowlist do topo descarta logger e percorre o sdk', () => {
+    const sdk = { name: '@sentry/node', packages: [{ name: 'token-interno' }] }
     const evento = minimizarEvento({
       sdk,
       event_id: 'authorization-field',
       message: 'cookie de sessão inválido',
+      logger: 'api',
+      profile: { frames: [] },
+      debug_meta: { images: [] },
+      extra: { nota: 'email a@b.com no texto' },
+      contexts: { trace: { trace_id: 'abc' }, os: { name: 'Linux' } },
     })
-    expect(evento.sdk).toBe(sdk)
-    expect(evento.event_id).toBe('authorization-field')
+    expect(evento.sdk).toEqual({ name: '@sentry/node', packages: [{ name: REDACTED }] })
+    expect(evento.sdk).not.toBe(sdk)
+    expect(evento.event_id).toBe(REDACTED)
     expect(evento.message).toBe(REDACTED)
+    expect(evento.logger).toBeUndefined()
+    expect(evento.profile).toBeUndefined()
+    expect(evento.debug_meta).toBeUndefined()
+    expect(evento.extra).toBeUndefined()
+    expect(evento.contexts).toEqual({ trace: { trace_id: 'abc' } })
+  })
+
+  it('aplica os casos compartilhados de palavra sensível', () => {
+    for (const amostra of casos.redige) {
+      expect(redigirString(amostra)).toBe(REDACTED)
+    }
+    for (const amostra of casos.intactos) {
+      expect(redigirString(amostra)).toBe(amostra)
+    }
+    for (const chave of casos.chavesSensiveis) {
+      expect(chaveSensivel(chave)).toBe(true)
+      expect(minimizarEvento({ tags: { [chave]: 'valor-limpo' } }).tags[chave] ?? REDACTED).toBe(REDACTED)
+    }
+    for (const chave of casos.chavesLivres) {
+      expect(chaveSensivel(chave)).toBe(false)
+    }
+    const fonte = readFileSync(join(process.cwd(), 'src/observabilidade/scrub.js'), 'utf8')
+    expect(fonte).toMatch(/from '\.\/palavras\.js'/)
+    expect(fonte).not.toMatch(/const PALAVRA/)
   })
 
   it('DSN é lido por acesso estático e o módulo não importa o SDK sem ele', () => {

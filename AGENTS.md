@@ -72,7 +72,7 @@ O Codex Review barra o PR se encontrar isto.
 **P0**
 
 - Segredo, DSN ou chave de PostHog no repositório.
-- Evento de Sentry ou PostHog com header, cookie, body, query, senha, token, CPF, CNPJ, telefone, e-mail ou placa. A string inteira que contém a palavra sensível sai; campo de transporte do SDK (`event_id`, `sdk`, `span_id`, `trace_id`) não é reescrito.
+- Evento de Sentry ou PostHog com header, cookie, body, query, palavra sensível, CPF, CNPJ, telefone, e-mail ou placa. A string inteira sai. No Sentry o evento final só tem a allowlist do topo; `logger`, `profile`, `debug_meta` e o resto são descartados, e o que fica passa pelo scrub. A palavra é bilíngue (`password`/`senha`, `token`, `api_key`, `cookie`, `session`, …) e casa com `_`, `-` ou espaço. `resenha` não é `senha`.
 - `identify` do PostHog com nick, avatar, e-mail ou Faceit. Só `steamId`.
 - SQL montado com interpolação de input, ou rota autenticada sem `requireAuth`.
 - Migration já aplicada alterada.

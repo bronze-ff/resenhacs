@@ -1,42 +1,41 @@
-// Minimização por allowlist compartilhada com site/client/src/observabilidade/scrub.js
-// e coletor/src/coletor/observabilidade.py. Mantenha os três alinhados.
+// Minimização por allowlist. O client reexporta este arquivo
+// (site/client/src/observabilidade/scrub.js). O Coletor espelha em
+// coletor/src/coletor/observabilidade.py. Mantenha os dois alinhados.
 //
-// Allowlist: request só com method + URL (origem + caminho); user só com id.
-// Headers, cookies, body e query saem inteiros — não são mascarados campo a campo.
-// Palavra sensível ou PII na string restante redige a string inteira.
-// Campos de transporte do SDK (event_id, sdk, span_id, …) não são percorridos.
+// No topo do evento só entram as chaves de CHAVES_EVENTO. Cada valor passa pelo
+// scrub recursivo. logger, profile, debug_meta e o resto são descartados.
+// contexts fica só com trace. request só com method + URL (origem + caminho);
+// user só com id. Headers, cookies, body e query saem inteiros.
+// Palavra sensível (palavras.js) ou PII na string restante redige a string inteira.
 
+import { PALAVRA, chaveSensivel } from './palavras.js'
+
+export { chaveSensivel }
 export const REDACTED = '[Redacted]'
 
-const TRANSPORTE = new Set([
+const CHAVES_EVENTO = [
   'event_id',
   'timestamp',
   'start_timestamp',
-  'platform',
-  'sdk',
   'level',
-  'logger',
-  'span_id',
-  'parent_span_id',
-  'trace_id',
-  'op',
-  'origin',
-  'dist',
-  'environment',
+  'platform',
   'release',
-  'server_name',
-  'debug_meta',
-  'measurements',
-  'profile',
+  'environment',
+  'exception',
+  'message',
+  'logentry',
+  'breadcrumbs',
+  'tags',
+  'contexts',
+  'sdk',
+  'request',
+  'user',
+  'transaction',
   'type',
-  'category',
-])
+  'fingerprint',
+]
 
 const DESCARTAR = /^(headers|cookies|cookie|set-cookie|query_string|query|body|request_body|response_body|env|authorization)$/i
-
-// `(?<!re)` evita que "resenha" (marca do produto) dispare "senha".
-// "token" segue sem fronteira de palavra para pegar access_token.
-const PALAVRA = /(?<!re)senha|token|authorization|cookie/i
 
 const PII = [
   /\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/,
@@ -83,22 +82,13 @@ export function redigirString(valor) {
   return texto
 }
 
-function chaveSensivel(chave) {
-  return typeof chave === 'string' && PALAVRA.test(chave)
-}
-
 export function scrubValor(valor, chave) {
-  if (typeof chave === 'string' && TRANSPORTE.has(chave)) return valor
   if (chaveSensivel(chave)) return REDACTED
   if (typeof valor === 'string') return redigirString(valor)
   if (Array.isArray(valor)) return valor.map((item) => scrubValor(item))
   if (valor && typeof valor === 'object') {
     const saida = {}
     for (const [k, v] of Object.entries(valor)) {
-      if (TRANSPORTE.has(k)) {
-        saida[k] = v
-        continue
-      }
       if (DESCARTAR.test(k)) continue
       saida[k] = scrubValor(v, k)
     }
@@ -107,19 +97,57 @@ export function scrubValor(valor, chave) {
   return valor
 }
 
+function contextsMinimos(valor) {
+  if (!valor || typeof valor !== 'object' || Array.isArray(valor)) return undefined
+  const trace = valor.trace
+  if (!trace || typeof trace !== 'object' || Array.isArray(trace)) return {}
+  return { trace: scrubValor(trace) }
+}
+
+function minimizarBreadcrumbs(valor) {
+  if (Array.isArray(valor)) {
+    return valor.map((item) => minimizarBreadcrumb(item)).filter((item) => item != null)
+  }
+  if (!valor || typeof valor !== 'object') return undefined
+  const saida = {}
+  for (const [k, v] of Object.entries(valor)) {
+    if (k === 'values' && Array.isArray(v)) {
+      saida.values = v.map((item) => minimizarBreadcrumb(item)).filter((item) => item != null)
+      continue
+    }
+    if (DESCARTAR.test(k)) continue
+    saida[k] = scrubValor(v, k)
+  }
+  return saida
+}
+
 export function minimizarEvento(evento) {
   if (!evento || typeof evento !== 'object') return evento
-  const saida = scrubValor(evento)
+  const saida = {}
+  for (const chave of CHAVES_EVENTO) {
+    if (!Object.hasOwn(evento, chave)) continue
+    if (chave === 'breadcrumbs') {
+      const migalhas = minimizarBreadcrumbs(evento.breadcrumbs)
+      if (migalhas) saida.breadcrumbs = migalhas
+      continue
+    }
+    if (chave === 'contexts') {
+      const contexts = contextsMinimos(evento.contexts)
+      if (contexts) saida.contexts = contexts
+      continue
+    }
+    saida[chave] = scrubValor(evento[chave])
+  }
   if (saida.request && typeof saida.request === 'object') {
     const method = typeof saida.request.method === 'string' ? saida.request.method : undefined
-    const url = typeof saida.request.url === 'string' ? redigirString(saida.request.url) : undefined
+    const url = typeof saida.request.url === 'string' ? saida.request.url : undefined
     saida.request = {}
     if (method) saida.request.method = method
     if (url) saida.request.url = url
   }
   if (saida.user && typeof saida.user === 'object') {
     const id = saida.user.id
-    saida.user = id != null && id !== '' ? { id: redigirString(String(id)) } : {}
+    saida.user = id != null && id !== '' ? { id: typeof id === 'string' ? id : redigirString(String(id)) } : {}
   }
   return saida
 }
@@ -144,5 +172,5 @@ export function minimizarSpan(span) {
 export function minimizarBreadcrumb(breadcrumb) {
   if (!breadcrumb || typeof breadcrumb !== 'object') return breadcrumb
   if (breadcrumb.category === 'console') return null
-  return minimizarEvento(breadcrumb)
+  return scrubValor(breadcrumb)
 }

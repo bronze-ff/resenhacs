@@ -1,46 +1,44 @@
 """Scrub e init do Sentry no Coletor.
 
 Sem SENTRY_DSN o módulo não importa o sentry-sdk (teste e dev seguem no-op).
-A lógica de minimização espelha site/client/src/observabilidade/scrub.js.
+A lógica de minimização espelha site/server/src/observabilidade/scrub.js.
+A lista de palavras mora em palavras.py.
 """
 
 import os
 import re
 from urllib.parse import urlsplit, urlunsplit
 
+from .palavras import PALAVRA, chave_sensivel
+
 REDACTED = "[Redacted]"
 
-_TRANSPORTE = {
+_CHAVES_EVENTO = (
     "event_id",
     "timestamp",
     "start_timestamp",
-    "platform",
-    "sdk",
     "level",
-    "logger",
-    "span_id",
-    "parent_span_id",
-    "trace_id",
-    "op",
-    "origin",
-    "dist",
-    "environment",
+    "platform",
     "release",
-    "server_name",
-    "debug_meta",
-    "measurements",
-    "profile",
+    "environment",
+    "exception",
+    "message",
+    "logentry",
+    "breadcrumbs",
+    "tags",
+    "contexts",
+    "sdk",
+    "request",
+    "user",
+    "transaction",
     "type",
-    "category",
-}
+    "fingerprint",
+)
 
 _DESCARTAR = re.compile(
     r"^(headers|cookies|cookie|set-cookie|query_string|query|body|request_body|response_body|env|authorization)$",
     re.IGNORECASE,
 )
-# (?<!re) evita que "resenha" (marca do produto) dispare "senha".
-# "token" segue sem fronteira de palavra para pegar access_token.
-_PALAVRA = re.compile(r"(?<!re)senha|token|authorization|cookie", re.IGNORECASE)
 _PII = [
     re.compile(r"\b\d{3}\.\d{3}\.\d{3}-\d{2}\b"),
     re.compile(r"\b\d{11}\b"),
@@ -92,19 +90,13 @@ def redigir_string(valor):
 
     texto = _URL.sub(lambda match: _cortar_url(match.group(0)), valor)
     texto = _REL.sub(lambda match: match.group(1) + _cortar_url(match.group(2)), texto)
-    if _PALAVRA.search(texto) or any(padrao.search(texto) for padrao in _PII):
+    if PALAVRA.search(texto) or any(padrao.search(texto) for padrao in _PII):
         return REDACTED
     return texto
 
 
-def _chave_sensivel(chave):
-    return isinstance(chave, str) and _PALAVRA.search(chave)
-
-
 def scrub_valor(valor, chave=None):
-    if isinstance(chave, str) and chave in _TRANSPORTE:
-        return valor
-    if _chave_sensivel(chave):
+    if chave_sensivel(chave):
         return REDACTED
     if isinstance(valor, str):
         return redigir_string(valor)
@@ -113,9 +105,6 @@ def scrub_valor(valor, chave=None):
     if isinstance(valor, dict):
         saida = {}
         for k, v in valor.items():
-            if k in _TRANSPORTE:
-                saida[k] = v
-                continue
             if isinstance(k, str) and _DESCARTAR.match(k):
                 continue
             saida[k] = scrub_valor(v, k)
@@ -123,22 +112,74 @@ def scrub_valor(valor, chave=None):
     return valor
 
 
+def _contexts_minimos(valor):
+    if not isinstance(valor, dict):
+        return None
+    trace = valor.get("trace")
+    if not isinstance(trace, dict):
+        return {}
+    return {"trace": scrub_valor(trace)}
+
+
+def minimizar_breadcrumb(breadcrumb):
+    if not isinstance(breadcrumb, dict):
+        return breadcrumb
+    if breadcrumb.get("category") == "console":
+        return None
+    return scrub_valor(breadcrumb)
+
+
+def _minimizar_breadcrumbs(valor):
+    if isinstance(valor, list):
+        return [item for item in (minimizar_breadcrumb(b) for b in valor) if item is not None]
+    if not isinstance(valor, dict):
+        return None
+    saida = {}
+    for k, v in valor.items():
+        if k == "values" and isinstance(v, list):
+            saida["values"] = [item for item in (minimizar_breadcrumb(b) for b in v) if item is not None]
+            continue
+        if isinstance(k, str) and _DESCARTAR.match(k):
+            continue
+        saida[k] = scrub_valor(v, k)
+    return saida
+
+
 def minimizar_evento(evento):
     if not isinstance(evento, dict):
         return evento
-    saida = scrub_valor(evento)
+    saida = {}
+    for chave in _CHAVES_EVENTO:
+        if chave not in evento:
+            continue
+        if chave == "breadcrumbs":
+            migalhas = _minimizar_breadcrumbs(evento.get("breadcrumbs"))
+            if migalhas is not None:
+                saida["breadcrumbs"] = migalhas
+            continue
+        if chave == "contexts":
+            contexts = _contexts_minimos(evento.get("contexts"))
+            if contexts is not None:
+                saida["contexts"] = contexts
+            continue
+        saida[chave] = scrub_valor(evento[chave])
     req = saida.get("request")
     if isinstance(req, dict):
         novo = {}
         if isinstance(req.get("method"), str):
             novo["method"] = req["method"]
         if isinstance(req.get("url"), str):
-            novo["url"] = redigir_string(req["url"])
+            novo["url"] = req["url"]
         saida["request"] = novo
     user = saida.get("user")
     if isinstance(user, dict):
         ident = user.get("id")
-        saida["user"] = {"id": redigir_string(str(ident))} if ident not in (None, "") else {}
+        if ident in (None, ""):
+            saida["user"] = {}
+        elif isinstance(ident, str):
+            saida["user"] = {"id": ident}
+        else:
+            saida["user"] = {"id": redigir_string(str(ident))}
     return saida
 
 
@@ -153,7 +194,7 @@ def minimizar_span(span):
         for k in list(data):
             if not isinstance(k, str):
                 continue
-            if _DESCARTAR.match(k) or re.search(r"query|header|cookie|body|fragment", k, re.I) or _PALAVRA.search(k):
+            if _DESCARTAR.match(k) or re.search(r"query|header|cookie|body|fragment", k, re.I) or PALAVRA.search(k):
                 del data[k]
     return saida
 
@@ -163,9 +204,7 @@ def before_send(evento, hint):
 
 
 def before_breadcrumb(crumb, hint):
-    if isinstance(crumb, dict) and crumb.get("category") == "console":
-        return None
-    return minimizar_evento(crumb)
+    return minimizar_breadcrumb(crumb)
 
 
 def before_send_span(span, hint):

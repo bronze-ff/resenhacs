@@ -76,7 +76,7 @@ describe('evento do PostHog', () => {
     expect(evento.event).toBe('$pageview')
     expect(evento.timestamp).toBe('2026-10-12T00:00:00Z')
     expect(evento.properties.distinct_id).toBe('76561198000000000?x=1')
-    expect(evento.properties.$session_id).toBe('sessao?q=1#f')
+    expect(evento.properties.$session_id).toBe(REDACTED)
     expect(evento.properties.token).toBe(REDACTED)
     expect(evento.properties.$lib).toBe('web')
     expect(evento.properties.$current_url).toBe(LIMPA)
@@ -188,10 +188,25 @@ describe('evento do PostHog', () => {
     }
   })
 
+  it('usa a mesma lista bilíngue do scrub', () => {
+    const casos = JSON.parse(readFileSync(join(process.cwd(), '../../shared/observabilidade/casos-palavras.json'), 'utf8'))
+    for (const amostra of casos.redige) {
+      expect(limparEventoPosthog({ properties: { nota: amostra } }).properties.nota).toBe(REDACTED)
+    }
+    for (const amostra of casos.intactos) {
+      expect(limparEventoPosthog({ properties: { nota: amostra } }).properties.nota).toBe(amostra)
+    }
+    for (const chave of casos.chavesSensiveis) {
+      expect(limparEventoPosthog({ properties: { [chave]: 'valor-limpo' } }).properties[chave]).toBe(REDACTED)
+    }
+  })
+
   it('before_send usa o limpador e a chave é lida de forma estática', () => {
     const fonte = readFileSync(join(process.cwd(), 'src/observabilidade/posthog.js'), 'utf8')
     expect(fonte).toMatch(/before_send: limparEventoPosthog/)
     expect(fonte).toMatch(/import\.meta\.env\.VITE_POSTHOG_KEY/)
     expect(fonte).not.toMatch(/import\.meta\.env\[/)
+    expect(fonte).not.toMatch(/const PALAVRA/)
+    expect(fonte).toMatch(/chaveSensivel/)
   })
 })

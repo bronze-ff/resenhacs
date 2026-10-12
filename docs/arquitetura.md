@@ -44,7 +44,7 @@ O workflow `R2 replays` é manual (`workflow_dispatch`): inventário ou backfill
 
 ## Observabilidade
 
-Erros do browser, da API e do Coletor vão para projetos Sentry separados. O DSN vem de variável de ambiente. O scrub tira header, cookie, body e query, reduz URL a origem + caminho e redige a string inteira se ela tiver palavra sensível ou PII. Tracing desligado (`tracesSampleRate` 0) com `beforeSendSpan` de reserva. O cron `discover` faz check-in no monitor `resenhacs-coletor` só quando o Actions está em produção e o DSN existe.
+Erros do browser, da API e do Coletor vão para projetos Sentry separados. O DSN vem de variável de ambiente. O evento final só conserva a allowlist do topo (cada valor passa pelo scrub; `logger`, `profile` e `debug_meta` saem). O scrub tira header, cookie, body e query, reduz URL a origem + caminho e redige a string inteira se a chave ou o valor tiver palavra sensível ou PII. Tracing desligado (`tracesSampleRate` 0) com `beforeSendSpan` de reserva. O cron `discover` faz check-in no monitor `resenhacs-coletor` só quando o Actions está em produção e o DSN existe.
 
 PostHog fica no client: sem chave, no-op; com chave, contagem sem cookie e `identify` só pelo `steamId` depois do login.
 
