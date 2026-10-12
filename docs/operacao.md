@@ -28,7 +28,7 @@ Crie os projetos no Sentry e no PostHog antes de preencher. Sem as variáveis, o
 | `VITE_SENTRY_RELEASE` | Opcional. O build usa `VERCEL_GIT_COMMIT_SHA` se estiver vazia | — |
 | `VITE_POSTHOG_KEY` | Vercel `resenha` | PostHog `resenhacs`, host EU |
 | `VITE_POSTHOG_HOST` | Vercel `resenha`. Valor: `https://eu.i.posthog.com` | o mesmo projeto PostHog |
-| `SENTRY_AUTH_TOKEN` | Vercel `resenha` (build). Opcional também como secret do GitHub, se o CI for enviar source map | org do Sentry, projeto `resenhacs-web` |
+| `SENTRY_AUTH_TOKEN` | Vercel `resenha` (build). Não entra no CI | org do Sentry, projeto `resenhacs-web` |
 | `SENTRY_ORG` | Vercel `resenha` (build), ao lado do token | slug da organização Sentry |
 | `SENTRY_PROJECT` | Vercel `resenha` (build). Valor: `resenhacs-web` | Sentry `resenhacs-web` |
 | `SENTRY_DSN` | Vercel `resenhacs` | Sentry `resenhacs-api` |
@@ -38,7 +38,9 @@ Crie os projetos no Sentry e no PostHog antes de preencher. Sem as variáveis, o
 
 O DSN do Coletor e o da API são secrets diferentes: cada um aponta para o projeto Sentry da sua parte. Não reutilize o DSN do browser no servidor.
 
-Source map: o plugin do Vite só roda se `SENTRY_AUTH_TOKEN` e `SENTRY_ORG` existirem juntos. Faltando um dos dois, o build segue e não publica `.map`. A API é JavaScript sem bundle; o stack já tem linha, não há upload.
+Source map: o upload é só no build da Vercel (`resenha`). O CI, inclusive `pull_request`, não recebe `SENTRY_AUTH_TOKEN`. O plugin do Vite só roda se `SENTRY_AUTH_TOKEN` e `SENTRY_ORG` existirem juntos. Faltando um dos dois, o build segue e não publica `.map`. A API é JavaScript sem bundle; o stack já tem linha, não há upload.
+
+No PostHog, o `before_send` apaga atribuição de campanha: chave que começa com `$utm_`, `utm_` ou `$initial_utm_`, `$session_entry_*`, `$gclid`/`gclid`, `$fbclid`/`fbclid`, `$msclkid`/`msclkid`, `$initial_referrer`, `$initial_referring_domain` e `$referring_domain`. O mesmo vale para a cópia em `$set` e `$set_once`, que saem por inteiro.
 
 No painel do Sentry, em cada projeto: Data Scrubber ligado, Scrub IP addresses ligado, e regras de scrub para CPF, CNPJ, telefone, e-mail e placa. No PostHog: Discard client IP data ligado. Isso é proteção extra; o SDK já não manda header, cookie, body nem query.
 

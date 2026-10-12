@@ -102,7 +102,7 @@ PostHog só no client, projeto `resenhacs` (host `https://eu.i.posthog.com`). Se
 
 Tracing do Sentry fica em `tracesSampleRate: 0`. `beforeSendSpan` ainda limpa URL (só origem + caminho) se um span existir. Replay do Sentry desligado.
 
-Source map do client sobe no build só se `SENTRY_AUTH_TOKEN` e `SENTRY_ORG` existirem. Sem os dois, o build passa e não gera `.map`.
+Source map do client sobe no build da Vercel só se `SENTRY_AUTH_TOKEN` e `SENTRY_ORG` existirem. O CI não recebe esse token. Sem os dois, o build passa e não gera `.map`.
 
 Nunca logar dado pessoal. O scrub está em `site/client/src/observabilidade/scrub.js`, `site/server/src/observabilidade/scrub.js` e `coletor/src/coletor/observabilidade.py`. Detalhe operacional em [docs/operacao.md](docs/operacao.md).
 

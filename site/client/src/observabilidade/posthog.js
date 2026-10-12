@@ -31,6 +31,21 @@ const TRANSPORTE = new Set([
 
 const APAGAR = new Set(['$ip', '$set', '$set_once', 'email', 'nick', 'avatarUrl', 'faceitNick'])
 
+// Click id como o PostHog grava ($fbclid) e como a query chega (fbclid).
+const CLICK_ID = new Set(['$gclid', 'gclid', '$fbclid', 'fbclid', '$msclkid', 'msclkid'])
+const REFERER_ATRIBUICAO = new Set(['$initial_referrer', '$initial_referring_domain', '$referring_domain'])
+
+function chaveDeAtribuicao(chave) {
+  return (
+    chave.startsWith('$utm_') ||
+    chave.startsWith('utm_') ||
+    chave.startsWith('$initial_utm_') ||
+    chave.startsWith('$session_entry_') ||
+    CLICK_ID.has(chave) ||
+    REFERER_ATRIBUICAO.has(chave)
+  )
+}
+
 function chaveDeUrl(chave) {
   return (
     /^\$initial_/i.test(chave) ||
@@ -64,7 +79,7 @@ function limparValor(valor, chave) {
         saida[k] = v
         continue
       }
-      if (APAGAR.has(k)) continue
+      if (APAGAR.has(k) || chaveDeAtribuicao(k)) continue
       saida[k] = limparValor(v, k)
     }
     return saida

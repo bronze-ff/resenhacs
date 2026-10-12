@@ -111,11 +111,10 @@ jobs:
         working-directory: coletor
         run: pip install -r requirements.txt -r dev-requirements.txt
 
+      # Source map sobe no build da Vercel (projeto resenha). Este job não recebe
+      # SENTRY_AUTH_TOKEN: pull_request enxergaria o secret do repositório.
       - name: verify
         env:
-          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
-          SENTRY_PROJECT: resenhacs-web
           RUN_CLIENT: ${{ steps.diff.outputs.client }}
           RUN_SERVER: ${{ steps.diff.outputs.server }}
           RUN_COLETOR: ${{ steps.diff.outputs.coletor }}
