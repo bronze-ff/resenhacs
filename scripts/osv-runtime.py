@@ -11,6 +11,10 @@ import sys
 
 def main():
     caminho = sys.argv[1]
+    # dev-requirements.txt só entra no pytest. Não é o runtime do Coletor.
+    if caminho.replace("\\", "/").endswith("dev-requirements.txt"):
+        print(f"osv: {caminho} é dependência de teste, fora do gate de runtime")
+        return 0
     dados = json.load(sys.stdin)
     runtime = []
     for resultado in dados.get("results") or []:
