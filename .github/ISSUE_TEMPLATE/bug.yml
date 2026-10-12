@@ -1,0 +1,25 @@
+name: Bug
+description: Algo quebrou no site, na API ou no Coletor
+labels: ['tipo:bug']
+body:
+  - type: textarea
+    attributes:
+      label: O que aconteceu
+      description: O que você fez e o que apareceu. Sem senha, token, cookie ou DSN.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: O que deveria acontecer
+    validations:
+      required: true
+  - type: dropdown
+    attributes:
+      label: Onde
+      options:
+        - site (resenha)
+        - API (resenhacs)
+        - Coletor
+        - bot
+    validations:
+      required: true

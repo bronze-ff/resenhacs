@@ -8,6 +8,7 @@
 // Config/db/app são criados uma vez por módulo: em invocações "quentes" da mesma
 // instância da função, o pool de conexões (pg.Pool) é reaproveitado em vez de recriado
 // a cada request — essencial pra não estourar o limite de conexões do Postgres.
+import '../src/observabilidade/sentry.js'
 import { loadConfig } from '../src/config.js'
 import { createDb } from '../src/db.js'
 import { createApp } from '../src/app.js'

@@ -7,3 +7,5 @@ psycopg[binary]>=3.3.4
 # validada em dev (ver `pip show rarfile`); trava evita uma versão futura mudar
 # comportamento de extração (ex.: tool_setup) sem aviso.
 rarfile==4.3
+# Erro e cron do Coletor. Sem SENTRY_DSN o processo não inicializa o SDK.
+sentry-sdk>=2.35,<3

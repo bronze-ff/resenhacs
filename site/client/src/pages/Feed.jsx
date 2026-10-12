@@ -63,7 +63,7 @@ function contextoPartida(m) {
 // Uma linha por Partida — layout único que reflui (não duas árvores JSX mobile/desktop
 // separadas): mapa+nome+badges numa ponta, chip de resultado sempre grudado na outra,
 // e a linha inteira quebra pro card empilhar em telas estreitas sem duplicar código.
-// Sem side-stripe colorido pra indicar vitória/derrota (ver DESIGN.md, Don't) — o chip
+// Sem side-stripe colorido pra indicar vitória/derrota (ver docs/produto/DESIGN.md, Don't) — o chip
 // preenchido + ícone já comunicam isso sozinhos.
 function CardPartida({ m }) {
   const resultado = resultadoDoGrupo(m)

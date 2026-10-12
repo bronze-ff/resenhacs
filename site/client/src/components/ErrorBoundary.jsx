@@ -1,4 +1,5 @@
 import { Component } from 'react'
+import { capturarErro } from '../observabilidade/sentry.js'
 import Card from './ui/Card.jsx'
 
 // Rede de segurança do site inteiro: sem isso, qualquer erro de render (ex.: um
@@ -17,6 +18,7 @@ export default class ErrorBoundary extends Component {
   }
 
   componentDidCatch(erro, info) {
+    capturarErro(erro)
     console.error('Erro não tratado na UI:', erro, info)
   }
 

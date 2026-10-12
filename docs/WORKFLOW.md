@@ -5,7 +5,7 @@ Guia prático pra manter o repositório organizado — nasceu de uma limpeza rea
 14 PRs do Dependabot paradas, e uma PR de bundle de ferramentas que ninguém lembrava
 de ter pedido. As regras abaixo existem pra isso não se repetir.
 
-Pesquisa de referência (git branching, worktrees, PRs, Linear) nas fontes ao final.
+Pesquisa de referência (git branching, worktrees, PRs, GitHub Issues) nas fontes ao final.
 
 ## 1. Nomeação de branches
 
@@ -103,27 +103,17 @@ acumulando.
 
 ## 7. Backlog / issues
 
-Hoje o projeto não usa nenhum rastreador — decisões e pendências vivem só na
-conversa com a IA e nos arquivos de memória dela. Isso funciona pra pendências de
-curto prazo, mas perde tudo que não vira ação imediata (ex.: "aplicar retry
-automático em falhas transitórias" só não se perdeu porque virou uma tarefa em
-background explícita).
+Issues ficam no **GitHub Issues deste repositório**. Não abrir issue no Linear e
+não usar `FIL-xxx` em branch, PR ou documento novo. Comentários antigos no código
+que citam `FIL-xxx` são o id histórico do Linear; sem uma tabela de mapeamento
+eles não viram `#n`.
 
-Se for adotar o Linear (ou qualquer rastreador leve), o mínimo que compensa pra um
-grupo pequeno:
-- **Um time só**, sem sub-times — overhead de estrutura não compensa pra ~10 pessoas.
-- **Labels por tipo** (bug, feature, chore) em vez de workflow complexo de status.
-- **Projects** pra entregas maiores que atravessam várias sessões (ex.: "Competições
-  de Clipes" seria um Project, não uma issue solta) — dá pra ver progresso sem
-  precisar reconstruir o histórico de conversa.
-- **Cycles** são opcionais — só valem a pena se o ritmo de trabalho for regular o
-  suficiente pra um "sprint" fazer sentido; pra um projeto de fim de semana, pule.
-- Toda PR referencia a issue relacionada (`Closes RES-42` na descrição) — sem isso,
-  o rastreador vira só uma lista solta sem ligação com o código.
-
-Sem um rastreador, o mínimo viável é: toda decisão importante e toda pendência
-adiada vira uma nota explícita (arquivo de memória, comentário no código, ou
-`spawn_task`), nunca só "vou lembrar disso".
+- Labels por tipo (`tipo:bug`, `tipo:feature`, `tipo:melhoria`) e prioridade
+  (`prioridade:alta`, `prioridade:media`, `prioridade:baixa`).
+- Entrega que atravessa várias sessões vira um conjunto de issues, não uma nota
+  só na conversa.
+- Toda PR referencia a issue (`Fixes #n` ou `Closes #n`).
+- Decisão importante que não é issue vira ADR em `docs/decisoes/`.
 
 ## 8. Regras específicas pra sessões de IA (Claude Code)
 

@@ -1,0 +1,14 @@
+name: Feature
+description: Funcionalidade nova
+labels: ['tipo:feature']
+body:
+  - type: textarea
+    attributes:
+      label: O que muda para o Jogador
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Fora de escopo
+    validations:
+      required: true

@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react'
+import { esquecerJogador, identificarJogador } from '../observabilidade/posthog.js'
 
 const AuthContext = createContext({ carregando: true, jogador: null })
 
@@ -10,6 +11,8 @@ export function AuthProvider({ children }) {
       .then((res) => (res.ok ? res.json() : null))
       .then((jogador) => {
         setEstado({ carregando: false, jogador })
+        if (jogador?.steamId) identificarJogador(jogador.steamId)
+        else esquecerJogador()
       })
       .catch(() => setEstado({ carregando: false, jogador: null }))
   }, [])

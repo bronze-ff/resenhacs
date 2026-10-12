@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 // Duração/easing únicos pra toda transição de entrada/saída de modal do produto —
-// ver DESIGN.md ("elementos transitórios e flutuantes" ganham fade de entrada, nunca
+// ver docs/produto/DESIGN.md ("elementos transitórios e flutuantes" ganham fade de entrada, nunca
 // aparecem/somem do nada). Mantido num único lugar pra garantir consistência entre
 // os modais de granadas/táticas (FormGranada, DetalheGranada, FormTatica,
 // DetectarTaticas, DetalheTatica).

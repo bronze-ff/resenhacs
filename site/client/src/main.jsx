@@ -2,6 +2,8 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { registerSW } from 'virtual:pwa-register'
 import App from './App.jsx'
+import { iniciarPosthog } from './observabilidade/posthog.js'
+import { iniciarSentry } from './observabilidade/sentry.js'
 import './index.css'
 
 // Registro do service worker (FIL-57). Precisa vir daqui, e nao do script que o
@@ -19,6 +21,9 @@ import './index.css'
 //
 // Em `npm run dev` o modulo virtual e uma versao no-op: nada e registrado.
 registerSW({ immediate: true })
+
+await iniciarSentry()
+iniciarPosthog()
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

@@ -58,6 +58,10 @@ jobs:
     # (banco, Steam, R2). Teste de PR fica no job `tests`.
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    env:
+      # Vazio enquanto o secret não existe: o Coletor trata DSN vazio como no-op.
+      SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+      SENTRY_ENVIRONMENT: producao
     # Reprocessar TODAS as Partidas (run manual) não cabe em 45 min — o timeout
     # curto derrubou o run 29278267027 no meio. 300 min só nesse caso; o job
     # agendado normal continua com 45 pra não segurar a fila meia hora à toa.
@@ -67,6 +71,8 @@ jobs:
       # ser movida pelo publisher (de boa-fé ou por conta comprometida) pra apontar pra
       # outro código sem o repo perceber; o SHA é imutável.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.12'
@@ -228,6 +234,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.12'

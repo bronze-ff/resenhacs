@@ -9,3 +9,5 @@ __pycache__/
 coletor/.venv/
 .superpowers/
 .wrangler/
+.mcp.json
+.claude/homunculus/

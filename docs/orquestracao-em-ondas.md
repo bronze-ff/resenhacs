@@ -1,3 +1,8 @@
+> **Neste repositório as issues ficam no GitHub Issues, não no Linear.** O texto
+> abaixo ainda descreve o playbook antigo (MCP do Linear, `FIL-xxx`). Para o
+> Resenha, leia a issue com `gh issue view <n>`, referencie o PR com `Fixes #n`
+> e não crie ticket no Linear. A regra vigente está no `AGENTS.md`.
+
 ---
 name: orquestrar-projeto
 description: >-
