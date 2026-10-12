@@ -70,6 +70,6 @@ Demo no R2: a limpeza apaga o `.dem` bruto com mais de 14 dias e mantém `replay
 
 ## CI
 
-`.github/workflows/ci.yml` é o gate rápido: gitleaks só no intervalo de commits do PR, `npm run verify` do que mudou, osv se o lockfile mudou, zizmor se `.github/` mudou. Actions pinadas por SHA. Os workflows `Coletor`, `Site` e `R2 replays` continuam. `Site` ainda roda os testes de client e server quando `site/**` muda.
+`.github/workflows/ci.yml` é o gate rápido: gitleaks só no intervalo de commits do PR, `npm run verify` em todo PR (se a mudança não toca client, API, Coletor nem bot, roda o verify inteiro), osv se o lockfile mudou, zizmor se `.github/` mudou. Actions pinadas por SHA. Não há merge automático. Os workflows `Coletor`, `Site` e `R2 replays` continuam. `Site` ainda roda os testes de client e server quando `site/**` muda.
 
 Issues: GitHub Issues deste repositório. Templates em `.github/ISSUE_TEMPLATE/`.

@@ -55,6 +55,10 @@ jobs:
           if grep -qE '^bot/' changed.txt; then bot=true; fi
           if grep -qE '^(package\.json|scripts/|\.github/workflows/ci\.yml$)' changed.txt; then all=true; fi
           if [ "$all" = true ]; then client=true; server=true; coletor=true; bot=true; fi
+          # PR só de docs (ou sem código) ainda roda o verify inteiro.
+          if [ "$client" != true ] && [ "$server" != true ] && [ "$coletor" != true ] && [ "$bot" != true ]; then
+            client=true; server=true; coletor=true; bot=true
+          fi
           if grep -qE '(^|/)(package-lock\.json|requirements[^/]*\.txt)$' changed.txt; then deps=true; fi
           if grep -qE '^\.github/' changed.txt; then wf=true; fi
           if [ "$client" = true ] || [ "$server" = true ] || [ "$coletor" = true ] || [ "$bot" = true ]; then code=true; fi
@@ -108,7 +112,6 @@ jobs:
         run: pip install -r requirements.txt -r dev-requirements.txt
 
       - name: verify
-        if: steps.diff.outputs.code == 'true'
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
@@ -154,34 +157,3 @@ jobs:
       - name: zizmor (workflow mudou)
         if: steps.diff.outputs.workflows == 'true'
         run: pipx run zizmor==1.30.1 --min-severity medium .github/workflows
-
-  risk:
-    name: risk
-    if: github.event_name == 'pull_request' && vars.AUTO_MERGE == 'true'
-    runs-on: ubuntu-slim
-    timeout-minutes: 3
-    permissions:
-      contents: read
-      pull-requests: write
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - name: classificar e ligar auto-merge
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR: ${{ github.event.pull_request.number }}
-          BASE: ${{ github.event.pull_request.base.sha }}
-          HEAD: ${{ github.event.pull_request.head.sha }}
-          LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
-        run: |
-          files=$(git diff --name-only "$BASE" "$HEAD")
-          lines=$(git diff --shortstat "$BASE" "$HEAD" | awk '{print $4+$6}')
-          high='(^|/)(auth|middleware|migrations|supabase)/|\.sql$|^\.github/|(^|/)\.env|vercel\.json|middleware\.js'
-          if echo "$files" | grep -Eq "$high" || [ "${lines:-0}" -gt 400 ]; then RISK=alto; else RISK=baixo; fi
-          gh pr edit "$PR" --repo "$GITHUB_REPOSITORY" --remove-label risco:baixo,risco:alto >/dev/null 2>&1 || true
-          gh pr edit "$PR" --repo "$GITHUB_REPOSITORY" --add-label "risco:$RISK"
-          if [ "$RISK" = baixo ]; then gh pr merge "$PR" --repo "$GITHUB_REPOSITORY" --auto --squash
-          elif ! echo "$LABELS" | grep -q aprovado-filippe; then
-            echo "::error::Risco alto: precisa da label aprovado-filippe"; exit 1; fi
