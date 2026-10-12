@@ -2,3 +2,5 @@
 pytest>=9.1.1
 pandas>=3.0.5
 rarfile
+# O job de testes não instala requirements.txt. O init com DSN precisa do mesmo piso.
+sentry-sdk>=2.67.0,<3

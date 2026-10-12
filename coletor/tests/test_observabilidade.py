@@ -51,24 +51,25 @@ def test_steam_id_nao_e_tratado_como_cpf():
 
 
 def test_init_com_dsn_nao_quebra(monkeypatch):
+    import sentry_sdk
+
     import coletor.observabilidade as obs
 
     monkeypatch.setenv("SENTRY_DSN", "https://public@o0.ingest.sentry.io/0")
     monkeypatch.setenv("SENTRY_ENVIRONMENT", "dev")
     monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
     obs._ativo = False
+    cliente = None
     try:
         assert obs.init_sentry() is True
-        import sentry_sdk
-
         partes = tuple(int(p) for p in sentry_sdk.VERSION.split(".")[:3])
         assert partes >= (2, 67, 0)
-        assert sentry_sdk.get_client().options["before_send_span"] is obs.before_send_span
+        cliente = sentry_sdk.get_client()
+        assert cliente.options["before_send_span"] is obs.before_send_span
     finally:
         obs._ativo = False
-        import sentry_sdk
-
-        sentry_sdk.get_client().close(timeout=0)
+        if cliente is not None:
+            cliente.close(timeout=0)
 
 
 def test_init_sem_dsn_nao_ativa(monkeypatch):
