@@ -8,4 +8,5 @@ psycopg[binary]>=3.3.4
 # comportamento de extração (ex.: tool_setup) sem aviso.
 rarfile==4.3
 # Erro e cron do Coletor. Sem SENTRY_DSN o processo não inicializa o SDK.
-sentry-sdk>=2.35,<3
+# before_send_span só é opção de init a partir do 2.67.0.
+sentry-sdk>=2.67.0,<3
