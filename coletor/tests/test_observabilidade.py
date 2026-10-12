@@ -39,6 +39,21 @@ def test_palavra_sensivel_redige_a_string_inteira_e_nao_mexe_no_sdk():
     assert evento["extra"]["nota"] == REDACTED
 
 
+def test_telefone_fixo_e_celular():
+    amostras = [
+        "(11) 3456-7890",
+        "+55 (11) 3456-7890",
+        "1134567890",
+        "11.3456.7890",
+        "(11) 91234-5678",
+        "+55 11 9 1234-5678",
+        "11912345678",
+    ]
+    for amostra in amostras:
+        assert minimizar_evento({"message": f"liga {amostra}"})["message"] == REDACTED
+    assert minimizar_evento({"message": STEAM})["message"] == STEAM
+
+
 def test_caminho_relativo_perde_query_e_resenha_nao_vira_senha():
     evento = minimizar_evento({"request": {"url": "/api/auth/me?code=1"}})
     assert evento["request"]["url"] == "/api/auth/me"

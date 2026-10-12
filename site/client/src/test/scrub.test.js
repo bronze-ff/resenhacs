@@ -22,6 +22,32 @@ describe('scrub de observabilidade', () => {
     })
   })
 
+  it('redige telefone fixo e celular, com ou sem +55 e separadores', () => {
+    const amostras = [
+      '(11) 3456-7890',
+      '11 3456-7890',
+      '11 3456 7890',
+      '+55 11 3456-7890',
+      '+55 (11) 3456-7890',
+      '+55-11-3456-7890',
+      '(11)3456-7890',
+      '1134567890',
+      '11.3456.7890',
+      '(11) 91234-5678',
+      '11 91234-5678',
+      '+55 11 91234-5678',
+      '+55 (11) 9 1234-5678',
+      '+5511912345678',
+      '11912345678',
+      '11.91234.5678',
+    ]
+    for (const amostra of amostras) {
+      expect(minimizarEvento({ message: `liga ${amostra} agora` }).message).toBe(REDACTED)
+    }
+    expect(minimizarEvento({ message: STEAM }).message).toBe(STEAM)
+    expect(minimizarEvento({ message: 'resenha do grupo' }).message).toBe('resenha do grupo')
+  })
+
   it('redige a string inteira quando sobra palavra sensível ou PII', () => {
     const evento = minimizarEvento({
       message: 'falha ao ler senha do jogador',

@@ -44,7 +44,9 @@ const PII = [
   /\b\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\b/,
   /\b\d{14}\b/,
   /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i,
-  /\b(?:\+?55\s?)?\(?\d{2}\)?\s?9\d{4}-?\d{4}\b/,
+  // Fixo (8 dígitos) e celular (9). +55 opcional; DDD com ou sem parênteses;
+  // separador pode ser espaço, ponto, hífen, barra ou nada.
+  /(?<!\d)\+?(?:55[\s./-]*)?\(?\d{2}\)?[\s./-]*9?[\s./-]*\d{4}[\s./-]*\d{4}(?!\d)/,
   /\b[A-Z]{3}-?\d{4}\b/i,
   /\b[A-Z]{3}\d[A-Z]\d{2}\b/i,
 ]

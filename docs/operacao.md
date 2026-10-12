@@ -40,7 +40,7 @@ O DSN do Coletor e o da API são secrets diferentes: cada um aponta para o proje
 
 Source map: o upload é só no build da Vercel (`resenha`). O CI, inclusive `pull_request`, não recebe `SENTRY_AUTH_TOKEN`. O plugin do Vite só roda se `SENTRY_AUTH_TOKEN` e `SENTRY_ORG` existirem juntos. Faltando um dos dois, o build segue e não publica `.map`. A API é JavaScript sem bundle; o stack já tem linha, não há upload.
 
-No PostHog, o `before_send` apaga atribuição de campanha: chave que começa com `$utm_`, `utm_` ou `$initial_utm_`, `$session_entry_*`, `$gclid`/`gclid`, `$fbclid`/`fbclid`, `$msclkid`/`msclkid`, `$initial_referrer`, `$initial_referring_domain` e `$referring_domain`. O mesmo vale para a cópia em `$set` e `$set_once`, que saem por inteiro.
+No PostHog, o `before_send` apaga atribuição de campanha: chave que começa com `$utm_`, `utm_` ou `$initial_utm_`, `$session_entry_*`, `$gclid`/`gclid`, `$fbclid`/`fbclid`, `$msclkid`/`msclkid`, `$initial_referrer`, `$initial_referring_domain` e `$referring_domain`. O mesmo vale para a cópia em `$set` e `$set_once`, que saem por inteiro. Fora uma lista fechada no topo do evento (`token`, `distinct_id`, `$session_id`, `$window_id`, `$device_id`, `$insert_id`, `$time`, `$lib`, `$lib_version`, `uuid`), qualquer string com e-mail, CPF, CNPJ, telefone, placa ou `token`/`senha` é redigida por inteiro. Um `token` aninhado em `properties` não herda essa isenção.
 
 No painel do Sentry, em cada projeto: Data Scrubber ligado, Scrub IP addresses ligado, e regras de scrub para CPF, CNPJ, telefone, e-mail e placa. No PostHog: Discard client IP data ligado. Isso é proteção extra; o SDK já não manda header, cookie, body nem query.
 
@@ -60,7 +60,7 @@ Lista completa de exemplo: `site/server/.env.example`, `site/client/.env.example
 - Coletor: log do workflow `Coletor` no GitHub. Falha não tratada vai ao Sentry `resenhacs-coletor`. O monitor `resenhacs-coletor` (crontab `*/10 * * * *`, margem de 10 minutos) avisa se o `discover` de produção não faz check-in. O check-in só acontece com DSN e `SENTRY_ENVIRONMENT=producao` dentro do Actions.
 - R2 replays: log do workflow manual. O mesmo DSN do Coletor, se o secret existir.
 
-Erro de Sentry não é lugar de guardar dado pessoal. O scrub redige a string inteira quando ela contém `senha`, `token`, `authorization`, `cookie`, CPF, CNPJ, telefone, e-mail ou placa. A marca `resenha` não conta como `senha`. `access_token` conta. URL (absoluta ou caminho relativo) fica só com origem e caminho, e essa limpeza acontece antes da regra da palavra. Campos de transporte do SDK não são reescritos. A regex de placa antiga também casa com códigos no formato `ADR-0006`.
+Erro de Sentry não é lugar de guardar dado pessoal. O scrub redige a string inteira quando ela contém `senha`, `token`, `authorization`, `cookie`, CPF, CNPJ, telefone (fixo ou celular, com ou sem `+55`), e-mail ou placa. A marca `resenha` não conta como `senha`. `access_token` conta. URL (absoluta ou caminho relativo) fica só com origem e caminho, e essa limpeza acontece antes da regra da palavra. Campos de transporte do SDK não são reescritos. A regex de placa antiga também casa com códigos no formato `ADR-0006`.
 
 ## Rollback
 

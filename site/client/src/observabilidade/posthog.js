@@ -1,5 +1,5 @@
 import posthog from 'posthog-js'
-import { soOrigemCaminho } from './scrub.js'
+import { REDACTED, redigirString } from './scrub.js'
 
 // Acesso estático. Sem a chave, o módulo não inicializa (dev e teste seguem no-op).
 const chave = import.meta.env.VITE_POSTHOG_KEY
@@ -7,27 +7,22 @@ const host = import.meta.env.VITE_POSTHOG_HOST
 
 let iniciado = false
 
-// Identificadores do evento. Não são URL e não são reescritos, mesmo com ? ou #.
-const TRANSPORTE = new Set([
-  'uuid',
-  'event',
-  'timestamp',
-  'distinct_id',
+// Só no topo do evento. Um token (ou distinct_id, …) aninhado passa pela limpeza.
+const TRANSPORTE_TOPO = new Set([
   'token',
+  'distinct_id',
   '$session_id',
   '$window_id',
-  '$insert_id',
   '$device_id',
+  '$insert_id',
+  '$time',
   '$lib',
   '$lib_version',
-  '$sent_at',
-  'ip',
-  'event_id',
-  'sdk',
-  'span_id',
-  'parent_span_id',
-  'trace_id',
+  'uuid',
 ])
+
+// Mesma palavra do scrub. Chave aninhada com esse nome redige o valor inteiro.
+const PALAVRA = /(?<!re)senha|token|authorization|cookie/i
 
 const APAGAR = new Set(['$ip', '$set', '$set_once', 'email', 'nick', 'avatarUrl', 'faceitNick'])
 
@@ -46,41 +41,20 @@ function chaveDeAtribuicao(chave) {
   )
 }
 
-function chaveDeUrl(chave) {
-  return (
-    /^\$initial_/i.test(chave) ||
-    /^\$prev_pageview_/i.test(chave) ||
-    /(?:^|\$|_)(current_url|pathname|referrer|referring_domain|href|url)$/i.test(chave)
-  )
-}
-
-function pareceUrl(valor) {
-  return /^https?:\/\//i.test(valor) || (valor.startsWith('/') && !valor.startsWith('//'))
-}
-
-function semQuery(valor) {
-  const pelaUrl = soOrigemCaminho(valor)
-  if (pelaUrl !== valor) return pelaUrl
-  const corte = valor.search(/[?#]/)
-  return corte === -1 ? valor : valor.slice(0, corte)
-}
-
-function limparValor(valor, chave) {
-  if (typeof chave === 'string' && TRANSPORTE.has(chave)) return valor
-  if (typeof valor === 'string') {
-    if ((typeof chave === 'string' && chaveDeUrl(chave)) || pareceUrl(valor)) return semQuery(valor)
-    return valor
-  }
-  if (Array.isArray(valor)) return valor.map((item) => limparValor(item))
+function limparValor(valor, chave, noTopo) {
+  if (noTopo && typeof chave === 'string' && TRANSPORTE_TOPO.has(chave)) return valor
+  if (typeof chave === 'string' && PALAVRA.test(chave)) return REDACTED
+  if (typeof valor === 'string') return redigirString(valor)
+  if (Array.isArray(valor)) return valor.map((item) => limparValor(item, undefined, false))
   if (valor && typeof valor === 'object') {
     const saida = {}
     for (const [k, v] of Object.entries(valor)) {
-      if (TRANSPORTE.has(k)) {
+      if (noTopo && TRANSPORTE_TOPO.has(k)) {
         saida[k] = v
         continue
       }
       if (APAGAR.has(k) || chaveDeAtribuicao(k)) continue
-      saida[k] = limparValor(v, k)
+      saida[k] = limparValor(v, k, false)
     }
     return saida
   }
@@ -89,7 +63,7 @@ function limparValor(valor, chave) {
 
 export function limparEventoPosthog(evento) {
   if (!evento || typeof evento !== 'object') return evento
-  return limparValor(evento)
+  return limparValor(evento, undefined, true)
 }
 
 export function iniciarPosthog() {

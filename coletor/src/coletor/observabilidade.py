@@ -47,7 +47,10 @@ _PII = [
     re.compile(r"\b\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}\b"),
     re.compile(r"\b\d{14}\b"),
     re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE),
-    re.compile(r"\b(?:\+?55\s?)?\(?\d{2}\)?\s?9\d{4}-?\d{4}\b"),
+    # Fixo (8 dígitos) e celular (9). +55 opcional; DDD com ou sem parênteses.
+    re.compile(
+        r"(?<!\d)\+?(?:55[\s./-]*)?\(?\d{2}\)?[\s./-]*9?[\s./-]*\d{4}[\s./-]*\d{4}(?!\d)"
+    ),
     re.compile(r"\b[A-Z]{3}-?\d{4}\b", re.IGNORECASE),
     re.compile(r"\b[A-Z]{3}\d[A-Z]\d{2}\b", re.IGNORECASE),
 ]
