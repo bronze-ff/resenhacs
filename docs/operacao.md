@@ -61,7 +61,7 @@ Lista completa de exemplo: `site/server/.env.example`, `site/client/.env.example
 - Coletor: log do workflow `Coletor` no GitHub. Falha não tratada vai ao Sentry `resenhacs-coletor`. O monitor `resenhacs-coletor` (crontab `*/10 * * * *`, margem de 10 minutos) avisa se o `discover` de produção não faz check-in. O check-in só acontece com DSN e `SENTRY_ENVIRONMENT=producao` dentro do Actions.
 - R2 replays: log do workflow manual. O mesmo DSN do Coletor, se o secret existir.
 
-Erro de Sentry não é lugar de guardar dado pessoal. O scrub redige a string inteira quando ela contém `senha`, `token`, `authorization`, `cookie`, CPF, CNPJ, telefone (fixo ou celular, com ou sem `+55`), e-mail ou placa. A marca `resenha` não conta como `senha`. `access_token` conta. URL (absoluta ou caminho relativo) fica só com origem e caminho, e essa limpeza acontece antes da regra da palavra. Campos de transporte do SDK não são reescritos. A regex de placa antiga também casa com códigos no formato `ADR-0006`.
+Erro de Sentry não é lugar de guardar dado pessoal. O scrub redige a string inteira quando ela contém `senha`, `token`, `authorization`, `cookie`, CPF, CNPJ, telefone (fixo ou celular, com ou sem `+55` e com ou sem DDD, inclusive o número local de 8 ou 9 dígitos), e-mail ou placa. A marca `resenha` não conta como `senha`. `access_token` conta. URL (absoluta ou caminho relativo) fica só com origem e caminho, e essa limpeza acontece antes da regra da palavra. Campos de transporte do SDK não são reescritos. A regex de placa antiga também casa com códigos no formato `ADR-0006`.
 
 ## Rollback
 

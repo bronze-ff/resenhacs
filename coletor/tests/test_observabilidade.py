@@ -48,10 +48,27 @@ def test_telefone_fixo_e_celular():
         "(11) 91234-5678",
         "+55 11 9 1234-5678",
         "11912345678",
+        "3333-4444",
+        "3333 4444",
+        "33334444",
+        "91234-5678",
+        "91234 5678",
+        "912345678",
     ]
     for amostra in amostras:
         assert minimizar_evento({"message": f"liga {amostra}"})["message"] == REDACTED
-    assert minimizar_evento({"message": STEAM})["message"] == STEAM
+    intactos = [
+        STEAM,
+        "2026-10-12",
+        "12/10/2026",
+        "2026-10-12T21:00:00Z",
+        "placar 13-9",
+        "placar 16-14",
+        "placar 13:9",
+        "empate 12:12",
+    ]
+    for amostra in intactos:
+        assert minimizar_evento({"message": amostra})["message"] == amostra
 
 
 def test_caminho_relativo_perde_query_e_resenha_nao_vira_senha():

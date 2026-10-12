@@ -40,12 +40,30 @@ describe('scrub de observabilidade', () => {
       '+5511912345678',
       '11912345678',
       '11.91234.5678',
+      '3333-4444',
+      '3333 4444',
+      '33334444',
+      '91234-5678',
+      '91234 5678',
+      '912345678',
     ]
     for (const amostra of amostras) {
       expect(minimizarEvento({ message: `liga ${amostra} agora` }).message).toBe(REDACTED)
     }
-    expect(minimizarEvento({ message: STEAM }).message).toBe(STEAM)
-    expect(minimizarEvento({ message: 'resenha do grupo' }).message).toBe('resenha do grupo')
+    const intactos = [
+      STEAM,
+      'resenha do grupo',
+      '2026-10-12',
+      '12/10/2026',
+      '2026-10-12T21:00:00Z',
+      'placar 13-9',
+      'placar 16-14',
+      'placar 13:9',
+      'empate 12:12',
+    ]
+    for (const amostra of intactos) {
+      expect(minimizarEvento({ message: amostra }).message).toBe(amostra)
+    }
   })
 
   it('redige a string inteira quando sobra palavra sensível ou PII', () => {
