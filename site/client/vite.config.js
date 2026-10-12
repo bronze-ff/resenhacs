@@ -1,8 +1,4 @@
-import path from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { defineConfig, loadEnv } from 'vite'
-
-const dirCliente = path.dirname(fileURLToPath(import.meta.url))
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
@@ -112,10 +108,6 @@ export default defineConfig(async ({ mode }) => {
   define,
   build: { sourcemap: Boolean(token && org) },
   server: {
-    // O scrub do client reexporta site/server. Sem isto o Vitest recusa o arquivo.
-    fs: {
-      allow: [dirCliente, path.resolve(dirCliente, '../server/src/observabilidade')],
-    },
     proxy: { '/api': 'http://localhost:3001' },
   },
   test: {

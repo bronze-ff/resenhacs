@@ -1,6 +1,7 @@
-// Minimização por allowlist. O client reexporta este arquivo
-// (site/client/src/observabilidade/scrub.js). O Coletor espelha em
-// coletor/src/coletor/observabilidade.py. Mantenha os dois alinhados.
+// Minimização por allowlist. Este arquivo é igual em
+// site/client/src/observabilidade/scrub.js e aqui: cada deploy da Vercel
+// só enxerga o próprio Root Directory. O teste compara os dois.
+// O Coletor espelha em coletor/src/coletor/observabilidade.py.
 //
 // No topo do evento só entram as chaves de CHAVES_EVENTO. Cada valor passa pelo
 // scrub recursivo. logger, profile, debug_meta e o resto são descartados.

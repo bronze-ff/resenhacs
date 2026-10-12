@@ -81,8 +81,10 @@ describe('scrub da API', () => {
       expect(chaveSensivel(chave)).toBe(false)
     }
     const fonte = readFileSync(join(process.cwd(), 'src/observabilidade/scrub.js'), 'utf8')
+    const palavras = readFileSync(join(process.cwd(), 'src/observabilidade/palavras.js'), 'utf8')
     expect(fonte).toMatch(/from '\.\/palavras\.js'/)
-    expect(fonte).not.toMatch(/const PALAVRA/)
+    expect(fonte).toBe(readFileSync(join(process.cwd(), '../client/src/observabilidade/scrub.js'), 'utf8'))
+    expect(palavras).toBe(readFileSync(join(process.cwd(), '../client/src/observabilidade/palavras.js'), 'utf8'))
   })
 
   it('DSN é lido por acesso estático e o módulo não importa o SDK sem ele', () => {

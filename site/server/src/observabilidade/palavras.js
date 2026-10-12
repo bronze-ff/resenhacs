@@ -1,6 +1,8 @@
 // Lista única do JavaScript (client, server e PostHog).
-// coletor/src/coletor/palavras.py repete o mesmo texto em PADRAO;
-// o teste do Coletor compara os dois.
+// O mesmo arquivo está em site/client/src/observabilidade/palavras.js:
+// cada deploy da Vercel só enxerga o próprio Root Directory, e o teste
+// compara os dois. coletor/src/coletor/palavras.py repete o texto em PADRAO;
+// o teste do Coletor compara com este arquivo.
 //
 // Sem diferenciar maiúsculas. "_" "-" e espaço separam (api_key, api-key, api key,
 // apikey). A fronteira alfanumérica deixa "resenha" fora de "senha" e "tokenizer"
