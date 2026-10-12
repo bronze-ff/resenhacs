@@ -199,6 +199,12 @@ describe('evento do PostHog', () => {
     for (const chave of casos.chavesSensiveis) {
       expect(limparEventoPosthog({ properties: { [chave]: 'valor-limpo' } }).properties[chave]).toBe(REDACTED)
     }
+    for (const amostra of casos.telefones) {
+      expect(limparEventoPosthog({ properties: { nota: `liga ${amostra} agora` } }).properties.nota).toBe(REDACTED)
+    }
+    for (const amostra of casos.naoTelefone) {
+      expect(limparEventoPosthog({ properties: { nota: amostra } }).properties.nota).toBe(amostra)
+    }
   })
 
   it('before_send usa o limpador e a chave é lida de forma estática', () => {

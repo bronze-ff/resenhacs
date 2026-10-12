@@ -80,6 +80,12 @@ describe('scrub da API', () => {
     for (const chave of casos.chavesLivres) {
       expect(chaveSensivel(chave)).toBe(false)
     }
+    for (const amostra of casos.telefones) {
+      expect(redigirString(`liga ${amostra} agora`)).toBe(REDACTED)
+    }
+    for (const amostra of casos.naoTelefone) {
+      expect(redigirString(amostra)).toBe(amostra)
+    }
     const fonte = readFileSync(join(process.cwd(), 'src/observabilidade/scrub.js'), 'utf8')
     const palavras = readFileSync(join(process.cwd(), 'src/observabilidade/palavras.js'), 'utf8')
     expect(fonte).toMatch(/from '\.\/palavras\.js'/)

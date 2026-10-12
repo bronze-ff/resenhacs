@@ -45,10 +45,11 @@ _PII = [
     re.compile(r"\b\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}\b"),
     re.compile(r"\b\d{14}\b"),
     re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE),
-    # Fixo (8) e celular (9). +55 e DDD opcionais. Número local entra sem DDD.
-    # (?<!\d) e (?!\d) impedem SteamID, data e placar (não há dígito colado).
+    # 8 a 13 dígitos, com espaço, ponto, hífen, parênteses ou +. Cobre fixo, celular e
+    # 0800/0300/0500/0900. A data ISO YYYY-MM-DD fica de fora. SteamID (17) não cabe
+    # no teto e placar curto não chega em 8 dígitos. (?<!\d)/(?!\d) barram dígito colado.
     re.compile(
-        r"(?<!\d)(?:\+?55[\s./-]*)?(?:\(?\d{2}\)?[\s./-]*)?(?:9[\s./-]*\d{4}[\s./-]*\d{4}|\d{5}[\s./-]*\d{4}|\d{4}[\s./-]*\d{4})(?!\d)"
+        r"(?<!\d)(?!\d{4}-\d{2}-\d{2}(?!\d))\+?(?:\d[\s.()\-+]*){7,12}\d(?!\d)"
     ),
     re.compile(r"\b[A-Z]{3}-?\d{4}\b", re.IGNORECASE),
     re.compile(r"\b[A-Z]{3}\d[A-Z]\d{2}\b", re.IGNORECASE),

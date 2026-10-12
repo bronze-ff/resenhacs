@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext.jsx'
+import { esquecerJogador } from '../observabilidade/posthog.js'
 
 const CHAVE_SIDEBAR_COLAPSADA = 'resenha_sidebar_colapsada'
 
@@ -237,6 +238,7 @@ export default function Shell({ children }) {
 
   async function sair() {
     await fetch('/api/auth/logout', { method: 'POST' })
+    esquecerJogador()
     window.location.href = '/'
   }
 

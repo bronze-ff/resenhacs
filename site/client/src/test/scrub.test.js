@@ -134,6 +134,12 @@ describe('scrub de observabilidade', () => {
       expect(chaveSensivel(chave)).toBe(false)
       expect(minimizarEvento({ tags: { [chave]: 'valor-limpo' } }).tags[chave]).toBe('valor-limpo')
     }
+    for (const amostra of casos.telefones) {
+      expect(minimizarEvento({ message: `liga ${amostra} agora` }).message).toBe(REDACTED)
+    }
+    for (const amostra of casos.naoTelefone) {
+      expect(minimizarEvento({ message: amostra }).message).toBe(amostra)
+    }
   })
 
   it('user fica só com o id, e steam id de 17 dígitos passa', () => {

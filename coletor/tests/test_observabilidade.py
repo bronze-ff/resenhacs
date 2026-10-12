@@ -68,6 +68,12 @@ def test_casos_compartilhados_e_padrao_igual_ao_javascript():
         assert tags.get(chave, REDACTED) == REDACTED
     for chave in CASOS["chavesLivres"]:
         assert not chave_sensivel(chave)
+    for amostra in CASOS["telefones"]:
+        assert redigir_string(f"liga {amostra} agora") == REDACTED
+        assert minimizar_evento({"message": f"liga {amostra} agora"})["message"] == REDACTED
+    for amostra in CASOS["naoTelefone"]:
+        assert redigir_string(amostra) == amostra
+        assert minimizar_evento({"message": amostra})["message"] == amostra
     texto = (RAIZ / "site/server/src/observabilidade/palavras.js").read_text(encoding="utf-8")
     inicio = texto.index("export const PALAVRA =\n  /") + len("export const PALAVRA =\n  /")
     fim = texto.index("/i", inicio)
