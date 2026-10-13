@@ -171,21 +171,44 @@ describe('evento do PostHog', () => {
     expect(evento.properties.mapa).toBe('de_dust2')
   })
 
-  it('preserva o token do topo só quando é a chave do projeto', () => {
+  it('preserva properties.token só quando é a chave do projeto', () => {
     vi.stubEnv('VITE_POSTHOG_KEY', 'phc_projeto')
     try {
       const igual = limparEventoPosthog({
         token: 'phc_projeto',
-        properties: { token: 'phc_projeto' },
+        event: '$pageview',
+        properties: { token: 'phc_projeto', mapa: 'de_dust2' },
       })
       expect(igual.token).toBe('phc_projeto')
-      expect(igual.properties.token).toBe(REDACTED)
+      expect(igual.properties.token).toBe('phc_projeto')
+      expect(igual.properties.mapa).toBe('de_dust2')
+      expect(igual.event).toBe('$pageview')
 
-      const outro = limparEventoPosthog({ token: 'nao-e-a-chave' })
+      const outro = limparEventoPosthog({
+        token: 'nao-e-a-chave',
+        properties: { token: 'phc_outra', caixa: { token: 'segredo-interno' } },
+      })
       expect(outro.token).toBe(REDACTED)
+      expect(outro.properties.token).toBe(REDACTED)
+      expect(outro.properties.caixa.token).toBe(REDACTED)
     } finally {
       vi.unstubAllEnvs()
     }
+  })
+
+  it('mantém Date e não destrói tipo que não é objeto plano', () => {
+    const quando = new Date('2026-10-12T21:00:00.000Z')
+    const marca = /de_dust2/
+    const evento = limparEventoPosthog({
+      timestamp: quando,
+      properties: { quando, marca, nota: 'ok' },
+    })
+    expect(evento.timestamp).toBe(quando)
+    expect(evento.timestamp).toBeInstanceOf(Date)
+    expect(evento.timestamp).not.toEqual({})
+    expect(evento.properties.quando).toBe(quando)
+    expect(evento.properties.marca).toBe(marca)
+    expect(evento.properties.nota).toBe('ok')
   })
 
   it('usa a mesma lista bilíngue do scrub', () => {

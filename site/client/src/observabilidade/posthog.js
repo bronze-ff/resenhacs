@@ -47,12 +47,22 @@ function chaveDeAtribuicao(chave) {
   )
 }
 
+function objetoPlano(valor) {
+  if (!valor || typeof valor !== 'object' || Array.isArray(valor)) return false
+  const proto = Object.getPrototypeOf(valor)
+  return proto === Object.prototype || proto === null
+}
+
 function limparValor(valor, chave, noTopo) {
+  // O SDK grava a project key em properties.token. Sem ela a ingestão rejeita.
+  // Só esse valor exato fica; qualquer outro `token` continua redigido.
+  if (chave === 'token' && tokenDoProjeto(valor)) return valor
   if (noTopo && typeof chave === 'string' && isentoNoTopo(chave, valor)) return valor
   if (chaveSensivel(chave)) return REDACTED
   if (typeof valor === 'string') return redigirString(valor)
   if (Array.isArray(valor)) return valor.map((item) => limparValor(item, undefined, false))
-  if (valor && typeof valor === 'object') {
+  // Date e outras instâncias não são objeto plano. Object.entries(date) é [] e viraria {}.
+  if (valor && typeof valor === 'object' && objetoPlano(valor)) {
     const saida = {}
     for (const [k, v] of Object.entries(valor)) {
       if (noTopo && isentoNoTopo(k, v)) {

@@ -226,6 +226,10 @@ def init_sentry():
     kwargs = dict(
         dsn=dsn,
         environment=os.environ.get("SENTRY_ENVIRONMENT") or "dev",
+        # SENTRY_RELEASE está documentada na atribuição (não comentada) de
+        # coletor/.env.example — o exemplo que o Coletor usa. O processo lê
+        # os.environ. A mesma linha está em site/client/.env.example e
+        # site/server/.env.example.
         release=os.environ.get("GITHUB_SHA") or os.environ.get("SENTRY_RELEASE") or None,
         send_default_pii=False,
         traces_sample_rate=0,
