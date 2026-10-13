@@ -1,5 +1,5 @@
 // Ícone + tom + rótulo por resultado — reforça o julgamento além da cor (Regra do
-// Sinal Duplo do DESIGN.md). `null`/resultado desconhecido (ex.: Partida pro sem
+// Sinal Duplo do docs/produto/DESIGN.md). `null`/resultado desconhecido (ex.: Partida pro sem
 // ninguém do grupo em campo) cai no chip neutro sem rótulo, só o placar cru.
 const RESULTADOS = {
   vitoria: { bg: 'bg-sucesso/10', border: 'border-sucesso/40', texto: 'text-sucesso', rotulo: 'Vitória', path: 'M12 19V5M6 11l6-6 6 6' },

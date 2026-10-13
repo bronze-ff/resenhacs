@@ -1718,7 +1718,7 @@ PORT=3001
 ```markdown
 # Resenha
 
-Stats e highlights de CS2 para o grupo. Docs do domínio em [CONTEXT.md](CONTEXT.md) e [docs/BRIEF.md](docs/BRIEF.md).
+Stats e highlights de CS2 para o grupo. Docs do domínio em [CONTEXT.md](../../produto/CONTEXT.md) e [docs/BRIEF.md](../../BRIEF.md).
 
 ## Rodar em dev
 

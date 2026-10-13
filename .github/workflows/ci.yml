@@ -1,0 +1,158 @@
+name: ci
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# PR: cancela o run anterior do mesmo PR. main: um run por SHA, nunca cancela.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  GITLEAKS_IMAGE: ghcr.io/gitleaks/gitleaks:v8.30.1
+  OSV_IMAGE: ghcr.io/google/osv-scanner:v2.6.0
+
+jobs:
+  fast:
+    name: fast
+    if: github.event.pull_request.draft != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: O que mudou
+        id: diff
+        env:
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          HEAD: ${{ github.sha }}
+        run: |
+          BASE="${PR_BASE:-$PUSH_BEFORE}"
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            git ls-files > changed.txt
+            RANGE="HEAD~1..HEAD"
+          else
+            git diff --name-only "$BASE" "$HEAD" > changed.txt
+            RANGE="$BASE..$HEAD"
+          fi
+          client=false; server=false; coletor=false; bot=false; all=false
+          deps=false; wf=false; code=false
+          if grep -qE '^site/client/' changed.txt; then client=true; fi
+          if grep -qE '^site/server/' changed.txt; then server=true; fi
+          if grep -qE '^coletor/' changed.txt; then coletor=true; fi
+          if grep -qE '^bot/' changed.txt; then bot=true; fi
+          if grep -qE '^(package\.json|scripts/|\.github/workflows/ci\.yml$)' changed.txt; then all=true; fi
+          if [ "$all" = true ]; then client=true; server=true; coletor=true; bot=true; fi
+          # PR só de docs (ou sem código) ainda roda o verify inteiro.
+          if [ "$client" != true ] && [ "$server" != true ] && [ "$coletor" != true ] && [ "$bot" != true ]; then
+            client=true; server=true; coletor=true; bot=true
+          fi
+          if grep -qE '(^|/)(package-lock\.json|requirements[^/]*\.txt)$' changed.txt; then deps=true; fi
+          if grep -qE '^\.github/' changed.txt; then wf=true; fi
+          if [ "$client" = true ] || [ "$server" = true ] || [ "$coletor" = true ] || [ "$bot" = true ]; then code=true; fi
+          {
+            echo "client=$client"
+            echo "server=$server"
+            echo "coletor=$coletor"
+            echo "bot=$bot"
+            echo "deps=$deps"
+            echo "workflows=$wf"
+            echo "code=$code"
+            echo "range=$RANGE"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: gitleaks (commits novos)
+        env:
+          RANGE: ${{ steps.diff.outputs.range }}
+        run: docker run --rm -v "$PWD:/repo" "$GITLEAKS_IMAGE" git /repo --redact --exit-code 1 --log-opts="$RANGE"
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        if: steps.diff.outputs.client == 'true' || steps.diff.outputs.server == 'true'
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: |
+            site/client/package-lock.json
+            site/server/package-lock.json
+
+      - name: npm ci (client)
+        if: steps.diff.outputs.client == 'true'
+        working-directory: site/client
+        run: npm ci
+
+      - name: npm ci (server)
+        if: steps.diff.outputs.server == 'true'
+        working-directory: site/server
+        run: npm ci
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        if: steps.diff.outputs.coletor == 'true'
+        with:
+          python-version-file: .python-version
+          cache: pip
+          cache-dependency-path: |
+            coletor/requirements.txt
+            coletor/dev-requirements.txt
+
+      - name: pip install (coletor)
+        if: steps.diff.outputs.coletor == 'true'
+        working-directory: coletor
+        run: pip install -r requirements.txt -r dev-requirements.txt
+
+      # Source map sobe no build da Vercel (projeto resenha). Este job não recebe
+      # SENTRY_AUTH_TOKEN: pull_request enxergaria o secret do repositório.
+      - name: verify
+        env:
+          RUN_CLIENT: ${{ steps.diff.outputs.client }}
+          RUN_SERVER: ${{ steps.diff.outputs.server }}
+          RUN_COLETOR: ${{ steps.diff.outputs.coletor }}
+          RUN_BOT: ${{ steps.diff.outputs.bot }}
+        run: |
+          args=()
+          if [ "$RUN_CLIENT" = true ]; then args+=(client); fi
+          if [ "$RUN_SERVER" = true ]; then args+=(server); fi
+          if [ "$RUN_COLETOR" = true ]; then args+=(coletor); fi
+          if [ "$RUN_BOT" = true ]; then args+=(bot); fi
+          node scripts/verify.mjs "${args[@]}"
+
+      # Pacote só de dev (vitest, postcss, …) não entra no bundle publicado.
+      # O gate barra pacote de runtime. requirements.txt do Coletor não tem grupo dev.
+      - name: osv-scanner (lockfile mudou)
+        if: steps.diff.outputs.deps == 'true'
+        run: |
+          set -o pipefail
+          fail=0
+          while IFS= read -r f; do
+            case "$f" in
+              *package-lock.json|*/requirements.txt|*requirements*.txt)
+                docker run --rm -v "$PWD:/src" "$OSV_IMAGE" scan source -L "/src/$f" --format json > osv.json || status=$?
+                status=${status:-0}
+                if [ "$status" -gt 1 ]; then
+                  echo "::error::osv-scanner falhou em $f (exit $status)"
+                  exit "$status"
+                fi
+                if ! python3 scripts/osv-runtime.py "$f" < osv.json; then
+                  fail=1
+                fi
+                rm -f osv.json
+                status=
+                ;;
+            esac
+          done < changed.txt
+          exit "$fail"
+
+      - name: zizmor (workflow mudou)
+        if: steps.diff.outputs.workflows == 'true'
+        run: pipx run zizmor==1.30.1 --min-severity medium .github/workflows

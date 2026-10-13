@@ -8,13 +8,16 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@sentry/react": "^11.7.0",
     "@vercel/functions": "^3.7.5",
+    "posthog-js": "^1.438.9",
     "qrcode": "^1.5.4",
     "react": "^19.0.0",
     "react-dom": "^19.2.8",
     "react-router-dom": "^7.18.4"
   },
   "devDependencies": {
+    "@sentry/vite-plugin": "^5.4.1",
     "@tailwindcss/vite": "^4.0.0",
     "@testing-library/jest-dom": "^6.6.0",
     "@testing-library/react": "^16.1.0",

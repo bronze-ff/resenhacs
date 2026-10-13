@@ -5,7 +5,7 @@
 
 ## Contexto
 
-O Resenha hoje trata "clipe" como um **link externo** (Allstar/Medal/YouTube) anexado manualmente por um jogador — decisão registrada em `CONTEXT.md`, `docs/BRIEF.md` e `docs/ROADMAP.md` ("a plataforma não renderiza vídeo... deep-link no Replay 2D cobre esse caso"). Os "Highlights" (aces, clutches, multi-kills) já são detectados automaticamente no parse e têm link direto pro momento exato dentro do Replay 2D (canvas 2D, desenhado a partir das posições extraídas da demo — não é vídeo do jogo).
+O Resenha hoje trata "clipe" como um **link externo** (Allstar/Medal/YouTube) anexado manualmente por um jogador — decisão registrada em `docs/produto/CONTEXT.md`, `docs/BRIEF.md` e `docs/ROADMAP.md` ("a plataforma não renderiza vídeo... deep-link no Replay 2D cobre esse caso"). Os "Highlights" (aces, clutches, multi-kills) já são detectados automaticamente no parse e têm link direto pro momento exato dentro do Replay 2D (canvas 2D, desenhado a partir das posições extraídas da demo — não é vídeo do jogo).
 
 Filippe pediu para reabrir essa decisão: quer que o sistema **grave a tela real do CS2** rodando a demo, gerando um `.mp4` de verdade — igual ao que o Allstar.gg entrega — para decidir com o grupo se vale o investimento. Este documento é o resultado de uma pesquisa técnica e de custo dedicada a essa pergunta, feita antes de qualquer código ser escrito.
 

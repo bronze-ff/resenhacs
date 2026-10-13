@@ -32,6 +32,7 @@ from . import faceit
 from . import storage_r2
 from . import transform
 from .config import Config
+from .observabilidade import em_monitor_discover, init_sentry
 
 # Janela em que o .dem bruto fica no R2 (ADR-0006). O workflow passa o mesmo número
 # em `cleanup --days`. replay.json, uploads e curso-mira/ não entram nessa conta.
@@ -1087,6 +1088,7 @@ def cmd_comprimir_replays(config, dry_run=True, limit=None):
 
 
 def main(argv=None):
+    init_sentry()
     argv = argv if argv is not None else sys.argv[1:]
     ap = argparse.ArgumentParser(prog="coletor")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -1186,7 +1188,7 @@ def main(argv=None):
     conn = dbmod.connect(config.database_url)
     try:
         if args.cmd == "discover":
-            cmd_discover(config, conn)
+            em_monitor_discover(lambda: cmd_discover(config, conn))
         elif args.cmd == "ingest":
             from pathlib import Path
 

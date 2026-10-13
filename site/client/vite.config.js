@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
@@ -33,8 +33,17 @@ import { VitePWA } from 'vite-plugin-pwa'
 // procedimento que nao pode falhar.
 // O passo 2 precisa manter o caminho /sw.js — e o caminho que os aparelhos ja
 // registrados vao consultar.
-export default defineConfig({
-  plugins: [
+function ambienteBuild(mode) {
+  if (process.env.VITE_SENTRY_ENVIRONMENT) return process.env.VITE_SENTRY_ENVIRONMENT
+  if (process.env.VERCEL_ENV === 'production') return 'producao'
+  if (process.env.VERCEL_ENV === 'preview') return 'homologacao'
+  return mode === 'production' ? 'producao' : 'dev'
+}
+
+export default defineConfig(async ({ mode }) => {
+  // .env não aparece em process.env. Sem isto, o define abaixo apaga VITE_* do arquivo.
+  const envArquivo = loadEnv(mode, process.cwd(), 'VITE_')
+  const plugins = [
     react(),
     tailwindcss(),
     VitePWA({
@@ -70,7 +79,34 @@ export default defineConfig({
         cleanupOutdatedCaches: true,
       },
     }),
-  ],
+  ]
+  // Source map só sobe quando o token E a org existem. Sem os dois, o build segue
+  // e não publica .map (o deploy da Vercel não depende do Sentry).
+  const token = process.env.SENTRY_AUTH_TOKEN
+  const org = process.env.SENTRY_ORG
+  if (token && org) {
+    const { sentryVitePlugin } = await import('@sentry/vite-plugin')
+    plugins.push(sentryVitePlugin({
+      org,
+      project: process.env.SENTRY_PROJECT || 'resenhacs-web',
+      authToken: token,
+      telemetry: false,
+      sourcemaps: { filesToDeleteAfterUpload: ['./dist/**/*.map'] },
+    }))
+  }
+  const define = {}
+  if (!envArquivo.VITE_SENTRY_ENVIRONMENT) {
+    define['import.meta.env.VITE_SENTRY_ENVIRONMENT'] = JSON.stringify(ambienteBuild(mode))
+  }
+  if (!envArquivo.VITE_SENTRY_RELEASE) {
+    define['import.meta.env.VITE_SENTRY_RELEASE'] = JSON.stringify(
+      process.env.VITE_SENTRY_RELEASE || process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || '',
+    )
+  }
+  return {
+  plugins,
+  define,
+  build: { sourcemap: Boolean(token && org) },
   server: {
     proxy: { '/api': 'http://localhost:3001' },
   },
@@ -79,4 +115,5 @@ export default defineConfig({
     setupFiles: './src/test/setup.js',
     globals: true,
   },
+  }
 })

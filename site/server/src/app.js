@@ -23,6 +23,7 @@ import { createPartidasProRouter } from './routes/partidasPro.js'
 import { createGranadasRouter } from './routes/granadas.js'
 import { createCursoRouter } from './routes/curso.js'
 import { createRequireAuth } from './auth/middleware.js'
+import { capturarErro } from './observabilidade/sentry.js'
 import { limiteGeral } from './rateLimit.js'
 import { createR2Client } from './r2.js'
 
@@ -123,6 +124,7 @@ export function createApp({
   // pela ARIDADE, os 4 parâmetros são obrigatórios mesmo sem usar o next.
   // eslint-disable-next-line no-unused-vars
   app.use((err, req, res, next) => {
+    capturarErro(err)
     console.error(`erro não tratado em ${req.method} ${req.path}:`, err)
     if (!res.headersSent) res.status(500).json({ erro: 'Erro interno' })
   })

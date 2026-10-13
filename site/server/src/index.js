@@ -1,3 +1,4 @@
+import './observabilidade/sentry.js'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { loadConfig } from './config.js'

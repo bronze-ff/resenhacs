@@ -83,7 +83,7 @@ tamanho do grupo (~10-15 usuários, um punhado de partidas por dia), a infra atu
 **Único ponto real de atenção, achado nesta análise:** o **JSON de replay não usa
 streaming por round** — o client baixa a partida inteira (potencialmente vários MB)
 antes de poder tocar o primeiro round. Num celular com conexão ruim (o caso de uso
-mais citado no `PRODUCT.md` — "no celular, logo depois de sair de um jogo"), isso
+mais citado no `docs/produto/PRODUCT.md` — "no celular, logo depois de sair de um jogo"), isso
 pode significar um espera perceptível antes do Replay 2D abrir. Melhoria futura de
 baixo risco: paginar o replay por round (buscar sob demanda conforme o usuário troca
 de round), ou pelo menos mostrar o primeiro round assim que ele chegar em vez de

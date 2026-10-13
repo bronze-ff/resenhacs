@@ -1,6 +1,6 @@
 # Resenha — Brief do produto
 
-> Decisões da sessão de grilling de 2026-07-09. Termos em negrito estão definidos no [CONTEXT.md](../CONTEXT.md); decisões arquiteturais têm ADR em [docs/adr/](./adr/).
+> Decisões da sessão de grilling de 2026-07-09. Termos em negrito estão definidos no [CONTEXT.md](produto/CONTEXT.md); decisões arquiteturais têm ADR em [docs/adr/](./adr/).
 
 ## O que é
 
