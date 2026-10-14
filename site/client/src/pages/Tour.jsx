@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { Card, SectionHeader, Badge } from '../components/ui'
+import { Badge, Button, CabecalhoPagina, Card, Input, classesBotao } from '../components/ui'
 import { useAuth } from '../auth/AuthContext.jsx'
 import PassoAPassoSteam from '../components/PassoAPassoSteam.jsx'
 
-const TOTAL_PASSOS = 4
+const NOMES_PASSOS = ['Boas-vindas', 'Steam', 'FACEIT', 'Menu']
+const TOTAL_PASSOS = NOMES_PASSOS.length
 
 export default function Tour() {
   const { jogador } = useAuth()
@@ -33,25 +34,34 @@ export default function Tour() {
   }
 
   return (
-    <div className="mx-auto max-w-lg space-y-6 py-10">
-      <SectionHeader
+    <div className="mx-auto max-w-xl space-y-6 px-4 py-6 sm:px-0 sm:py-10">
+      <CabecalhoPagina
+        eyebrow={`Passo ${passo + 1} de ${TOTAL_PASSOS}`}
         titulo="Bem-vindo ao Resenha"
-        acao={
-          <button
-            type="button"
-            onClick={concluir}
-            className="inline-flex min-h-10 items-center font-mono text-xs uppercase tracking-wide text-texto-fraco underline lg:min-h-0"
-          >
+        className="mb-0"
+        acoes={
+          <Button variante="fantasma" tamanho="sm" onClick={concluir}>
             Pular tour
-          </button>
+          </Button>
         }
       />
 
-      {mensagem && <p className="font-mono text-sm text-texto-fraco">{mensagem}</p>}
+      <ol className="grid grid-cols-4 gap-2" aria-label="Progresso do tour">
+        {NOMES_PASSOS.map((nome, i) => (
+          <li key={nome} aria-current={i === passo ? 'step' : undefined} className="min-w-0">
+            <div className={`h-1 w-full ${i <= passo ? 'bg-destaque' : 'bg-borda'}`} aria-hidden="true" />
+            <span className={`mt-1.5 block truncate font-mono text-[11px] ${i === passo ? 'text-texto' : 'text-texto-fraco'}`}>
+              {i < passo ? '✓ ' : ''}{nome}
+            </span>
+          </li>
+        ))}
+      </ol>
+
+      {mensagem && <p role="status" className="text-sm text-texto-fraco">{mensagem}</p>}
 
       {passo === 0 && (
-        <Card className="p-4 sm:p-5">
-          <p className="font-mono text-sm leading-relaxed text-texto-fraco">
+        <Card className="p-4 sm:p-6">
+          <p className="text-sm leading-relaxed text-texto-fraco">
             O Resenha acompanha as Partidas de matchmaking do seu grupo — estatísticas,
             ranking, granadas e táticas puxadas direto das suas demos. Esse tour rápido mostra
             como configurar sua conta e onde achar cada coisa no menu.
@@ -60,53 +70,42 @@ export default function Tour() {
       )}
 
       {passo === 1 && (
-        <Card className="space-y-4 p-4 sm:p-5">
-          <h3 className="font-display text-sm font-semibold uppercase tracking-wide text-texto">
+        <Card className="space-y-4 p-4 sm:p-6">
+          <h3 className="font-display text-lg font-semibold text-texto">
             Vincular Steam
           </h3>
           <PassoAPassoSteam />
-          <form onSubmit={salvarSteam} className="space-y-3">
-            <div>
-              <label className="block font-mono text-xs uppercase tracking-wide text-texto-fraco" htmlFor="tourAuthCode">
-                Código de autenticação de histórico
-              </label>
-              <input
-                id="tourAuthCode"
-                value={matchAuthCode}
-                onChange={(e) => setMatchAuthCode(e.target.value)}
-                className="panel-cut-sm min-h-10 w-full border border-borda bg-superficie px-3 py-2 font-mono text-sm lg:min-h-0"
-                placeholder="XXXX-XXXXX-XXXX"
-              />
-            </div>
-            <div>
-              <label className="block font-mono text-xs uppercase tracking-wide text-texto-fraco" htmlFor="tourShareCode">
-                Share code de partida (ponto de partida da busca)
-              </label>
-              <input
-                id="tourShareCode"
-                value={lastShareCode}
-                onChange={(e) => setLastShareCode(e.target.value)}
-                className="panel-cut-sm min-h-10 w-full border border-borda bg-superficie px-3 py-2 font-mono text-sm lg:min-h-0"
-                placeholder="CSGO-xxxxx-xxxxx-xxxxx-xxxxx-xxxxx"
-              />
-            </div>
-            <button
-              type="submit"
-              className="panel-cut-sm min-h-10 w-full border border-destaque bg-destaque px-4 py-2 font-display text-sm font-semibold uppercase tracking-wide text-fundo lg:min-h-0 lg:w-auto"
-            >
+          <form onSubmit={salvarSteam} className="space-y-4 border-t border-borda pt-4">
+            <Input
+              id="tourAuthCode"
+              rotulo="Código de autenticação de histórico"
+              value={matchAuthCode}
+              onChange={(e) => setMatchAuthCode(e.target.value)}
+              className="font-mono"
+              placeholder="XXXX-XXXXX-XXXX"
+            />
+            <Input
+              id="tourShareCode"
+              rotulo="Share code de partida (ponto de partida da busca)"
+              value={lastShareCode}
+              onChange={(e) => setLastShareCode(e.target.value)}
+              className="font-mono"
+              placeholder="CSGO-xxxxx-xxxxx-xxxxx-xxxxx-xxxxx"
+            />
+            <Button type="submit" variante="contorno" className="w-full sm:w-auto">
               Salvar códigos
-            </button>
+            </Button>
           </form>
         </Card>
       )}
 
       {passo === 2 && (
-        <Card className="flex items-center justify-between gap-3 p-4 sm:p-5">
+        <Card className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6">
           <div>
-            <p className="font-display text-sm font-semibold uppercase tracking-wide text-texto">
+            <p className="font-display text-lg font-semibold text-texto">
               FACEIT (opcional)
             </p>
-            <p className="font-mono text-xs text-texto-fraco">
+            <p className="mt-1 text-sm text-texto-fraco">
               {jogador?.faceitNick
                 ? `Vinculado como ${jogador.faceitNick}.`
                 : 'Vincule pra importar suas partidas da FACEIT automaticamente — pode fazer isso depois em Minha conta também.'}
@@ -115,10 +114,7 @@ export default function Tour() {
           {jogador?.faceitNick ? (
             <Badge tom="sucesso">Vinculado</Badge>
           ) : (
-            <a
-              href="/api/faceit/login"
-              className="panel-cut-sm inline-flex min-h-10 shrink-0 items-center border border-destaque px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-destaque hover:bg-destaque/10 lg:min-h-0"
-            >
+            <a href="/api/faceit/login" className={classesBotao({ variante: 'contorno', tamanho: 'sm' })}>
               Vincular
             </a>
           )}
@@ -126,8 +122,8 @@ export default function Tour() {
       )}
 
       {passo === 3 && (
-        <Card className="space-y-3 p-4 sm:p-5 font-mono text-sm leading-relaxed text-texto-fraco">
-          <h3 className="font-display text-sm font-semibold uppercase tracking-wide text-texto">
+        <Card className="space-y-3 p-4 text-sm leading-relaxed text-texto-fraco sm:p-6">
+          <h3 className="font-display text-lg font-semibold text-texto">
             Onde achar cada coisa
           </h3>
           <p><span className="text-texto">Partidas / Ranking</span> — acompanhar seu desempenho e o dos seus amigos.</p>
@@ -138,31 +134,22 @@ export default function Tour() {
         </Card>
       )}
 
-      <div className="flex items-center justify-between gap-3">
-        <button
-          type="button"
+      <div className="flex items-center justify-between gap-3 border-t border-borda pt-4">
+        <Button
+          variante="secundario"
           onClick={() => setPasso((p) => Math.max(0, p - 1))}
           disabled={passo === 0}
-          className="panel-cut-sm min-h-10 border border-borda px-4 py-2 font-display text-sm font-semibold uppercase tracking-wide text-texto-fraco disabled:opacity-40 lg:min-h-0"
         >
           Voltar
-        </button>
+        </Button>
         {passo < TOTAL_PASSOS - 1 ? (
-          <button
-            type="button"
-            onClick={() => setPasso((p) => p + 1)}
-            className="panel-cut-sm min-h-10 border border-destaque bg-destaque px-4 py-2 font-display text-sm font-semibold uppercase tracking-wide text-fundo lg:min-h-0"
-          >
+          <Button variante="primario" onClick={() => setPasso((p) => p + 1)}>
             Próximo
-          </button>
+          </Button>
         ) : (
-          <button
-            type="button"
-            onClick={concluir}
-            className="panel-cut-sm min-h-10 border border-destaque bg-destaque px-4 py-2 font-display text-sm font-semibold uppercase tracking-wide text-fundo lg:min-h-0"
-          >
+          <Button variante="primario" onClick={concluir}>
             Concluir
-          </button>
+          </Button>
         )}
       </div>
     </div>

@@ -1,36 +1,35 @@
 import { forwardRef } from 'react'
 
 // Botão padrão do site. Antes cada tela escrevia a mesma string de classes à mão
-// (mais de 10 variações de "panel-cut-sm border-destaque bg-destaque px-4 py-2 …"
-// com padding, tracking e hover divergindo). Aqui mora o vocabulário inteiro:
-// variante (papel do botão) × tamanho. `as` deixa usar com <Link>/<a> sem perder o
-// visual. O corte diagonal fica, mas só no canto superior direito (panel-cut-tr):
-// dois cortes num elemento de 40px de altura pesavam demais.
+// (mais de 10 variações com padding, tracking e hover divergindo). Aqui mora o
+// vocabulário inteiro: variante (papel do botão) × tamanho. `as` deixa usar com
+// <Link>/<a> sem perder o visual.
 const VARIANTES = {
   primario:
-    'bg-destaque text-fundo hover:bg-destaque-forte hover:shadow-acento active:translate-y-px border border-destaque',
+    'bg-destaque text-sobre-destaque border border-destaque hover:bg-destaque-forte hover:border-destaque-forte active:scale-[0.98]',
   secundario:
-    'border border-borda-forte bg-superficie-alta text-texto hover:border-texto-fraco/60 hover:bg-superficie-topo',
+    'border border-borda-forte bg-superficie-alta text-texto hover:bg-superficie-topo hover:border-[#3a3a41] active:scale-[0.98]',
   contorno:
-    'border border-destaque/60 bg-destaque/5 text-destaque hover:border-destaque hover:bg-destaque/10',
+    'border border-destaque/40 bg-destaque/10 text-destaque hover:bg-destaque/15 hover:border-destaque/60 active:scale-[0.98]',
   fantasma:
     'border border-transparent text-texto-fraco hover:bg-superficie-alta hover:text-texto',
   perigo:
-    'border border-perigo/40 bg-perigo/5 text-perigo hover:border-perigo/70 hover:bg-perigo/10',
+    'border border-perigo/30 bg-perigo/10 text-perigo hover:bg-perigo/15 hover:border-perigo/50 active:scale-[0.98]',
 }
 
 const TAMANHOS = {
-  sm: 'min-h-9 px-3 text-xs gap-1.5 lg:min-h-8',
-  md: 'min-h-11 px-4 text-sm gap-2 lg:min-h-10',
-  lg: 'min-h-12 px-6 text-base gap-2.5',
-  icone: 'min-h-10 min-w-10 justify-center p-0',
+  xs: 'h-8 px-2 text-xs gap-1 lg:h-7',
+  sm: 'h-9 px-3 text-[13px] gap-1.5 lg:h-8',
+  md: 'h-11 px-4 text-sm gap-2 lg:h-9',
+  lg: 'h-12 px-5 text-[15px] gap-2 lg:h-11',
+  icone: 'h-10 w-10 justify-center p-0 lg:h-9 lg:w-9',
 }
 
 export function classesBotao({ variante = 'secundario', tamanho = 'md', larguraTotal = false, className = '' } = {}) {
   return [
-    'panel-cut-tr inline-flex shrink-0 cursor-pointer select-none items-center justify-center',
-    'font-display font-semibold uppercase tracking-[0.06em] whitespace-nowrap',
-    'transition-[background-color,border-color,color,box-shadow,transform] duration-200',
+    'inline-flex shrink-0 cursor-pointer select-none items-center justify-center rounded-[var(--radius-pequeno)]',
+    'font-sans font-medium whitespace-nowrap',
+    'transition-[background-color,border-color,color,transform] duration-150',
     'disabled:pointer-events-none disabled:opacity-45 aria-disabled:pointer-events-none aria-disabled:opacity-45',
     VARIANTES[variante] ?? VARIANTES.secundario,
     TAMANHOS[tamanho] ?? TAMANHOS.md,

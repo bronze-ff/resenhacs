@@ -1,341 +1,158 @@
 ---
 name: Resenha
 description: Ferramenta de análise de stats de CS2 para um grupo fechado de amigos
+direction: Studio (2026-10)
 colors:
-  destaque-vermelho: "#ff2e43"
-  destaque-vermelho-fraco: "#4a1219"
-  time-a-ambar: "#f5a524"
-  time-b-azul: "#4fb6ff"
-  destaque-vermelho-forte: "#ff4b5e"
-  sucesso-verde: "#2fd982"
-  perigo-rosado: "#ff5d73"
+  destaque-laranja: "#ff6a1a"
+  destaque-laranja-forte: "#ff8240"
+  sobre-destaque: "#1c0a00"
+  time-a-dourado: "#e9b949"
+  time-b-azul: "#5aa9ff"
+  sucesso-verde: "#3ddc97"
+  perigo-vermelho: "#f2555a"
   ranking-ouro: "#facc15"
   ranking-prata: "#cbd5e1"
   ranking-bronze: "#d97706"
   aviso-ambar: "#fbbf24"
-  fundo-quase-preto: "#08090b"
-  superficie: "#111317"
-  superficie-alta: "#191c21"
-  superficie-topo: "#22262d"
-  borda: "#262a31"
-  borda-forte: "#363b44"
-  texto: "#f2f3f5"
-  texto-fraco: "#8e95a1"
+  fundo: "#0a0a0b"
+  superficie: "#111113"
+  superficie-alta: "#18181b"
+  superficie-topo: "#212125"
+  borda: "#232327"
+  borda-forte: "#303036"
+  texto: "#ededef"
+  texto-fraco: "#8a8a93"
 typography:
-  display:
-    fontFamily: "Barlow Condensed, Inter, system-ui, sans-serif"
-    fontWeight: 700
-    letterSpacing: "0.01em"
-  body:
-    fontFamily: "Inter, system-ui, sans-serif"
-    fontWeight: 400
-    letterSpacing: "normal"
-  label:
-    fontFamily: "JetBrains Mono, ui-monospace, monospace"
-    fontSize: "0.75rem"
-    letterSpacing: "0.05em"
-rounded:
-  none: "0px"
-spacing:
-  panel-cut-lg: "14px"
-  panel-cut-sm: "8px"
-components:
-  card:
-    backgroundColor: "{colors.superficie}"
-    rounded: "{rounded.none}"
-  badge-destaque:
-    backgroundColor: "{colors.destaque-vermelho}"
-    textColor: "{colors.destaque-vermelho}"
-  badge-sucesso:
-    backgroundColor: "{colors.sucesso-verde}"
-    textColor: "{colors.sucesso-verde}"
-  badge-perigo:
-    backgroundColor: "{colors.perigo-rosado}"
-    textColor: "{colors.perigo-rosado}"
+  sans: "Geist, Inter, system-ui, sans-serif"
+  mono: "Geist Mono, ui-monospace, monospace"
+radius:
+  pequeno: "6px"
+  medio: "8px"
+  grande: "12px"
 ---
 
-# Design System: Resenha
-
-## 0. Revisão "HUD refinado" (2026-10)
-
-Revisão completa da identidade a partir de referências de produtos do nicho (scope.gg, Leetify, Blitz.gg,
-Refrag, a própria UI do CS2) e de shots de dashboards de esports no Dribbble/Pinterest. O norte continua o mesmo
-(debriefing pós-partida, corte diagonal como assinatura); o que mudou:
-
-- **Tipografia:** Rajdhani saiu do display (fino e pouco legível abaixo de 16px). Entrou **Barlow Condensed**
-  (500–800), a fonte livre mais próxima da Stratum 2 Condensed que o CS2 usa. Inter continua na prosa — e prosa
-  agora é Inter de verdade, não mono. JetBrains Mono fica só pra dado e rótulo.
-- **Superfícies em 4 degraus** (`fundo` → `superficie` → `superficie-alta` → `superficie-topo`) + `borda-forte`,
-  como no scope.gg. Painéis ganham `realce-topo` (1px de luz no topo) em vez de sombra.
-- **Perigo separado do acento:** antes `#ff2e43` (ação) e `#ff3b4e` (ruim) eram a mesma cor na prática, o que
-  quebrava a Regra do Acento Único. Perigo virou `#ff5d73`, rosado.
-- **Componentes de verdade** em `site/client/src/components/ui`: `Button` (primario, secundario, contorno,
-  fantasma, perigo × sm/md/lg/icone), `Modal` (portal, Escape, trava scroll, folha de baixo no mobile), `Abas`
-  (segmentado pra filtro, sublinhado pra seção), `Input`/`Textarea`/`Campo`, `Skeleton`/`SkeletonLista`,
-  `EstadoVazio`, `EstadoErro`, `CabecalhoPagina`. Tela nova não escreve botão nem casca de modal à mão.
-- **Corte em botão e aba:** só o canto superior direito (`panel-cut-tr`). Dois cortes num elemento de 40px
-  pesavam demais. Painéis grandes seguem com `panel-cut`, chips/avatares com `panel-cut-sm`.
-- **Filtro ativo não é bloco vermelho cheio.** Segmento ativo = `superficie-topo` + barra de 2px no destaque.
-  Vermelho cheio fica pra ação primária.
-- **Navegação:** menu lateral agrupado (Análise, Comunidade, Biblioteca, Conta, Admin), sem a numeração 01–12.
-  Header fixo com blur.
+# Design System: Resenha — "Studio"
 
 ## 1. Overview
 
-**Creative North Star: "Debriefing pós-partida"**
+**North Star: ferramenta de análise profissional.** O Resenha é onde o grupo senta depois do jogo pra entender o
+que aconteceu. A direção "Studio" trata o site como um software de verdade, no espírito de Linear, Vercel e
+scope.gg: neutro escuro, hairlines, um único acento, tipografia limpa e números sempre em mono. Nada de enfeite
+"gamer" (neon, glow, cantos cortados, CAIXA ALTA em tudo). O jogo aparece no dado, não na decoração.
 
-O Resenha é a sala onde o grupo se senta depois do jogo pra entender o que aconteceu de verdade — não um app de
-entretenimento, uma mesa de análise. Cada tela deve parecer o painel de um analista revisando a fita: dado em
-primeiro lugar, decoração só quando serve a leitura, tom sério mesmo quando o assunto é brincadeira entre amigos.
-A identidade visual herdada — cantos cortados diagonalmente, tipografia monoespaçada pra tudo que é número,
-paleta escura e contida — já aponta nessa direção; o trabalho de redesign é executar essa direção com mais
-disciplina e consistência, não abandoná-la por um dashboard SaaS genérico.
+Substituiu em 2026-10 a direção anterior ("HUD tático": cantos cortados, vermelho, Rajdhani/JetBrains Mono,
+títulos em caixa alta). Referências pesquisadas: scope.gg (escala de superfícies, um acento só), Leetify
+(julgamento bom/ruim em todo stat), Blitz.gg (botões e abas), shots de dashboards de esports no
+Dribbble/Pinterest.
 
-Rejeita explicitamente: cantos arredondados como default, cards aninhados dentro de cards, gradiente em texto,
-qualquer coisa que pareça "template de fim de semana" em vez de ferramenta com identidade própria.
+**Características:**
+- Neutro primeiro. Cor só quando significa algo: ação (laranja), time (dourado/azul), julgamento (verde/vermelho).
+- Hairlines de 1px e degraus de superfície no lugar de sombra.
+- Caixa de frase em todo título, botão, aba e rótulo. Caixa alta só em sigla (ADR, HS%, MVP, FACEIT).
+- Geist pra interface, Geist Mono pra número, data, placar e ID.
+- Cantos levemente arredondados: 6px em controle, 8px em grupo de controles, 12px em painel.
 
-**Key Characteristics:**
-- Corte diagonal (panel-cut) como assinatura, não enfeite — aparece em praticamente todo container.
-- Um único acento de cor "principal" (vermelho/coral), usado com moderação — o resto da paleta é neutro ou
-  semântico (bom/ruim/times).
-- Tipografia mono pra todo dado tabular/numérico; display condensado pra títulos e números grandes; sans só pra
-  prosa corrida (que é rara nesse produto).
-- Chapado por padrão — sem sombra em superfícies de repouso; profundidade vem do corte + contraste entre camadas
-  de fundo.
+## 2. Cores
 
-## 2. Colors
+### Acento
+- **Laranja** (`destaque`, `#ff6a1a`): ação e seleção — botão primário, link, foco, item ativo do menu.
+  **Regra do Acento Único:** se dois elementos na mesma tela estão laranja por motivos diferentes, um está
+  errado. Laranja nunca marca categoria, tag ("grupo", "seu time"), plataforma nem "isso é importante".
+- Texto sobre laranja cheio usa `sobre-destaque` (`#1c0a00`).
 
-Paleta escura e contida: um acento quente único, dois tons de time (âmbar/azul) que nunca competem com o acento,
-e dois semânticos (sucesso/perigo) reservados só pra julgamento de performance.
+### Times
+- **Time A** dourado (`#e9b949`) e **Time B** azul (`#5aa9ff`). **Regra do Time Real:** a cor segue o time de
+  verdade do jogador mostrado, nunca a posição na tela. O dourado é amarelado de propósito, pra não competir com
+  o laranja do acento.
 
-### Primary
-- **Vermelho de Destaque** (`#ff2e43`): o único acento "de ação" do sistema — CTAs, links, seleção ativa, foco,
-  hover de interativos. **A Regra do Acento Único**: se dois elementos na mesma tela usam vermelho de destaque
-  por motivos diferentes, um dos dois está errado — essa cor significa "aja aqui" ou "isso está selecionado",
-  nunca "isso é importante" em geral.
-  - *Nota de decisão*: o comentário antigo no CSS descrevia a intenção original como "âmbar decisivo", mas a
-    implementação real sempre foi esse vermelho/coral — já consolidado em botões, seleção de texto, hover, links
-    há várias sessões de desenvolvimento. Mantém-se o vermelho como fonte de verdade; o comentário desatualizado
-    é corrigido, a cor não muda.
-- **Vermelho de Destaque (fraco)** (`#4a1219`): variante escura do acento, usada como fundo sutil atrás de texto/
-  ícone na cor cheia (nunca como acento isolado).
+### Julgamento
+- **Sucesso** `#3ddc97` / **Perigo** `#f2555a`: só pra bom/ruim (rating ≥ 1.0, vitória/derrota, fogo amigo).
+- **Regra do Sinal Duplo:** nenhum julgamento depende só da cor — sempre com seta, ícone ou o valor ao lado.
 
-### Secondary
-- **Âmbar do Time A** (`#f5a524`) / **Azul do Time B** (`#4fb6ff`): identificam de qual lado um jogador/dado é,
-  em qualquer tela que compare os dois times (placar, economia, replay 2D, Head to Head). **A Regra do Time
-  Real**: a cor segue o time de verdade do jogador sendo mostrado, nunca uma posição fixa na tela — alguém do
-  Time B nunca deve ver os próprios números pintados de âmbar só porque "sempre foi a cor da esquerda".
+### Ranking e aviso
+- Ouro/prata/bronze só nas 3 primeiras posições. Aviso (`#fbbf24`) pra aviso não crítico.
 
-### Tertiary
-- **Verde de Sucesso** (`#2fd982`) / **Rosa de Perigo** (`#ff5d73`): julgamento de bom/ruim — rating acima/
-  abaixo de 1.0, vitória/derrota, fogo amigo. Reservados exclusivamente pra esse julgamento; nunca usados como
-  decoração ou pra identificar time.
+### Neutros (4 degraus)
+| Token | Hex | Uso |
+|---|---|---|
+| `fundo` | `#0a0a0b` | Página, menu lateral |
+| `superficie` | `#111113` | Painel, card, campo |
+| `superficie-alta` | `#18181b` | Hover de linha, popover, botão secundário |
+| `superficie-topo` | `#212125` | Item ativo (aba, menu), hover dentro de popover |
+| `borda` / `borda-forte` | `#232327` / `#303036` | Hairline / contorno de controle e flutuante |
+| `texto` / `texto-fraco` | `#ededef` / `#8a8a93` | Texto / rótulo, metadado |
 
-### Quaternary
-- **Ouro / Prata / Bronze** (`#facc15` / `#cbd5e1` / `#d97706`): identificam as 3 primeiras posições do ranking —
-  mesmos tons já usados no componente de Ranking, agora nomeados como token em vez de classe Tailwind solta.
-- **Aviso** (`#fbbf24`): aviso não-crítico (ex.: mapa sem calibração de radar) — mesmo tom já usado nos textos de
-  aviso do Replay 2D/Posicionamento Agregado/Mapa de Calor, agora nomeado como token.
+Hex que precisa existir em JS (canvas do Replay 2D, mapa de calor) fica espelhado em
+`site/client/src/lib/colors.js` e `lib/replayEngine.js`. Mudou aqui, muda lá.
 
-### Neutral
-- **Fundo** (`#08090b`): quase preto, fundo de página inteira (grade de pontos sutil + brilho vermelho no topo).
-- **Superfície** (`#111317`): fundo de painéis/cards — um degrau acima do fundo.
-- **Superfície Alta** (`#191c21`): hover de linha, popovers, cabeçalho de tabela.
-- **Superfície Topo** (`#22262d`): item ativo (aba, menu), hover dentro de popover.
-- **Borda** (`#262a31`) / **Borda Forte** (`#363b44`): hairlines; a forte é pra hover e contorno de flutuante.
-- **Texto** (`#f2f3f5`): texto principal, quase branco.
-- **Texto Fraco** (`#8e95a1`): rótulos, texto secundário, metadado.
+## 3. Tipografia
 
-### Named Rules
-**A Regra do Sinal Duplo.** Nenhum julgamento de bom/ruim depende só da cor verde/vermelho — todo indicador
-carrega também um ícone, seta, ou o próprio valor numérico visível ao lado. Ninguém no grupo confirmou
-daltonismo, mas o custo de reforçar é baixo e a prática é padrão.
+- **Geist** (400–700) pra toda a interface. Títulos: peso 600, tracking −0.02em.
+- **Geist Mono** pra todo dado: placar, K/D/A, ADR, rating, data, ID. **Regra do Número Tabular:** coluna
+  numérica é mono + `tabular-nums` + alinhada à direita. A classe `.tabular-nums` já aplica a fonte mono.
 
-## 3. Typography
+| Papel | Tamanho / peso |
+|---|---|
+| Título de página (`CabecalhoPagina`) | 28px / 600 |
+| Título de seção (`SectionHeader`) | 16px / 600 |
+| Corpo | 14px / 400 |
+| Rótulo (`rotulo`) | 12px / 500, `texto-fraco` |
+| Número de destaque | mono 24–64px / 500 |
 
-**Display Font:** Barlow Condensed (com fallback `Inter, system-ui, sans-serif`)
-**Body Font:** Inter (com fallback `system-ui, sans-serif`)
-**Label/Mono Font:** JetBrains Mono (com fallback `ui-monospace, monospace`)
+## 4. Elevação
 
-**Character:** Barlow Condensed dá peso técnico aos títulos e números grandes sem parecer decorativo; JetBrains
-Mono trata todo dado tabular como informação de instrumento, não como texto comum; Inter fica reservado pra prosa
-corrida, que é rara nesse produto — a maior parte da tela é rótulo + número, não parágrafo.
+Chapado em repouso. Profundidade vem dos degraus de superfície e de `realce-topo` (1px de luz no topo do
+painel). `shadow-flutuante` só em modal, popover, dropdown e tooltip. Sombra em card parado é bug.
 
-### Hierarchy
-- **Display** (peso 600-800, Barlow Condensed, tracking +0.01em): títulos de seção, placar da partida, valores grandes
-  de destaque (rating, contagens). Números de display grandes usam `.display-tight` (tracking -0.01em) pra
-  compensar o tracking positivo do display em tamanhos maiores.
-- **Label/Mono** (JetBrains Mono, `text-[10px]` a `text-sm`, uppercase, tracking +0.05em quando é rótulo de
-  coluna/badge): todo dado tabular — placares, K/D/A/ADR/Rating, datas, IDs. **A Regra do Número Tabular**: se o
-  valor é comparado por magnitude com outro na mesma coluna, ele é mono + `tabular-nums`, alinhado à direita.
-  Datas, códigos e IDs não são comparados por magnitude e alinham à esquerda mesmo em mono.
-- **Body** (Inter, peso 400): prosa corrida — textos de ajuda, descrições, mensagens de erro/vazio. Máximo de
-  65-75ch quando for parágrafo de verdade (raro nesse produto).
+## 5. Componentes
 
-### Named Rules
-**A Regra do Mono Automático.** Dado tabular nunca escolhe a fonte manualmente — herda de uma classe utilitária
-(`.tabular-nums`) aplicada uma vez no elemento pai. Se uma coluna numérica nova nascer sem essa classe, é bug de
-implementação, não uma exceção de design.
+Tudo em `site/client/src/components/ui` (barrel `index.js`). Tela nova não escreve casca de botão, modal, aba
+ou campo à mão.
 
-## 4. Elevation
+- **Button / classesBotao** — `variante`: `primario` (laranja, uma por área), `secundario` (default),
+  `contorno` (ação de marca secundária, ex. Apoie), `fantasma` (ações de linha/toolbar), `perigo`
+  (destrutiva). `tamanho`: `xs`, `sm`, `md`, `lg`, `icone`. `carregando` mostra spinner.
+- **Modal** — portal, Escape fecha só o modal do topo, trava o scroll, folha de baixo no mobile. Usar com
+  `useTransicaoModal()`. Cabeçalho com título + X, corpo rolável, `rodape` com ações (primária à direita).
+- **Abas** — `segmentado` pra filtro curto (trilho com item ativo em `superficie-topo`); `sublinhado` pra seções
+  da página (sublinhado laranja de 2px). Setas ←/→ navegam. `title` opcional por item.
+- **Input / Textarea / Campo / classeEntrada** — mesma casca do `Select`. Foco = borda laranja + anel suave.
+- **Select** — dropdown próprio (não nativo), painel em portal com `shadow-flutuante`.
+- **Skeleton / SkeletonLista / EstadoVazio / EstadoErro** — carregando, vazio (ícone + título + uma frase +
+  uma ação) e erro. Nunca "Carregando…" solto.
+- **CabecalhoPagina** — eyebrow + título + descrição + ações. **SectionHeader** — título de seção.
+- **Card**, **Badge** (4 tons: destaque, sucesso, perigo, neutro), **Chip**, **StatTile**, **DataTable**,
+  **Avatar**, **ResultChip**, **MapIcon** e os badges de Premier/FACEIT/rating/plataforma.
 
-Chapado por padrão em toda superfície de repouso — sem sombra em cards, painéis ou linhas de tabela. Profundidade
-vem de duas fontes só: o corte diagonal (que já cria uma silhueta não-retangular, dispensando sombra pra "separar"
-o painel do fundo) e o contraste entre as três camadas de superfície (fundo → superfície → superfície-alta).
-Exceção registrada: `shadow-acento` (brilho vermelho curto) no hover do botão primário, que é estado de
-interação, não repouso. Elementos **transitórios e flutuantes** (modal, popover, tooltip, dropdown aberto) ganham uma sombra ambiente
-sutil — não pra parecer "cartão elevado", mas pra reforçar que aquele elemento está temporariamente por cima do
-resto da tela, já que ele quebra o fluxo normal de camadas.
+Os utilitários `panel-cut`, `panel-cut-sm` e `panel-cut-tr` continuam existindo por compatibilidade, mas hoje
+são só raio (12px / 6px / 6px). Código novo usa `rounded-[var(--radius-*)]`.
 
-### Shadow Vocabulary
-- **Flutuante** (token `shadow-flutuante`): modais, popovers, dropdowns abertos, tooltip
-  flutuante do Replay 2D/Head to Head. Nunca aplicada a conteúdo em repouso no fluxo normal da página.
+### Navegação
+Menu lateral no fundo da página, agrupado (Análise, Comunidade, Biblioteca, Conta, Admin); item ativo em
+`superficie-topo` com ícone laranja. Header fixo com blur. No mobile, barra inferior com 4 rotas + "Mais".
 
-### Named Rules
-**A Regra do Chapado-Por-Padrão.** Se uma sombra está sendo aplicada a algo que não se move/sobrepõe (um card
-normal, uma linha de tabela, um badge), ela está errada — volte pro corte diagonal + contraste de camada.
-Sombra é reservada pra quando algo genuinamente flutua por cima do resto.
+### Tabela de dados
+Cabeçalho 12px `texto-fraco` sem caixa alta, hairline entre linhas, sem zebra, hover em `superficie-alta`,
+números mono à direita. Detalhe atrás de clique (linha expansível ou modal), nunca tudo na tabela principal.
 
-## 5. Components
+## 6. Do / Don't
 
-Cada componente carrega o corte diagonal como silhueta padrão — a exceção (retângulo reto) precisa de motivo
-explícito (modal fullscreen mobile, onde o corte exporia o backdrop).
+**Do**
+- Caixa de frase em tudo que não é sigla.
+- Uma ação primária laranja por área; o resto secundário ou fantasma.
+- Seta/ícone junto de todo verde/vermelho.
+- Densidade por contexto: Feed arejado, Partida densa.
 
-### Buttons
-- **Componente:** `Button` / `classesBotao()` em `components/ui/Button.jsx`. Nunca escrever a string à mão.
-- **Shape:** corte só no canto superior direito (`panel-cut-tr`), nunca border-radius.
-- **Primary:** fundo vermelho de destaque cheio, texto no tom de fundo (`#08090b`), Barlow Condensed 600,
-  uppercase, tracking 0.06em. Uma ação primária por área.
-- **Hover / Focus:** primary escurece levemente; secundário/ghost ganha borda vermelho-destaque e texto muda pra
-  destaque no hover.
-- **Secundario:** fundo `superficie-alta`, borda `borda-forte`, texto `texto`.
-- **Contorno:** borda destaque 60%, texto destaque — ação de marca que não é a principal (ex. "Apoie").
-- **Fantasma:** sem borda, texto `texto-fraco`, fundo só no hover.
-- **Perigo:** borda/texto `perigo` — ações destrutivas.
-
-### Chips (Badge)
-- **Style:** corte `panel-cut-sm`, fórmula fixa border 40% + fundo 10-15% + texto na cor cheia do tom.
-- **State:** 4 tons semânticos fixos — destaque (metadado/categoria, ex. "AUTO"/"PRO"), sucesso, perigo, neutro.
-  Nunca um 5º tom ad-hoc; se nenhum dos 4 serve, o dado não deveria ser um badge.
-
-### Cards / Containers
-- **Corner Style:** corte diagonal `panel-cut` (14px) em containers grandes, `panel-cut-sm` (8px) em elementos
-  pequenos (badge, avatar-fallback, ícone de mapa).
-- **Background:** `superficie`, um degrau acima do `fundo` da página.
-- **Shadow Strategy:** nenhuma em repouso (ver Elevation) — só se o card for, ele mesmo, um modal/popover
-  flutuante.
-- **Border:** hairline 1px `borda` em quase todo container.
-- **Internal Padding:** compacto (`p-3`/`p-4`), nunca o respiro generoso de um card de marketing.
-
-### Inputs / Fields (Select)
-- **Style:** dropdown customizado (não `<select>` nativo) — botão trigger idêntico ao antigo (borda `borda`,
-  fundo `superficie`, seta SVG), painel de opções em portal pro `<body>` com `panel-cut-sm`, sombra flutuante
-  e `position: fixed` calculado a partir do trigger (nunca `absolute` dentro de um container com `panel-cut`,
-  que quebraria o posicionamento — mesmo bug já visto no modal de detalhe por round).
-  - *Nota de decisão*: a primeira versão deste sistema usava `<select>` nativo de propósito (teclado/leitor de
-    tela/picker mobile de graça). Feedback direto de uso mostrou que o popup nativo (fundo branco, destaque azul
-    do SO) destoava do resto do produto — "muito amador". A versão customizada reimplementa navegação por
-    teclado (setas, Enter/Espaço, Escape, fecha ao clicar fora) e `role="listbox"`/`role="option"` à mão para
-    não perder acessibilidade ao trocar de abordagem.
-- **Focus/Hover:** borda muda pra destaque/60% no hover, destaque cheio quando aberto; seta acompanha a cor e
-  gira 180° aberto.
-- **Opção selecionada:** texto na cor de destaque + ícone de check; opção em foco/hover por teclado ou mouse
-  ganha fundo `superficie-alta`.
-- **Disabled:** opacidade reduzida, cursor `not-allowed`.
-
-### Modais
-- **Componente:** `Modal` em `components/ui/Modal.jsx`, sempre com `useTransicaoModal()` no componente que o abre.
-- Desktop: painel centralizado com `panel-cut`, barra de 2px no destaque no canto superior esquerdo, cabeçalho com
-  título display + X, corpo rolável, rodapé opcional com as ações (primária à direita).
-- Mobile: folha que sobe da base (até 92vh), com alça.
-- Backdrop `fundo/75` + blur leve. Escape fecha. Portal pro `<body>` (clip-path do pai quebrava o fixed).
-
-### Abas
-- **Componente:** `Abas`. `segmentado` pra filtro curto (trilho afundado, item ativo `superficie-topo` + 2px
-  de destaque embaixo). `sublinhado` pra seções de página (barra de 2px sob o item ativo). Setas ←/→ navegam.
-
-### Estados
-- Carregando = `Skeleton`/`SkeletonLista` no formato do conteúdo, nunca "Carregando…" em texto solto.
-- Vazio = `EstadoVazio` (ícone, título, uma frase, uma ação). Erro = `EstadoErro`.
-
-### Navigation
-- Sidebar fixa à esquerda (desktop), agrupada por intenção, com item ativo marcado por barra de 3px no destaque
-  à esquerda + fundo `superficie-topo` — a
-  única exceção tolerada à "Regra do sem side-stripe", porque aqui é indicador de estado de navegação (como uma
-  aba ativa), não decoração de card/alerta. Barra inferior fixa no mobile (estilo app), com "Mais" abrindo um
-  drawer com o restante do menu.
-
-### Tabela de Dados (componente-assinatura)
-- Cabeçalho mono uppercase `text-[10px]`, texto-fraco; hairline entre linhas (nunca zebra — as tabelas do
-  produto são interativas, hover + clique abrem detalhe, e zebra some com esse tipo de estado); hover de linha
-  = `superficie-alta`; toda coluna numérica right-align + tabular-nums; linhas expansíveis (clique abre
-  detalhe/modal) são o padrão de "progressive disclosure" do produto — a tabela principal fica enxuta, o
-  detalhe fica atrás de um clique, nunca na tabela principal.
-
-## 6. Do's and Don'ts
-
-### Do:
-- **Do** usar corte diagonal (`panel-cut`/`panel-cut-sm`) como silhueta padrão de qualquer container novo.
-- **Do** reforçar todo indicador bom/ruim com ícone/seta além da cor verde/vermelho (Regra do Sinal Duplo).
-- **Do** manter a cor de time seguindo o time real do jogador mostrado, nunca uma posição fixa na tela.
-- **Do** aplicar `tabular-nums` + mono + right-align em toda coluna numérica nova, sem exceção.
-- **Do** reservar sombra só pra elementos flutuantes/transitórios (modal, popover, tooltip) — nunca em repouso.
-- **Do** ajustar a densidade por contexto: superfície de escaneamento rápido (Feed) fica mais espaçada, superfície
-  analítica densa (Partida) cabe mais colunas — não forçar a mesma densidade em todo o site.
-
-### Don't:
-- **Don't** usar border-radius arredondado como default — o corte diagonal é a linguagem geométrica do produto.
-- **Don't** usar side-stripe (`border-left`/`border-right` colorido) em cards/alertas/listas — exceção única e
-  já registrada: item ativo da navegação lateral, que é indicador de estado, não decoração.
-- **Don't** aninhar cards dentro de cards.
-- **Don't** aplicar gradiente em texto (`background-clip: text`) — ênfase é peso/tamanho, nunca gradiente.
-- **Don't** aplicar zebra striping em tabelas — são interativas (hover/clique), zebra cria ruído visual com esse
-  tipo de estado; hairline é a escolha já feita.
-- **Don't** deixar um dado de julgamento (bom/ruim) depender só da cor — sempre par com ícone/seta/peso.
-- **Don't** parecer "projeto de fim de semana" — é a única anti-referência explícita do produto (PRODUCT.md).
+**Don't**
+- Laranja pra tag, categoria ou destaque genérico.
+- Sombra, glow ou gradiente em conteúdo parado; gradiente em texto.
+- Card dentro de card. Side-stripe colorido em card/alerta.
+- Corte diagonal, CAIXA ALTA com tracking largo, mono em prosa.
 
 ## 7. Motion
 
-Não existia seção de motion até agora — e essa lacuna é a causa raiz provável da inconsistência de duração/
-easing encontrada em outras partes desta auditoria: sem um padrão documentado, cada componente escolheu (ou
-não escolheu) um valor por conta própria. Motion aqui é reforço de interação, não linguagem própria — controlado,
-funcional, quase invisível quando bem feito.
-
-### Duration
-- **Padrão: `duration-200` (200ms)** pra qualquer transição de interação — hover, foco, abertura/fechamento de
-  painel. Já é o valor explícito usado no hover do Card (`Card.jsx`), no drawer mobile do Shell
-  (`transition-opacity duration-200` / `transition-[transform,width] duration-200`), e nas linhas clicáveis de
-  Ranking, Comparar e JogadorPerfil. **A Regra dos 200ms**: toda transição nova declara `duration-200`
-  explicitamente — nunca depender do default implícito do Tailwind (150ms) nem inventar um terceiro valor.
-- **Exceção — entrada de flutuantes** (ver abaixo): usa uma duração mais curta, porque é aparição pontual, não
-  uma transição hover contínua.
-
-### Easing
-- **Padrão: a curva default do Tailwind** (`cubic-bezier(0.4, 0, 0.2, 1)`), já embutida em toda classe
-  `transition-*` sem precisar de `ease-*` explícito — nenhum componente do site hoje sobrescreve isso, então é,
-  na prática, a única curva usada no produto. **Não** adicionar `ease-linear`/`ease-in`/`ease-out` a menos que
-  exista um motivo documentado; o default já é o padrão.
-
-### prefers-reduced-motion
-Já implementado globalmente em `index.css` (`@media (prefers-reduced-motion: reduce)` zera `animation-duration`,
-`transition-duration` e `scroll-behavior` pra `*`, `*::before`, `*::after`). Componente novo **não** precisa
-reimplementar isso individualmente — é regra de sistema aplicada uma vez, mesma lógica da Regra do Mono
-Automático em Typography (seção 3).
-
-### Entrada de flutuantes
-Todo elemento que carrega a sombra "Flutuante" (seção 4 — modal, popover, tooltip, dropdown aberto) precisa de
-uma transição de entrada: fade e, quando fizer sentido, um scale/translate pequeno (ver `animate-surgir` em
-`index.css` como referência de forma, ainda que a duração dele — 450ms — seja pensada pra revelar conteúdo de
-página, não pra um flutuante). Aparecer/desaparecer sem transição nenhuma quebra a mesma promessa da sombra:
-comunicar que aquilo está temporariamente por cima do resto da tela.
-- **Duração:** mais curta que o padrão de interação — 120-150ms, a mesma faixa já usada implicitamente no resto
-  do site pelo default do Tailwind — rápido o bastante pra não atrasar a interação, perceptível o bastante pra
-  não parecer instantâneo/quebrado.
-- **Saída:** se o elemento já sai do DOM ao fechar (padrão atual do site), não precisa de animação de saída, só
-  de entrada.
-- **Gap atual:** o painel de opções do Select (`Select.jsx`) hoje aparece sem transição nenhuma — é exatamente
-  o tipo de caso que essa regra deveria cobrir daqui pra frente.
-
-### Named Rules
-**A Regra do Movimento Funcional.** Se uma transição ou animação não comunica hover, foco, abertura, ou entrada
-de um flutuante, ela provavelmente não deveria existir — motion aqui é reforço de interação, não coreografia.
+- Interação (hover, foco): `duration-150`. Abertura/fechamento de painel e modal: 200ms (`useTransicaoModal`),
+  curva `--ease-saida`.
+- Flutuantes entram com fade + leve scale/translate; saem do DOM sem animação de saída (exceto modal).
+- `prefers-reduced-motion` zera tudo globalmente em `index.css`.
+- **Regra do Movimento Funcional:** se a animação não comunica hover, foco, abertura ou entrada, ela sai.

@@ -1,8 +1,27 @@
 // site/client/src/components/SeletorClipesCompeticao.jsx
 import { useEffect, useState } from 'react'
-import { createPortal } from 'react-dom'
 import { useAuth } from '../auth/AuthContext.jsx'
+import { useTransicaoModal } from '../lib/useTransicaoModal.js'
 import CardClipeCompeticao from './CardClipeCompeticao.jsx'
+import { Button, EstadoErro, EstadoVazio, Modal, Skeleton } from './ui'
+
+// Contador de envio: número grande + barra de uso; vira perigo quando estoura.
+function Medidor({ rotulo, usado, limite }) {
+  const cheio = usado >= limite
+  const pct = Math.min(100, limite > 0 ? (usado / limite) * 100 : 0)
+  return (
+    <div className="min-w-0 flex-1">
+      <div className="rotulo">{rotulo}</div>
+      <div className="mt-1 flex items-baseline gap-1 font-display font-semibold tabular-nums">
+        <span className={`text-2xl leading-none ${cheio ? 'text-perigo' : 'text-texto'}`}>{usado}</span>
+        <span className="text-sm text-texto-fraco">/ {limite}</span>
+      </div>
+      <div className="mt-1.5 h-1 w-full bg-borda" aria-hidden="true">
+        <div className={`h-full ${cheio ? 'bg-perigo' : 'bg-destaque'}`} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  )
+}
 
 // Tela de seleção compartilhada — acionada tanto pelo botão "Enviar clipe" da aba
 // Competições quanto pelo atalho "Enviar pra competição →" dentro de Partida > Clipes.
@@ -14,7 +33,7 @@ export default function SeletorClipesCompeticao({ competicaoId, onFechar, onEnvi
   const [limites, setLimites] = useState(null)
   const [enviando, setEnviando] = useState(null)
   const [erro, setErro] = useState(null)
-  const [visivel, setVisivel] = useState(false)
+  const { visivel, iniciarSaida } = useTransicaoModal()
   const [clipeAberto, setClipeAberto] = useState(null)
 
   const motivoBloqueio = !limites
@@ -25,12 +44,7 @@ export default function SeletorClipesCompeticao({ competicaoId, onFechar, onEnvi
         ? 'limite total atingido'
         : null
 
-  useEffect(() => { setVisivel(true) }, [])
-
-  function fechar() {
-    setVisivel(false)
-    setTimeout(onFechar, 200)
-  }
+  const fechar = () => iniciarSaida(onFechar)
 
   function carregar() {
     fetch(`/api/competicoes/${competicaoId}/elegiveis`)
@@ -56,19 +70,6 @@ export default function SeletorClipesCompeticao({ competicaoId, onFechar, onEnvi
 
   useEffect(carregar, [competicaoId])
 
-  // O modal cobre a tela inteira: sem travar o scroll, rolar dentro dele leva a
-  // página de trás junto; sem o Esc, a única saída é o clique no backdrop.
-  useEffect(() => {
-    function aoTeclar(e) { if (e.key === 'Escape') fechar() }
-    document.addEventListener('keydown', aoTeclar)
-    const anterior = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.removeEventListener('keydown', aoTeclar)
-      document.body.style.overflow = anterior
-    }
-  }, [])
-
   async function enviar(allstarClipId) {
     setEnviando(allstarClipId)
     setErro(null)
@@ -82,32 +83,41 @@ export default function SeletorClipesCompeticao({ competicaoId, onFechar, onEnvi
     }
   }
 
-  // Portal pro body de propósito: na aba Competições este seletor é montado dentro
-  // de um <Card>, cuja classe panel-cut é um clip-path — e clip-path RECORTA os
-  // descendentes, inclusive os position:fixed. Sem o portal o modal aparece
-  // truncado na caixa do card. O portal imuniza qualquer ponto de montagem futuro.
-  return createPortal(
-    <div
-      className={`fixed inset-0 z-50 flex items-center justify-center bg-fundo/80 p-4 transition-opacity duration-200 ${visivel ? 'opacity-100' : 'opacity-0'}`}
-      onClick={fechar}
+  // ui/Modal já vai por portal pro body (o panel-cut do Card de Competições é um
+  // clip-path e recortava o position:fixed), trava o scroll e fecha no Esc.
+  return (
+    <Modal
+      visivel={visivel}
+      onFechar={fechar}
+      titulo="Selecionar clipes pra enviar"
+      subtitulo="Só aparecem clipes gerados de partidas dentro do período"
+      tamanho="lg"
     >
-      <div className="panel-cut max-h-[80vh] w-full max-w-3xl overflow-y-auto border border-borda bg-superficie p-4" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between">
-          <h2 className="font-display text-lg font-bold text-texto">Selecionar clipes pra enviar</h2>
-          <button onClick={fechar} className="font-mono text-xs uppercase text-texto-fraco hover:text-texto">fechar</button>
-        </div>
+      <div className="flex flex-col gap-4">
         {limites && (
-          <p className="mt-1 font-mono text-xs text-texto-fraco">
-            {limites.hoje} de {limites.limiteDiario} enviados hoje · {limites.total} de {limites.limiteTotal} no total · mínimo {limites.minimoParaRankear} pra rankear
-          </p>
+          <div className="panel-cut-sm border border-borda bg-fundo/50 p-3">
+            <div className="flex gap-4">
+              <Medidor rotulo="Hoje" usado={limites.hoje} limite={limites.limiteDiario} />
+              <Medidor rotulo="Total" usado={limites.total} limite={limites.limiteTotal} />
+            </div>
+            <p className="mt-2 font-mono text-xs text-texto-fraco">
+              {limites.hoje} de {limites.limiteDiario} enviados hoje · {limites.total} de {limites.limiteTotal} no total · mínimo {limites.minimoParaRankear} pra rankear
+            </p>
+          </div>
         )}
-        {erro && <p className="mt-2 font-mono text-xs text-perigo">{erro}</p>}
+        {erro && <EstadoErro mensagem={erro} />}
         {clipes === null ? (
-          <p className="mt-4 font-mono text-sm text-texto-fraco">Carregando…</p>
+          <div role="status" aria-label="Carregando clipes" className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Skeleton className="panel-cut-sm aspect-[4/3] w-full" />
+            <Skeleton className="panel-cut-sm aspect-[4/3] w-full" />
+          </div>
         ) : clipes.length === 0 ? (
-          <p className="mt-4 font-mono text-sm text-texto-fraco">Nenhum clipe elegível ainda — gere um clipe de uma partida jogada dentro do período da competição.</p>
+          <EstadoVazio
+            titulo="Sem clipes elegíveis"
+            descricao="Nenhum clipe elegível ainda — gere um clipe de uma partida jogada dentro do período da competição."
+          />
         ) : (
-          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {clipes.map((c) => (
               <CardClipeCompeticao
                 key={c.id}
@@ -117,20 +127,22 @@ export default function SeletorClipesCompeticao({ competicaoId, onFechar, onEnvi
                 viewerSteamId={jogador?.steamId}
                 location="selecaoCompeticao"
                 acao={
-                  <button
+                  <Button
+                    variante={c.jaEnviado || motivoBloqueio ? 'secundario' : 'primario'}
+                    tamanho="sm"
+                    larguraTotal
+                    className="mt-3"
                     onClick={() => enviar(c.allstarClipId)}
                     disabled={c.jaEnviado || enviando === c.allstarClipId || Boolean(motivoBloqueio)}
-                    className="panel-cut-sm mt-2 min-h-10 w-full border border-borda px-3 font-mono text-xs uppercase text-texto-fraco hover:border-destaque/50 hover:text-destaque disabled:opacity-50 lg:min-h-0"
                   >
                     {c.jaEnviado ? 'já enviado' : motivoBloqueio ? motivoBloqueio : enviando === c.allstarClipId ? '…' : 'enviar'}
-                  </button>
+                  </Button>
                 }
               />
             ))}
           </div>
         )}
       </div>
-    </div>,
-    document.body,
+    </Modal>
   )
 }

@@ -20,20 +20,20 @@ export default function Abas({ itens, valor, onChange, variante = 'segmentado', 
 
   const segmentado = variante === 'segmentado'
   const trilho = segmentado
-    ? `panel-cut-tr inline-flex gap-0.5 border border-borda bg-fundo/60 p-0.5 ${larguraTotal ? 'w-full' : ''}`
-    : `flex gap-1 overflow-x-auto border-b border-borda ${larguraTotal ? 'w-full' : ''}`
+    ? `inline-flex gap-0.5 rounded-[var(--radius-medio)] border border-borda bg-superficie p-0.5 ${larguraTotal ? 'w-full' : ''}`
+    : `flex gap-5 overflow-x-auto border-b border-borda ${larguraTotal ? 'w-full' : ''}`
 
   return (
     <div role="tablist" aria-label={rotulo} className={`${trilho} ${className}`.trim()}>
       {itens.map((item, i) => {
         const ativo = item.valor === valor
         const base = segmentado
-          ? `min-h-10 px-3 font-mono text-xs uppercase tracking-wide transition-colors duration-200 lg:min-h-8 ${larguraTotal ? 'flex-1' : ''} ${
-              ativo ? 'bg-superficie-topo text-texto shadow-[inset_0_-2px_0_0_var(--color-destaque)]' : 'text-texto-fraco hover:text-texto'
+          ? `h-9 rounded-[var(--radius-pequeno)] px-3 text-[13px] font-medium transition-colors duration-150 lg:h-7 ${larguraTotal ? 'flex-1' : ''} ${
+              ativo ? 'bg-superficie-topo text-texto shadow-[inset_0_0_0_1px_var(--color-borda-forte)]' : 'text-texto-fraco hover:text-texto'
             }`
-          : `relative min-h-11 shrink-0 px-3 font-display text-sm font-semibold uppercase tracking-[0.08em] transition-colors duration-200 ${
+          : `relative h-11 shrink-0 px-0.5 text-sm font-medium transition-colors duration-150 ${
               ativo
-                ? 'text-texto after:absolute after:inset-x-2 after:-bottom-px after:h-[2px] after:bg-destaque'
+                ? 'text-texto after:absolute after:inset-x-0 after:-bottom-px after:h-[2px] after:rounded-full after:bg-destaque'
                 : 'text-texto-fraco hover:text-texto'
             }`
         return (
@@ -43,6 +43,7 @@ export default function Abas({ itens, valor, onChange, variante = 'segmentado', 
             type="button"
             role="tab"
             aria-selected={ativo}
+            title={item.title}
             tabIndex={ativo ? 0 : -1}
             onClick={() => onChange?.(item.valor)}
             onKeyDown={(e) => aoTeclar(e, i)}
@@ -50,7 +51,7 @@ export default function Abas({ itens, valor, onChange, variante = 'segmentado', 
           >
             {item.rotulo}
             {item.contagem != null && (
-              <span className={`font-mono text-[10px] tabular-nums ${ativo ? 'text-destaque' : 'text-texto-fraco/70'}`}>{item.contagem}</span>
+              <span className={`rounded-full bg-superficie-alta px-1.5 font-mono text-[11px] tabular-nums ${ativo ? 'text-texto' : 'text-texto-fraco'}`}>{item.contagem}</span>
             )}
           </button>
         )

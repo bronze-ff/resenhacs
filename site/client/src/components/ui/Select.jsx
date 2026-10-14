@@ -119,7 +119,7 @@ export default function Select({ value, onChange, children, className = '', sele
         // focus-visible (não em `aberto`, que é o estado de dropdown aberto e não
         // reflete navegação por teclado) senão quem navega via Tab perde a referência
         // visual de onde está o foco.
-        className={`peer panel-cut-tr flex min-h-11 w-full items-center gap-2 border bg-fundo/70 py-2 pl-3 pr-9 text-left text-sm text-texto transition-colors duration-200 hover:border-borda-forte focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-destaque)] disabled:cursor-not-allowed disabled:opacity-50 lg:min-h-10 ${aberto ? 'border-destaque' : 'border-borda'} ${selectClassName}`}
+        className={`peer panel-cut-tr flex min-h-11 w-full items-center gap-2 border bg-superficie py-2 pl-3 pr-9 text-left text-sm text-texto transition-colors duration-150 hover:border-[#3a3a41] focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-destaque)] disabled:cursor-not-allowed disabled:opacity-50 lg:min-h-9 ${aberto ? 'border-destaque/70' : 'border-borda-forte'} ${selectClassName}`}
       >
         <span className="truncate">{selecionada?.label ?? ' '}</span>
       </button>
@@ -147,7 +147,7 @@ export default function Select({ value, onChange, children, className = '', sele
             // animate-surgir-painel só roda na entrada (o painel some do DOM direto ao
             // fechar, sem saída animada) — @keyframes e o guard de prefers-reduced-motion
             // ficam em index.css junto do resto das animações do projeto.
-            className="panel-cut-tr max-h-72 origin-top animate-surgir-painel overflow-y-auto border border-borda-forte bg-superficie-alta p-1 text-sm shadow-flutuante focus:outline-none"
+            className="max-h-72 origin-top animate-surgir-painel overflow-y-auto rounded-[var(--radius-medio)] border border-borda-forte bg-superficie-alta p-1 text-sm shadow-flutuante focus:outline-none"
           >
             {opcoes.map((o, i) => (
               <li
@@ -156,7 +156,7 @@ export default function Select({ value, onChange, children, className = '', sele
                 aria-selected={o.value === selecionada?.value}
                 onMouseEnter={() => setAtivo(i)}
                 onClick={() => escolher(o)}
-                className={`flex min-h-10 cursor-pointer items-center justify-between gap-3 px-3 py-2 lg:min-h-0 ${i === ativo ? 'bg-superficie-topo' : ''} ${o.value === selecionada?.value ? 'text-destaque' : 'text-texto'}`}
+                className={`flex min-h-10 cursor-pointer items-center justify-between gap-3 rounded-[var(--radius-pequeno)] px-2.5 py-1.5 lg:min-h-0 ${i === ativo ? 'bg-superficie-topo' : ''} ${o.value === selecionada?.value ? 'text-texto font-medium' : 'text-texto-fraco'}`}
               >
                 <span className="min-w-0 truncate">{o.label}</span>
                 {o.value === selecionada?.value && (

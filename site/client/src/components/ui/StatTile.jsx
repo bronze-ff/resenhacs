@@ -16,9 +16,8 @@ export default function StatTile({ rotulo, valor, sub, tom = 'neutro', className
   const corValor = TONS[tom] ?? TONS.neutro
   return (
     <Card className={`relative p-4 ${className}`.trim()} {...props}>
-      <div className="absolute left-0 top-0 h-[2px] w-8 bg-destaque/70" />
       <div className="break-words rotulo [overflow-wrap:anywhere]">{rotulo}</div>
-      <div className={`mt-2 break-words font-display text-3xl font-bold leading-none tabular-nums display-tight ${corValor}`}>{valor}</div>
+      <div className={`mt-2 break-words font-mono text-2xl font-medium leading-none tabular-nums display-tight ${corValor}`}>{valor}</div>
       {sub != null && <div className="mt-0.5 font-mono text-xs text-texto-fraco">{sub}</div>}
     </Card>
   )

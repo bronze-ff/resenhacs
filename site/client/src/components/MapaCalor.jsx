@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { nomeMapa } from '../lib/format.js'
 import { CORES } from '../lib/colors.js'
-import { Select } from './ui'
+import { Select, Abas } from './ui'
 
 const TAM = 640
 const RAIO_CLIQUE = 14 // px — distância máxima do clique até um ponto pra considerar "acertou"
@@ -52,8 +52,10 @@ function pontosDeGranada(replay) {
 }
 
 const COR_GRANADA = { smoke: 'rgba(210,210,215,0.5)', fire: 'rgba(255,110,30,0.5)', flash: 'rgba(255,255,255,0.5)', he: 'rgba(255,170,60,0.5)' }
-const TIPOS_GRANADA = [['', 'Todas'], ['flash', 'Flash'], ['smoke', 'Smoke'], ['he', 'HE'], ['fire', 'Molotov']]
-const LADOS = [['', 'Ambos'], ['CT', 'CT'], ['T', 'T']]
+const paraItens = (pares) => pares.map(([valor, rotulo]) => ({ valor, rotulo }))
+const TIPOS_GRANADA = paraItens([['', 'Todas'], ['flash', 'Flash'], ['smoke', 'Smoke'], ['he', 'HE'], ['fire', 'Molotov']])
+const LADOS = paraItens([['', 'Ambos'], ['CT', 'CT'], ['T', 'T']])
+const MODOS = paraItens([['mortes', 'Onde morre'], ['kills', 'Onde mata'], ['granadas', 'Granadas']])
 
 function desenhar(ctx, radar, pontos, cor, modo, cursorTeclado) {
   ctx.clearRect(0, 0, TAM, TAM)
@@ -176,59 +178,28 @@ export default function MapaCalor({ replay, onSelecionarPonto }) {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-3">
-        <div className="panel-cut-sm flex overflow-hidden border border-borda font-mono text-xs uppercase">
-          {[['mortes', 'Onde morre'], ['kills', 'Onde mata'], ['granadas', 'Granadas']].map(([v, label]) => (
-            <button
-              key={v}
-              onClick={() => setModo(v)}
-              className={`flex min-h-10 items-center px-3 py-1.5 transition-colors lg:min-h-0 ${modo === v ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'}`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <Abas rotulo="O que mostrar" itens={MODOS} valor={modo} onChange={setModo} />
         {modo !== 'granadas' && (
           <>
             <Select value={jogadorFiltro} onChange={(e) => setJogadorFiltro(e.target.value)} selectClassName="text-xs">
               <option value="">Todo mundo</option>
               {jogadoresIds.map((id) => <option key={id} value={id}>{replay.names[id]}</option>)}
             </Select>
-            <div className="panel-cut-sm flex overflow-hidden border border-borda font-mono text-xs uppercase">
-              {LADOS.map(([v, label]) => (
-                <button
-                  key={v || 'ambos'}
-                  onClick={() => setLadoFiltro(v)}
-                  title={v ? `Só quando estava jogando de ${v}` : 'CT e T juntos'}
-                  className={`flex min-h-10 items-center px-2.5 py-1.5 transition-colors lg:min-h-0 ${ladoFiltro === v ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'}`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+            <Abas rotulo="Lado" itens={LADOS} valor={ladoFiltro} onChange={setLadoFiltro} />
           </>
         )}
         {modo === 'granadas' && (
-          <div className="panel-cut-sm flex overflow-hidden border border-borda font-mono text-xs uppercase">
-            {TIPOS_GRANADA.map(([v, label]) => (
-              <button
-                key={v || 'todas'}
-                onClick={() => setTipoGranadaFiltro(v)}
-                className={`flex min-h-10 items-center px-2.5 py-1.5 transition-colors lg:min-h-0 ${tipoGranadaFiltro === v ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'}`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          <Abas rotulo="Tipo de granada" itens={TIPOS_GRANADA} valor={tipoGranadaFiltro} onChange={setTipoGranadaFiltro} />
         )}
         <span className="font-mono text-xs text-texto-fraco">{pontos.length} pontos</span>
         {interativo && (
-          <span className="font-mono text-xs text-texto-fraco">
+          <span className="text-xs text-texto-fraco">
             · clique num ponto (ou navegue com as setas do teclado + Enter) pra assistir no Replay 2D
           </span>
         )}
       </div>
       {!replay.calibrated && (
-        <p className="font-mono text-xs uppercase tracking-wide" style={{ color: CORES.aviso }}>
+        <p className="font-mono text-xs" style={{ color: CORES.aviso }}>
           Mapa sem calibração de radar — posições em coordenadas cruas.
         </p>
       )}

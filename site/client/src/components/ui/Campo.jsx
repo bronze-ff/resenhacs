@@ -4,7 +4,7 @@ import { forwardRef, useId } from 'react'
 // (borda, fundo afundado, foco no destaque) pra input, textarea e o próprio Select
 // conviverem lado a lado sem parecerem de famílias diferentes.
 export const classeEntrada =
-  'w-full min-h-11 border border-borda bg-fundo/70 px-3 py-2 text-sm text-texto placeholder:text-texto-fraco/60 transition-colors duration-200 hover:border-borda-forte focus:border-destaque focus:outline-none focus-visible:outline-none disabled:opacity-50 lg:min-h-10'
+  'w-full min-h-11 rounded-[var(--radius-pequeno)] border border-borda-forte bg-superficie px-3 py-2 text-sm text-texto placeholder:text-texto-fraco/60 transition-colors duration-200 hover:border-[#3a3a41] focus:border-destaque/70 focus:outline-none focus:ring-2 focus:ring-destaque/20 focus-visible:outline-none disabled:opacity-50 lg:min-h-9'
 
 export function Campo({ rotulo, ajuda = null, erro = null, htmlFor, className = '', children }) {
   return (

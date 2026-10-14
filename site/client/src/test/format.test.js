@@ -29,11 +29,11 @@ describe('dataHora', () => {
 
 describe('origemPartida', () => {
   it('upload manual continua MANUAL', () => {
-    expect(origemPartida('upload', true).label).toBe('MANUAL')
+    expect(origemPartida('upload', true).label).toBe('Manual')
   })
 
   it('partida automática com demo parseada é AUTO', () => {
-    expect(origemPartida('valve_mm', true).label).toBe('AUTO')
+    expect(origemPartida('valve_mm', true).label).toBe('Auto')
   })
 
   it('partida sem demo (stats-only da API) é SEM DEMO', () => {

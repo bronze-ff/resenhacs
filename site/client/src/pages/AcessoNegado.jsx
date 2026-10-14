@@ -12,7 +12,7 @@ export default function AcessoNegado() {
           </svg>
         </span>
         <p className="rotulo !text-perigo">Acesso negado</p>
-        <h1 className="font-display text-4xl font-extrabold uppercase leading-none tracking-wide text-texto">Fora da whitelist</h1>
+        <h1 className="font-display text-4xl font-semibold leading-none text-texto">Fora da whitelist</h1>
         <p className="text-sm leading-relaxed text-texto-fraco">
           Sua conta Steam não está na whitelist. Pede pra um admin do grupo te adicionar.
         </p>

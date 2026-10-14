@@ -29,7 +29,7 @@ import Curso from './pages/Curso.jsx'
 function TelaCarregando() {
   return (
     <div role="status" className="flex min-h-screen flex-col items-center justify-center gap-4">
-      <span aria-hidden="true" className="panel-cut-sm flex h-12 w-12 animate-pulso-sinal items-center justify-center bg-destaque font-display text-2xl font-extrabold text-fundo">R</span>
+      <span aria-hidden="true" className="panel-cut-sm flex h-12 w-12 animate-pulso-sinal items-center justify-center bg-destaque font-sans text-2xl font-bold text-sobre-destaque">R</span>
       <span className="rotulo">Carregando…</span>
     </div>
   )

@@ -187,20 +187,20 @@ const NAV_INFERIOR_BASE = [
 
 function itemClasse(colapsada) {
   return ({ isActive }) =>
-    `group relative mx-2 flex items-center gap-3 px-3 py-2 font-display text-[15px] font-semibold uppercase tracking-[0.06em] transition-colors duration-200 [&_svg]:h-5 [&_svg]:w-5 ${
+    `group relative mx-2 flex h-9 items-center gap-2.5 rounded-[var(--radius-pequeno)] px-2.5 text-sm font-medium transition-colors duration-150 [&_svg]:h-[18px] [&_svg]:w-[18px] ${
       colapsada ? 'lg:justify-center lg:px-0' : ''
     } ${
       isActive
-        ? 'panel-cut-tr bg-superficie-topo text-texto before:absolute before:inset-y-1.5 before:-left-2 before:w-[3px] before:bg-destaque [&_svg]:text-destaque'
+        ? 'bg-superficie-topo text-texto [&_svg]:text-destaque'
         : 'text-texto-fraco hover:bg-superficie-alta hover:text-texto'
     }`
 }
 
 // Marca: quadrado com corte diagonal e um "R" — mesma silhueta dos painéis.
 function Marca({ tamanho = 'md' }) {
-  const lado = tamanho === 'sm' ? 'h-7 w-7 text-base' : 'h-9 w-9 text-xl'
+  const lado = tamanho === 'sm' ? 'h-6 w-6 text-[13px]' : 'h-7 w-7 text-sm'
   return (
-    <span aria-hidden="true" className={`panel-cut-sm flex shrink-0 items-center justify-center bg-destaque font-display font-extrabold leading-none text-fundo ${lado}`}>
+    <span aria-hidden="true" className={`flex shrink-0 items-center justify-center rounded-[var(--radius-pequeno)] bg-destaque font-sans font-bold leading-none text-sobre-destaque ${lado}`}>
       R
     </span>
   )
@@ -212,7 +212,7 @@ function Marca({ tamanho = 'md' }) {
 function IndicadorCompeticaoAtiva() {
   return (
     <span className="absolute -right-0.5 -top-0.5 inline-flex h-2.5 w-2.5">
-      <span className="absolute inline-flex h-full w-full animate-pulso-sinal rounded-full bg-destaque shadow-[0_0_6px_var(--color-destaque)]" />
+      <span className="absolute inline-flex h-full w-full animate-pulso-sinal rounded-full bg-destaque" />
       <span className="sr-only">Competição ativa</span>
     </span>
   )
@@ -285,23 +285,21 @@ export default function Shell({ children }) {
       {/* lg:sticky + h-screen: no desktop a sidebar vira uma coluna fixa de altura total,
           então o botão de recolher (no rodapé dela) fica SEMPRE visível sem rolar a página. */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-64 shrink-0 flex-col border-r border-borda bg-superficie transition-[transform,width] duration-200 lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 flex w-60 shrink-0 flex-col border-r border-borda bg-fundo transition-[transform,width] duration-200 lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 ${
           menuAberto ? 'translate-x-0' : '-translate-x-full'
-        } ${colapsada ? 'lg:w-[72px]' : 'lg:w-64'}`}
+        } ${colapsada ? 'lg:w-[60px]' : 'lg:w-60'}`}
       >
-        <div className={`flex h-16 items-center gap-3 border-b border-borda px-5 ${colapsada ? 'lg:justify-center lg:px-0' : ''}`}>
+        <div className={`flex h-14 items-center gap-2.5 px-4 ${colapsada ? 'lg:justify-center lg:px-0' : ''}`}>
           <Marca />
           <div className={colapsada ? 'lg:hidden' : ''}>
-            <h1 className="font-display text-2xl font-extrabold uppercase leading-none tracking-[0.08em] text-texto">
-              Resenha<span className="text-destaque">.</span>
-            </h1>
-            <p className="rotulo mt-1 !text-[9px] !tracking-[0.24em]">CS2 · debrief</p>
+            <h1 className="font-display text-[15px] font-semibold leading-none text-texto">Resenha</h1>
+            <p className="mt-1 text-xs leading-none text-texto-fraco">CS2 do grupo</p>
           </div>
         </div>
-        <nav className="flex-1 space-y-4 overflow-y-auto py-4" aria-label="Menu">
+        <nav className="flex-1 space-y-5 overflow-y-auto py-3" aria-label="Menu">
           {[...GRUPOS, ...(jogador?.isSuperAdmin ? [GRUPO_ADMIN] : [])].map((grupo) => (
             <div key={grupo.titulo}>
-              <div className={`rotulo mb-1 px-5 !text-[9px] !text-texto-fraco/60 ${colapsada ? 'lg:hidden' : ''}`}>{grupo.titulo}</div>
+              <div className={`mb-1 px-4 text-xs font-medium text-texto-fraco/70 ${colapsada ? 'lg:hidden' : ''}`}>{grupo.titulo}</div>
               <div className={`mx-4 mb-1 hidden h-px bg-borda ${colapsada ? 'lg:block' : ''}`} aria-hidden="true" />
               <div className="space-y-0.5">
                 {grupo.itens.map((item) => (
@@ -325,16 +323,16 @@ export default function Shell({ children }) {
             </div>
           ))}
         </nav>
-        <div className="hidden border-t border-borda p-2 lg:flex">
+        <div className="hidden p-2 lg:flex">
           <button
             type="button"
             onClick={() => setColapsada((v) => !v)}
             aria-label={colapsada ? 'Expandir menu' : 'Recolher menu'}
             title={colapsada ? 'Expandir menu' : 'Recolher menu'}
-            className="panel-cut-sm flex h-10 w-full cursor-pointer items-center justify-center gap-2 text-texto-fraco transition-colors duration-200 hover:bg-superficie-alta hover:text-texto"
+            className="flex h-9 w-full cursor-pointer items-center justify-center gap-2 rounded-[var(--radius-pequeno)] text-texto-fraco transition-colors duration-150 hover:bg-superficie-alta hover:text-texto"
           >
             {NAV_ICONES[colapsada ? 'expandir' : 'colapsar']}
-            {!colapsada && <span className="text-[10px] font-mono uppercase tracking-wide">Recolher</span>}
+            {!colapsada && <span className="text-[13px]">Recolher</span>}
           </button>
         </div>
       </aside>
@@ -342,22 +340,20 @@ export default function Shell({ children }) {
           carrossel de Resenhas) impede o flex-item de encolher, alarga o body além do
           viewport e o iOS reduz o zoom da página INTEIRA pra caber (tudo fica miúdo). */}
       <div className="min-w-0 flex-1">
-        <header className="sticky top-0 z-20 flex h-14 items-center justify-between gap-2 border-b border-borda bg-fundo/80 px-3 backdrop-blur-md lg:h-16 lg:justify-end lg:gap-2 lg:px-6">
+        <header className="sticky top-0 z-20 flex h-14 items-center justify-between gap-2 border-b border-borda bg-fundo/80 px-3 backdrop-blur-md lg:justify-end lg:gap-2 lg:px-6">
           {/* Sem hambúrguer aqui: a barra inferior mobile cobre as rotas
               principais e o botão "Mais" abre este mesmo drawer, então um
               segundo gatilho no header seria redundante. */}
           <div className="flex shrink-0 items-center gap-2.5 lg:hidden">
             <Marca tamanho="sm" />
-            <h1 className="font-display text-xl font-extrabold uppercase tracking-[0.08em] text-texto">
-              Resenha<span className="text-destaque">.</span>
-            </h1>
+            <h1 className="font-display text-[15px] font-semibold text-texto">Resenha</h1>
           </div>
           <div className="flex min-w-0 items-center gap-1.5 lg:gap-2">
             <Link
               to="/apoie"
               title="Apoie o Resenha"
               aria-label="Apoie"
-              className={classesBotao({ variante: 'contorno', tamanho: 'sm', className: 'min-h-10 px-2.5 [&_svg]:h-4 [&_svg]:w-4 lg:min-h-9' })}
+              className={classesBotao({ variante: 'contorno', tamanho: 'sm', className: 'px-2 [&_svg]:h-4 [&_svg]:w-4 lg:px-2.5' })}
             >
               {NAV_ICONES.apoie}
               <span className="hidden lg:inline">Apoie</span>
@@ -365,7 +361,7 @@ export default function Shell({ children }) {
             <Link
               to="/tour"
               title="Como usar o Resenha"
-              className={classesBotao({ variante: 'fantasma', tamanho: 'sm', className: 'min-h-10 lg:min-h-9' })}
+              className={classesBotao({ variante: 'fantasma', tamanho: 'sm', className: 'px-2 lg:px-3' })}
             >
               Ajuda
             </Link>
@@ -373,10 +369,10 @@ export default function Shell({ children }) {
             <Link
               to={`/jogador/${jogador?.steamId}`}
               title="Meu perfil"
-              className="panel-cut-tr group flex min-h-10 min-w-0 shrink-0 items-center gap-2 border border-borda bg-superficie py-1 pl-1 pr-3 transition-colors duration-200 hover:border-borda-forte hover:bg-superficie-alta"
+              className="group flex h-9 min-w-0 shrink-0 items-center gap-2 rounded-[var(--radius-pequeno)] py-1 pl-1 pr-2.5 transition-colors duration-150 hover:bg-superficie-alta"
             >
               <span aria-hidden="true"><Avatar p={jogador ? { ...jogador, team: null } : null} size={28} /></span>
-              <span className="max-w-[72px] truncate font-mono text-xs text-texto sm:max-w-[140px]">{jogador?.nick}</span>
+              <span className="max-w-[56px] truncate text-[13px] font-medium text-texto sm:max-w-[140px]">{jogador?.nick}</span>
             </Link>
             <button
               onClick={sair}
@@ -391,7 +387,7 @@ export default function Shell({ children }) {
             </button>
           </div>
         </header>
-        <main className="mx-auto w-full max-w-[1480px] px-4 pb-24 pt-5 lg:px-8 lg:py-8">{children}</main>
+        <main className="mx-auto w-full max-w-[1320px] px-4 pb-24 pt-5 lg:px-10 lg:py-8">{children}</main>
       </div>
       <BarraInferior menuAberto={menuAberto} onAbrirMenu={() => setMenuAberto(true)} temCompeticaoAtiva={temCompeticaoAtiva} />
     </div>
@@ -413,8 +409,8 @@ function BarraInferior({ menuAberto, onAbrirMenu, temCompeticaoAtiva }) {
     : NAV_INFERIOR_BASE
 
   function itemNavClasse({ isActive }) {
-    return `relative flex h-16 flex-col items-center justify-center gap-1 text-[10px] font-mono uppercase tracking-wide transition-colors duration-200 [&_svg]:h-[22px] [&_svg]:w-[22px] ${
-      isActive ? 'text-texto before:absolute before:inset-x-5 before:top-0 before:h-[2px] before:bg-destaque [&_svg]:text-destaque' : 'text-texto-fraco'
+    return `relative flex h-16 flex-col items-center justify-center gap-1 text-[11px] font-medium transition-colors duration-150 [&_svg]:h-[22px] [&_svg]:w-[22px] ${
+      isActive ? 'text-texto [&_svg]:text-destaque' : 'text-texto-fraco'
     }`
   }
 
@@ -428,7 +424,7 @@ function BarraInferior({ menuAberto, onAbrirMenu, temCompeticaoAtiva }) {
 
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-20 grid border-t border-borda bg-superficie/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-md lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-20 grid border-t border-borda bg-fundo/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-md lg:hidden"
       style={{ gridTemplateColumns: `repeat(${itens.length + 1}, minmax(0, 1fr))` }}
       aria-label="Navegação principal"
     >
@@ -446,8 +442,8 @@ function BarraInferior({ menuAberto, onAbrirMenu, temCompeticaoAtiva }) {
         onClick={onAbrirMenu}
         aria-label="Mais opções"
         aria-expanded={menuAberto}
-        className={`relative flex h-16 flex-col items-center justify-center gap-1 text-[10px] font-mono uppercase tracking-wide transition-colors duration-200 [&_svg]:h-[22px] [&_svg]:w-[22px] ${
-          maisAtivo || !rotaCobertaPelasPrincipais ? 'text-texto before:absolute before:inset-x-5 before:top-0 before:h-[2px] before:bg-destaque [&_svg]:text-destaque' : 'text-texto-fraco'
+        className={`relative flex h-16 flex-col items-center justify-center gap-1 text-[11px] font-medium transition-colors duration-150 [&_svg]:h-[22px] [&_svg]:w-[22px] ${
+          maisAtivo || !rotaCobertaPelasPrincipais ? 'text-texto [&_svg]:text-destaque' : 'text-texto-fraco'
         }`}
       >
         {NAV_ICONES.mais}

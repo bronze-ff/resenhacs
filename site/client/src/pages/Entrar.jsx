@@ -1,9 +1,5 @@
 import { Button } from '../components/ui'
 
-function CornerMark({ className }) {
-  return <div className={`pointer-events-none absolute h-10 w-10 border-destaque/25 ${className}`} />
-}
-
 function SteamIcon({ className }) {
   return (
     <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
@@ -15,33 +11,18 @@ function SteamIcon({ className }) {
 export default function Entrar() {
   return (
     <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden px-6">
-      <div className="pointer-events-none absolute left-1/2 top-1/2 h-[600px] w-[600px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-destaque/10 blur-[130px]" />
-      <div
-        className="pointer-events-none absolute inset-0 opacity-40"
-        style={{
-          background:
-            'conic-gradient(from 0deg at 50% 50%, transparent 0deg, rgba(255,46,67,0.05) 40deg, transparent 90deg)',
-          animation: 'girar 14s linear infinite',
-        }}
-      />
-
-      <CornerMark className="left-6 top-6 border-l border-t" />
-      <CornerMark className="right-6 top-6 border-r border-t" />
-      <CornerMark className="bottom-6 left-6 border-b border-l" />
-      <CornerMark className="bottom-6 right-6 border-b border-r" />
-
       <div className="relative z-10 flex flex-col items-center text-center">
         <p
-          className="animate-surgir font-mono text-xs uppercase tracking-[0.35em] text-destaque"
+          className="animate-surgir rotulo"
           style={{ animationDelay: '0ms' }}
         >
           Stats de cs2 por grupo
         </p>
         <h1
-          className="animate-surgir mt-5 font-display text-6xl font-extrabold uppercase leading-none tracking-[0.06em] text-texto sm:text-8xl"
+          className="animate-surgir mt-3 font-display text-5xl font-semibold leading-none text-texto sm:text-7xl"
           style={{ animationDelay: '90ms' }}
         >
-          Resenha<span className="text-destaque">.</span>
+          Resenha
         </h1>
         <p
           className="animate-surgir mt-5 max-w-sm text-base leading-relaxed text-texto-fraco"
@@ -70,7 +51,6 @@ export default function Entrar() {
         </p>
       </div>
 
-      <style>{`@keyframes girar { to { transform: rotate(360deg); } }`}</style>
     </div>
   )
 }

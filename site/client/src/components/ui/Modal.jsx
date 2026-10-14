@@ -15,6 +15,8 @@ const LARGURAS = {
   xl: 'lg:max-w-6xl',
 }
 
+const pilhaModais = []
+
 export function IconeFechar({ className = 'h-5 w-5' }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className={className} aria-hidden="true">
@@ -43,8 +45,12 @@ export default function Modal({
   onFecharRef.current = onFechar
 
   useEffect(() => {
+    // Pilha de modais abertos: com um modal sobre outro (DetalheGranada sobre
+    // DetalheTatica), Escape fecha só o de cima.
+    const marca = {}
+    pilhaModais.push(marca)
     function aoTeclar(e) {
-      if (e.key === 'Escape') onFecharRef.current?.()
+      if (e.key === 'Escape' && pilhaModais[pilhaModais.length - 1] === marca) onFecharRef.current?.()
     }
     document.addEventListener('keydown', aoTeclar)
     const overflowAntes = document.body.style.overflow
@@ -53,6 +59,8 @@ export default function Modal({
     painelRef.current?.focus({ preventScroll: true })
     return () => {
       document.removeEventListener('keydown', aoTeclar)
+      const i = pilhaModais.indexOf(marca)
+      if (i !== -1) pilhaModais.splice(i, 1)
       document.body.style.overflow = overflowAntes
       if (focoAntes && typeof focoAntes.focus === 'function') focoAntes.focus({ preventScroll: true })
     }
@@ -60,7 +68,7 @@ export default function Modal({
 
   return createPortal(
     <div
-      className={`fixed inset-0 ${camada} flex items-end justify-center bg-fundo/75 backdrop-blur-sm transition-opacity duration-200 lg:items-center lg:p-6 ${visivel ? 'opacity-100' : 'opacity-0'}`}
+      className={`fixed inset-0 ${camada} flex items-end justify-center bg-black/60 backdrop-blur-[2px] transition-opacity duration-200 lg:items-center lg:p-6 ${visivel ? 'opacity-100' : 'opacity-0'}`}
       onClick={onFechar}
     >
       <div
@@ -70,19 +78,18 @@ export default function Modal({
         aria-labelledby={titulo ? tituloId : undefined}
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
-        className={`relative flex max-h-[92vh] w-full flex-col border-t border-borda-forte bg-superficie shadow-flutuante outline-none transition-[opacity,transform] duration-200 ease-[var(--ease-saida)] lg:panel-cut lg:max-h-[88vh] lg:border ${LARGURAS[tamanho] ?? LARGURAS.md} ${visivel ? 'translate-y-0 opacity-100 lg:scale-100' : 'translate-y-6 opacity-0 lg:translate-y-0 lg:scale-[0.97]'} ${className}`}
+        className={`relative flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-[var(--radius-grande)] border border-borda-forte bg-superficie shadow-flutuante outline-none transition-[opacity,transform] duration-200 ease-[var(--ease-saida)] lg:max-h-[88vh] lg:rounded-[var(--radius-grande)] ${LARGURAS[tamanho] ?? LARGURAS.md} ${visivel ? 'translate-y-0 opacity-100 lg:scale-100' : 'translate-y-6 opacity-0 lg:translate-y-0 lg:scale-[0.97]'} ${className}`}
       >
-        <div className="absolute left-0 top-0 h-[2px] w-16 bg-destaque" aria-hidden="true" />
-        <div className="mx-auto mt-2 h-1 w-10 bg-borda-forte lg:hidden" aria-hidden="true" />
+        <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-borda-forte lg:hidden" aria-hidden="true" />
         {(titulo || acoesCabecalho) && (
-          <header className="flex items-start justify-between gap-3 border-b border-borda px-4 py-3 lg:px-6 lg:py-4">
+          <header className="flex items-start justify-between gap-3 border-b border-borda px-4 py-3 lg:px-5 lg:py-4">
             <div className="min-w-0">
               {titulo && (
-                <h3 id={tituloId} className="font-display text-xl font-bold uppercase leading-tight tracking-wide text-texto lg:text-2xl">
+                <h3 id={tituloId} className="font-display text-lg font-semibold leading-tight text-texto">
                   {titulo}
                 </h3>
               )}
-              {subtitulo && <div className="mt-0.5 font-mono text-xs text-texto-fraco">{subtitulo}</div>}
+              {subtitulo && <div className="mt-0.5 text-[13px] text-texto-fraco">{subtitulo}</div>}
             </div>
             <div className="flex shrink-0 items-center gap-1">
               {acoesCabecalho}
@@ -91,16 +98,16 @@ export default function Modal({
                 onClick={onFechar}
                 aria-label={rotuloFechar}
                 title={rotuloFechar}
-                className="panel-cut-tr flex h-10 w-10 items-center justify-center text-texto-fraco transition-colors duration-200 hover:bg-superficie-alta hover:text-texto"
+                className="flex h-9 w-9 items-center justify-center rounded-[var(--radius-pequeno)] text-texto-fraco transition-colors duration-150 hover:bg-superficie-alta hover:text-texto"
               >
-                <IconeFechar />
+                <IconeFechar className="h-[18px] w-[18px]" />
               </button>
             </div>
           </header>
         )}
-        <div className={`min-h-0 flex-1 overflow-y-auto px-4 py-4 lg:px-6 lg:py-5 ${corpoClassName}`}>{children}</div>
+        <div className={`min-h-0 flex-1 overflow-y-auto px-4 py-4 lg:px-5 lg:py-5 ${corpoClassName}`}>{children}</div>
         {rodape && (
-          <footer className="flex flex-wrap items-center justify-end gap-2 border-t border-borda bg-superficie-alta/40 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:px-6">
+          <footer className="flex flex-wrap items-center justify-end gap-2 border-t border-borda bg-superficie-alta/50 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:px-5">
             {rodape}
           </footer>
         )}
