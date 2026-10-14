@@ -83,14 +83,14 @@ export function dataHora(iso) {
 // parseado) da stats-only, montada só com o que a API da plataforma devolve — que não
 // tem ADR, KAST, rating, rounds nem Replay 2D. Ver matches.tem_demo.
 export function origemPartida(source, temDemo = true) {
-  if (source === 'upload') return { label: 'MANUAL', title: 'Demo enviada manualmente' }
+  if (source === 'upload') return { label: 'Manual', title: 'Demo enviada manualmente' }
   if (!temDemo) {
     return {
       label: 'SEM DEMO',
       title: 'Só as estatísticas da plataforma — envie a demo pra completar (ADR, KAST, rating, replay)',
     }
   }
-  return { label: 'AUTO', title: 'Baixada automaticamente pelo Coletor' }
+  return { label: 'Auto', title: 'Baixada automaticamente pelo Coletor' }
 }
 
 // Verde/vermelho/neutro para rating estilo HLTV.

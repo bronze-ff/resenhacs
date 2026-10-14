@@ -3,7 +3,9 @@ import { Link } from 'react-router-dom'
 import { nomeMapa, dataHora, origemPartida, corRating } from '../lib/format.js'
 import { orientarPlacar } from '../lib/resultado.js'
 import FiltroPeriodo from '../components/FiltroPeriodo.jsx'
-import { Avatar, Card, SectionHeader, Badge, MapIcon, Select, ResultChip, PlataformaBadge } from '../components/ui'
+import {
+  Abas, Avatar, Badge, Button, CabecalhoPagina, Card, EstadoVazio, MapIcon, PlataformaBadge, ResultChip, Select, SkeletonLista,
+} from '../components/ui'
 
 const MAPAS = ['de_anubis', 'de_ancient', 'de_cache', 'de_dust2', 'de_inferno', 'de_mirage', 'de_nuke', 'de_overpass', 'de_train', 'de_vertigo']
 
@@ -30,69 +32,83 @@ function resultadoDoGrupo(m) {
   return 'misto'
 }
 
-// Linha de contexto: nomes dos times (partida pro) ou jogadores rastreados, com o MVP
-// destacado por um mini-avatar (dá "rosto" ao dado, igual à referência do Faceit) — mesmo
-// dado nos dois casos, um jeito só de montar.
-function contextoPartida(m) {
-  const mvpChip = m.mvp && (
+// Jogadores do grupo na Partida, com rosto: pilha de avatares (o /api/matches não
+// manda avatar no `tracked`, então o Feed cruza com a lista de /api/players que já
+// carrega pro filtro) + nicks. O MVP vem por último, destacado. Partida pro mostra os
+// nomes dos times no lugar.
+function GrupoDaPartida({ m, avatares }) {
+  const comAvatar = (p) => ({ ...p, avatarUrl: p.avatarUrl ?? avatares.get(p.steamId) ?? null })
+  const mvp = m.mvp ? comAvatar(m.mvp) : null
+  const mvpChip = mvp && (
     <span className="inline-flex items-center gap-1.5 align-middle">
-      <Avatar p={m.mvp} size={16} />
-      <span className="text-texto">{m.mvp.nick}</span>
+      <span className="font-mono text-[11px] font-bold text-ouro">MVP</span>
+      <span className="text-texto">{mvp.nick}</span>
     </span>
   )
   if (m.source === 'pro' && m.teamAName && m.teamBName) {
     return (
-      <>
-        {m.teamAName} x {m.teamBName}
+      <div className="truncate font-mono text-xs text-texto-fraco">
+        <span className="text-texto">{m.teamAName}</span> x <span className="text-texto">{m.teamBName}</span>
         {mvpChip && <span> · {mvpChip}</span>}
-      </>
+      </div>
     )
   }
-  if (m.tracked?.length > 0) {
-    const outros = m.tracked.filter((t) => t.steamId !== m.mvp?.steamId)
-    return (
-      <>
+  if (!m.tracked?.length) return null
+  const outros = m.tracked.filter((t) => t.steamId !== m.mvp?.steamId)
+  const rostos = [...outros, ...(mvp ? [mvp] : [])].map(comAvatar)
+  const extras = rostos.length - 5
+  return (
+    <div className="flex min-w-0 items-center gap-2.5">
+      <span className="flex shrink-0 -space-x-1.5">
+        {rostos.slice(0, 5).map((p) => (
+          <Avatar key={p.steamId} p={p} size={22} />
+        ))}
+        {extras > 0 && (
+          <span className="panel-cut-sm flex h-[22px] min-w-[22px] items-center justify-center border border-borda bg-superficie-alta px-1 font-mono text-[11px] text-texto-fraco">
+            +{extras}
+          </span>
+        )}
+      </span>
+      <span className="min-w-0 truncate font-mono text-xs text-texto-fraco">
         {outros.map((t) => t.nick).join(', ')}
-        {mvpChip && <span>{outros.length > 0 && ', '}{mvpChip}</span>}
-      </>
-    )
-  }
-  return null
+        {mvpChip && <span>{outros.length > 0 && ' · '}{mvpChip}</span>}
+      </span>
+    </div>
+  )
 }
 
 // Uma linha por Partida — layout único que reflui (não duas árvores JSX mobile/desktop
 // separadas): mapa+nome+badges numa ponta, chip de resultado sempre grudado na outra,
 // e a linha inteira quebra pro card empilhar em telas estreitas sem duplicar código.
-// Sem side-stripe colorido pra indicar vitória/derrota (ver docs/produto/DESIGN.md, Don't) — o chip
-// preenchido + ícone já comunicam isso sozinhos.
-function CardPartida({ m }) {
+// Sem side-stripe colorido pra indicar vitória/derrota (ver
+// docs/produto/DESIGN.md, Don't) — o chip preenchido + ícone já comunicam isso sozinhos.
+function CardPartida({ m, avatares }) {
   const resultado = resultadoDoGrupo(m)
   const origem = origemPartida(m.source, m.temDemo)
   const { a, b } = orientarPlacar(m.scoreA, m.scoreB, resultado)
-  const contexto = contextoPartida(m)
 
   return (
-    <Card as={Link} interativo to={`/partida/${m.id}`} className="block p-4 hover:bg-superficie-alta">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <MapIcon map={m.map} size={44} />
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-          <span className="w-full truncate font-display text-lg font-bold uppercase tracking-wide text-texto lg:w-auto">
-            {nomeMapa(m.map)}
-          </span>
-          {m.source === 'pro' && <Badge tom="destaque" className="shrink-0">PRO</Badge>}
-          <PlataformaBadge source={m.source} plataformaManual={m.plataformaManual} className="shrink-0" />
-          <Badge tom="neutro" title={origem.title} className="shrink-0">{origem.label}</Badge>
+    <Card as={Link} interativo to={`/partida/${m.id}`} className="block">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-3 p-4">
+        <MapIcon map={m.map} size={48} />
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="truncate font-display text-xl font-semibold leading-none text-texto">
+              {nomeMapa(m.map)}
+            </span>
+            {m.source === 'pro' && <Badge tom="destaque" className="shrink-0">PRO</Badge>}
+            <PlataformaBadge source={m.source} plataformaManual={m.plataformaManual} className="shrink-0" />
+            <Badge tom="neutro" title={origem.title} className="shrink-0">{origem.label}</Badge>
+          </div>
+          {dataHora(m.playedAt) && <div className="font-mono text-xs text-texto-fraco">{dataHora(m.playedAt)}</div>}
         </div>
         <div className="ml-auto">
           <ResultChip resultado={resultado} a={a} b={b} />
         </div>
-      </div>
-      {(dataHora(m.playedAt) || contexto) && (
-        <div className="mt-2 truncate pl-[60px] font-mono text-xs text-texto-fraco">
-          {dataHora(m.playedAt)}
-          {contexto && <span> · {contexto}</span>}
+        <div className="w-full min-w-0 empty:hidden sm:pl-16">
+          <GrupoDaPartida m={m} avatares={avatares} />
         </div>
-      )}
+      </div>
     </Card>
   )
 }
@@ -143,20 +159,21 @@ function CardResenha({ s, ativo, onClick }) {
       as="button"
       interativo
       onClick={onClick}
-      className={`w-60 shrink-0 snap-start p-3 text-left ${ativo ? 'border-destaque' : ''}`}
+      aria-pressed={ativo}
+      className={`w-64 shrink-0 snap-start p-4 text-left ${ativo ? '!border-destaque/70 !bg-superficie-alta' : ''}`}
     >
-      <div className="flex items-center justify-between font-mono text-xs text-texto-fraco">
+      <div className="flex items-center justify-between gap-2 font-mono text-xs text-texto-fraco">
         <span>{dataHora(s.inicio)}</span>
-        <span>{s.partidas} partida{s.partidas === 1 ? '' : 's'}</span>
+        <span className="tabular-nums">{s.partidas} partida{s.partidas === 1 ? '' : 's'}</span>
       </div>
-      <div className="mt-1.5 flex items-center gap-2 font-display text-lg font-bold">
-        {s.vitorias > 0 && <span className="text-sucesso">{s.vitorias}V</span>}
-        {s.derrotas > 0 && <span className="text-perigo">{s.derrotas}D</span>}
-        {s.empates > 0 && <span className="text-texto-fraco">{s.empates}E</span>}
-        {s.mistos > 0 && <span className="text-texto-fraco">{s.mistos} misto</span>}
+      <div className="mt-2 flex items-baseline gap-3 font-display text-2xl font-semibold leading-none tabular-nums">
+        {s.vitorias > 0 && <span className="text-sucesso">{s.vitorias}<span className="ml-0.5 text-sm">V</span></span>}
+        {s.derrotas > 0 && <span className="text-perigo">{s.derrotas}<span className="ml-0.5 text-sm">D</span></span>}
+        {s.empates > 0 && <span className="text-texto-fraco">{s.empates}<span className="ml-0.5 text-sm">E</span></span>}
+        {s.mistos > 0 && <span className="text-texto-fraco">{s.mistos}<span className="ml-1 text-sm">misto</span></span>}
       </div>
       {s.destaque && (
-        <div className="mt-2 flex items-center gap-2 border-t border-borda pt-2 font-mono text-xs">
+        <div className="mt-3 flex items-center gap-2 border-t border-borda pt-3 font-mono text-xs">
           <Avatar p={s.destaque} size={22} />
           <div className="min-w-0">
             <Link to={`/jogador/${s.destaque.steamId}`} className="truncate text-texto hover:text-destaque">
@@ -188,9 +205,10 @@ function Resenhas({ sessaoAtiva, onEscolher }) {
 
   return (
     <section>
-      <h3 className="mb-2 font-display text-sm font-semibold uppercase tracking-wide text-texto-fraco">
-        Resenhas recentes
-      </h3>
+      <div className="mb-3 flex items-baseline justify-between gap-3">
+        <h3 className="rotulo">Resenhas recentes</h3>
+        <span className="hidden font-mono text-[11px] text-texto-fraco sm:inline">clique pra filtrar as Partidas</span>
+      </div>
       <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-1">
         {(sessoes ?? []).map((s) => (
           <CardResenha
@@ -301,91 +319,121 @@ export default function Feed() {
     return partidas.filter((m) => resultadoDoGrupo(m) === resultado)
   }, [partidas, resultado])
 
+  const avatares = useMemo(() => new Map(jogadores.filter((j) => j.avatarUrl).map((j) => [j.steamId, j.avatarUrl])), [jogadores])
+  const temFiltro = Boolean(de || ate || mapa || origem || plataforma || resultado || jogador)
+  function limparFiltros() {
+    setDe('')
+    setAte('')
+    setMapa('')
+    setOrigem('')
+    setPlataforma('')
+    setResultado('')
+    setJogador('')
+  }
+
   return (
     <div className="space-y-6">
-      <SectionHeader titulo="Partidas" margem="grande" />
+      <CabecalhoPagina
+        eyebrow="Feed"
+        titulo="Partidas"
+        descricao="Toda Partida do grupo, da mais recente pra trás. Clique numa pra abrir o debrief."
+        className="!mb-0"
+      />
       <SincStatus />
       <Resenhas sessaoAtiva={sessaoAtiva} onEscolher={setSessaoAtiva} />
 
       {sessaoAtiva && (
-        <div className="panel-cut-sm flex items-center gap-3 border border-destaque/60 bg-superficie px-3 py-2 font-mono text-xs">
+        <div className="panel-cut-sm flex flex-wrap items-center gap-3 border border-destaque/50 bg-superficie px-4 py-2 font-mono text-xs">
           <span className="text-texto-fraco">
             Mostrando a Resenha de <span className="text-texto">{dataHora(sessaoAtiva.inicio)}</span> ({sessaoAtiva.partidas} partida{sessaoAtiva.partidas === 1 ? '' : 's'})
           </span>
-          <button onClick={() => setSessaoAtiva(null)} className="ml-auto uppercase text-destaque hover:underline">
+          <Button variante="fantasma" tamanho="sm" onClick={() => setSessaoAtiva(null)} className="ml-auto">
             Limpar
-          </button>
+          </Button>
         </div>
       )}
 
-      <div className={`panel-cut-sm flex flex-col gap-3 border border-borda bg-superficie p-3 lg:flex-row lg:flex-wrap lg:items-center lg:gap-x-5 lg:gap-y-3 ${sessaoAtiva ? 'hidden' : ''}`}>
-        <div className="flex w-full flex-col gap-3 lg:w-auto lg:flex-row lg:flex-wrap lg:items-center">
-          <FiltroPeriodo de={de} ate={ate} onDe={setDe} onAte={setAte} />
-          {/* No mobile os dois selects dividem a largura em grid (a quebra livre deixava
+      <div className={`flex flex-col gap-3 border-y border-borda py-4 ${sessaoAtiva ? 'hidden' : ''}`}>
+        <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center lg:gap-x-4">
+          {/* No mobile os selects dividem a largura em grid (a quebra livre deixava
               cada um de um tamanho, visual quebrado); no desktop segue inline. */}
-          <div className="grid w-full grid-cols-2 gap-2 lg:flex lg:w-auto lg:items-center lg:gap-3">
-            <Select value={mapa} onChange={(e) => setMapa(e.target.value)} className="w-full lg:w-auto" selectClassName="py-1.5 text-xs">
+          <div className="grid w-full grid-cols-2 gap-2 lg:flex lg:w-auto lg:items-center">
+            <Select value={mapa} onChange={(e) => setMapa(e.target.value)} className="w-full lg:w-44">
               <option value="">Todos os mapas</option>
               {MAPAS.map((m) => <option key={m} value={m}>{nomeMapa(m)}</option>)}
             </Select>
-            <Select value={jogador} onChange={(e) => setJogador(e.target.value)} className="w-full lg:w-auto" selectClassName="py-1.5 text-xs">
+            <Select value={jogador} onChange={(e) => setJogador(e.target.value)} className="w-full lg:w-48">
               <option value="">Todos os jogadores</option>
               {jogadores.map((j) => <option key={j.steamId} value={j.steamId}>{j.nick}</option>)}
             </Select>
             {/* col-span-2: terceiro select no grid mobile de 2 colunas — meia largura
                 órfã na segunda linha ficava visualmente quebrada; no lg vira flex e
                 o span é inerte. */}
-            <Select value={plataforma} onChange={(e) => setPlataforma(e.target.value)} className="col-span-2 w-full lg:col-span-1 lg:w-auto" selectClassName="py-1.5 text-xs">
+            <Select value={plataforma} onChange={(e) => setPlataforma(e.target.value)} className="col-span-2 w-full lg:col-span-1 lg:w-48">
               <option value="">Todas as plataformas</option>
               {PLATAFORMAS.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
             </Select>
           </div>
+          <div className="lg:ml-auto">
+            <FiltroPeriodo de={de} ate={ate} onDe={setDe} onAte={setAte} />
+          </div>
         </div>
-        <div className="flex flex-col gap-2 lg:ml-auto lg:flex-row lg:flex-wrap lg:items-center lg:gap-3">
-          <div className="panel-cut-sm flex w-full overflow-hidden border border-borda font-mono text-xs uppercase lg:w-auto">
-            {[['', 'Tudo'], ['vitoria', 'Vitórias'], ['derrota', 'Derrotas']].map(([v, label]) => (
-              <button
-                key={v}
-                onClick={() => setResultado(v)}
-                className={`flex-1 min-h-10 px-3 py-1.5 transition-colors lg:min-h-0 lg:flex-none ${resultado === v ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'}`}
-              >
-                {label}
-              </button>
-            ))}
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-6">
+          <div className="flex items-center gap-3">
+            <span className="rotulo w-16 shrink-0 sm:w-auto">Resultado</span>
+            <Abas
+              rotulo="Filtrar por resultado"
+              valor={resultado}
+              onChange={setResultado}
+              larguraTotal
+              className="sm:w-auto"
+              itens={[
+                { valor: '', rotulo: 'Tudo' },
+                { valor: 'vitoria', rotulo: 'Vitórias' },
+                { valor: 'derrota', rotulo: 'Derrotas' },
+              ]}
+            />
           </div>
-          <div className="panel-cut-sm flex w-full overflow-hidden border border-borda font-mono text-xs uppercase lg:w-auto">
-            {[['', 'Todas'], ['valve_mm', 'Auto'], ['upload', 'Manual']].map(([v, label]) => (
-              <button
-                key={v}
-                onClick={() => setOrigem(v)}
-                className={`flex-1 min-h-10 px-3 py-1.5 transition-colors lg:min-h-0 lg:flex-none ${origem === v ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'}`}
-              >
-                {label}
-              </button>
-            ))}
+          <div className="flex items-center gap-3">
+            <span className="rotulo w-16 shrink-0 sm:w-auto">Origem</span>
+            <Abas
+              rotulo="Filtrar por origem"
+              valor={origem}
+              onChange={setOrigem}
+              larguraTotal
+              className="sm:w-auto"
+              itens={[
+                { valor: '', rotulo: 'Todas' },
+                { valor: 'valve_mm', rotulo: 'Auto' },
+                { valor: 'upload', rotulo: 'Manual' },
+              ]}
+            />
           </div>
+          {temFiltro && (
+            <Button variante="fantasma" tamanho="sm" onClick={limparFiltros} className="self-start sm:ml-auto sm:self-auto">
+              Limpar filtros
+            </Button>
+          )}
         </div>
       </div>
 
-      {visiveis === null && <p className="font-mono text-sm text-texto-fraco">Carregando…</p>}
+      {visiveis === null && <SkeletonLista linhas={5} altura="h-24" rotulo="Carregando Partidas" />}
       {visiveis?.length === 0 && (
-        <p className="font-mono text-sm text-texto-fraco">
-          Nenhuma Partida encontrada com esses filtros.
-        </p>
+        <EstadoVazio
+          titulo="Nenhuma Partida encontrada"
+          descricao={temFiltro ? 'Nada bate com esses filtros. Ajuste o período, o mapa ou o jogador.' : 'Assim que o Coletor sincronizar uma Partida do grupo, ela aparece aqui.'}
+          acao={temFiltro ? <Button variante="secundario" tamanho="sm" onClick={limparFiltros}>Limpar filtros</Button> : null}
+        />
       )}
       <div className="space-y-2">
-        {visiveis?.map((m) => <CardPartida key={m.id} m={m} />)}
+        {visiveis?.map((m) => <CardPartida key={m.id} m={m} avatares={avatares} />)}
       </div>
 
       {temMais && (
         <div className="flex justify-center">
-          <button
-            onClick={carregarMais}
-            disabled={carregandoMais}
-            className="panel-cut-sm min-h-10 border border-borda bg-superficie px-5 py-2 font-mono text-sm uppercase tracking-wide text-texto transition-colors hover:border-destaque hover:text-destaque disabled:cursor-not-allowed disabled:opacity-60"
-          >
+          <Button variante="secundario" onClick={carregarMais} carregando={carregandoMais}>
             {carregandoMais ? 'Carregando…' : 'Carregar mais'}
-          </button>
+          </Button>
         </div>
       )}
     </div>

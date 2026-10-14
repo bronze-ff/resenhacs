@@ -16,7 +16,7 @@ export default function Granadas() {
   }, [])
 
   if (!mapa || !MAPAS_POOL.includes(mapa)) {
-    return <ExplorarMapas contagens={contagens} onEscolher={(m) => setSearchParams({ map: m })} />
+    return <ExplorarMapas eyebrow="Granadas" contagens={contagens} onEscolher={(m) => setSearchParams({ map: m })} />
   }
 
   return <PaginaMapa mapa={mapa} onTrocarMapa={(m) => setSearchParams({ map: m })} />

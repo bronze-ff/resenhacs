@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Card, SectionHeader, Badge } from '../components/ui'
+import { Badge, Button, CabecalhoPagina, Card, EstadoErro, Input, classesBotao } from '../components/ui'
 import { useAuth } from '../auth/AuthContext.jsx'
 import PassoAPassoSteam from '../components/PassoAPassoSteam.jsx'
 
@@ -47,20 +47,18 @@ export default function Perfil() {
     // horizontal à direita e empurrava as seções de baixo pra fora da tela. Mobile
     // continua empilhado.
     <div className="space-y-6">
-      <SectionHeader titulo="Minha conta" />
+      <CabecalhoPagina eyebrow="Perfil" titulo="Minha conta" descricao="Códigos da Steam e contas vinculadas pra importar suas Partidas." className="mb-0" />
 
       <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
       <section className="space-y-3">
-        <h3 className="font-display text-sm font-semibold uppercase tracking-wide text-texto-fraco">
-          Importação automática (Steam)
-        </h3>
+        <h3 className="rotulo">Importação automática (Steam)</h3>
         <Card className="p-4 sm:p-5">
           <button
             type="button"
             onClick={() => setPassoAPassoAberto((v) => !v)}
             className="flex min-h-10 w-full items-center justify-between gap-2 text-left lg:min-h-0"
           >
-            <span className="font-mono text-sm text-texto-fraco">
+            <span className="text-sm text-texto-fraco">
               Não sabe onde pegar os códigos? <span className="text-destaque">Veja o passo a passo</span>
             </span>
             <SetaExpandir aberto={passoAPassoAberto} />
@@ -75,51 +73,38 @@ export default function Perfil() {
               <PassoAPassoSteam />
             </div>
           )}
-          <form onSubmit={salvar} className="mt-4 space-y-3">
-            <div>
-              <label className="block font-mono text-xs uppercase tracking-wide text-texto-fraco" htmlFor="authCode">
-                Código de autenticação de histórico
-              </label>
-              <input
-                id="authCode"
-                value={matchAuthCode}
-                onChange={(e) => setMatchAuthCode(e.target.value)}
-                className="panel-cut-sm min-h-10 w-full border border-borda bg-superficie px-3 py-2 font-mono text-sm lg:min-h-0"
-                placeholder="XXXX-XXXXX-XXXX"
-              />
-            </div>
-            <div>
-              <label className="block font-mono text-xs uppercase tracking-wide text-texto-fraco" htmlFor="shareCode">
-                Share code de partida (ponto de partida da busca)
-              </label>
-              <input
-                id="shareCode"
-                value={lastShareCode}
-                onChange={(e) => setLastShareCode(e.target.value)}
-                className="panel-cut-sm min-h-10 w-full border border-borda bg-superficie px-3 py-2 font-mono text-sm lg:min-h-0"
-                placeholder="CSGO-xxxxx-xxxxx-xxxxx-xxxxx-xxxxx"
-              />
-            </div>
-            <button
-              type="submit"
-              className="panel-cut-sm min-h-10 w-full border border-destaque bg-destaque px-4 py-2 font-display text-sm font-semibold uppercase tracking-wide text-fundo lg:min-h-0 lg:w-auto"
-            >
+          <form onSubmit={salvar} className="mt-4 space-y-4">
+            <Input
+              id="authCode"
+              rotulo="Código de autenticação de histórico"
+              value={matchAuthCode}
+              onChange={(e) => setMatchAuthCode(e.target.value)}
+              className="font-mono"
+              placeholder="XXXX-XXXXX-XXXX"
+            />
+            <Input
+              id="shareCode"
+              rotulo="Share code de partida (ponto de partida da busca)"
+              value={lastShareCode}
+              onChange={(e) => setLastShareCode(e.target.value)}
+              className="font-mono"
+              placeholder="CSGO-xxxxx-xxxxx-xxxxx-xxxxx-xxxxx"
+            />
+            <Button type="submit" variante="primario" className="w-full sm:w-auto">
               Salvar
-            </button>
+            </Button>
           </form>
-          {mensagem && <p className="mt-3 font-mono text-sm text-texto-fraco">{mensagem}</p>}
+          {mensagem && <p role="status" className="mt-3 text-sm text-texto-fraco">{mensagem}</p>}
         </Card>
       </section>
 
       <div className="space-y-6">
       <section className="space-y-3">
-        <h3 className="font-display text-sm font-semibold uppercase tracking-wide text-texto-fraco">
-          Contas vinculadas
-        </h3>
+        <h3 className="rotulo">Contas vinculadas</h3>
         <Card className="flex items-center justify-between gap-3 p-4 sm:p-5">
           <div>
-            <p className="font-display text-sm font-semibold uppercase tracking-wide text-texto">FACEIT</p>
-            <p className="font-mono text-xs text-texto-fraco">
+            <p className="font-display text-sm font-semibold text-texto">FACEIT</p>
+            <p className="text-sm text-texto-fraco">
               {jogador?.faceitNick
                 ? `Vinculado como ${jogador.faceitNick}.`
                 : 'Vincule pra importar suas partidas da FACEIT automaticamente.'}
@@ -130,20 +115,19 @@ export default function Perfil() {
           ) : (
             <a
               href="/api/faceit/login"
-              className="panel-cut-sm inline-flex min-h-10 shrink-0 items-center border border-destaque px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-destaque hover:bg-destaque/10 lg:min-h-0"
+              className={classesBotao({ variante: 'contorno', tamanho: 'sm' })}
             >
               Vincular
             </a>
           )}
         </Card>
         {faceitResultado === 'erro' && (
-          <p className="font-mono text-xs text-perigo">
-            Não deu pra concluir o vínculo com a FACEIT — a autenticação passou, mas a troca de
-            credenciais falhou do nosso lado. Tenta de novo; se persistir, avisa o admin.
-          </p>
+          <EstadoErro
+            mensagem="Não deu pra concluir o vínculo com a FACEIT — a autenticação passou, mas a troca de credenciais falhou do nosso lado. Tenta de novo; se persistir, avisa o admin."
+          />
         )}
         {faceitResultado === 'ok' && !jogador?.faceitNick && (
-          <p className="font-mono text-xs text-texto-fraco">
+          <p className="text-sm text-texto-fraco">
             Vínculo concluído — recarregue a página se o status ainda não atualizou.
           </p>
         )}

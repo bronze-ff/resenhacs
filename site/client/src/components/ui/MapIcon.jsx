@@ -14,7 +14,7 @@ export default function MapIcon({ map, size = 32, className = '' }) {
       <span
         title={nome}
         style={{ width: size, height: size }}
-        className={`panel-cut-sm inline-flex shrink-0 items-center justify-center border border-borda bg-fundo font-mono text-[10px] font-bold uppercase text-destaque ${className}`}
+        className={`panel-cut-sm inline-flex shrink-0 items-center justify-center border border-borda bg-fundo font-mono text-[11px] font-bold text-destaque ${className}`}
       >
         {nome.slice(0, 3)}
       </span>

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { thumbYoutube } from '../../lib/youtube.js'
 import { ROTULO_TECNICA } from '../../lib/rotulos.js'
-import { Card, Badge } from '../ui'
+import { Card, Badge, Button } from '../ui'
 
 // Ícone simples por tipo, desenhado direto em SVG (sem lib de ícones).
 // Exportado (named) pra ser reusado no mini-radar dos cards de Táticas
@@ -14,10 +14,10 @@ import { Card, Badge } from '../ui'
 // Sem essa prop o marcador se comporta exatamente como antes.
 export function MarcadorTipo({ tipo, x, y, ativo, estado }) {
   const corPorTipo = { smoke: '#d2d2d7', flash: '#fff8d6', he: '#ffaa3c', molotov: '#ff6e1e' }
-  const cor = ativo ? '#ffd166' : estado === 'ativo' ? '#ff2e43' : corPorTipo[tipo]
+  const cor = ativo ? '#ffd166' : estado === 'ativo' ? '#ff6a1a' : corPorTipo[tipo]
   const opacidade = estado === 'normal' ? 0.4 : 0.9
   const anel = estado === 'ativo'
-    ? <circle cx={x} cy={y} r="3.1" fill="none" stroke="#ff2e43" strokeWidth="0.6" opacity="0.95" />
+    ? <circle cx={x} cy={y} r="3.1" fill="none" stroke="#ff6a1a" strokeWidth="0.6" opacity="0.95" />
     : estado === 'outro'
       ? <circle cx={x} cy={y} r="2.7" fill="none" stroke="#d2d2d7" strokeWidth="0.4" opacity="0.55" />
       : null
@@ -103,7 +103,7 @@ export default function RadarGranadas({
               fill="#e8e8ec"
               fontSize={c.nivel === 'noob' ? 2.6 : 1.8}
               opacity={c.nivel === 'noob' ? 0.9 : 0.7}
-              style={{ paintOrder: 'stroke', stroke: '#0a0a0c', strokeWidth: 0.5 }}
+              style={{ paintOrder: 'stroke', stroke: '#0a0a0b', strokeWidth: 0.5 }}
             >
               {c.nome}
             </text>
@@ -143,7 +143,7 @@ export default function RadarGranadas({
           )}
           {modoMarcacao?.alvo && (
             <>
-              <circle cx={modoMarcacao.alvo.x * 100} cy={modoMarcacao.alvo.y * 100} r="1.6" fill="#4fb6ff" />
+              <circle cx={modoMarcacao.alvo.x * 100} cy={modoMarcacao.alvo.y * 100} r="1.6" fill="#5aa9ff" />
               <line
                 x1={modoMarcacao.arremesso.x * 100} y1={modoMarcacao.arremesso.y * 100}
                 x2={modoMarcacao.alvo.x * 100} y2={modoMarcacao.alvo.y * 100}
@@ -155,7 +155,7 @@ export default function RadarGranadas({
 
         {!semHover && hovered && !modoMarcacao && (
           <Card
-            className="pointer-events-none absolute z-10 w-56 p-3 shadow-lg"
+            className="pointer-events-none absolute z-10 w-56 p-3 shadow-flutuante"
             style={{
               left: `${Math.min(hovered.alvoX * 100, 62)}%`,
               top: `${Math.min(hovered.alvoY * 100 + 4, 78)}%`,
@@ -168,7 +168,7 @@ export default function RadarGranadas({
             {thumbYoutube(hovered.videoUrl) && (
               <img src={thumbYoutube(hovered.videoUrl)} alt="" className="panel-cut-sm mt-2 w-full" />
             )}
-            <p className="mt-1 font-mono text-[10px] uppercase text-texto-fraco">clique pra ver vídeo e passos</p>
+            <p className="mt-1 font-mono text-[11px] text-texto-fraco">clique pra ver vídeo e passos</p>
           </Card>
         )}
       </div>
@@ -184,12 +184,9 @@ export default function RadarGranadas({
           {thumbYoutube(destacada.videoUrl) && (
             <img src={thumbYoutube(destacada.videoUrl)} alt="" className="panel-cut-sm mt-2 w-full" />
           )}
-          <button
-            onClick={() => onSelecionar(destacada)}
-            className="panel-cut-sm mt-2 min-h-10 w-full border border-destaque bg-destaque/10 px-3 font-mono text-xs uppercase text-destaque hover:bg-destaque/20"
-          >
+          <Button variante="contorno" larguraTotal className="mt-3" onClick={() => onSelecionar(destacada)}>
             Ver vídeo e passos
-          </button>
+          </Button>
         </Card>
       )}
     </div>
