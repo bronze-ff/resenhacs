@@ -893,3 +893,30 @@ describe('detectProvider', () => {
     expect(detectProvider('não é url')).toBeNull()
   })
 })
+
+describe('GET /api/matches — linha do viewer e highlights', () => {
+  it('devolve o K/D/A, rating e ADR de quem está olhando, e a contagem de highlights', async () => {
+    const { app, db } = appWith([
+      ['from matches m', [{
+        id: 'm1', map: 'de_inferno', played_at: null, score_a: 9, score_b: 13, status: 'parsed', source: 'valve_mm',
+        tracked: [], mvp: null, n_highlights: 2,
+        eu: { kills: 18, deaths: 13, assists: 9, rating: '1.12', damage: 1694, roundsPlayed: 22, won: false, team: 'A' },
+      }]],
+    ])
+    const res = await request(app).get('/api/matches').set('Cookie', cookie)
+    expect(res.body[0].eu).toEqual({ kills: 18, deaths: 13, assists: 9, rating: 1.12, adr: 77, won: false, team: 'A' })
+    expect(res.body[0].highlights).toBe(2)
+    const [sql, params] = db.query.mock.calls.find(([s]) => s.includes('from matches m'))
+    expect(sql).toContain('mpe.steam_id64 = $1')
+    expect(params[0]).toBe(STEAM_ID)
+  })
+
+  it('partida de amigo em que o viewer não jogou: eu null', async () => {
+    const { app } = appWith([
+      ['from matches m', [{ id: 'm1', map: 'de_inferno', played_at: null, score_a: 9, score_b: 13, status: 'parsed', source: 'valve_mm', tracked: [], mvp: null, eu: null }]],
+    ])
+    const res = await request(app).get('/api/matches').set('Cookie', cookie)
+    expect(res.body[0].eu).toBeNull()
+    expect(res.body[0].highlights).toBe(0)
+  })
+})

@@ -3,6 +3,9 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { nomeMapa, dataHora, corRating, nomeArma, TIPO_COMPRA } from '../lib/format.js'
 import { Abas, Avatar, Button, classesBotao, EstadoErro, EstadoVazio, Skeleton, SkeletonLista, Card, SectionHeader, StatTile, RatingBadge, DataTable, MapIcon, Badge, Select, PlataformaBadge, SteamIcon, FaceitIcon, faixaPremier, nivelDoElo, corChipDoNivel, TEXTO_POR_NIVEL } from '../components/ui'
 import LinhaEvolucao from '../components/LinhaEvolucao.jsx'
+import DesempenhoRecente from '../components/perfil/DesempenhoRecente.jsx'
+import MapaAtividade from '../components/perfil/MapaAtividade.jsx'
+import PontosFortes from '../components/perfil/PontosFortes.jsx'
 import FiltroPeriodo from '../components/FiltroPeriodo.jsx'
 import TagEstilo from '../components/TagEstilo.jsx'
 import PosicionamentoAgregado from '../components/PosicionamentoAgregado.jsx'
@@ -360,6 +363,14 @@ export default function JogadorPerfil() {
         <StatTile rotulo="Kills" valor={stats.kills} sub={`${stats.deaths} deaths`} />
       </div>
 
+      {/* 2b. Desempenho recente (gráfico das últimas 30) + mapa de atividade, e os
+          pontos fortes contra o grupo — referência FACEIT/Leetify. */}
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <DesempenhoRecente evolucao={evolucao} />
+        <MapaAtividade atividade={data.atividade ?? []} />
+      </div>
+      <PontosFortes pontos={data.pontosFortes ?? []} proprio={viewer?.steamId === jogador.steamId} />
+
       {badges.length > 0 && (
         <section>
           <SectionHeader titulo={<>Conquistas <span className="text-texto-fraco">({badges.length})</span></>} />
@@ -578,13 +589,6 @@ export default function JogadorPerfil() {
       </section>
 
       {/* 8. Resto — evolução, stats avançadas/utilitária, economia e posicionamento. */}
-      <section>
-        <SectionHeader titulo={<>Evolução do rating <span className="text-texto-fraco">(últimas {evolucao.length} partidas)</span></>} />
-        <Card className="p-4">
-          <LinhaEvolucao pontos={evolucao.map((e) => ({ label: dataHora(e.playedAt), valor: e.rating }))} />
-        </Card>
-      </section>
-
       <section>
         <SectionHeader titulo="Detalhado" />
         {(() => {

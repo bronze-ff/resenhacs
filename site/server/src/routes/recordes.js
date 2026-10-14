@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { partidaVisivelExpr } from '../friendships.js'
+import { recordesPessoais } from '../recordesPessoais.js'
 
 // Mesmo gap de "Resenha" que sessions.js usa pra agrupar Partidas da mesma noite —
 // duplicado aqui (não importado) porque é só uma linha de lógica e criar um módulo
@@ -136,6 +137,24 @@ export function createRecordesRouter({ db, requireAuth }) {
     }
 
     res.json({ maisKills, melhorAdr, maiorSequencia, maisClutchesNaNoite })
+  })
+
+  // Recordes PESSOAIS do viewer batidos nos últimos 14 dias (aviso do Feed). Só olha as
+  // Partidas do próprio viewer — são sempre visíveis pra ele, não precisa do filtro de
+  // amizade. Mesma janela de 750 Partidas da rota acima.
+  router.get('/pessoais', requireAuth, async (req, res) => {
+    const { rows } = await db.query(
+      `select * from (
+         select mp.match_id, m.map, m.played_at, mp.kills, mp.damage, mp.rounds_played,
+                mp.rating, mp.utility_damage
+         from match_players mp join matches m on m.id = mp.match_id
+         where mp.steam_id64 = $1 and m.status = 'parsed'
+         order by m.played_at desc nulls last, m.id desc limit 750
+       ) recentes order by played_at asc nulls last`,
+      [req.player.steamId],
+    )
+    const desde = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000)
+    res.json(recordesPessoais(rows, { desde }))
   })
 
   return router
