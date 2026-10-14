@@ -1,4 +1,4 @@
-import { Card, Badge, RatingBadge, ResultChip, MapIcon, Avatar, SteamIcon } from '../components/ui'
+import { Card, Badge, RatingBadge, ResultChip, MapIcon, Avatar, SteamIcon, Button } from '../components/ui'
 import { nomeArma } from '../lib/format.js'
 
 // Corte só nos 4 cantos externos da viewport (mesmo motivo do /entrar: assinatura visual
@@ -285,15 +285,20 @@ function MockHighlights() {
 
 // --- Layout de seção: copy de um lado, mockup do outro, alternando -------------------
 
-function Secao({ titulo, corpo, mockup, inverter = false, className = '' }) {
+function Secao({ numero, eyebrow, titulo, corpo, mockup, inverter = false, className = '' }) {
   return (
-    <section className={`border-t border-borda py-16 sm:py-20 ${className}`}>
-      <div className={`mx-auto grid max-w-5xl items-center gap-10 px-6 lg:grid-cols-2 lg:gap-16 ${inverter ? 'lg:[&>*:first-child]:order-2' : ''}`}>
+    <section className={`border-t border-borda py-16 sm:py-24 ${className}`}>
+      <div className={`mx-auto grid max-w-6xl items-center gap-10 px-6 lg:grid-cols-2 lg:gap-20 ${inverter ? 'lg:[&>*:first-child]:order-2' : ''}`}>
         <div className="min-w-0">
-          <h2 className="text-2xl font-bold uppercase tracking-wide text-texto sm:text-3xl [text-wrap:balance]">
+          <div className="rotulo mb-4 flex items-center gap-3">
+            <span className="font-display text-base font-bold tracking-normal text-destaque">{numero}</span>
+            <span className="h-px w-8 bg-borda-forte" aria-hidden="true" />
+            {eyebrow}
+          </div>
+          <h2 className="text-3xl font-bold uppercase leading-[0.95] tracking-wide text-texto sm:text-5xl [text-wrap:balance]">
             {titulo}
           </h2>
-          <p className="mt-4 max-w-md font-mono text-sm leading-relaxed text-texto-fraco">
+          <p className="mt-5 max-w-md text-base leading-relaxed text-texto-fraco">
             {corpo}
           </p>
         </div>
@@ -310,57 +315,89 @@ export default function Landing() {
       <CornerMark className="right-6 top-6 border-r border-t" />
 
       {/* Barra superior mínima — âncora fixa pro CTA sem depender de rolar até o topo. */}
-      <header className="mx-auto flex max-w-5xl items-center justify-between px-6 py-6">
-        <span className="font-display text-lg font-bold uppercase tracking-widest text-texto">
-          Resenha<span className="text-destaque">.</span>
-        </span>
-        <a
-          href="/api/auth/steam"
-          className="panel-cut-sm border border-borda px-4 py-2 font-mono text-xs uppercase tracking-wide text-texto-fraco transition-colors duration-200 hover:border-destaque hover:text-destaque"
-        >
-          Entrar
-        </a>
+      <header className="sticky top-0 z-20 border-b border-borda/60 bg-fundo/75 backdrop-blur-md">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
+          <span className="flex items-center gap-2.5">
+            <span aria-hidden="true" className="panel-cut-sm flex h-8 w-8 items-center justify-center bg-destaque font-display text-lg font-extrabold text-fundo">R</span>
+            <span className="font-display text-xl font-extrabold uppercase tracking-[0.08em] text-texto">
+              Resenha<span className="text-destaque">.</span>
+            </span>
+          </span>
+          <div className="flex items-center gap-2">
+            <Button as="a" href="/replay-demo" variante="fantasma" tamanho="sm" className="hidden sm:inline-flex">
+              Ver replay de exemplo
+            </Button>
+            <Button as="a" href="/api/auth/steam" variante="secundario" tamanho="sm">
+              Entrar
+            </Button>
+          </div>
+        </div>
       </header>
 
-      {/* Hero */}
-      <div className="relative flex flex-col items-center px-6 pb-20 pt-8 text-center sm:pb-28">
-        <div className="pointer-events-none absolute left-1/2 top-0 h-[500px] w-[600px] -translate-x-1/2 rounded-full bg-destaque/10 blur-[130px]" />
-        <p className="animate-surgir relative font-mono text-xs uppercase tracking-[0.35em] text-destaque" style={{ animationDelay: '0ms' }}>
-          Stats de CS2 por grupo
-        </p>
-        <h1
-          className="animate-surgir relative mt-4 max-w-3xl text-4xl font-bold uppercase tracking-widest text-texto [text-wrap:balance] sm:text-6xl lg:text-7xl"
-          style={{ animationDelay: '90ms' }}
-        >
-          A resenha pós-partida,<br className="hidden sm:block" /> com dado de verdade<span className="text-destaque">.</span>
-        </h1>
-        <p
-          className="animate-surgir relative mt-5 max-w-lg font-mono text-sm leading-relaxed text-texto-fraco sm:text-base"
-          style={{ animationDelay: '180ms' }}
-        >
-          Descoberta automática das Partidas, replay 2D, economia por round e comparativos entre
-          Jogadores, pra parar de discutir quem carregou e ir direto no dado.
-        </p>
-        <a
-          href="/api/auth/steam"
-          className="animate-surgir panel-cut relative mt-9 flex items-center gap-3 border border-destaque bg-destaque px-7 py-3.5 font-display text-sm font-semibold uppercase tracking-wider text-fundo shadow-[0_0_40px_-10px_rgba(255,46,67,0.6)] transition-shadow hover:shadow-[0_0_60px_-8px_rgba(255,46,67,0.8)]"
-          style={{ animationDelay: '280ms' }}
-        >
-          <SteamIcon className="h-5 w-5" />
-          Entrar com Steam
-        </a>
-        <p className="animate-surgir relative mt-6 font-mono text-[11px] uppercase tracking-widest text-texto-fraco/60" style={{ animationDelay: '360ms' }}>
-          Fechado pro grupo, feito pra resenha, não pra internet
-        </p>
+      {/* Hero: copy à esquerda, prévia real do produto à direita. */}
+      <div className="relative">
+        <div className="pointer-events-none absolute -top-20 left-[10%] h-[520px] w-[720px] rounded-full bg-destaque/10 blur-[140px]" />
+        <div className="relative mx-auto grid max-w-6xl items-center gap-12 px-6 pb-20 pt-14 sm:pb-28 sm:pt-20 lg:grid-cols-[1.05fr_1fr] lg:gap-16">
+          <div className="min-w-0 text-center lg:text-left">
+            <p className="animate-surgir rotulo inline-flex items-center gap-2 border border-destaque/30 bg-destaque/5 px-3 py-1.5 !text-destaque" style={{ animationDelay: '0ms' }}>
+              <span className="h-1.5 w-1.5 animate-pulso-sinal rounded-full bg-destaque" aria-hidden="true" />
+              Stats de CS2 por grupo
+            </p>
+            <h1
+              className="animate-surgir mt-6 text-5xl font-extrabold uppercase leading-[0.9] tracking-wide text-texto [text-wrap:balance] sm:text-7xl lg:text-[88px]"
+              style={{ animationDelay: '90ms' }}
+            >
+              A resenha pós-partida, com dado de verdade<span className="text-destaque">.</span>
+            </h1>
+            <p
+              className="animate-surgir mx-auto mt-6 max-w-lg text-base leading-relaxed text-texto-fraco sm:text-lg lg:mx-0"
+              style={{ animationDelay: '180ms' }}
+            >
+              Descoberta automática das Partidas, replay 2D, economia por round e comparativos entre
+              Jogadores, pra parar de discutir quem carregou e ir direto no dado.
+            </p>
+            <div className="animate-surgir mt-9 flex flex-col items-center gap-3 sm:flex-row sm:justify-center lg:justify-start" style={{ animationDelay: '280ms' }}>
+              <Button as="a" href="/api/auth/steam" variante="primario" tamanho="lg" icone={<SteamIcon className="h-5 w-5" />}>
+                Entrar com Steam
+              </Button>
+              <Button as="a" href="/replay-demo" variante="secundario" tamanho="lg">
+                Ver replay de exemplo
+              </Button>
+            </div>
+            <dl className="animate-surgir mx-auto mt-10 grid max-w-md grid-cols-3 divide-x divide-borda border-y border-borda lg:mx-0" style={{ animationDelay: '360ms' }}>
+              {[['Auto', 'Partidas'], ['2D', 'Replay'], ['1v1', 'Head to Head']].map(([valor, rotulo]) => (
+                <div key={rotulo} className="px-3 py-3 text-center lg:text-left">
+                  <dt className="rotulo">{rotulo}</dt>
+                  <dd className="mt-0.5 font-display text-2xl font-bold text-texto">{valor}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+          <div className="animate-surgir relative min-w-0" style={{ animationDelay: '220ms' }}>
+            <img
+              src="/radars/de_mirage.png"
+              alt=""
+              aria-hidden="true"
+              className="pointer-events-none absolute -right-10 -top-10 w-[115%] max-w-none opacity-[0.07] [mask-image:radial-gradient(closest-side,black,transparent)]"
+            />
+            <div className="relative shadow-flutuante">
+              <MockPartida />
+            </div>
+          </div>
+        </div>
       </div>
 
       <Secao
+        numero="01"
+        eyebrow="Partida"
         titulo="Do placar geral ao round que decidiu tudo"
         corpo="Cada Partida abre com a visão de quem jogou bem e desce até o detalhe: o que cada um comprou, quem morreu pra quê, round a round."
         mockup={<MockPartida />}
       />
 
       <Secao
+        numero="02"
+        eyebrow="Replay 2D"
         titulo="Reveja a jogada, não só o resultado"
         corpo="Replay 2D interativo direto no navegador: posicionamento, tiros e rotações de qualquer round, sem precisar baixar ou renderizar vídeo nenhum."
         mockup={<MockReplay2D />}
@@ -368,12 +405,16 @@ export default function Landing() {
       />
 
       <Secao
+        numero="03"
+        eyebrow="Head to Head"
         titulo="Compare dois Jogadores, direto"
         corpo="Rating, ADR, clutch, headshot%: Head to Head lado a lado entre qualquer dupla do grupo, pra saber de verdade quem é melhor em quê."
         mockup={<MockComparar />}
       />
 
       <Secao
+        numero="04"
+        eyebrow="Highlights"
         titulo="Toda discussão tem um Highlight que resolve"
         corpo="ACE, clutch, multi-kill: a plataforma detecta o Momento Notável sozinha e guarda o Clipe anexado do jogo, pronto pra encerrar a discussão do grupo."
         mockup={<MockHighlights />}
@@ -381,23 +422,29 @@ export default function Landing() {
       />
 
       {/* CTA final */}
-      <div className="relative flex flex-col items-center border-t border-borda px-6 py-20 text-center sm:py-24">
-        <h2 className="max-w-md text-2xl font-bold uppercase tracking-wide text-texto [text-wrap:balance] sm:text-3xl">
-          Entra e chama a resenha
-        </h2>
-        <a
-          href="/api/auth/steam"
-          className="panel-cut mt-8 flex items-center gap-3 border border-destaque bg-destaque px-7 py-3.5 font-display text-sm font-semibold uppercase tracking-wider text-fundo shadow-[0_0_40px_-10px_rgba(255,46,67,0.6)] transition-shadow hover:shadow-[0_0_60px_-8px_rgba(255,46,67,0.8)]"
-        >
-          <SteamIcon className="h-5 w-5" />
-          Entrar com Steam
-        </a>
+      <div className="border-t border-borda px-6 py-20 sm:py-28">
+        <div className="panel-cut relative mx-auto flex max-w-4xl flex-col items-center overflow-hidden border border-borda bg-superficie px-6 py-14 text-center">
+          <div className="pointer-events-none absolute inset-x-0 -bottom-40 mx-auto h-72 w-[80%] rounded-full bg-destaque/15 blur-[100px]" />
+          <div className="absolute left-0 top-0 h-[2px] w-24 bg-destaque" aria-hidden="true" />
+          <h2 className="relative max-w-lg text-4xl font-extrabold uppercase leading-[0.95] tracking-wide text-texto [text-wrap:balance] sm:text-5xl">
+            Entra e chama a resenha
+          </h2>
+          <p className="relative mt-4 max-w-sm text-sm text-texto-fraco">
+            Login com a Steam. Quem já é seu amigo lá entra no grupo automático.
+          </p>
+          <Button as="a" href="/api/auth/steam" variante="primario" tamanho="lg" className="relative mt-8" icone={<SteamIcon className="h-5 w-5" />}>
+            Entrar com Steam
+          </Button>
+        </div>
       </div>
 
-      <footer className="border-t border-borda px-6 py-8 text-center">
-        <p className="font-mono text-[11px] uppercase tracking-widest text-texto-fraco/60">
-          Resenha, feito pro grupo, não pra internet
-        </p>
+      <footer className="border-t border-borda px-6 py-8">
+        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-2 sm:flex-row">
+          <span className="font-display text-base font-extrabold uppercase tracking-[0.08em] text-texto">
+            Resenha<span className="text-destaque">.</span>
+          </span>
+          <p className="rotulo">Feito pro grupo, não pra internet</p>
+        </div>
       </footer>
 
       <CornerMark className="bottom-6 left-6 border-b border-l" />

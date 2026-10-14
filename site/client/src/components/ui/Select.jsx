@@ -119,7 +119,7 @@ export default function Select({ value, onChange, children, className = '', sele
         // focus-visible (não em `aberto`, que é o estado de dropdown aberto e não
         // reflete navegação por teclado) senão quem navega via Tab perde a referência
         // visual de onde está o foco.
-        className={`peer panel-cut-sm flex min-h-10 w-full items-center gap-2 border bg-superficie py-2 pl-3 pr-9 text-left font-mono text-sm text-texto transition-colors hover:border-destaque/60 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-destaque)] disabled:cursor-not-allowed disabled:opacity-50 lg:min-h-0 ${aberto ? 'border-destaque' : 'border-borda'} ${selectClassName}`}
+        className={`peer panel-cut-tr flex min-h-11 w-full items-center gap-2 border bg-fundo/70 py-2 pl-3 pr-9 text-left text-sm text-texto transition-colors duration-200 hover:border-borda-forte focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-destaque)] disabled:cursor-not-allowed disabled:opacity-50 lg:min-h-10 ${aberto ? 'border-destaque' : 'border-borda'} ${selectClassName}`}
       >
         <span className="truncate">{selecionada?.label ?? ' '}</span>
       </button>
@@ -130,7 +130,7 @@ export default function Select({ value, onChange, children, className = '', sele
         strokeWidth="2"
         strokeLinecap="round"
         strokeLinejoin="round"
-        className={`pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 transition-transform peer-hover:text-destaque peer-focus:text-destaque ${aberto ? 'rotate-180 text-destaque' : 'text-texto-fraco'}`}
+        className={`pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 transition-transform peer-hover:text-texto peer-focus:text-destaque ${aberto ? 'rotate-180 text-destaque' : 'text-texto-fraco'}`}
         aria-hidden="true"
       >
         <path d="M6 9L12 15L18 9" />
@@ -147,7 +147,7 @@ export default function Select({ value, onChange, children, className = '', sele
             // animate-surgir-painel só roda na entrada (o painel some do DOM direto ao
             // fechar, sem saída animada) — @keyframes e o guard de prefers-reduced-motion
             // ficam em index.css junto do resto das animações do projeto.
-            className="panel-cut-sm max-h-60 origin-top animate-surgir-painel overflow-y-auto border border-borda bg-superficie py-1 font-mono text-sm shadow-[0_8px_32px_rgba(0,0,0,0.45)] focus:outline-none"
+            className="panel-cut-tr max-h-72 origin-top animate-surgir-painel overflow-y-auto border border-borda-forte bg-superficie-alta p-1 text-sm shadow-flutuante focus:outline-none"
           >
             {opcoes.map((o, i) => (
               <li
@@ -156,7 +156,7 @@ export default function Select({ value, onChange, children, className = '', sele
                 aria-selected={o.value === selecionada?.value}
                 onMouseEnter={() => setAtivo(i)}
                 onClick={() => escolher(o)}
-                className={`flex min-h-10 cursor-pointer items-center justify-between gap-3 px-3 py-2 lg:min-h-0 ${i === ativo ? 'bg-superficie-alta' : ''} ${o.value === selecionada?.value ? 'text-destaque' : 'text-texto'}`}
+                className={`flex min-h-10 cursor-pointer items-center justify-between gap-3 px-3 py-2 lg:min-h-0 ${i === ativo ? 'bg-superficie-topo' : ''} ${o.value === selecionada?.value ? 'text-destaque' : 'text-texto'}`}
               >
                 <span className="min-w-0 truncate">{o.label}</span>
                 {o.value === selecionada?.value && (

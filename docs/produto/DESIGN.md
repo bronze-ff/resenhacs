@@ -6,23 +6,26 @@ colors:
   destaque-vermelho-fraco: "#4a1219"
   time-a-ambar: "#f5a524"
   time-b-azul: "#4fb6ff"
-  sucesso-verde: "#24d17e"
-  perigo-vermelho: "#ff3b4e"
+  destaque-vermelho-forte: "#ff4b5e"
+  sucesso-verde: "#2fd982"
+  perigo-rosado: "#ff5d73"
   ranking-ouro: "#facc15"
   ranking-prata: "#cbd5e1"
   ranking-bronze: "#d97706"
   aviso-ambar: "#fbbf24"
-  fundo-quase-preto: "#0a0a0c"
-  superficie: "#141419"
-  superficie-alta: "#1d1d24"
-  borda: "#2a2a32"
-  texto: "#f1f2f4"
-  texto-fraco: "#8b8b96"
+  fundo-quase-preto: "#08090b"
+  superficie: "#111317"
+  superficie-alta: "#191c21"
+  superficie-topo: "#22262d"
+  borda: "#262a31"
+  borda-forte: "#363b44"
+  texto: "#f2f3f5"
+  texto-fraco: "#8e95a1"
 typography:
   display:
-    fontFamily: "Rajdhani, system-ui, sans-serif"
-    fontWeight: 600
-    letterSpacing: "0.02em"
+    fontFamily: "Barlow Condensed, Inter, system-ui, sans-serif"
+    fontWeight: 700
+    letterSpacing: "0.01em"
   body:
     fontFamily: "Inter, system-ui, sans-serif"
     fontWeight: 400
@@ -47,11 +50,35 @@ components:
     backgroundColor: "{colors.sucesso-verde}"
     textColor: "{colors.sucesso-verde}"
   badge-perigo:
-    backgroundColor: "{colors.perigo-vermelho}"
-    textColor: "{colors.perigo-vermelho}"
+    backgroundColor: "{colors.perigo-rosado}"
+    textColor: "{colors.perigo-rosado}"
 ---
 
 # Design System: Resenha
+
+## 0. Revisão "HUD refinado" (2026-10)
+
+Revisão completa da identidade a partir de referências de produtos do nicho (scope.gg, Leetify, Blitz.gg,
+Refrag, a própria UI do CS2) e de shots de dashboards de esports no Dribbble/Pinterest. O norte continua o mesmo
+(debriefing pós-partida, corte diagonal como assinatura); o que mudou:
+
+- **Tipografia:** Rajdhani saiu do display (fino e pouco legível abaixo de 16px). Entrou **Barlow Condensed**
+  (500–800), a fonte livre mais próxima da Stratum 2 Condensed que o CS2 usa. Inter continua na prosa — e prosa
+  agora é Inter de verdade, não mono. JetBrains Mono fica só pra dado e rótulo.
+- **Superfícies em 4 degraus** (`fundo` → `superficie` → `superficie-alta` → `superficie-topo`) + `borda-forte`,
+  como no scope.gg. Painéis ganham `realce-topo` (1px de luz no topo) em vez de sombra.
+- **Perigo separado do acento:** antes `#ff2e43` (ação) e `#ff3b4e` (ruim) eram a mesma cor na prática, o que
+  quebrava a Regra do Acento Único. Perigo virou `#ff5d73`, rosado.
+- **Componentes de verdade** em `site/client/src/components/ui`: `Button` (primario, secundario, contorno,
+  fantasma, perigo × sm/md/lg/icone), `Modal` (portal, Escape, trava scroll, folha de baixo no mobile), `Abas`
+  (segmentado pra filtro, sublinhado pra seção), `Input`/`Textarea`/`Campo`, `Skeleton`/`SkeletonLista`,
+  `EstadoVazio`, `EstadoErro`, `CabecalhoPagina`. Tela nova não escreve botão nem casca de modal à mão.
+- **Corte em botão e aba:** só o canto superior direito (`panel-cut-tr`). Dois cortes num elemento de 40px
+  pesavam demais. Painéis grandes seguem com `panel-cut`, chips/avatares com `panel-cut-sm`.
+- **Filtro ativo não é bloco vermelho cheio.** Segmento ativo = `superficie-topo` + barra de 2px no destaque.
+  Vermelho cheio fica pra ação primária.
+- **Navegação:** menu lateral agrupado (Análise, Comunidade, Biblioteca, Conta, Admin), sem a numeração 01–12.
+  Header fixo com blur.
 
 ## 1. Overview
 
@@ -100,7 +127,7 @@ e dois semânticos (sucesso/perigo) reservados só pra julgamento de performance
   Time B nunca deve ver os próprios números pintados de âmbar só porque "sempre foi a cor da esquerda".
 
 ### Tertiary
-- **Verde de Sucesso** (`#24d17e`) / **Vermelho de Perigo** (`#ff3b4e`): julgamento de bom/ruim — rating acima/
+- **Verde de Sucesso** (`#2fd982`) / **Rosa de Perigo** (`#ff5d73`): julgamento de bom/ruim — rating acima/
   abaixo de 1.0, vitória/derrota, fogo amigo. Reservados exclusivamente pra esse julgamento; nunca usados como
   decoração ou pra identificar time.
 
@@ -111,12 +138,13 @@ e dois semânticos (sucesso/perigo) reservados só pra julgamento de performance
   aviso do Replay 2D/Posicionamento Agregado/Mapa de Calor, agora nomeado como token.
 
 ### Neutral
-- **Fundo** (`#0a0a0c`): quase preto, fundo de página inteira.
-- **Superfície** (`#141419`): fundo de painéis/cards — um degrau acima do fundo.
-- **Superfície Alta** (`#1d1d24`): hover de linha, popovers — um degrau acima da superfície.
-- **Borda** (`#2a2a32`): hairlines entre linhas, contorno de painéis, scrollbar.
-- **Texto** (`#f1f2f4`): texto principal, quase branco.
-- **Texto Fraco** (`#8b8b96`): rótulos, texto secundário, metadado.
+- **Fundo** (`#08090b`): quase preto, fundo de página inteira (grade de pontos sutil + brilho vermelho no topo).
+- **Superfície** (`#111317`): fundo de painéis/cards — um degrau acima do fundo.
+- **Superfície Alta** (`#191c21`): hover de linha, popovers, cabeçalho de tabela.
+- **Superfície Topo** (`#22262d`): item ativo (aba, menu), hover dentro de popover.
+- **Borda** (`#262a31`) / **Borda Forte** (`#363b44`): hairlines; a forte é pra hover e contorno de flutuante.
+- **Texto** (`#f2f3f5`): texto principal, quase branco.
+- **Texto Fraco** (`#8e95a1`): rótulos, texto secundário, metadado.
 
 ### Named Rules
 **A Regra do Sinal Duplo.** Nenhum julgamento de bom/ruim depende só da cor verde/vermelho — todo indicador
@@ -125,18 +153,18 @@ daltonismo, mas o custo de reforçar é baixo e a prática é padrão.
 
 ## 3. Typography
 
-**Display Font:** Rajdhani (com fallback `system-ui, sans-serif`)
+**Display Font:** Barlow Condensed (com fallback `Inter, system-ui, sans-serif`)
 **Body Font:** Inter (com fallback `system-ui, sans-serif`)
 **Label/Mono Font:** JetBrains Mono (com fallback `ui-monospace, monospace`)
 
-**Character:** Rajdhani condensado dá peso técnico aos títulos e números grandes sem parecer decorativo; JetBrains
+**Character:** Barlow Condensed dá peso técnico aos títulos e números grandes sem parecer decorativo; JetBrains
 Mono trata todo dado tabular como informação de instrumento, não como texto comum; Inter fica reservado pra prosa
 corrida, que é rara nesse produto — a maior parte da tela é rótulo + número, não parágrafo.
 
 ### Hierarchy
-- **Display** (peso 600-700, Rajdhani, tracking +0.02em): títulos de seção, placar da partida, valores grandes
+- **Display** (peso 600-800, Barlow Condensed, tracking +0.01em): títulos de seção, placar da partida, valores grandes
   de destaque (rating, contagens). Números de display grandes usam `.display-tight` (tracking -0.01em) pra
-  compensar o tracking positivo do Rajdhani em tamanhos maiores.
+  compensar o tracking positivo do display em tamanhos maiores.
 - **Label/Mono** (JetBrains Mono, `text-[10px]` a `text-sm`, uppercase, tracking +0.05em quando é rótulo de
   coluna/badge): todo dado tabular — placares, K/D/A/ADR/Rating, datas, IDs. **A Regra do Número Tabular**: se o
   valor é comparado por magnitude com outro na mesma coluna, ele é mono + `tabular-nums`, alinhado à direita.
@@ -154,12 +182,13 @@ implementação, não uma exceção de design.
 Chapado por padrão em toda superfície de repouso — sem sombra em cards, painéis ou linhas de tabela. Profundidade
 vem de duas fontes só: o corte diagonal (que já cria uma silhueta não-retangular, dispensando sombra pra "separar"
 o painel do fundo) e o contraste entre as três camadas de superfície (fundo → superfície → superfície-alta).
-Elementos **transitórios e flutuantes** (modal, popover, tooltip, dropdown aberto) ganham uma sombra ambiente
+Exceção registrada: `shadow-acento` (brilho vermelho curto) no hover do botão primário, que é estado de
+interação, não repouso. Elementos **transitórios e flutuantes** (modal, popover, tooltip, dropdown aberto) ganham uma sombra ambiente
 sutil — não pra parecer "cartão elevado", mas pra reforçar que aquele elemento está temporariamente por cima do
 resto da tela, já que ele quebra o fluxo normal de camadas.
 
 ### Shadow Vocabulary
-- **Flutuante** (`box-shadow: 0 8px 32px rgba(0,0,0,0.45)`): modais, popovers, dropdowns abertos, tooltip
+- **Flutuante** (token `shadow-flutuante`): modais, popovers, dropdowns abertos, tooltip
   flutuante do Replay 2D/Head to Head. Nunca aplicada a conteúdo em repouso no fluxo normal da página.
 
 ### Named Rules
@@ -173,12 +202,16 @@ Cada componente carrega o corte diagonal como silhueta padrão — a exceção (
 explícito (modal fullscreen mobile, onde o corte exporia o backdrop).
 
 ### Buttons
-- **Shape:** corte diagonal `panel-cut-sm` (canto de 8px cortado), nunca border-radius.
-- **Primary:** fundo vermelho de destaque cheio, texto no tom de fundo (`#0a0a0c`), peso 600, uppercase,
-  tracking largo — mono ou display conforme o contexto.
+- **Componente:** `Button` / `classesBotao()` em `components/ui/Button.jsx`. Nunca escrever a string à mão.
+- **Shape:** corte só no canto superior direito (`panel-cut-tr`), nunca border-radius.
+- **Primary:** fundo vermelho de destaque cheio, texto no tom de fundo (`#08090b`), Barlow Condensed 600,
+  uppercase, tracking 0.06em. Uma ação primária por área.
 - **Hover / Focus:** primary escurece levemente; secundário/ghost ganha borda vermelho-destaque e texto muda pra
   destaque no hover.
-- **Secondary / Ghost:** borda neutra (`borda`), texto `texto-fraco`, sem fundo — vira destaque só no hover/foco.
+- **Secundario:** fundo `superficie-alta`, borda `borda-forte`, texto `texto`.
+- **Contorno:** borda destaque 60%, texto destaque — ação de marca que não é a principal (ex. "Apoie").
+- **Fantasma:** sem borda, texto `texto-fraco`, fundo só no hover.
+- **Perigo:** borda/texto `perigo` — ações destrutivas.
 
 ### Chips (Badge)
 - **Style:** corte `panel-cut-sm`, fórmula fixa border 40% + fundo 10-15% + texto na cor cheia do tom.
@@ -210,8 +243,24 @@ explícito (modal fullscreen mobile, onde o corte exporia o backdrop).
   ganha fundo `superficie-alta`.
 - **Disabled:** opacidade reduzida, cursor `not-allowed`.
 
+### Modais
+- **Componente:** `Modal` em `components/ui/Modal.jsx`, sempre com `useTransicaoModal()` no componente que o abre.
+- Desktop: painel centralizado com `panel-cut`, barra de 2px no destaque no canto superior esquerdo, cabeçalho com
+  título display + X, corpo rolável, rodapé opcional com as ações (primária à direita).
+- Mobile: folha que sobe da base (até 92vh), com alça.
+- Backdrop `fundo/75` + blur leve. Escape fecha. Portal pro `<body>` (clip-path do pai quebrava o fixed).
+
+### Abas
+- **Componente:** `Abas`. `segmentado` pra filtro curto (trilho afundado, item ativo `superficie-topo` + 2px
+  de destaque embaixo). `sublinhado` pra seções de página (barra de 2px sob o item ativo). Setas ←/→ navegam.
+
+### Estados
+- Carregando = `Skeleton`/`SkeletonLista` no formato do conteúdo, nunca "Carregando…" em texto solto.
+- Vazio = `EstadoVazio` (ícone, título, uma frase, uma ação). Erro = `EstadoErro`.
+
 ### Navigation
-- Sidebar fixa à esquerda (desktop) com item ativo marcado por borda esquerda fina + fundo destaque a 10% — a
+- Sidebar fixa à esquerda (desktop), agrupada por intenção, com item ativo marcado por barra de 3px no destaque
+  à esquerda + fundo `superficie-topo` — a
   única exceção tolerada à "Regra do sem side-stripe", porque aqui é indicador de estado de navegação (como uma
   aba ativa), não decoração de card/alerta. Barra inferior fixa no mobile (estilo app), com "Mais" abrindo um
   drawer com o restante do menu.

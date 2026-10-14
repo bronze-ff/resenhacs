@@ -1,3 +1,5 @@
+import { Button } from '../components/ui'
+
 function CornerMark({ className }) {
   return <div className={`pointer-events-none absolute h-10 w-10 border-destaque/25 ${className}`} />
 }
@@ -36,29 +38,32 @@ export default function Entrar() {
           Stats de cs2 por grupo
         </p>
         <h1
-          className="animate-surgir mt-4 font-display text-4xl font-bold uppercase tracking-widest text-texto sm:text-6xl lg:text-7xl"
+          className="animate-surgir mt-5 font-display text-6xl font-extrabold uppercase leading-none tracking-[0.06em] text-texto sm:text-8xl"
           style={{ animationDelay: '90ms' }}
         >
           Resenha<span className="text-destaque">.</span>
         </h1>
         <p
-          className="animate-surgir mt-4 max-w-sm font-mono text-sm leading-relaxed text-texto-fraco"
+          className="animate-surgir mt-5 max-w-sm text-base leading-relaxed text-texto-fraco"
           style={{ animationDelay: '180ms' }}
         >
           Stats, replay 2D e highlights de CS2 — feito pra resenha do grupo, não pra internet.
         </p>
 
-        <a
+        <Button
+          as="a"
           href="/api/auth/steam"
-          className="animate-surgir panel-cut mt-10 flex items-center gap-3 border border-destaque bg-destaque px-7 py-3.5 font-display text-sm font-semibold uppercase tracking-wider text-fundo shadow-[0_0_40px_-10px_rgba(255,46,67,0.6)] transition-shadow hover:shadow-[0_0_60px_-8px_rgba(255,46,67,0.8)]"
+          variante="primario"
+          tamanho="lg"
+          className="animate-surgir mt-10"
           style={{ animationDelay: '280ms' }}
+          icone={<SteamIcon className="h-5 w-5" />}
         >
-          <SteamIcon className="h-5 w-5" />
           Entrar com Steam
-        </a>
+        </Button>
 
         <p
-          className="animate-surgir mt-8 font-mono text-[11px] uppercase tracking-widest text-texto-fraco/60"
+          className="animate-surgir rotulo mt-10 max-w-md leading-relaxed"
           style={{ animationDelay: '360ms' }}
         >
           Depois de entrar, adicione seus amigos na aba Amigos — quem já é seu amigo na Steam entra automático
