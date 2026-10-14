@@ -16,6 +16,7 @@ const LARGURAS = {
 }
 
 const pilhaModais = []
+let overflowOriginal = ''
 
 export function IconeFechar({ className = 'h-5 w-5' }) {
   return (
@@ -47,13 +48,16 @@ export default function Modal({
   useEffect(() => {
     // Pilha de modais abertos: com um modal sobre outro (DetalheGranada sobre
     // DetalheTatica), Escape fecha só o de cima.
+    // A trava de scroll também é da pilha: o primeiro modal guarda o overflow
+    // original e só o último a fechar devolve. Se cada um restaurasse o que viu,
+    // fechar os dois juntos (ex.: navegação) podia deixar o body preso em hidden.
     const marca = {}
+    if (pilhaModais.length === 0) overflowOriginal = document.body.style.overflow
     pilhaModais.push(marca)
     function aoTeclar(e) {
       if (e.key === 'Escape' && pilhaModais[pilhaModais.length - 1] === marca) onFecharRef.current?.()
     }
     document.addEventListener('keydown', aoTeclar)
-    const overflowAntes = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     const focoAntes = document.activeElement
     painelRef.current?.focus({ preventScroll: true })
@@ -61,7 +65,7 @@ export default function Modal({
       document.removeEventListener('keydown', aoTeclar)
       const i = pilhaModais.indexOf(marca)
       if (i !== -1) pilhaModais.splice(i, 1)
-      document.body.style.overflow = overflowAntes
+      if (pilhaModais.length === 0) document.body.style.overflow = overflowOriginal
       if (focoAntes && typeof focoAntes.focus === 'function') focoAntes.focus({ preventScroll: true })
     }
   }, [])
