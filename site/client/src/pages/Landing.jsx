@@ -179,11 +179,11 @@ function MockReplay2D() {
           <line x1="34" y1="40" x2="98" y2="96" stroke="url(#tracado-bala)" strokeWidth="1.5" />
           <line x1="150" y1="160" x2="100" y2="100" stroke="url(#tracado-bala)" strokeWidth="1.5" />
 
-          <circle cx="34" cy="40" r="4" fill="#f5a524" stroke="#0a0a0c" strokeWidth="1.5" />
-          <circle cx="44" cy="52" r="4" fill="#f5a524" stroke="#0a0a0c" strokeWidth="1.5" />
-          <circle cx="150" cy="160" r="4" fill="#4fb6ff" stroke="#0a0a0c" strokeWidth="1.5" />
-          <circle cx="162" cy="150" r="4" fill="#4fb6ff" stroke="#0a0a0c" strokeWidth="1.5" />
-          <circle cx="100" cy="100" r="4" fill="#4fb6ff" stroke="#0a0a0c" strokeWidth="1.5" opacity="0.5" />
+          <circle cx="34" cy="40" r="4" fill="#f5a524" stroke="#08090b" strokeWidth="1.5" />
+          <circle cx="44" cy="52" r="4" fill="#f5a524" stroke="#08090b" strokeWidth="1.5" />
+          <circle cx="150" cy="160" r="4" fill="#4fb6ff" stroke="#08090b" strokeWidth="1.5" />
+          <circle cx="162" cy="150" r="4" fill="#4fb6ff" stroke="#08090b" strokeWidth="1.5" />
+          <circle cx="100" cy="100" r="4" fill="#4fb6ff" stroke="#08090b" strokeWidth="1.5" opacity="0.5" />
         </svg>
 
         <div className="absolute bottom-2 left-2 flex items-center gap-1.5 rounded-sm bg-fundo/80 px-2 py-1 font-mono text-[10px] text-texto-fraco">

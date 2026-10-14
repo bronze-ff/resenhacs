@@ -1,65 +1,86 @@
 @import 'tailwindcss';
 
 /*
-  Direção: HUD tático / mission control. Painéis com cantos cortados (ecoando os
-  próprios painéis do HUD do CS2), acento âmbar único e decisivo, dados sempre em
-  monoespaçada (leitura tabular rápida), fundo com grid sutil de "radar".
+  Direção: "HUD refinado" — debriefing pós-partida com acabamento de produto.
+  Corte diagonal como assinatura (painéis, botões, chips), um único acento vermelho
+  para ação/seleção, escala de superfícies em 4 degraus, números sempre em mono
+  tabular e títulos em Barlow Condensed (a fonte livre mais próxima da Stratum 2
+  Condensed que o próprio CS2 usa). Detalhe em docs/produto/DESIGN.md.
 */
 
 @theme {
-  --font-sans: 'Inter', sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
-  --font-display: 'Rajdhani', sans-serif;
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --font-display: 'Barlow Condensed', 'Inter', system-ui, sans-serif;
 
-  --color-fundo: #0a0a0c;
-  --color-superficie: #141419;
-  --color-superficie-alta: #1d1d24;
-  --color-borda: #2a2a32;
-  --color-texto: #f1f2f4;
-  --color-texto-fraco: #8b8b96;
+  /* Superfícies: fundo → superficie → superficie-alta → superficie-topo. */
+  --color-fundo: #08090b;
+  --color-superficie: #111317;
+  --color-superficie-alta: #191c21;
+  --color-superficie-topo: #22262d;
+  --color-borda: #262a31;
+  --color-borda-forte: #363b44;
+  --color-texto: #f2f3f5;
+  --color-texto-fraco: #8e95a1;
 
+  /* Acento único de ação/seleção. Nunca usado pra julgar bom/ruim. */
   --color-destaque: #ff2e43;
+  --color-destaque-forte: #ff4b5e;
   --color-destaque-fraco: #4a1219;
+
+  /* Times (CT/T) — seguem o time real do jogador mostrado. */
   --color-time-a: #f5a524;
   --color-time-b: #4fb6ff;
-  --color-sucesso: #24d17e;
-  --color-perigo: #ff3b4e;
 
-  /* Medalhas do Ranking (1º/2º/3º lugar) — mesmos tons que já estavam hardcoded como
-     text-yellow-400/text-slate-300/text-amber-600, agora como token pra não depender da
-     paleta padrão do Tailwind. */
+  /* Julgamento bom/ruim. Perigo é rosado de propósito: não pode se confundir com o
+     acento de ação (antes eram #ff2e43 e #ff3b4e, praticamente a mesma cor). */
+  --color-sucesso: #2fd982;
+  --color-perigo: #ff5d73;
+
   --color-ouro: #facc15;
   --color-prata: #cbd5e1;
   --color-bronze: #d97706;
-  /* Aviso (ex.: mapa sem calibração de radar) — mesmo tom já usado nos 3 componentes de replay/mapa. */
   --color-aviso: #fbbf24;
+
+  --shadow-flutuante: 0 12px 40px -8px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(255 255 255 / 0.04);
+  --shadow-acento: 0 6px 24px -6px rgb(255 46 67 / 0.45);
+
+  --ease-saida: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 body {
   background-color: var(--color-fundo);
   color: var(--color-texto);
   font-family: var(--font-sans);
+  font-feature-settings: 'cv11', 'ss01';
   background-image:
-    radial-gradient(ellipse 900px 500px at 15% -10%, rgba(255, 46, 67, 0.05), transparent 60%),
-    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
-  background-size: auto, 44px 44px, 44px 44px;
+    radial-gradient(ellipse 1100px 520px at 10% -12%, rgb(255 46 67 / 0.07), transparent 62%),
+    radial-gradient(ellipse 900px 600px at 105% 110%, rgb(79 182 255 / 0.035), transparent 60%),
+    radial-gradient(rgb(255 255 255 / 0.05) 1px, transparent 1px);
+  background-size: auto, auto, 24px 24px;
   background-attachment: fixed;
 }
 
 h1, h2, h3, .font-display {
   font-family: var(--font-display);
-  letter-spacing: 0.02em;
+  letter-spacing: 0.01em;
 }
 
 /* Todo dado numérico tabular vira monoespaçado — sem precisar tocar em cada JSX. */
 .tabular-nums {
   font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
 
 /* Tracking negativo sutil pros tamanhos grandes de display (valores de stat, números FACEIT). */
 .display-tight {
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
 }
 
 ::selection {
@@ -68,15 +89,15 @@ h1, h2, h3, .font-display {
 }
 
 * {
-  scrollbar-color: var(--color-borda) var(--color-fundo);
+  scrollbar-color: var(--color-borda-forte) transparent;
   scrollbar-width: thin;
 }
 *::-webkit-scrollbar { width: 10px; height: 10px; }
-*::-webkit-scrollbar-track { background: var(--color-fundo); }
+*::-webkit-scrollbar-track { background: transparent; }
 *::-webkit-scrollbar-thumb {
-  background: var(--color-borda);
+  background: var(--color-borda-forte);
   border-radius: 0;
-  border: 2px solid var(--color-fundo);
+  border: 3px solid var(--color-fundo);
 }
 *::-webkit-scrollbar-thumb:hover { background: var(--color-destaque-fraco); }
 
@@ -88,6 +109,25 @@ h1, h2, h3, .font-display {
 }
 @utility panel-cut-sm {
   clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+}
+/* Só um canto (superior direito) cortado — botões e abas, onde dois cortes pesam demais. */
+@utility panel-cut-tr {
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);
+}
+
+/* Rótulo micro padrão (eyebrow) — mono caixa alta, tracking largo. */
+@utility rotulo {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.4;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--color-texto-fraco);
+}
+
+/* Brilho de borda superior — dá "vidro" aos painéis sem sombra em repouso. */
+@utility realce-topo {
+  box-shadow: inset 0 1px 0 0 rgb(255 255 255 / 0.04);
 }
 
 @keyframes pulso-sinal {
@@ -103,7 +143,7 @@ h1, h2, h3, .font-display {
   to { opacity: 1; transform: translateY(0); }
 }
 .animate-surgir {
-  animation: surgir 0.45s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  animation: surgir 0.45s var(--ease-saida) backwards;
 }
 
 /* Entrada sutil do painel de opções do Select (fade + leve translate/scale) — sem saída
@@ -113,7 +153,23 @@ h1, h2, h3, .font-display {
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 .animate-surgir-painel {
-  animation: surgir-painel 0.12s ease-out;
+  animation: surgir-painel 0.14s var(--ease-saida);
+}
+
+/* Skeleton: faixa clara varrendo o bloco. Substitui "Carregando…" em texto cru. */
+@keyframes brilho-skeleton {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+.animate-skeleton {
+  background-image: linear-gradient(
+    90deg,
+    var(--color-superficie-alta) 0%,
+    var(--color-superficie-topo) 50%,
+    var(--color-superficie-alta) 100%
+  );
+  background-size: 200% 100%;
+  animation: brilho-skeleton 1.4s ease-in-out infinite;
 }
 
 /* Respeita a preferência do SO por menos movimento — anula qualquer animação/transição/
@@ -133,6 +189,7 @@ button:not(:disabled):focus-visible,
 a:focus-visible,
 [tabindex]:focus-visible,
 input:focus-visible,
+textarea:focus-visible,
 select:focus-visible {
   outline: 2px solid var(--color-destaque);
   outline-offset: 2px;

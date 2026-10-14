@@ -17,10 +17,13 @@ export default function SectionHeader({ titulo, subtitulo, acao, margem = 'padra
   return (
     <div className={MARGENS[margem] ?? MARGENS.padrao}>
       <div className={`flex items-center justify-between gap-3 ${subtitulo != null ? 'mb-1' : ''} ${className}`.trim()}>
-        <h2 className="min-w-0 truncate font-display text-lg font-semibold uppercase tracking-wide text-texto">{titulo}</h2>
+        <h2 className="flex min-w-0 items-center gap-2 truncate font-display text-xl font-bold uppercase tracking-wide text-texto">
+          <span className="h-3.5 w-[3px] shrink-0 bg-destaque" aria-hidden="true" />
+          <span className="min-w-0 truncate">{titulo}</span>
+        </h2>
         {acao != null && <div className="flex-shrink-0">{acao}</div>}
       </div>
-      {subtitulo != null && <p className="font-mono text-sm text-texto-fraco">{subtitulo}</p>}
+      {subtitulo != null && <p className="text-sm text-texto-fraco">{subtitulo}</p>}
     </div>
   )
 }

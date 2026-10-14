@@ -103,7 +103,7 @@ export default function RadarGranadas({
               fill="#e8e8ec"
               fontSize={c.nivel === 'noob' ? 2.6 : 1.8}
               opacity={c.nivel === 'noob' ? 0.9 : 0.7}
-              style={{ paintOrder: 'stroke', stroke: '#0a0a0c', strokeWidth: 0.5 }}
+              style={{ paintOrder: 'stroke', stroke: '#08090b', strokeWidth: 0.5 }}
             >
               {c.nome}
             </text>
