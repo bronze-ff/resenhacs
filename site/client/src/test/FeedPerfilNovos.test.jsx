@@ -5,7 +5,7 @@ import CardPartidaFeed from '../components/feed/CardPartidaFeed.jsx'
 import SessaoDeHoje, { sessaoDeHoje } from '../components/feed/SessaoDeHoje.jsx'
 import AvisoRecorde from '../components/feed/AvisoRecorde.jsx'
 import DesempenhoRecente from '../components/perfil/DesempenhoRecente.jsx'
-import { montarGrade } from '../components/perfil/MapaAtividade.jsx'
+import MapaAtividade, { montarGrade } from '../components/perfil/MapaAtividade.jsx'
 import PontosFortes, { formatarValor } from '../components/perfil/PontosFortes.jsx'
 
 const comRouter = (ui) => render(<MemoryRouter>{ui}</MemoryRouter>)
@@ -114,6 +114,19 @@ describe('MapaAtividade', () => {
     expect(dias.find((d) => d.chave === '2026-10-14').partidas).toBe(0)
     expect(dias.find((d) => d.chave === '2026-10-15').partidas).toBeNull()
     expect(grade[12][0].data.getDay()).toBe(0)
+  })
+})
+
+describe('MapaAtividade — totais', () => {
+  it('não soma dias que ficaram fora da grade', () => {
+    const hoje = new Date()
+    const dia = (n) => {
+      const d = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() - n)
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    }
+    // 200 dias atrás nunca cabe nas 13 semanas; ontem sempre cabe.
+    render(<MapaAtividade atividade={[{ dia: dia(200), partidas: 9 }, { dia: dia(1), partidas: 2 }]} />)
+    expect(screen.getByRole('img', { name: '2 partidas em 1 dias nas últimas 13 semanas' })).toBeInTheDocument()
   })
 })
 

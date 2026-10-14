@@ -19,12 +19,15 @@ export const METRICAS_RECORDE = [
 // Partida de alguém novo vira "recorde" de tudo.
 // Devolve no máximo um recorde por métrica (o mais recente), do mais novo pro mais velho,
 // só das Partidas jogadas a partir de `desde`.
-export function recordesPessoais(linhas, { desde, minimoAnteriores = 10 } = {}) {
+// `base`: o histórico MAIS VELHO que `linhas`, já agregado — `{ [chave]: { max, n } }`
+// (melhor marca e quantas Partidas com o stat). Sem ele, a comparação começaria do zero
+// na primeira linha recebida.
+export function recordesPessoais(linhas, { desde, minimoAnteriores = 10, base = {} } = {}) {
   const limite = desde ? new Date(desde).getTime() : -Infinity
   const porMetrica = new Map()
   for (const m of METRICAS_RECORDE) {
-    let melhor = null
-    let anteriores = 0
+    let melhor = base[m.chave]?.max ?? null
+    let anteriores = base[m.chave]?.n ?? 0
     for (const r of linhas) {
       const v = m.valor(r)
       if (v == null) continue

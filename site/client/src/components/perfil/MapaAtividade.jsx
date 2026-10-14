@@ -43,8 +43,11 @@ function nivel(n) {
 
 export default function MapaAtividade({ atividade }) {
   const semanas = montarGrade(atividade)
-  const total = (atividade ?? []).reduce((s, a) => s + a.partidas, 0)
-  const diasJogados = (atividade ?? []).filter((a) => a.partidas > 0).length
+  // Totais saem da grade, não da lista crua: a API manda 91 dias corridos e a grade
+  // começa no domingo de 12 semanas atrás, então os dias mais velhos podem não aparecer.
+  const visiveis = semanas.flat().filter((d) => d.partidas != null)
+  const total = visiveis.reduce((s, d) => s + d.partidas, 0)
+  const diasJogados = visiveis.filter((d) => d.partidas > 0).length
   const fmt = new Intl.DateTimeFormat('pt-BR', { day: 'numeric', month: 'short' })
   const meses = semanas.map((dias, i) => {
     const mes = new Intl.DateTimeFormat('pt-BR', { month: 'short' }).format(dias[0].data)
@@ -56,7 +59,7 @@ export default function MapaAtividade({ atividade }) {
     <Card className="p-5">
       <div className="flex items-baseline justify-between gap-2">
         <h3 className="font-display text-base font-semibold text-texto">Atividade</h3>
-        <span className="text-xs text-texto-fraco">últimos 90 dias</span>
+        <span className="text-xs text-texto-fraco">últimas 13 semanas</span>
       </div>
       <div className="mt-4 flex gap-2">
         <div className="grid grid-rows-7 gap-[3px] pt-4 text-[10px] leading-[12px] text-texto-fraco" aria-hidden="true">
@@ -70,7 +73,7 @@ export default function MapaAtividade({ atividade }) {
             className="grid grid-flow-col gap-[3px]"
             style={{ gridTemplateColumns: `repeat(${SEMANAS}, minmax(0, 1fr))`, gridTemplateRows: 'repeat(7, 12px)' }}
             role="img"
-            aria-label={`${total} partidas em ${diasJogados} dias nos últimos 90 dias`}
+            aria-label={`${total} partidas em ${diasJogados} dias nas últimas 13 semanas`}
           >
             {semanas.flat().map((d) => (
               <span
