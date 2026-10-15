@@ -1,6 +1,6 @@
 # Só o necessário para rodar os testes (as transformações são independentes do demoparser2).
 pytest>=9.1.1
-pandas>=3.0.5
+pandas>=3.0.6
 rarfile
 # O job de testes não instala requirements.txt. O init com DSN precisa do mesmo piso.
 sentry-sdk>=2.67.0,<3

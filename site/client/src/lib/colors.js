@@ -16,9 +16,9 @@ export const ROSA = { texto: 'text-[#ec4899]', borda: 'border-[#ec4899]/40', fun
 // o aviso de calibração e o dourado do clutcher triplicados). Se um tom mudar no CSS,
 // muda aqui também — os dois arquivos não se importam entre si, é sincronia manual.
 export const CORES = {
-  fundo: '#0a0a0c',
-  timeA: '#f5a524',
-  timeB: '#4fb6ff',
+  fundo: '#0a0a0b',
+  timeA: '#e9b949',
+  timeB: '#5aa9ff',
   // Medalhas do ranking (posições 1/2/3).
   ouro: '#facc15',
   prata: '#cbd5e1',

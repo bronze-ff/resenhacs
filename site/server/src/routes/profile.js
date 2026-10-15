@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { calcularEstilos, calcularBadges, melhorSequenciaDeVitorias } from '../analise.js'
 import { worldToRadar, isMapaCalibrado } from '../mapCalibration.js'
 import { partidaVisivelExpr } from '../friendships.js'
+import { pontosFortes } from '../pontosFortes.js'
 
 function pct(parte, total) {
   if (!total) return 0
@@ -193,14 +194,14 @@ async function evolucaoRating(db, steamId, from, to, viewerSteamId, limite = 20)
   const visivel = visivelWhere(viewerSteamId, params)
   params.push(limite)
   const { rows } = await db.query(
-    `select m.id, m.played_at, mp.rating
+    `select m.id, m.played_at, mp.rating, mp.won
      from match_players mp join matches m on m.id = mp.match_id
      where mp.steam_id64 = $1 and m.status = 'parsed' and mp.rating is not null${periodo}${visivel}
      order by m.played_at desc nulls last limit $${params.length}`,
     params,
   )
   return rows
-    .map((r) => ({ matchId: r.id, playedAt: r.played_at, rating: Number(r.rating) }))
+    .map((r) => ({ matchId: r.id, playedAt: r.played_at, rating: Number(r.rating), won: r.won ?? null }))
     .reverse() // cronológico, pro gráfico ler da esquerda pra direita
 }
 
@@ -483,7 +484,7 @@ export function createProfileRouter({ db, requireAuth }) {
          order by partidas desc`,
         [steamId, req.player.steamId],
       ),
-      evolucaoRating(db, steamId, from, to, req.player.steamId),
+      evolucaoRating(db, steamId, from, to, req.player.steamId, 30),
       // Badges são conquista de carreira — sempre no histórico INTEIRO visível, não no período filtrado.
       statsAgregados(db, steamId, undefined, undefined, req.player.steamId),
       melhorSequencia(db, steamId, req.player.steamId),
@@ -545,6 +546,36 @@ export function createProfileRouter({ db, requireAuth }) {
       partidas: statsGerais.partidas,
     })
 
+    // Atividade (mapa de calor dos últimos 91 dias) e pontos fortes (percentil no grupo,
+    // últimos 90 dias) usam janela FIXA, não o filtro de período da página: são
+    // "como anda o Jogador agora", e um filtro velho deixaria os dois vazios.
+    const [atividadeQ, grupoQ] = await Promise.all([
+      db.query(
+        `select to_char(m.played_at at time zone 'America/Sao_Paulo', 'YYYY-MM-DD') as dia, count(*)::int as partidas
+         from match_players mp join matches m on m.id = mp.match_id
+         where mp.steam_id64 = $1 and m.status = 'parsed'
+           and m.played_at >= now() - interval '91 days' and ${partidaVisivelExpr('m', '$2')}
+         group by dia order by dia`,
+        [steamId, req.player.steamId],
+      ),
+      db.query(
+        `select mp.steam_id64, count(*)::int as partidas,
+                sum(mp.damage) as dano, sum(mp.rounds_played) as rounds,
+                sum(mp.kills) as kills, sum(mp.headshot_kills) as hs,
+                sum(mp.shots_fired) as tiros, sum(mp.shots_hit) as tiros_acertados,
+                avg(mp.kast_pct) as kast, sum(mp.utility_damage) as util,
+                sum(mp.entry_kills) as entry_kills, sum(mp.entry_deaths) as entry_deaths,
+                sum(mp.clutch_wins) as clutch, sum(mp.flash_assists) as flash_assists
+         from match_players mp join matches m on m.id = mp.match_id
+         where (mp.is_tracked or mp.steam_id64 = $1) and m.status = 'parsed'
+           and m.played_at >= now() - interval '90 days' and ${partidaVisivelExpr('m', '$2')}
+         group by mp.steam_id64 having count(*) >= 3`,
+        [steamId, req.player.steamId],
+      ),
+    ])
+    const atividade = atividadeQ.rows.map((r) => ({ dia: r.dia, partidas: r.partidas }))
+    const fortes = pontosFortes(grupoQ.rows, steamId)
+
     res.json({
       jogador: {
         steamId: jogador.steam_id64, nick: jogador.nick, avatarUrl: jogador.avatar_url,
@@ -563,6 +594,8 @@ export function createProfileRouter({ db, requireAuth }) {
       evolucaoFaceit: faceitRow.rows.slice().reverse().map((r) => ({ playedAt: r.played_at, valor: Number(r.faceit_elo_after) })),
       stats,
       evolucao,
+      atividade,
+      pontosFortes: fortes,
       badges,
       estilo,
       armas,

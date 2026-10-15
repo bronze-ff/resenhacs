@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Card, SectionHeader, Badge } from '../components/ui'
+import { Badge, Button, CabecalhoPagina, Card, EstadoErro, EstadoVazio, Input, SkeletonLista, classesBotao } from '../components/ui'
 
 const TOM_STATUS = {
   pendente: 'neutro', baixando: 'destaque', processando: 'destaque',
@@ -77,29 +77,34 @@ export default function PartidasPro() {
 
   return (
     <div className="space-y-4">
-      <SectionHeader titulo="Partidas pro" />
-      <form onSubmit={adicionar} className="flex flex-col gap-2 lg:flex-row">
-        <input
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          placeholder="Link do demo no HLTV"
-          className="panel-cut-sm min-h-10 w-full border border-borda bg-superficie px-3 py-2 font-mono text-sm lg:min-h-0 lg:flex-1"
-        />
-        <button type="submit" className="panel-cut-sm min-h-10 w-full border border-destaque bg-destaque px-4 py-2 font-display text-sm font-semibold uppercase text-fundo lg:min-h-0 lg:w-auto">
-          Adicionar
-        </button>
-      </form>
-      <label className="panel-cut-sm flex min-h-10 w-full cursor-pointer items-center justify-center gap-2 border border-borda bg-superficie px-4 py-2 font-display text-sm font-semibold uppercase text-texto-fraco hover:text-texto lg:min-h-0 lg:w-fit lg:justify-start">
-        {enviando ? 'Enviando...' : 'Enviar arquivo (.rar/.dem)'}
-        <input
-          type="file"
-          accept=".rar,.dem"
-          disabled={enviando}
-          onChange={enviarArquivo}
-          className="hidden"
-        />
-      </label>
-      {erro && <p className="font-mono text-sm text-perigo">{erro}</p>}
+      <CabecalhoPagina eyebrow="HLTV" titulo="Partidas pro" descricao="Fila de demos profissionais pra processar." className="mb-2" />
+      <Card className="flex flex-col gap-4 p-4">
+        <form onSubmit={adicionar} className="flex flex-col gap-2 lg:flex-row">
+          <Input
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="Link do demo no HLTV"
+            aria-label="Link do demo no HLTV"
+            className="font-mono lg:flex-1"
+          />
+          <Button type="submit" variante="primario" className="w-full lg:w-auto">
+            Adicionar
+          </Button>
+        </form>
+        <label aria-disabled={enviando || undefined} className={classesBotao({ variante: 'secundario', className: 'w-full lg:w-fit' })}>
+          {enviando ? 'Enviando...' : 'Enviar arquivo (.rar/.dem)'}
+          <input
+            type="file"
+            accept=".rar,.dem"
+            disabled={enviando}
+            onChange={enviarArquivo}
+            className="hidden"
+          />
+        </label>
+      </Card>
+      {erro && <EstadoErro mensagem={erro} />}
+      {fila === null && <SkeletonLista linhas={4} altura="h-12" rotulo="Carregando fila" />}
+      {fila?.length === 0 && <EstadoVazio titulo="Fila vazia" descricao="Adicione um link do HLTV ou envie um arquivo." />}
       <div className="space-y-2">
         {fila?.map((f) => (
           <Card key={f.id} className="flex items-center justify-between gap-2 px-3 py-2">
@@ -109,12 +114,9 @@ export default function PartidasPro() {
                 {f.matchIds?.length > 1 ? `${f.matchIds.length} mapas processados` : f.status}
               </Badge>
               {f.status === 'falhou' && (
-                <button
-                  onClick={() => tentarDeNovo(f.id)}
-                  className="panel-cut-sm min-h-10 border border-borda px-2 py-1 font-mono text-[10px] uppercase text-texto-fraco hover:text-texto lg:min-h-0"
-                >
+                <Button tamanho="sm" variante="secundario" onClick={() => tentarDeNovo(f.id)}>
                   Tentar de novo
-                </button>
+                </Button>
               )}
             </div>
           </Card>

@@ -3,17 +3,17 @@
 // formulário de inputs continua em quem usa este componente.
 export default function PassoAPassoSteam() {
   return (
-    <div className="space-y-3 font-mono text-sm leading-relaxed text-texto-fraco">
+    <div className="space-y-3 text-sm leading-relaxed text-texto-fraco">
       <p>
         Para o Resenha achar suas Partidas de matchmaking, cole seu código de autenticação de
         histórico e um share code de partida. Os dois ficam na mesma página da Steam:
       </p>
-      <ol className="list-decimal space-y-2 pl-5">
+      <ol className="list-decimal space-y-2 pl-5 marker:font-mono marker:text-texto-fraco">
         <li>
           Clique no link abaixo — ele tenta abrir direto a página de códigos (pode pedir login
           se você não estiver logado no navegador):{' '}
           <a
-            className="text-destaque underline"
+            className="text-destaque underline underline-offset-2 hover:text-destaque-forte"
             href="https://help.steampowered.com/en/wizard/HelpWithGameIssue/?appid=730&issueid=128"
             target="_blank"
             rel="noreferrer"
@@ -34,9 +34,9 @@ export default function PassoAPassoSteam() {
         <li>
           A página mostra dois valores — copie{' '}
           <span className="text-texto">"Código de autenticação"</span> (o de histórico, formato{' '}
-          <span className="text-texto">XXXX-XXXXX-XXXX</span>) no primeiro campo abaixo, e{' '}
+          <span className="font-mono text-texto">XXXX-XXXXX-XXXX</span>) no primeiro campo abaixo, e{' '}
           <span className="text-texto">"Seu token de partida mais recente"</span> (o share code,
-          formato <span className="text-texto">CSGO-xxxxx-xxxxx-xxxxx-xxxxx-xxxxx</span>) no
+          formato <span className="font-mono text-texto">CSGO-xxxxx-xxxxx-xxxxx-xxxxx-xxxxx</span>) no
           segundo.
         </li>
       </ol>

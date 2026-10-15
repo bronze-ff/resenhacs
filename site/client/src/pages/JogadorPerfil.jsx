@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { nomeMapa, dataHora, corRating, nomeArma, TIPO_COMPRA } from '../lib/format.js'
-import { Card, SectionHeader, StatTile, RatingBadge, DataTable, MapIcon, Badge, Select, PlataformaBadge, SteamIcon, FaceitIcon, faixaPremier, nivelDoElo, corChipDoNivel, TEXTO_POR_NIVEL } from '../components/ui'
+import { Abas, Avatar, Button, classesBotao, EstadoErro, EstadoVazio, Skeleton, SkeletonLista, Card, SectionHeader, StatTile, RatingBadge, DataTable, MapIcon, Badge, Select, PlataformaBadge, SteamIcon, FaceitIcon, faixaPremier, nivelDoElo, corChipDoNivel, TEXTO_POR_NIVEL } from '../components/ui'
 import LinhaEvolucao from '../components/LinhaEvolucao.jsx'
+import DesempenhoRecente from '../components/perfil/DesempenhoRecente.jsx'
+import MapaAtividade from '../components/perfil/MapaAtividade.jsx'
+import PontosFortes from '../components/perfil/PontosFortes.jsx'
 import FiltroPeriodo from '../components/FiltroPeriodo.jsx'
 import TagEstilo from '../components/TagEstilo.jsx'
 import PosicionamentoAgregado from '../components/PosicionamentoAgregado.jsx'
@@ -14,7 +17,7 @@ import { useAuth } from '../auth/AuthContext.jsx'
 function Stat({ rotulo, valor, cor, rating }) {
   return (
     <div className="min-w-0">
-      <div className="font-mono text-[10px] uppercase tracking-wide text-texto-fraco">{rotulo}</div>
+      <div className="rotulo">{rotulo}</div>
       {rating !== undefined ? (
         <RatingBadge valor={rating} className="text-sm" />
       ) : (
@@ -33,14 +36,13 @@ function CardRatingComunidade({ rotulo, icone, corValor, valor, chipExtra, evolu
   // Saldo do período coberto pela evolução (último − primeiro), não da última partida só.
   const delta = evolucao.length >= 2 ? Math.round(evolucao[evolucao.length - 1].valor - evolucao[0].valor) : null
   return (
-    <Card className="relative p-4">
-      <div className="absolute left-0 top-0 h-[2px] w-6 bg-destaque/60" />
-      <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.15em] text-texto-fraco">
+    <Card className="relative p-5">
+      <div className="rotulo flex items-center gap-2">
         {icone}
         {rotulo}
       </div>
       <div className="mt-1.5 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <span className={`font-display text-4xl font-bold tabular-nums display-tight ${corValor}`}>
+        <span className={`font-display text-5xl font-semibold leading-none tabular-nums display-tight ${corValor}`}>
           {Math.round(valor)}
         </span>
         {chipExtra}
@@ -122,32 +124,17 @@ function SecaoHighlights({ destaques }) {
       <SectionHeader titulo={<>Highlights <span className="text-texto-fraco">({destaques.length}) — "em qual partida foi esse mesmo?"</span></>} />
 
       {/* Resumo por tipo — clicável, filtra a lista abaixo. */}
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={() => aplicarFiltroTipo(null)}
-          className={`panel-cut-sm min-h-10 cursor-pointer border px-3 py-2 font-mono text-xs uppercase tracking-wide transition-colors duration-200 sm:min-h-0 ${
-            filtroTipo == null
-              ? 'border-destaque/60 bg-destaque/10 text-destaque'
-              : 'border-borda bg-superficie text-texto-fraco hover:border-destaque/40 hover:text-texto'
-          }`}
-        >
-          Todos ({ordenados.length})
-        </button>
-        {[...contagemPorGrupo.entries()].map(([grupo, qtd]) => (
-          <button
-            key={grupo}
-            type="button"
-            onClick={() => aplicarFiltroTipo(grupo)}
-            className={`panel-cut-sm min-h-10 cursor-pointer border px-3 py-2 font-mono text-xs uppercase tracking-wide transition-colors duration-200 sm:min-h-0 ${
-              filtroTipo === grupo
-                ? 'border-destaque/60 bg-destaque/10 text-destaque'
-                : 'border-borda bg-superficie text-texto-fraco hover:border-destaque/40 hover:text-texto'
-            }`}
-          >
-            {grupo} ({qtd})
-          </button>
-        ))}
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <Abas
+          rotulo="Filtrar highlights por tipo"
+          valor={filtroTipo ?? ''}
+          onChange={(v) => aplicarFiltroTipo(v === '' ? null : v)}
+          className="max-w-full flex-wrap"
+          itens={[
+            { valor: '', rotulo: 'Todos', contagem: ordenados.length },
+            ...[...contagemPorGrupo.entries()].map(([grupo, qtd]) => ({ valor: grupo, rotulo: grupo, contagem: qtd })),
+          ]}
+        />
 
         {mapasDisponiveis.length > 1 && (
           <Select
@@ -156,7 +143,7 @@ function SecaoHighlights({ destaques }) {
               setFiltroMapa(e.target.value)
               setLimite(LIMITE_INICIAL_DESTAQUES)
             }}
-            selectClassName="text-xs uppercase tracking-wide"
+            selectClassName="text-xs"
           >
             <option value="">Todos os mapas</option>
             {mapasDisponiveis.map((m) => (
@@ -166,7 +153,7 @@ function SecaoHighlights({ destaques }) {
         )}
       </div>
 
-      {filtrados.length === 0 && <p className="font-mono text-sm text-texto-fraco">Nenhum highlight com esse filtro.</p>}
+      {filtrados.length === 0 && <EstadoVazio titulo="Nenhum highlight com esse filtro." />}
 
       {filtrados.length > 0 && (
         <>
@@ -191,13 +178,9 @@ function SecaoHighlights({ destaques }) {
 
           {temMais && (
             <div className="mt-3 flex justify-center">
-              <button
-                type="button"
-                onClick={() => setLimite((l) => l + LIMITE_INICIAL_DESTAQUES)}
-                className="panel-cut-sm min-h-10 cursor-pointer border border-borda px-4 py-2 font-mono text-xs uppercase tracking-wide text-texto-fraco transition-colors duration-200 hover:border-destaque/60 hover:text-destaque"
-              >
+              <Button variante="secundario" onClick={() => setLimite((l) => l + LIMITE_INICIAL_DESTAQUES)}>
                 Carregar mais ({filtrados.length - visiveis.length})
-              </button>
+              </Button>
             </div>
           )}
         </>
@@ -217,7 +200,7 @@ function SecaoClipes({ clipes, steamId, viewerSteamId }) {
         acao={
           <Link
             to={`/clipes?jogador=${steamId}`}
-            className="panel-cut-sm min-h-10 border border-borda px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-texto-fraco hover:border-destaque/50 hover:text-destaque lg:min-h-0"
+            className={classesBotao({ variante: 'fantasma', tamanho: 'sm' })}
           >
             Ver todos →
           </Link>
@@ -256,8 +239,24 @@ export default function JogadorPerfil() {
       .catch(() => setErro(true))
   }, [steamId, de, ate])
 
-  if (erro) return <p className="font-mono text-sm text-texto-fraco">Jogador não encontrado.</p>
-  if (!data) return <p className="font-mono text-sm text-texto-fraco">Carregando…</p>
+  if (erro) return <EstadoErro mensagem="Jogador não encontrado." />
+  if (!data) {
+    return (
+      <div className="space-y-6" role="status" aria-label="Carregando perfil">
+        <div className="flex items-center gap-4">
+          <Skeleton className="panel-cut h-20 w-20 shrink-0" />
+          <div className="flex-1 space-y-2">
+            <Skeleton className="h-8 w-56" />
+            <Skeleton className="h-4 w-40" />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          {Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className="panel-cut h-24" />)}
+        </div>
+        <SkeletonLista linhas={5} altura="h-14" rotulo="Carregando perfil" />
+      </div>
+    )
+  }
 
   const { jogador, stats, porMapa, recentes, sinergia, evolucao, badges, estilo, destaques, armas, economia, premierAtual } = data
   const clipes = data.clipes ?? []
@@ -268,23 +267,25 @@ export default function JogadorPerfil() {
   const nivelFaceit = faceitEloAtual != null ? (jogador.faceitSkillLevel ?? nivelDoElo(faceitEloAtual)) : null
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* 1. Header — avatar, nick, badges/estilo (pequenos, ficam aqui mesmo) e filtro de período. */}
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex min-w-0 items-center gap-4">
-          {jogador.avatarUrl && (
-            <img src={jogador.avatarUrl} alt="" className="panel-cut h-16 w-16 shrink-0 border border-borda object-cover" />
-          )}
+      <header className="flex flex-col gap-5 border-b border-borda pb-6 lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex min-w-0 items-center gap-4 sm:gap-5">
+          <Avatar p={jogador} size={80} />
           <div className="min-w-0">
+            <div className="rotulo mb-1.5">Jogador</div>
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="truncate font-display text-2xl font-bold uppercase tracking-wide text-texto">
+              <h2 className="truncate font-display text-3xl font-semibold leading-none text-texto sm:text-5xl">
                 {jogador.nick || jogador.steamId}
               </h2>
               <TagEstilo estilo={estilo} />
               {/* Premier/FACEIT saíram daqui de propósito: viraram o hero logo abaixo
                   (CardRatingComunidade) — o mesmo número duas vezes na mesma dobra é ruído. */}
             </div>
-            <p className="font-mono text-sm text-texto-fraco">{stats.partidas} partidas · {stats.winrate}% de vitória</p>
+            <p className="mt-2 font-mono text-sm text-texto-fraco">
+              <span className="tabular-nums text-texto">{stats.partidas}</span> partidas ·{' '}
+              <span className="tabular-nums text-texto">{stats.winrate}%</span> de vitória
+            </p>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3 lg:gap-4">
@@ -297,7 +298,7 @@ export default function JogadorPerfil() {
             rel="noreferrer"
             title="Abrir perfil na Steam"
             aria-label="Abrir perfil na Steam"
-            className="panel-cut-sm flex min-h-10 items-center border border-borda px-3 py-2 text-texto-fraco transition-colors hover:border-destaque/60 hover:text-destaque lg:min-h-0"
+            className={classesBotao({ variante: 'secundario', tamanho: 'icone' })}
           >
             <SteamIcon className="h-4 w-4" />
           </a>
@@ -308,19 +309,19 @@ export default function JogadorPerfil() {
               rel="noreferrer"
               title={`Abrir perfil na FACEIT (${jogador.faceitNick})`}
               aria-label="Abrir perfil na FACEIT"
-              className="panel-cut-sm flex min-h-10 items-center border border-borda px-3 py-2 text-texto-fraco transition-colors hover:border-destaque/60 hover:text-destaque lg:min-h-0"
+              className={classesBotao({ variante: 'secundario', tamanho: 'icone' })}
             >
               <FaceitIcon className="h-4 w-4" />
             </a>
           )}
           <Link
             to={`/comparar?a=${jogador.steamId}`}
-            className="panel-cut-sm min-h-10 border border-borda px-3 py-2 font-mono text-xs uppercase tracking-wide text-texto-fraco transition-colors hover:border-destaque/60 hover:text-destaque lg:min-h-0"
+            className={classesBotao({ variante: 'secundario' })}
           >
             Comparar com…
           </Link>
         </div>
-      </div>
+      </header>
 
       {/* 1b. Hero de rating de comunidade — o ponto do Premier e o ELO da FACEIT em
           destaque, antes dos tiles (é o número que a resenha mais cita). */}
@@ -339,7 +340,7 @@ export default function JogadorPerfil() {
             corValor={nivelFaceit != null ? (TEXTO_POR_NIVEL[nivelFaceit] ?? TEXTO_POR_NIVEL[1]) : ''}
             valor={faceitEloAtual}
             chipExtra={nivelFaceit != null && (
-              <span className={`panel-cut-sm border px-2 py-0.5 font-mono text-xs font-bold uppercase ${corChipDoNivel(nivelFaceit)}`}>
+              <span className={`panel-cut-sm border px-2 py-0.5 font-mono text-xs font-bold ${corChipDoNivel(nivelFaceit)}`}>
                 Nível {nivelFaceit}
               </span>
             )}
@@ -361,6 +362,14 @@ export default function JogadorPerfil() {
         <StatTile rotulo="Vitórias" valor={`${stats.vitorias}/${stats.partidas}`} sub={`${stats.winrate}%`} />
         <StatTile rotulo="Kills" valor={stats.kills} sub={`${stats.deaths} deaths`} />
       </div>
+
+      {/* 2b. Desempenho recente (gráfico das últimas 30) + mapa de atividade, e os
+          pontos fortes contra o grupo — referência FACEIT/Leetify. */}
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <DesempenhoRecente evolucao={evolucao} />
+        <MapaAtividade atividade={data.atividade ?? []} />
+      </div>
+      <PontosFortes pontos={data.pontosFortes ?? []} proprio={viewer?.steamId === jogador.steamId} />
 
       {badges.length > 0 && (
         <section>
@@ -390,7 +399,7 @@ export default function JogadorPerfil() {
             </span>
           )}
         </>} />
-        {recentes.length === 0 && <p className="font-mono text-sm text-texto-fraco">Nenhuma partida ainda.</p>}
+        {recentes.length === 0 && <EstadoVazio titulo="Nenhuma partida ainda." />}
 
         {recentes.length > 0 && (
           <>
@@ -417,7 +426,7 @@ export default function JogadorPerfil() {
                         >
                           {r.won === true ? 'V' : r.won === false ? 'D' : '—'}
                         </span>
-                        <span className="font-display text-lg font-bold tabular-nums text-texto">{r.scoreA} : {r.scoreB}</span>
+                        <span className="font-display text-lg font-semibold tabular-nums text-texto">{r.scoreA} : {r.scoreB}</span>
                         <MapIcon map={r.map} size={18} />
                         <span className="min-w-0 truncate font-mono text-xs text-texto-fraco">{nomeMapa(r.map)}</span>
                         <PlataformaBadge source={r.source} className="shrink-0" />
@@ -455,9 +464,7 @@ export default function JogadorPerfil() {
                   return (
                     <tr
                       key={r.id}
-                      className={`cursor-pointer border-l-4 ${
-                        r.won === true ? 'border-l-sucesso' : r.won === false ? 'border-l-perigo' : 'border-l-texto-fraco'
-                      }`}
+                      className="cursor-pointer"
                       onClick={() => navegar(`/partida/${r.id}`)}
                     >
                       <td className="px-3 py-2">
@@ -475,7 +482,7 @@ export default function JogadorPerfil() {
                           >
                             {r.won === true ? 'V' : r.won === false ? 'D' : '—'}
                           </span>
-                          <span className="font-display font-bold tabular-nums text-texto">{r.scoreA} : {r.scoreB}</span>
+                          <span className="font-display font-semibold tabular-nums text-texto">{r.scoreA} : {r.scoreB}</span>
                         </span>
                       </td>
                       <td className="px-2 py-2 text-right"><RatingBadge valor={r.rating} /></td>
@@ -508,7 +515,7 @@ export default function JogadorPerfil() {
       {/* 5. Armas. */}
       <section>
         <SectionHeader titulo="Armas" />
-        {armas.length === 0 && <p className="font-mono text-sm text-texto-fraco">Sem dados de arma ainda.</p>}
+        {armas.length === 0 && <EstadoVazio titulo="Sem dados de arma ainda." />}
         <div className="space-y-2">
           {armas.slice(0, 6).map((a) => {
             const maiorKills = armas[0]?.kills || 1
@@ -521,7 +528,7 @@ export default function JogadorPerfil() {
                     {a.temAccuracyConfiavel && <> · {a.accuracy}% precisão</>}
                   </span>
                 </div>
-                <div className="h-1.5 overflow-hidden rounded bg-fundo">
+                <div className="h-1.5 overflow-hidden bg-fundo">
                   <div className="h-full bg-destaque/70" style={{ width: `${(a.kills / maiorKills) * 100}%` }} />
                 </div>
               </Card>
@@ -533,7 +540,7 @@ export default function JogadorPerfil() {
       {/* 6. Por mapa. */}
       <section>
         <SectionHeader titulo="Por mapa" />
-        {porMapa.length === 0 && <p className="font-mono text-sm text-texto-fraco">Sem dados por mapa ainda.</p>}
+        {porMapa.length === 0 && <EstadoVazio titulo="Sem dados por mapa ainda." />}
         <div className="space-y-2">
           {porMapa.map((mp) => (
             <Card key={mp.map} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 p-3">
@@ -556,7 +563,7 @@ export default function JogadorPerfil() {
       {/* 7. Sinergia / com quem joga. */}
       <section>
         <SectionHeader titulo="Com quem mais joga" />
-        {sinergia.length === 0 && <p className="font-mono text-sm text-texto-fraco">Sem duplas registradas ainda.</p>}
+        {sinergia.length === 0 && <EstadoVazio titulo="Sem duplas registradas ainda." />}
         <div className="space-y-2">
           {sinergia.map((s) => (
             <Card
@@ -567,9 +574,7 @@ export default function JogadorPerfil() {
               className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 p-3"
             >
               <span className="flex min-w-0 items-center gap-3 font-mono text-texto">
-                {s.avatarUrl && (
-                  <img src={s.avatarUrl} alt="" className="panel-cut-sm h-8 w-8 shrink-0 border border-borda object-cover" />
-                )}
+                <Avatar p={s} size={32} />
                 <span className="truncate">{s.nick || s.steamId}</span>
               </span>
               <span className="shrink-0 font-mono text-sm text-texto-fraco">
@@ -584,13 +589,6 @@ export default function JogadorPerfil() {
       </section>
 
       {/* 8. Resto — evolução, stats avançadas/utilitária, economia e posicionamento. */}
-      <section>
-        <SectionHeader titulo={<>Evolução do rating <span className="text-texto-fraco">(últimas {evolucao.length} partidas)</span></>} />
-        <Card className="p-4">
-          <LinhaEvolucao pontos={evolucao.map((e) => ({ label: dataHora(e.playedAt), valor: e.rating }))} />
-        </Card>
-      </section>
-
       <section>
         <SectionHeader titulo="Detalhado" />
         {(() => {
@@ -700,10 +698,10 @@ export default function JogadorPerfil() {
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           {Object.entries(economia ?? {}).map(([tipo, e]) => (
             <Card key={tipo} className="p-3">
-              <div className={`font-mono text-xs uppercase tracking-wide ${TIPO_COMPRA[tipo]?.cor ?? 'text-texto-fraco'}`}>
+              <div className={`font-mono text-xs ${TIPO_COMPRA[tipo]?.cor ?? 'text-texto-fraco'}`}>
                 {TIPO_COMPRA[tipo]?.label ?? tipo}
               </div>
-              <div className="mt-1 font-display text-xl font-bold text-texto">
+              <div className="mt-1 font-display text-xl font-semibold text-texto">
                 {e.rounds > 0 ? `${e.winPct}%` : '–'}
               </div>
               <div className="font-mono text-xs text-texto-fraco">{e.won}/{e.rounds} rounds</div>

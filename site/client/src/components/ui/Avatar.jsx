@@ -27,7 +27,7 @@ export default function Avatar({ p, size = 24, className = '' }) {
     <span
       title={titulo}
       style={{ ...estilo, fontSize: Math.round(size * 0.42) }}
-      className={`panel-cut-sm flex flex-shrink-0 items-center justify-center border font-display font-bold ${cor} ${className}`}
+      className={`panel-cut-sm flex flex-shrink-0 items-center justify-center border font-display font-semibold ${cor} ${className}`}
     >
       {inicial}
     </span>

@@ -1,6 +1,6 @@
 // site/client/src/pages/Competicoes.jsx
 import { useEffect, useState } from 'react'
-import { SectionHeader, Card, Badge } from '../components/ui'
+import { Badge, Button, CabecalhoPagina, Card, EstadoErro, EstadoVazio, Input, SectionHeader, Skeleton, classesBotao } from '../components/ui'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { contadorRegressivo, dataHora } from '../lib/format.js'
 import SeletorClipesCompeticao from '../components/SeletorClipesCompeticao.jsx'
@@ -42,52 +42,69 @@ function Leaderboard({ leaderboard, minimoParaRankear, competicaoId, clipeAberto
       })
   }
 
+  const lider = qualificados[0]?.total || 0
+  const corPosicao = ['text-ouro', 'text-prata', 'text-bronze']
+
   return (
     <div className="space-y-3">
-      <div className="panel-cut border border-borda">
-        {qualificados.map((l, i) => (
-          <div key={l.steamId} className="border-b border-borda last:border-b-0">
-            <button
-              type="button"
-              onClick={() => alternar(l.steamId)}
-              aria-expanded={expandido === l.steamId}
-              aria-controls={`leaderboard-painel-${l.steamId}`}
-              className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-superficie-alta"
-            >
-              <span className="font-mono text-texto-fraco">{i + 1}º</span>
-              {l.avatarUrl && <img src={l.avatarUrl} alt="" className="panel-cut-sm h-6 w-6 border border-borda object-cover" />}
-              <span className="flex-1 font-mono text-texto">{l.nick}</span>
-              <span className="font-display font-bold text-destaque tabular-nums">{l.total}</span>
-            </button>
+      {qualificados.length === 0 && (
+        <p className="text-sm text-texto-fraco">Ninguém no ranking ainda — mínimo de {minimoParaRankear} clipes pra entrar.</p>
+      )}
+      {qualificados.length > 0 && (
+        <ol className="panel-cut-sm border border-borda bg-fundo/40">
+          {qualificados.map((l, i) => (
+            <li key={l.steamId} className="border-b border-borda last:border-b-0">
+              <button
+                type="button"
+                onClick={() => alternar(l.steamId)}
+                aria-expanded={expandido === l.steamId}
+                aria-controls={`leaderboard-painel-${l.steamId}`}
+                className={`flex min-h-12 w-full items-center gap-3 px-3 py-2 text-left transition-colors duration-200 hover:bg-superficie-alta ${expandido === l.steamId ? 'bg-superficie-alta' : ''}`}
+              >
+                <span className={`w-8 shrink-0 font-display text-lg font-semibold tabular-nums ${corPosicao[i] ?? 'text-texto-fraco'}`}>{i + 1}º</span>
+                {l.avatarUrl && <img src={l.avatarUrl} alt="" className="h-7 w-7 shrink-0 border border-borda object-cover" />}
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-mono text-sm text-texto">{l.nick}</span>
+                  <span className="mt-1 block h-1 w-full max-w-48 bg-borda" aria-hidden="true">
+                    <span className="block h-full bg-destaque/70" style={{ width: `${lider > 0 ? Math.round((l.total / lider) * 100) : 0}%` }} />
+                  </span>
+                </span>
+                <span className="font-display text-xl font-semibold tabular-nums text-texto">{l.total}</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`h-4 w-4 shrink-0 text-texto-fraco transition-transform duration-200 ${expandido === l.steamId ? 'rotate-180' : ''}`} aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
+              </button>
 
-            {expandido === l.steamId && (
-              <div id={`leaderboard-painel-${l.steamId}`} className="px-3 pb-3">
-                {erroPorJogador[l.steamId] ? (
-                  <p className="font-mono text-xs text-perigo">{erroPorJogador[l.steamId]}</p>
-                ) : clipesPorJogador[l.steamId] === undefined ? (
-                  <p className="font-mono text-xs text-texto-fraco">Carregando…</p>
-                ) : clipesPorJogador[l.steamId].length === 0 ? (
-                  <p className="font-mono text-xs text-texto-fraco">Nenhum clipe pra mostrar.</p>
-                ) : (
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                    {clipesPorJogador[l.steamId].map((c) => (
-                      <CardClipeCompeticao
-                        key={c.id}
-                        clipe={c}
-                        chave={`lb:${c.id}`}
-                        aberto={clipeAberto === `lb:${c.id}`}
-                        onAbrir={onAbrirClipe}
-                        viewerSteamId={viewerSteamId}
-                        location="leaderboardCompeticao"
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
+              {expandido === l.steamId && (
+                <div id={`leaderboard-painel-${l.steamId}`} className="border-t border-borda bg-superficie/60 p-3">
+                  {erroPorJogador[l.steamId] ? (
+                    <EstadoErro mensagem={erroPorJogador[l.steamId]} />
+                  ) : clipesPorJogador[l.steamId] === undefined ? (
+                    <div aria-hidden="true" className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <Skeleton className="panel-cut-sm h-48 w-full" />
+                      <Skeleton className="panel-cut-sm hidden h-48 w-full sm:block" />
+                    </div>
+                  ) : clipesPorJogador[l.steamId].length === 0 ? (
+                    <p className="text-sm text-texto-fraco">Nenhum clipe pra mostrar.</p>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      {clipesPorJogador[l.steamId].map((c) => (
+                        <CardClipeCompeticao
+                          key={c.id}
+                          clipe={c}
+                          chave={`lb:${c.id}`}
+                          aberto={clipeAberto === `lb:${c.id}`}
+                          onAbrir={onAbrirClipe}
+                          viewerSteamId={viewerSteamId}
+                          location="leaderboardCompeticao"
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </li>
+          ))}
+        </ol>
+      )}
       {naoQualificados.length > 0 && (
         <p className="font-mono text-xs text-texto-fraco">
           Ainda não qualificado (mínimo {minimoParaRankear} clipes): {naoQualificados.map((l) => l.nick).join(', ')}
@@ -97,7 +114,22 @@ function Leaderboard({ leaderboard, minimoParaRankear, competicaoId, clipeAberto
   )
 }
 
-function CardCompeticao({ comp, viewerSteamId, onTradelinkEnviado }) {
+function StatusCompeticao({ encerrada, naoComecou }) {
+  if (naoComecou) return <Badge tom="neutro">EM BREVE</Badge>
+  if (encerrada) return <Badge tom="neutro">Encerrada</Badge>
+  return (
+    <Badge tom="sucesso" className="gap-1.5">
+      <span className="h-1.5 w-1.5 rounded-full bg-sucesso" aria-hidden="true" />
+      Ao vivo
+    </Badge>
+  )
+}
+
+function TituloSecao({ children }) {
+  return <h3 className="rotulo mb-3">{children}</h3>
+}
+
+function CardCompeticao({ comp, viewerSteamId, onTradelinkEnviado, destaque = false }) {
   const [tradelink, setTradelink] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [seletorAberto, setSeletorAberto] = useState(false)
@@ -124,65 +156,78 @@ function CardCompeticao({ comp, viewerSteamId, onTradelinkEnviado }) {
     if (res?.ok) onTradelinkEnviado()
   }
 
+  const emAndamento = !encerrada && !naoComecou
+  const temPremio = comp.premioImagemUrl || comp.premioMercadoUrl || comp.premioDescricao
+
   return (
-    <Card className="p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <h2 className="font-display text-xl font-bold text-texto">{comp.nome}</h2>
-          {naoComecou && <Badge tom="neutro">EM BREVE</Badge>}
-        </div>
-        {comp.premioDescricao && <Badge tom="destaque">{comp.premioDescricao}</Badge>}
-      </div>
-      {(comp.premioImagemUrl || comp.premioMercadoUrl) && (
-        <div className="mt-3 flex items-center gap-3">
-          {comp.premioImagemUrl && (
-            <img
-              src={comp.premioImagemUrl}
-              alt={comp.premioDescricao || 'Prêmio da competição'}
-              className="panel-cut-sm h-16 w-16 border border-borda object-cover"
-            />
+    <Card className="overflow-hidden">
+      {/* Topo: identidade + prazo à esquerda, prêmio à direita (embaixo no mobile). */}
+      <div className={`grid ${temPremio ? 'lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]' : ''}`}>
+        <div className="flex flex-col gap-5 p-4 lg:p-6">
+          <div>
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <StatusCompeticao encerrada={encerrada} naoComecou={naoComecou} />
+            </div>
+            <h2 className={`font-display font-semibold leading-none text-texto ${destaque ? 'text-3xl sm:text-4xl' : 'text-2xl'}`}>
+              {comp.nome}
+            </h2>
+            {comp.descricao && <p className="mt-2 max-w-2xl text-sm leading-relaxed text-texto-fraco">{comp.descricao}</p>}
+            {naoComecou && (
+              <p className="mt-2 text-sm text-destaque">Começa em {dataHora(comp.dataInicio)}.</p>
+            )}
+          </div>
+
+          {!encerrada && (
+            <div className="flex flex-wrap items-end gap-x-6 gap-y-4">
+              <p className="flex flex-col gap-1" role="status" aria-live="polite">
+                <span className="rotulo">{naoComecou ? 'INÍCIO EM' : 'TERMINA EM'}</span>
+                <span className={`font-display font-semibold leading-none tabular-nums text-texto ${destaque ? 'text-4xl sm:text-5xl' : 'text-3xl'}`}>
+                  {contadorRegressivo(alvoContador, agora)}
+                </span>
+              </p>
+              {emAndamento && (
+                <Button variante="primario" tamanho="lg" onClick={() => setSeletorAberto(true)}>
+                  Enviar clipe
+                </Button>
+              )}
+            </div>
           )}
-          {comp.premioMercadoUrl && (
-            <a
-              href={comp.premioMercadoUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="panel-cut-sm border border-borda px-2 py-1 font-mono text-xs uppercase tracking-wide text-texto-fraco hover:border-destaque/50 hover:text-destaque"
-            >
-              Ver no mercado ↗
-            </a>
+          {encerrada && (
+            <p className="font-mono text-xs text-texto-fraco">Encerrou em {dataHora(comp.dataFim)}</p>
           )}
         </div>
-      )}
-      {comp.descricao && <p className="mt-2 font-mono text-sm text-texto-fraco">{comp.descricao}</p>}
-      {naoComecou && (
-        <p className="mt-2 font-mono text-sm text-destaque">Começa em {dataHora(comp.dataInicio)}.</p>
-      )}
-      {!encerrada && (
-        <p className="panel-cut-sm mt-3 inline-flex border border-borda bg-fundo px-2 py-1 font-mono text-xs tabular-nums text-texto" role="status" aria-live="polite">
-          <span className="mr-2 text-texto-fraco">{naoComecou ? 'INÍCIO EM' : 'TERMINA EM'}</span>
-          {contadorRegressivo(alvoContador, agora)}
-        </p>
-      )}
-      <div className="mt-3">
-        <h3 className="mb-1 font-display text-sm font-semibold uppercase tracking-wide text-texto-fraco">Regras</h3>
-        <ul className="space-y-1 font-mono text-xs text-texto-fraco">
-          <li>· Período: {dataHora(comp.dataInicio)} até {dataHora(comp.dataFim)}.</li>
-          <li className="text-texto">· Só valem clipes de partidas jogadas dentro do período — partidas de antes não contam.</li>
-          <li>· Até {comp.limiteDiario} clipes por dia, {comp.limiteTotal} no total.</li>
-          <li>· Mínimo de {comp.minimoParaRankear} clipes enviados pra entrar no ranking.</li>
-          <li>· Pontuação: kills (curva não-linear) + headshots + clutch + variedade de armas.</li>
-        </ul>
+
+        {temPremio && (
+          <aside className="flex items-center gap-4 border-t border-borda bg-fundo/50 p-4 lg:flex-col lg:items-stretch lg:justify-center lg:border-l lg:border-t-0 lg:p-6">
+            {comp.premioImagemUrl && (
+              <div className="relative flex h-24 w-32 shrink-0 items-center justify-center lg:h-40 lg:w-full">
+                <img
+                  src={comp.premioImagemUrl}
+                  alt={comp.premioDescricao || 'Prêmio da competição'}
+                  className="max-h-full max-w-full object-contain"
+                />
+              </div>
+            )}
+            <div className="min-w-0 lg:text-center">
+              <div className="rotulo">Prêmio</div>
+              {comp.premioDescricao && (
+                <p className="mt-1 font-display text-lg font-semibold leading-tight text-texto">{comp.premioDescricao}</p>
+              )}
+              {comp.premioMercadoUrl && (
+                <a
+                  href={comp.premioMercadoUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className={classesBotao({ variante: 'secundario', tamanho: 'sm', className: 'mt-3' })}
+                >
+                  Ver no mercado ↗
+                </a>
+              )}
+            </div>
+          </aside>
+        )}
       </div>
 
-      {!encerrada && !naoComecou && (
-        <button
-          onClick={() => setSeletorAberto(true)}
-          className="panel-cut-sm mt-3 min-h-10 border border-destaque bg-destaque/10 px-3 font-mono text-xs uppercase text-destaque hover:bg-destaque/20 lg:min-h-0"
-        >
-          Enviar clipe
-        </button>
-      )}
       {seletorAberto && (
         <SeletorClipesCompeticao
           competicaoId={comp.id}
@@ -191,50 +236,68 @@ function CardCompeticao({ comp, viewerSteamId, onTradelinkEnviado }) {
         />
       )}
 
-      {souVencedor && encerrada && comp.vencedorConfirmado && !comp.tradelinkVencedor && (
-        <form onSubmit={enviarTradelink} className="mt-4 panel-cut-sm border border-destaque bg-destaque/10 p-3">
-          <p className="font-mono text-sm text-destaque">🏆 Você venceu! Informe seu tradelink pra receber o prêmio.</p>
-          <div className="mt-2 flex gap-2">
-            <input
-              value={tradelink}
-              onChange={(e) => setTradelink(e.target.value)}
-              placeholder="Seu tradelink da Steam"
-              className="min-h-10 flex-1 border border-borda bg-superficie px-2 font-mono text-xs text-texto"
-            />
-            <button disabled={enviando} className="panel-cut-sm border border-destaque px-3 font-mono text-xs uppercase text-destaque">
-              {enviando ? '…' : 'Enviar'}
-            </button>
-          </div>
-        </form>
-      )}
-      {souVencedor && encerrada && !comp.vencedorConfirmado && !comp.tradelinkVencedor && (
-        <p className="mt-4 font-mono text-sm text-texto-fraco">
-          Você está na liderança — aguardando confirmação do admin antes de liberar o envio do tradelink.
-        </p>
-      )}
-      {souVencedor && comp.tradelinkVencedor && (
-        <p className="mt-4 font-mono text-sm text-sucesso">Tradelink enviado — aguarde o contato pro envio do prêmio.</p>
-      )}
-
-      {/* Numa agendada o leaderboard é sempre vazio — título sobre caixa vazia só
-          deixa o card "em breve" oco; a seção aparece junto com a competição. */}
-      {!naoComecou && (
-        <div className="mt-4">
-          <h3 className="mb-2 font-display text-sm font-semibold uppercase tracking-wide text-texto-fraco">Leaderboard</h3>
-          <Leaderboard
-            leaderboard={comp.leaderboard}
-            minimoParaRankear={comp.minimoParaRankear}
-            competicaoId={comp.id}
-            clipeAberto={clipeAberto}
-            onAbrirClipe={setClipeAberto}
-            viewerSteamId={viewerSteamId}
-          />
+      {souVencedor && (comp.tradelinkVencedor || encerrada) && (
+        <div className="border-t border-borda px-4 py-4 lg:px-6">
+          {encerrada && comp.vencedorConfirmado && !comp.tradelinkVencedor && (
+            <form onSubmit={enviarTradelink} className="panel-cut-sm border border-ouro/40 bg-ouro/5 p-4">
+              <p className="font-display text-lg font-semibold text-ouro">🏆 Você venceu! Informe seu tradelink pra receber o prêmio.</p>
+              <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                <Input
+                  value={tradelink}
+                  onChange={(e) => setTradelink(e.target.value)}
+                  placeholder="Seu tradelink da Steam"
+                  campoClassName="flex-1"
+                  className="font-mono"
+                />
+                <Button type="submit" variante="primario" carregando={enviando}>Enviar</Button>
+              </div>
+            </form>
+          )}
+          {encerrada && !comp.vencedorConfirmado && !comp.tradelinkVencedor && (
+            <p className="text-sm text-texto-fraco">
+              Você está na liderança — aguardando confirmação do admin antes de liberar o envio do tradelink.
+            </p>
+          )}
+          {comp.tradelinkVencedor && (
+            <p className="flex items-center gap-2 text-sm text-sucesso">
+              <span aria-hidden="true">✓</span> Tradelink enviado — aguarde o contato pro envio do prêmio.
+            </p>
+          )}
         </div>
       )}
 
+      <div className={`grid gap-6 border-t border-borda p-4 lg:p-6 ${!naoComecou ? 'lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]' : ''}`}>
+        <div>
+          <TituloSecao>Regras</TituloSecao>
+          <ul className="space-y-2 text-sm leading-relaxed text-texto-fraco">
+            <li>Período: <span className="font-mono text-xs text-texto">{dataHora(comp.dataInicio)}</span> até <span className="font-mono text-xs text-texto">{dataHora(comp.dataFim)}</span>.</li>
+            <li className="text-texto">Só valem clipes de partidas jogadas dentro do período — partidas de antes não contam.</li>
+            <li>Até <strong className="font-semibold text-texto">{comp.limiteDiario}</strong> clipes por dia, <strong className="font-semibold text-texto">{comp.limiteTotal}</strong> no total.</li>
+            <li>Mínimo de <strong className="font-semibold text-texto">{comp.minimoParaRankear}</strong> clipes enviados pra entrar no ranking.</li>
+            <li>Pontuação: kills (curva não-linear) + headshots + clutch + variedade de armas.</li>
+          </ul>
+        </div>
+
+        {/* Numa agendada o leaderboard é sempre vazio — título sobre caixa vazia só
+            deixa o card "em breve" oco; a seção aparece junto com a competição. */}
+        {!naoComecou && (
+          <div className="min-w-0">
+            <TituloSecao>Leaderboard</TituloSecao>
+            <Leaderboard
+              leaderboard={comp.leaderboard}
+              minimoParaRankear={comp.minimoParaRankear}
+              competicaoId={comp.id}
+              clipeAberto={clipeAberto}
+              onAbrirClipe={setClipeAberto}
+              viewerSteamId={viewerSteamId}
+            />
+          </div>
+        )}
+      </div>
+
       {comp.clipesRecentes?.length > 0 && (
-        <div className="mt-4">
-          <h3 className="mb-2 font-display text-sm font-semibold uppercase tracking-wide text-texto-fraco">Enviados recentemente</h3>
+        <div className="border-t border-borda p-4 lg:p-6">
+          <TituloSecao>Enviados recentemente</TituloSecao>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {comp.clipesRecentes.map((c) => (
               <CardClipeCompeticao
@@ -268,21 +331,51 @@ export default function Competicoes() {
 
   useEffect(carregar, [])
 
-  if (dados === null) return <p className="font-mono text-sm text-texto-fraco">Carregando…</p>
+  const cabecalho = (
+    <CabecalhoPagina
+      eyebrow="Clipes valendo prêmio"
+      titulo="Competições"
+      descricao="Envie seus melhores clipes do período e dispute o prêmio."
+    />
+  )
+
+  if (dados === null) {
+    return (
+      <div>
+        {cabecalho}
+        <div role="status" aria-label="Carregando competições" className="space-y-3">
+          <Skeleton className="panel-cut h-64 w-full" />
+          <Skeleton className="panel-cut h-40 w-full" />
+        </div>
+      </div>
+    )
+  }
+
+  const agendadas = dados.agendadas ?? []
 
   return (
-    <div className="space-y-6">
-      <SectionHeader titulo="Competições" />
-      {!dados.ativa && (dados.agendadas ?? []).length === 0 && dados.encerradas.length === 0 && (
-        <p className="font-mono text-sm text-texto-fraco">Nenhuma competição no momento.</p>
+    <div className="space-y-8">
+      {cabecalho}
+      {!dados.ativa && agendadas.length === 0 && dados.encerradas.length === 0 && (
+        <EstadoVazio titulo="Nenhuma competição no momento." descricao="Quando o admin abrir a próxima, ela aparece aqui." />
       )}
-      {dados.ativa && <CardCompeticao comp={dados.ativa} viewerSteamId={jogador?.steamId} onTradelinkEnviado={carregar} />}
-      {(dados.agendadas ?? []).map((comp) => (
-        <CardCompeticao key={comp.id} comp={comp} viewerSteamId={jogador?.steamId} onTradelinkEnviado={carregar} />
-      ))}
-      {dados.encerradas.map((comp) => (
-        <CardCompeticao key={comp.id} comp={comp} viewerSteamId={jogador?.steamId} onTradelinkEnviado={carregar} />
-      ))}
+      {dados.ativa && <CardCompeticao destaque comp={dados.ativa} viewerSteamId={jogador?.steamId} onTradelinkEnviado={carregar} />}
+      {agendadas.length > 0 && (
+        <section className="space-y-4">
+          <SectionHeader titulo="Agendadas" />
+          {agendadas.map((comp) => (
+            <CardCompeticao key={comp.id} comp={comp} viewerSteamId={jogador?.steamId} onTradelinkEnviado={carregar} />
+          ))}
+        </section>
+      )}
+      {dados.encerradas.length > 0 && (
+        <section className="space-y-4">
+          <SectionHeader titulo="Encerradas" />
+          {dados.encerradas.map((comp) => (
+            <CardCompeticao key={comp.id} comp={comp} viewerSteamId={jogador?.steamId} onTradelinkEnviado={carregar} />
+          ))}
+        </section>
+      )}
     </div>
   )
 }

@@ -11,7 +11,7 @@ export default function TagEstilo({ estilo }) {
   if (!estilo) return null
   return (
     <span
-      className={`panel-cut-sm border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-widest ${CORES[estilo.tag] ?? CORES.rifler}`}
+      className={`panel-cut-sm border px-1.5 py-0.5 font-mono text-[11px] ${CORES[estilo.tag] ?? CORES.rifler}`}
       title="Estilo de jogo, calculado em relação à média do grupo"
     >
       {estilo.label}

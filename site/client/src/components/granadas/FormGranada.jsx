@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { linkBuscaYoutube } from '../../lib/youtube.js'
 import { nomeMapa } from '../../lib/format.js'
 import { useTransicaoModal } from '../../lib/useTransicaoModal.js'
-import { Card, Select } from '../ui'
+import { Button, Campo, Input, Modal, Select, Textarea } from '../ui'
 
 const TIPOS = [['smoke', 'Smoke'], ['flash', 'Flash'], ['molotov', 'Molotov'], ['he', 'HE']]
 const TECNICAS = [
@@ -23,6 +23,7 @@ export default function FormGranada({ mapa, lado, posicoes, inicial = null, onSa
   const [salvando, setSalvando] = useState(false)
   const { visivel, iniciarSaida } = useTransicaoModal()
   const fechar = () => iniciarSaida(onCancelar)
+  const formId = useId()
 
   async function salvar(e) {
     e.preventDefault()
@@ -46,66 +47,75 @@ export default function FormGranada({ mapa, lado, posicoes, inicial = null, onSa
   }
 
   return (
-    <div
-      className={`fixed inset-0 z-50 flex items-center justify-center bg-fundo/80 p-0 transition-opacity duration-200 lg:p-4 ${visivel ? 'opacity-100' : 'opacity-0'}`}
-      onClick={fechar}
-    >
-      {/* Mobile: form ocupa a tela inteira, então o backdrop clicável some;
-          esse X fixo é o único jeito de fechar sem rolar até o fim. Desktop
-          continua fechando pelo clique fora ou pelo botão Cancelar de sempre. */}
-      <button
-        type="button"
-        onClick={(e) => { e.stopPropagation(); fechar() }}
-        aria-label="Fechar"
-        className="panel-cut-sm fixed right-3 top-3 z-[60] flex min-h-10 min-w-10 items-center justify-center border border-borda bg-superficie font-mono text-sm text-texto-fraco hover:text-texto lg:hidden"
-      >✕</button>
-      <Card
-        corte={false}
-        as="form"
-        onSubmit={salvar}
-        onClick={(e) => e.stopPropagation()}
-        className={`h-full w-full space-y-3 overflow-y-auto p-5 transition-all duration-200 lg:panel-cut lg:h-auto lg:max-h-[90vh] lg:w-full lg:max-w-lg ${visivel ? 'opacity-100 lg:scale-100' : 'opacity-0 lg:scale-95'}`}
-      >
-        <h3 className="font-display text-lg font-bold uppercase text-texto">
-          {inicial ? 'Editar granada' : 'Nova granada'} — {lado}
-        </h3>
-        <input value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Título (ex.: Smoke janela da base)"
-          className="panel-cut-sm min-h-10 w-full border border-borda bg-fundo px-3 py-2 font-mono text-sm lg:min-h-0" />
-        <textarea value={descricao} onChange={(e) => setDescricao(e.target.value)} placeholder="Descrição (opcional)" rows={2}
-          className="panel-cut-sm w-full border border-borda bg-fundo px-3 py-2 font-mono text-sm" />
-        <input value={videoUrl} onChange={(e) => setVideoUrl(e.target.value)} placeholder="Link do YouTube (opcional)"
-          className="panel-cut-sm min-h-10 w-full border border-borda bg-fundo px-3 py-2 font-mono text-sm lg:min-h-0" />
-        <a
-          href={linkBuscaYoutube(`${nomeMapa(mapa)} ${tipo} ${titulo}`)}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-block font-mono text-xs uppercase text-destaque hover:brightness-125"
-        >
-          Buscar vídeo no YouTube
-        </a>
-        <div className="grid grid-cols-1 gap-2 lg:grid-cols-3">
-          <Select value={tipo} onChange={(e) => setTipo(e.target.value)} className="w-full" selectClassName="px-2 pl-2 pr-7 text-xs">
-            {TIPOS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-          </Select>
-          <Select value={tecnica} onChange={(e) => setTecnica(e.target.value)} className="w-full" selectClassName="px-2 pl-2 pr-7 text-xs">
-            {TECNICAS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-          </Select>
-          <Select value={botao} onChange={(e) => setBotao(e.target.value)} className="w-full" selectClassName="px-2 pl-2 pr-7 text-xs">
-            {BOTOES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-          </Select>
-        </div>
-        <textarea value={passosTexto} onChange={(e) => setPassosTexto(e.target.value)} rows={4}
-          placeholder={'Passos, um por linha:\nFique colado na quina da caixa\nMire no pixel acima da antena\nJumpthrow'}
-          className="panel-cut-sm w-full border border-borda bg-fundo px-3 py-2 font-mono text-sm" />
-        {erro && <p className="font-mono text-sm text-perigo">{erro}</p>}
-        <div className="flex justify-end gap-2">
-          <button type="button" onClick={fechar} className="min-h-10 px-4 py-2 font-mono text-xs uppercase text-texto-fraco hover:text-texto lg:min-h-0">Cancelar</button>
-          <button type="submit" disabled={salvando}
-            className="panel-cut-sm min-h-10 border border-destaque bg-destaque px-4 py-2 font-display text-sm font-semibold uppercase text-fundo disabled:opacity-50 lg:min-h-0">
+    <Modal
+      visivel={visivel}
+      onFechar={fechar}
+      tamanho="md"
+      titulo={inicial ? 'Editar granada' : 'Nova granada'}
+      subtitulo={`${nomeMapa(mapa)} · lado ${lado}`}
+      rodape={
+        <>
+          {erro && <p role="alert" className="mr-auto text-sm text-perigo">{erro}</p>}
+          <Button variante="fantasma" onClick={fechar}>Cancelar</Button>
+          {/* O botão fica no rodapé do Modal (fora do <form>): `form` liga ele ao formulário. */}
+          <Button variante="primario" type="submit" form={formId} carregando={salvando}>
             {salvando ? 'Salvando…' : 'Salvar'}
-          </button>
+          </Button>
+        </>
+      }
+    >
+      <form id={formId} onSubmit={salvar} className="flex flex-col gap-4">
+        <Input
+          rotulo="Título"
+          value={titulo}
+          onChange={(e) => setTitulo(e.target.value)}
+          placeholder="Título (ex.: Smoke janela da base)"
+        />
+        <Textarea
+          rotulo="Descrição"
+          value={descricao}
+          onChange={(e) => setDescricao(e.target.value)}
+          placeholder="Descrição (opcional)"
+          rows={2}
+          className="min-h-16"
+        />
+        <Campo rotulo="Vídeo">
+          <Input value={videoUrl} onChange={(e) => setVideoUrl(e.target.value)} placeholder="Link do YouTube (opcional)" />
+          <a
+            href={linkBuscaYoutube(`${nomeMapa(mapa)} ${tipo} ${titulo}`)}
+            target="_blank"
+            rel="noreferrer"
+            className="w-fit font-mono text-[11px] text-destaque transition-colors hover:text-destaque-forte"
+          >
+            Buscar vídeo no YouTube ↗
+          </a>
+        </Campo>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <Campo rotulo="Tipo">
+            <Select value={tipo} onChange={(e) => setTipo(e.target.value)} className="w-full" selectClassName="min-h-11 lg:min-h-10">
+              {TIPOS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </Select>
+          </Campo>
+          <Campo rotulo="Técnica">
+            <Select value={tecnica} onChange={(e) => setTecnica(e.target.value)} className="w-full" selectClassName="min-h-11 lg:min-h-10">
+              {TECNICAS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </Select>
+          </Campo>
+          <Campo rotulo="Botão">
+            <Select value={botao} onChange={(e) => setBotao(e.target.value)} className="w-full" selectClassName="min-h-11 lg:min-h-10">
+              {BOTOES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </Select>
+          </Campo>
         </div>
-      </Card>
-    </div>
+        <Textarea
+          rotulo="Passos"
+          ajuda="Um passo por linha."
+          value={passosTexto}
+          onChange={(e) => setPassosTexto(e.target.value)}
+          rows={4}
+          placeholder={'Fique colado na quina da caixa\nMire no pixel acima da antena\nJumpthrow'}
+        />
+      </form>
+    </Modal>
   )
 }

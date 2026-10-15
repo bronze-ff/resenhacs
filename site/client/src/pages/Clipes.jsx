@@ -1,7 +1,7 @@
 // site/client/src/pages/Clipes.jsx
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { SectionHeader, Select } from '../components/ui'
+import { Abas, CabecalhoPagina, EstadoVazio, Select, Skeleton } from '../components/ui'
 import { useAuth } from '../auth/AuthContext.jsx'
 import CardClipe from '../components/CardClipe.jsx'
 
@@ -51,12 +51,13 @@ export default function Clipes() {
     dados === null ? null : jogadorFiltro ? dados.clipes.filter((c) => c.steamId === jogadorFiltro) : dados.clipes
 
   return (
-    <div className="space-y-6">
-      <SectionHeader
+    <div>
+      <CabecalhoPagina
+        eyebrow="Allstar"
         titulo="Clipes"
-        className="flex-wrap"
-        acao={
-          <div className="flex flex-wrap items-center gap-2">
+        descricao="Pontuação: kills (curva não-linear) + headshots + clutch + variedade de armas — passe o mouse no número pra ver o cálculo."
+        acoes={
+          <>
             <Select value={jogadorFiltro} onChange={(e) => setJogadorFiltro(e.target.value)} className="w-auto" selectClassName="py-1.5 text-xs">
               <option value="">Todos</option>
               {opcoesJogador.map((o) => (
@@ -69,30 +70,27 @@ export default function Clipes() {
                 <option key={jogadorFiltro} value={jogadorFiltro}>{`Jogador ${jogadorFiltro}`}</option>
               )}
             </Select>
-            {PERIODOS.map((p) => (
-              <button
-                key={p.valor}
-                onClick={() => setPeriodo(p.valor)}
-                className={`panel-cut-sm min-h-10 border px-3 py-1.5 font-mono text-xs uppercase tracking-wide lg:min-h-0 ${
-                  periodo === p.valor ? 'border-destaque bg-destaque/10 text-destaque' : 'border-borda text-texto-fraco'
-                }`}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
+            <Abas
+              rotulo="Período"
+              itens={PERIODOS.map((p) => ({ valor: p.valor, rotulo: p.label }))}
+              valor={periodo}
+              onChange={setPeriodo}
+            />
+          </>
         }
       />
-      <p className="font-mono text-xs text-texto-fraco">
-        Pontuação: kills (curva não-linear) + headshots + clutch + variedade de armas — passe o mouse no número pra ver o cálculo.
-      </p>
 
       {clipesFiltrados === null ? (
-        <p className="font-mono text-sm text-texto-fraco">Carregando…</p>
+        <div role="status" aria-label="Carregando clipes" className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }, (_, i) => (
+            <Skeleton key={i} className="panel-cut h-72 w-full" />
+          ))}
+        </div>
       ) : clipesFiltrados.length === 0 ? (
-        <p className="font-mono text-sm text-texto-fraco">
-          {jogadorFiltro ? 'Nenhum clipe desse jogador nesse período.' : 'Nenhum clipe nesse período ainda.'}
-        </p>
+        <EstadoVazio
+          titulo={jogadorFiltro ? 'Nenhum clipe desse jogador nesse período.' : 'Nenhum clipe nesse período ainda.'}
+          descricao={periodo !== 'sempre' ? 'Tente ampliar o período.' : null}
+        />
       ) : (
         <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {clipesFiltrados.map((c) => (
