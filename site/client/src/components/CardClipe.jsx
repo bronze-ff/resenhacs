@@ -2,7 +2,8 @@
 // Card de clipe da Allstar — extraído de Clipes.jsx pra reuso na seção de clipes do
 // perfil do jogador (mesma interface, mesmo comportamento nas duas telas).
 import { Link } from 'react-router-dom'
-import { Card, Badge } from './ui'
+import { Card, Badge, Button } from './ui'
+import { IconeFechar } from './ui/Modal.jsx'
 import { PlayerClipe, SnapshotPlaceholder, nomeDoKind } from './ui/PlayerClipe.jsx'
 import { nomeMapa, dataHora } from '../lib/format.js'
 
@@ -42,21 +43,27 @@ export default function CardClipe({ clipe, aberto, onAbrir, viewerSteamId }) {
           </div>
         </div>
         <div className="shrink-0 text-right">
-          <div className="font-display text-lg font-bold text-destaque" title={tituloPontuacao(pontuacao)}>
+          <div className="font-display text-2xl font-semibold leading-none tabular-nums text-destaque" title={tituloPontuacao(pontuacao)}>
             {pontuacao.total}
           </div>
+          <span className="rotulo">pts</span>
         </div>
       </div>
       {!aberto && (clipe.clipSnapshotUrl
         ? <img src={clipe.clipSnapshotUrl} alt="" className="mt-3 aspect-video w-full border border-borda object-cover" />
         : <SnapshotPlaceholder />)}
-      <button
-        type="button"
+      <Button
+        variante={aberto ? 'fantasma' : 'secundario'}
+        tamanho="sm"
+        larguraTotal
+        className="mt-3"
+        icone={aberto
+          ? <IconeFechar className="h-3.5 w-3.5" />
+          : <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15l13-7.5z" /></svg>}
         onClick={() => onAbrir(aberto ? null : clipe.id)}
-        className="panel-cut-sm mt-3 min-h-10 w-full border border-borda px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-texto-fraco hover:border-destaque/50 hover:text-destaque lg:min-h-0"
       >
-        {aberto ? 'Fechar' : '▶ Assistir'}
-      </button>
+        {aberto ? 'Fechar' : 'Assistir'}
+      </Button>
       {aberto && (
         <PlayerClipe
           clipUrl={clipe.clipUrl}

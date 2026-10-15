@@ -4,25 +4,40 @@ import { useAuth } from '../auth/AuthContext.jsx'
 import FiltroPeriodo from '../components/FiltroPeriodo.jsx'
 import TagEstilo from '../components/TagEstilo.jsx'
 import { nomeMapa, dataHora } from '../lib/format.js'
-import { Card, SectionHeader, RatingBadge, DataTable } from '../components/ui'
+import { CabecalhoPagina, Card, DataTable, EstadoVazio, RatingBadge, SectionHeader, Skeleton, SkeletonLista } from '../components/ui'
+
+// Tokens de medalha (--color-ouro/prata/bronze em index.css) em vez de cores hardcoded
+// da paleta padrão do Tailwind — mesmo esquema de token usado pro resto da paleta do app.
+const MEDALHAS = {
+  0: { texto: 'text-ouro', borda: 'border-ouro/50', fundo: 'bg-ouro/[0.06]', nome: 'Ouro' },
+  1: { texto: 'text-prata', borda: 'border-prata/40', fundo: 'bg-prata/[0.04]', nome: 'Prata' },
+  2: { texto: 'text-bronze', borda: 'border-bronze/45', fundo: 'bg-bronze/[0.05]', nome: 'Bronze' },
+}
 
 function Medalha({ posicao }) {
-  // Tokens de medalha (--color-ouro/prata/bronze em index.css) em vez de cores hardcoded
-  // da paleta padrão do Tailwind — mesmo esquema de token usado pro resto da paleta do app.
-  const cores = { 0: 'text-ouro', 1: 'text-prata', 2: 'text-bronze' }
-  if (!(posicao in cores)) return <span className="font-mono text-texto-fraco">{posicao + 1}</span>
-  return <span className={`font-display font-bold ${cores[posicao]}`}>{posicao + 1}º</span>
+  const m = MEDALHAS[posicao]
+  if (!m) return <span className="font-mono tabular-nums text-texto-fraco">{posicao + 1}</span>
+  return <span className={`font-display text-lg font-semibold tabular-nums ${m.texto}`}>{posicao + 1}º</span>
+}
+
+// Seta de julgamento (bom/ruim) — a cor nunca vai sozinha (regra do sinal duplo).
+function Juizo({ bom }) {
+  return (
+    <span aria-hidden="true" className="mr-1 text-[11px]">
+      {bom ? '▲' : '▼'}
+    </span>
+  )
 }
 
 // Avatar do ranking com fallback pra quem nunca logou no site (avatarUrl null) — mesmo
-// padrão do Avatar em Partida.jsx (Economia/Utilitária), mas quadrado maior pro card mobile.
-function AvatarRanking({ r }) {
+// padrão do Avatar em Partida.jsx (Economia/Utilitária), mas quadrado maior pro card.
+function AvatarRanking({ r, tamanho = 'h-14 w-14', texto = 'text-xl' }) {
   const titulo = r.nick || r.steamId
   if (r.avatarUrl) {
-    return <img src={r.avatarUrl} alt="" className="panel-cut-sm h-14 w-14 shrink-0 border border-borda object-cover" />
+    return <img src={r.avatarUrl} alt="" className={`panel-cut-sm ${tamanho} shrink-0 border border-borda object-cover`} />
   }
   return (
-    <span className="panel-cut-sm flex h-14 w-14 shrink-0 items-center justify-center border border-borda bg-superficie-alta font-display text-xl font-bold text-texto-fraco">
+    <span className={`panel-cut-sm flex ${tamanho} shrink-0 items-center justify-center border border-borda bg-superficie-alta font-display ${texto} font-bold text-texto-fraco`}>
       {titulo.charAt(0).toUpperCase()}
     </span>
   )
@@ -48,34 +63,83 @@ function SetaForma({ forma }) {
 function Stat({ rotulo, valor, cor }) {
   return (
     <div className="min-w-0">
-      <div className="font-mono text-[10px] uppercase tracking-wide text-texto-fraco">{rotulo}</div>
-      <div className={`truncate text-base font-semibold tabular-nums ${cor ?? 'text-texto'}`}>{valor}</div>
+      <div className="rotulo">{rotulo}</div>
+      <div className={`mt-0.5 truncate font-display text-lg font-semibold leading-tight tabular-nums ${cor ?? 'text-texto'}`}>{valor}</div>
     </div>
   )
 }
 
-// Card mobile (estilo app FACEIT): avatar grande + posição/nick + grade de 4 stats.
-// Destaca o próprio usuário logado com fundo/borda laranja.
+// Degrau do pódio (top 3). No desktop a ordem visual é 2-1-3 com o 1º mais alto; no
+// mobile empilha 1-2-3. Destaca o próprio usuário logado com o rótulo "você".
+function DegrauPodio({ r, posicao, souEu }) {
+  const m = MEDALHAS[posicao]
+  const primeiro = posicao === 0
+  const ordem = { 0: 'sm:order-2', 1: 'sm:order-1', 2: 'sm:order-3' }[posicao]
+  return (
+    <Link
+      to={`/jogador/${r.steamId}`}
+      className={`panel-cut realce-topo group relative flex flex-col gap-4 border ${m.borda} ${m.fundo} p-4 transition-colors duration-200 hover:bg-superficie-alta sm:p-5 ${ordem} ${primeiro ? 'sm:pb-8' : 'sm:mt-8'}`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <AvatarRanking r={r} tamanho={primeiro ? 'h-16 w-16' : 'h-14 w-14'} texto="text-2xl" />
+          <div className="min-w-0">
+            <div className="rotulo">
+              <span className={m.texto}>{m.nome}</span>
+              {souEu && <span className="ml-2 text-destaque">· você</span>}
+            </div>
+            <div className="mt-1 truncate font-display text-2xl font-semibold leading-none text-texto group-hover:text-destaque">
+              {r.nick || r.steamId}
+            </div>
+            <div className="mt-1.5"><TagEstilo estilo={r.estilo} /></div>
+          </div>
+        </div>
+        <span className={`font-display font-semibold leading-none tabular-nums ${m.texto} ${primeiro ? 'text-6xl' : 'text-5xl'}`}>
+          {posicao + 1}
+        </span>
+      </div>
+      <div className="grid grid-cols-4 gap-3 border-t border-borda pt-3">
+        <div className="min-w-0">
+          <div className="rotulo">Rating</div>
+          <span className="mt-1 inline-flex items-center">
+            <RatingBadge valor={r.rating} className="text-sm" />
+            <SetaForma forma={r.forma} />
+          </span>
+        </div>
+        <Stat rotulo="K/D" valor={r.kd} />
+        <Stat
+          rotulo="Winrate"
+          valor={<><Juizo bom={r.winrate >= 50} />{r.winrate}%</>}
+          cor={r.winrate >= 50 ? 'text-sucesso' : 'text-perigo'}
+        />
+        <Stat rotulo="Partidas" valor={r.partidas} />
+      </div>
+    </Link>
+  )
+}
+
+// Card mobile (estilo app FACEIT): avatar + posição/nick + grade de 4 stats.
+// Destaca o próprio usuário logado com borda no destaque.
 function CardJogador({ r, posicao, souEu }) {
   return (
     <Card
       as={Link}
       interativo={!souEu}
       to={`/jogador/${r.steamId}`}
-      className={`flex gap-3 p-4 ${souEu ? '!border-destaque !bg-destaque/10' : 'hover:bg-superficie-alta'}`}
+      className={`flex gap-3 p-4 ${souEu ? '!border-destaque/70 !bg-superficie-alta' : ''}`}
     >
-      <AvatarRanking r={r} />
+      <AvatarRanking r={r} tamanho="h-12 w-12" texto="text-lg" />
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="shrink-0 font-mono text-xs text-texto-fraco">#{posicao + 1}</span>
-          <span className="min-w-0 flex-1 truncate font-display text-lg font-bold text-texto">{r.nick || r.steamId}</span>
+          <span className="shrink-0 font-mono text-xs tabular-nums text-texto-fraco">#{posicao + 1}</span>
+          <span className="min-w-0 flex-1 truncate font-display text-lg font-semibold text-texto">{r.nick || r.steamId}</span>
           <TagEstilo estilo={r.estilo} />
         </div>
         <div className="mt-2 grid grid-cols-4 gap-2">
           <div className="min-w-0">
-            <div className="font-mono text-[10px] uppercase tracking-wide text-texto-fraco">Rating</div>
-            <span className="inline-flex items-center">
-              <RatingBadge valor={r.rating} className="text-base" />
+            <div className="rotulo">Rating</div>
+            <span className="mt-0.5 inline-flex items-center">
+              <RatingBadge valor={r.rating} className="text-sm" />
               <SetaForma forma={r.forma} />
             </span>
           </div>
@@ -94,23 +158,19 @@ function CardJogador({ r, posicao, souEu }) {
 function CardDestaque({ rotulo, nick, valor, to }) {
   const conteudo = (
     <>
-      <div className="absolute left-0 top-0 h-[2px] w-6 bg-destaque/60" />
-      <div className="font-mono text-[10px] uppercase tracking-[0.15em] text-texto-fraco">{rotulo}</div>
-      <div className="mt-1 font-display text-lg font-bold text-destaque">{nick}</div>
-      <div className="font-mono text-sm text-texto-fraco">{valor}</div>
+      <div className="rotulo">{rotulo}</div>
+      <div className="mt-2 truncate font-display text-xl font-semibold leading-none text-texto">{nick}</div>
+      <div className="mt-1.5 font-mono text-xs text-texto-fraco">{valor}</div>
     </>
   )
   if (to) {
     return (
-      <Link
-        to={to}
-        className="panel-cut-sm relative block border border-borda bg-superficie p-4 transition-colors duration-200 hover:border-destaque/60"
-      >
+      <Card as={Link} interativo to={to} className="block p-4">
         {conteudo}
-      </Link>
+      </Card>
     )
   }
-  return <div className="panel-cut-sm relative border border-borda bg-superficie p-4">{conteudo}</div>
+  return <Card className="p-4">{conteudo}</Card>
 }
 
 // Recordes do grupo (hall da fama): marcas históricas, sempre de TODAS as Partidas —
@@ -132,9 +192,7 @@ function Recordes() {
 
   return (
     <section>
-      <h3 className="mb-2 font-display text-sm font-semibold uppercase tracking-wide text-texto-fraco">
-        Recordes do grupo
-      </h3>
+      <SectionHeader titulo="Recordes do grupo" subtitulo="Marcas de todas as Partidas — não seguem o período." />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {maisKills && (
           <CardDestaque
@@ -173,6 +231,17 @@ function Recordes() {
   )
 }
 
+function CelulaLado({ l }) {
+  if (!l) return <span className="text-texto-fraco">—</span>
+  const bom = l.winrate >= 50
+  return (
+    <span className={bom ? 'text-sucesso' : 'text-perigo'}>
+      <Juizo bom={bom} />
+      {l.winrate}% <span className="text-texto-fraco">({l.vitorias}/{l.rounds})</span>
+    </span>
+  )
+}
+
 // "A gente é muito pior de T na Mirage?" (FIL-51) — winrate do grupo por lado (CT/T)
 // em cada mapa. Só aparece mapa a mapa quando há dado (partidas reprocessadas depois
 // do FIL-51, side_a); grupo sem nenhum dado ainda esconde a seção toda.
@@ -196,41 +265,44 @@ function LadoPorMapa() {
 
   return (
     <section>
-      <h3 className="mb-2 font-display text-sm font-semibold uppercase tracking-wide text-texto-fraco">
-        Winrate por lado
-      </h3>
-      <div className="panel-cut border border-borda">
+      <SectionHeader titulo="Winrate por lado" subtitulo="Rounds vencidos pelo grupo de CT e de T em cada mapa." />
+      <div className="panel-cut border border-borda bg-superficie">
         <DataTable
           head={
             <tr>
-              <th className="px-3 py-2">Mapa</th>
-              <th className="px-2 py-2 text-right">CT</th>
-              <th className="px-2 py-2 text-right">T</th>
+              <th className="px-4 py-2.5">Mapa</th>
+              <th className="px-3 py-2.5 text-right">CT</th>
+              <th className="px-4 py-2.5 text-right">T</th>
             </tr>
           }
         >
           {[...porMapa.entries()].map(([mapa, lados]) => (
             <tr key={mapa}>
-              <td className="px-3 py-2">{nomeMapa(mapa)}</td>
-              <td className="px-2 py-2 text-right tabular-nums">
-                {lados.CT ? (
-                  <span className={lados.CT.winrate >= 50 ? 'text-sucesso' : 'text-perigo'}>
-                    {lados.CT.winrate}% <span className="text-texto-fraco">({lados.CT.vitorias}/{lados.CT.rounds})</span>
-                  </span>
-                ) : <span className="text-texto-fraco">—</span>}
-              </td>
-              <td className="px-2 py-2 text-right tabular-nums">
-                {lados.T ? (
-                  <span className={lados.T.winrate >= 50 ? 'text-sucesso' : 'text-perigo'}>
-                    {lados.T.winrate}% <span className="text-texto-fraco">({lados.T.vitorias}/{lados.T.rounds})</span>
-                  </span>
-                ) : <span className="text-texto-fraco">—</span>}
-              </td>
+              <td className="px-4 py-2.5 font-display font-semibold text-texto">{nomeMapa(mapa)}</td>
+              <td className="px-3 py-2.5 text-right font-mono text-xs tabular-nums"><CelulaLado l={lados.CT} /></td>
+              <td className="px-4 py-2.5 text-right font-mono text-xs tabular-nums"><CelulaLado l={lados.T} /></td>
             </tr>
           ))}
         </DataTable>
       </div>
     </section>
+  )
+}
+
+function CarregandoRanking() {
+  return (
+    <div className="space-y-6" role="status" aria-label="Carregando ranking">
+      <div className="space-y-2">
+        <Skeleton className="h-3 w-20" />
+        <Skeleton className="h-9 w-64" />
+      </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Skeleton className="panel-cut h-44 sm:mt-8" />
+        <Skeleton className="panel-cut h-52" />
+        <Skeleton className="panel-cut h-44 sm:mt-8" />
+      </div>
+      <SkeletonLista linhas={5} altura="h-12" rotulo="Carregando ranking" />
+    </div>
   )
 }
 
@@ -250,7 +322,7 @@ export default function Ranking() {
       .catch(() => setRanking([]))
   }, [de, ate])
 
-  if (ranking === null) return <p className="font-mono text-sm text-texto-fraco">Carregando…</p>
+  if (ranking === null) return <CarregandoRanking />
 
   const comPartida = ranking.filter((r) => r.partidas > 0)
   const semPartida = ranking.filter((r) => r.partidas === 0)
@@ -262,130 +334,157 @@ export default function Ranking() {
   const melhorClutchPct = [...comPartida].filter((r) => r.clutchAttempts >= 5).sort((a, b) => b.clutchPct - a.clutchPct)[0]
   const melhorEntryRate = [...comPartida].filter((r) => r.entryKills + r.entryDeaths >= 10).sort((a, b) => b.entryWinPct - a.entryWinPct)[0]
 
+  // Pódio só com 3+ Jogadores; abaixo disso a lista sozinha já conta a história.
+  const podio = comPartida.length >= 3 ? comPartida.slice(0, 3) : []
+  const restoMobile = comPartida.slice(podio.length)
+
   return (
-    <div className="space-y-6">
-      <SectionHeader
+    <div className="space-y-8">
+      <CabecalhoPagina
+        eyebrow="Ranking"
         titulo="Ranking do grupo"
-        margem="nenhuma"
-        className="flex-wrap"
-        acao={<FiltroPeriodo de={de} ate={ate} onDe={setDe} onAte={setAte} />}
+        descricao="Quem está carregando a resenha, por rating médio no período."
+        acoes={<FiltroPeriodo de={de} ate={ate} onDe={setDe} onAte={setAte} />}
+        className="!mb-0"
       />
+
+      {comPartida.length === 0 && (
+        <EstadoVazio
+          titulo="Sem Partidas no ranking"
+          descricao={`Ninguém do grupo tem Partidas registradas ${de || ate ? 'nesse período' : 'ainda'}.`}
+        />
+      )}
+
+      {podio.length > 0 && (
+        <section aria-label="Pódio" className="grid grid-cols-1 items-start gap-3 sm:grid-cols-3">
+          {podio.map((r, i) => (
+            <DegrauPodio key={r.steamId} r={r} posicao={i} souEu={r.steamId === jogador?.steamId} />
+          ))}
+        </section>
+      )}
+
+      {comPartida.length > 0 && (
+        <section>
+          <SectionHeader titulo="Classificação" />
+          {restoMobile.length > 0 && (
+            <div className="space-y-2 lg:hidden">
+              {restoMobile.map((r) => {
+                const i = comPartida.indexOf(r)
+                return <CardJogador key={r.steamId} r={r} posicao={i} souEu={r.steamId === jogador?.steamId} />
+              })}
+            </div>
+          )}
+
+          <div className="panel-cut hidden border border-borda bg-superficie lg:block">
+            <DataTable
+              head={
+                <tr>
+                  <th className="w-14 px-4 py-2.5">#</th>
+                  <th className="px-3 py-2.5">Jogador</th>
+                  <th className="px-3 py-2.5 text-right">Partidas</th>
+                  <th className="px-3 py-2.5 text-right">Winrate</th>
+                  <th className="px-3 py-2.5 text-right">K/D</th>
+                  <th className="px-3 py-2.5 text-right">HS%</th>
+                  <th className="px-3 py-2.5 text-right">ACEs</th>
+                  <th className="px-3 py-2.5 text-right">Clutches</th>
+                  <th className="px-4 py-2.5 text-right">Rating</th>
+                </tr>
+              }
+            >
+              {comPartida.map((r, i) => {
+                const souEu = r.steamId === jogador?.steamId
+                return (
+                  <tr key={r.steamId} className={souEu ? 'bg-destaque/[0.06]' : ''}>
+                    <td className="px-4 py-2.5"><Medalha posicao={i} /></td>
+                    <td className="px-3 py-2.5">
+                      <Link to={`/jogador/${r.steamId}`} className="flex items-center gap-2.5 font-display text-base font-semibold text-texto hover:text-destaque">
+                        <AvatarRanking r={r} tamanho="h-7 w-7" texto="text-xs" />
+                        {r.nick || r.steamId}
+                        <TagEstilo estilo={r.estilo} />
+                        {souEu && <span className="font-mono text-[11px] normal-case tracking-normal text-destaque">você</span>}
+                      </Link>
+                    </td>
+                    <td className="px-3 py-2.5 text-right font-mono tabular-nums text-texto-fraco">{r.partidas}</td>
+                    <td className={`px-3 py-2.5 text-right font-mono tabular-nums ${r.winrate >= 50 ? 'text-sucesso' : 'text-perigo'}`}>
+                      <Juizo bom={r.winrate >= 50} />{r.winrate}%
+                    </td>
+                    <td className="px-3 py-2.5 text-right font-mono tabular-nums text-texto">{r.kd}</td>
+                    <td className="px-3 py-2.5 text-right font-mono tabular-nums text-texto-fraco">{r.hsPct}%</td>
+                    <td className="px-3 py-2.5 text-right font-mono tabular-nums text-texto-fraco">{r.aces}</td>
+                    <td className="px-3 py-2.5 text-right font-mono tabular-nums text-texto-fraco" title="Clutches vencidos / tentativas (1vX)">
+                      {r.clutchWins}/{r.clutchAttempts}
+                      {r.clutchAttempts > 0 && (
+                        <span className={`ml-1.5 text-xs ${r.clutchPct >= 50 ? 'text-sucesso' : 'text-texto-fraco'}`}>{r.clutchPct}%</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2.5 text-right">
+                      <RatingBadge valor={r.rating} />
+                      <SetaForma forma={r.forma} />
+                    </td>
+                  </tr>
+                )
+              })}
+            </DataTable>
+          </div>
+
+          {semPartida.length > 0 && (
+            <p className="mt-3 font-mono text-xs text-texto-fraco">
+              Ainda sem partidas: {semPartida.map((r) => r.nick || r.steamId).join(', ')}
+            </p>
+          )}
+        </section>
+      )}
+
+      {comPartida.length > 0 && (maisAces?.aces > 0 || maisClutches?.clutchWins > 0 || melhorWinrate || melhorClutchPct || melhorEntryRate) && (
+        <section>
+          <SectionHeader titulo="Destaques do período" />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            {maisAces?.aces > 0 && (
+              <CardDestaque
+                rotulo="Mais ACEs"
+                nick={maisAces.nick}
+                valor={`${maisAces.aces} ace${maisAces.aces > 1 ? 's' : ''}`}
+                to={`/jogador/${maisAces.steamId}`}
+              />
+            )}
+            {maisClutches?.clutchWins > 0 && (
+              <CardDestaque
+                rotulo="Mais clutches"
+                nick={maisClutches.nick}
+                valor={`${maisClutches.clutchWins}/${maisClutches.clutchAttempts} tentativas · ${maisClutches.clutchPct}%`}
+                to={`/jogador/${maisClutches.steamId}`}
+              />
+            )}
+            {melhorWinrate && (
+              <CardDestaque
+                rotulo="Melhor winrate (3+ partidas)"
+                nick={melhorWinrate.nick}
+                valor={`${melhorWinrate.winrate}%`}
+                to={`/jogador/${melhorWinrate.steamId}`}
+              />
+            )}
+            {melhorClutchPct && (
+              <CardDestaque
+                rotulo="Melhor clutch% (5+ tentativas)"
+                nick={melhorClutchPct.nick}
+                valor={`${melhorClutchPct.clutchPct}% (${melhorClutchPct.clutchWins}/${melhorClutchPct.clutchAttempts})`}
+                to={`/jogador/${melhorClutchPct.steamId}`}
+              />
+            )}
+            {melhorEntryRate && (
+              <CardDestaque
+                rotulo="Melhor entry rate (10+ duelos)"
+                nick={melhorEntryRate.nick}
+                valor={`${melhorEntryRate.entryWinPct}% (${melhorEntryRate.entryKills}/${melhorEntryRate.entryKills + melhorEntryRate.entryDeaths})`}
+                to={`/jogador/${melhorEntryRate.steamId}`}
+              />
+            )}
+          </div>
+        </section>
+      )}
 
       <Recordes />
       <LadoPorMapa />
-
-      {comPartida.length === 0 && (
-        <p className="font-mono text-sm text-texto-fraco">Ninguém do grupo tem Partidas registradas {de || ate ? 'nesse período' : 'ainda'}.</p>
-      )}
-
-      {comPartida.length > 0 && (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          {maisAces?.aces > 0 && (
-            <CardDestaque
-              rotulo="Mais ACEs"
-              nick={maisAces.nick}
-              valor={`${maisAces.aces} ace${maisAces.aces > 1 ? 's' : ''}`}
-              to={`/jogador/${maisAces.steamId}`}
-            />
-          )}
-          {maisClutches?.clutchWins > 0 && (
-            <CardDestaque
-              rotulo="Mais clutches"
-              nick={maisClutches.nick}
-              valor={`${maisClutches.clutchWins}/${maisClutches.clutchAttempts} tentativas · ${maisClutches.clutchPct}%`}
-              to={`/jogador/${maisClutches.steamId}`}
-            />
-          )}
-          {melhorWinrate && (
-            <CardDestaque
-              rotulo="Melhor winrate (3+ partidas)"
-              nick={melhorWinrate.nick}
-              valor={`${melhorWinrate.winrate}%`}
-              to={`/jogador/${melhorWinrate.steamId}`}
-            />
-          )}
-          {melhorClutchPct && (
-            <CardDestaque
-              rotulo="Melhor clutch% (5+ tentativas)"
-              nick={melhorClutchPct.nick}
-              valor={`${melhorClutchPct.clutchPct}% (${melhorClutchPct.clutchWins}/${melhorClutchPct.clutchAttempts})`}
-              to={`/jogador/${melhorClutchPct.steamId}`}
-            />
-          )}
-          {melhorEntryRate && (
-            <CardDestaque
-              rotulo="Melhor entry rate (10+ duelos)"
-              nick={melhorEntryRate.nick}
-              valor={`${melhorEntryRate.entryWinPct}% (${melhorEntryRate.entryKills}/${melhorEntryRate.entryKills + melhorEntryRate.entryDeaths})`}
-              to={`/jogador/${melhorEntryRate.steamId}`}
-            />
-          )}
-        </div>
-      )}
-
-      {comPartida.length > 0 && (
-        <div className="space-y-2 lg:hidden">
-          {comPartida.map((r, i) => (
-            <CardJogador key={r.steamId} r={r} posicao={i} souEu={r.steamId === jogador?.steamId} />
-          ))}
-        </div>
-      )}
-
-      {comPartida.length > 0 && (
-        <div className="panel-cut hidden border border-borda lg:block">
-          <DataTable
-            head={
-              <tr>
-                <th className="px-3 py-2">#</th>
-                <th className="px-3 py-2">Jogador</th>
-                <th className="px-2 py-2 text-right">Partidas</th>
-                <th className="px-2 py-2 text-right">Winrate</th>
-                <th className="px-2 py-2 text-right">K/D</th>
-                <th className="hidden px-2 py-2 text-right sm:table-cell">HS%</th>
-                <th className="hidden px-2 py-2 text-right sm:table-cell">ACEs</th>
-                <th className="hidden px-2 py-2 text-right sm:table-cell">Clutches</th>
-                <th className="px-3 py-2 text-right">Rating</th>
-              </tr>
-            }
-          >
-            {comPartida.map((r, i) => (
-              <tr key={r.steamId}>
-                <td className="px-3 py-2"><Medalha posicao={i} /></td>
-                <td className="px-3 py-2">
-                  <Link to={`/jogador/${r.steamId}`} className="flex items-center gap-2 font-mono text-texto hover:text-destaque">
-                    {r.avatarUrl && (
-                      <img src={r.avatarUrl} alt="" className="panel-cut-sm h-6 w-6 border border-borda object-cover" />
-                    )}
-                    {r.nick || r.steamId}
-                    <TagEstilo estilo={r.estilo} />
-                  </Link>
-                </td>
-                <td className="px-2 py-2 text-right tabular-nums">{r.partidas}</td>
-                <td className={`px-2 py-2 text-right tabular-nums ${r.winrate >= 50 ? 'text-sucesso' : 'text-perigo'}`}>{r.winrate}%</td>
-                <td className="px-2 py-2 text-right tabular-nums">{r.kd}</td>
-                <td className="hidden px-2 py-2 text-right tabular-nums sm:table-cell">{r.hsPct}%</td>
-                <td className="hidden px-2 py-2 text-right tabular-nums sm:table-cell">{r.aces}</td>
-                <td className="hidden px-2 py-2 text-right tabular-nums sm:table-cell" title="Clutches vencidos / tentativas (1vX)">
-                  {r.clutchWins}/{r.clutchAttempts}
-                  {r.clutchAttempts > 0 && (
-                    <span className={`ml-1.5 text-xs ${r.clutchPct >= 50 ? 'text-sucesso' : 'text-texto-fraco'}`}>{r.clutchPct}%</span>
-                  )}
-                </td>
-                <td className="px-3 py-2 text-right">
-                  <RatingBadge valor={r.rating} />
-                  <SetaForma forma={r.forma} />
-                </td>
-              </tr>
-            ))}
-          </DataTable>
-        </div>
-      )}
-
-      {semPartida.length > 0 && (
-        <p className="font-mono text-xs text-texto-fraco">
-          Ainda sem partidas: {semPartida.map((r) => r.nick || r.steamId).join(', ')}
-        </p>
-      )}
     </div>
   )
 }

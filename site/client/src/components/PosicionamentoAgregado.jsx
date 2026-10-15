@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { nomeMapa } from '../lib/format.js'
 import { CORES } from '../lib/colors.js'
-import { Select } from './ui'
+import { Select, Abas, Skeleton, EstadoVazio } from './ui'
 
 const TAM = 480
 
@@ -62,26 +62,26 @@ export default function PosicionamentoAgregado({ steamId }) {
   }, [dados, modo, radarPronto])
 
   if (dados === null && !mapaEscolhido) {
-    return <p className="font-mono text-sm text-texto-fraco">Carregando posicionamento…</p>
+    return (
+      <div role="status" aria-label="Carregando posicionamento" className="space-y-3">
+        <Skeleton className="h-10 w-56" />
+        <Skeleton className="mx-auto aspect-square w-full max-w-[480px]" />
+      </div>
+    )
   }
   if (dados && !dados.map) {
-    return <p className="font-mono text-sm text-texto-fraco">Sem dados de posicionamento ainda.</p>
+    return <EstadoVazio titulo="Sem dados de posicionamento ainda." />
   }
 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-3">
-        <div className="panel-cut-sm flex overflow-hidden border border-borda font-mono text-xs uppercase">
-          {[['mortes', 'Onde morre'], ['kills', 'Onde mata']].map(([v, label]) => (
-            <button
-              key={v}
-              onClick={() => setModo(v)}
-              className={`flex min-h-10 items-center px-3 py-1.5 transition-colors lg:min-h-0 ${modo === v ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'}`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <Abas
+          rotulo="O que mostrar"
+          itens={[{ valor: 'mortes', rotulo: 'Onde morre' }, { valor: 'kills', rotulo: 'Onde mata' }]}
+          valor={modo}
+          onChange={setModo}
+        />
         {dados?.mapas?.length > 0 && (
           <Select value={mapaEscolhido || dados.map} onChange={(e) => setMapaEscolhido(e.target.value)} selectClassName="text-xs">
             {dados.mapas.map((m) => (
@@ -92,7 +92,7 @@ export default function PosicionamentoAgregado({ steamId }) {
         {dados && <span className="font-mono text-xs text-texto-fraco">{dados.pontos.length} pontos</span>}
       </div>
       {dados && !dados.calibrated && (
-        <p className="font-mono text-xs uppercase tracking-wide" style={{ color: CORES.aviso }}>
+        <p className="font-mono text-xs" style={{ color: CORES.aviso }}>
           Mapa sem calibração de radar — sem preview visual ainda.
         </p>
       )}

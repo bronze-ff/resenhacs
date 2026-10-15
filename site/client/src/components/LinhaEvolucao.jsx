@@ -6,11 +6,11 @@ const PAD = 18
 
 export default function LinhaEvolucao({ pontos, cor = 'var(--color-destaque)', formatoValor = (v) => v.toFixed(2) }) {
   if (!pontos || pontos.length === 0) {
-    return <p className="font-mono text-sm text-texto-fraco">Sem partidas suficientes ainda.</p>
+    return <p className="text-sm text-texto-fraco">Sem partidas suficientes ainda.</p>
   }
   if (pontos.length === 1) {
     return (
-      <p className="font-mono text-sm text-texto-fraco">
+      <p className="text-sm text-texto-fraco">
         Só uma partida registrada até agora ({formatoValor(pontos[0].valor)}) — o gráfico aparece a partir da 2ª.
       </p>
     )

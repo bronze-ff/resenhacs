@@ -2,43 +2,54 @@ import { useEffect, useState } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { esquecerJogador } from '../observabilidade/posthog.js'
+import { Avatar, classesBotao } from './ui'
 
 const CHAVE_SIDEBAR_COLAPSADA = 'resenha_sidebar_colapsada'
 
-// `num` é derivado do índice (abaixo), nunca hardcoded — a numeração já dessincronizou
-// uma vez no passado (remoção de Grupos/Ranking Público/Times deixou um "09 → 12" sem
-// os itens 10/11 existirem mais em lugar nenhum) por causa de números fixos por item.
-const ITENS_BASE = [
-  { to: '/', end: true, label: 'Partidas', icone: 'partidas' },
-  { to: '/ranking', label: 'Ranking', icone: 'ranking' },
-  { to: '/enviar-demo', label: 'Enviar demo', icone: 'enviarDemo' },
-  { to: '/clipes', label: 'Clipes', icone: 'clipes' },
-  { to: '/competicoes', label: 'Competições', icone: 'competicoes' },
-  { to: '/jogadores', label: 'Amigos', icone: 'jogadores' },
-  { to: '/comparar', label: 'Comparar', icone: 'comparar' },
-  // Granadas/Táticas são públicos pra visualização (só criar/editar é admin — cada
-  // página já esconde os controles de edição sozinha via isSuperAdmin) — por isso
-  // ficam aqui, fora do bloco condicional a isSuperAdmin logo abaixo.
-  { to: '/granadas', label: 'Granadas', icone: 'granadas' },
-  { to: '/taticas', label: 'Táticas', icone: 'taticas' },
-  { to: '/conta', label: 'Minha conta', icone: 'perfil' },
-  { to: '/curso', label: 'Curso de mira', icone: 'curso' },
+// Menu agrupado por intenção (analisar, comunidade, biblioteca). Os números "01…12"
+// de antes saíram: viraram ruído quando a lista passou de 10 itens, e os grupos
+// passam a dar a mesma orientação com menos texto.
+const GRUPOS = [
+  {
+    titulo: 'Análise',
+    itens: [
+      { to: '/', end: true, label: 'Partidas', icone: 'partidas' },
+      { to: '/ranking', label: 'Ranking', icone: 'ranking' },
+      { to: '/comparar', label: 'Comparar', icone: 'comparar' },
+      { to: '/enviar-demo', label: 'Enviar demo', icone: 'enviarDemo' },
+    ],
+  },
+  {
+    titulo: 'Comunidade',
+    itens: [
+      { to: '/clipes', label: 'Clipes', icone: 'clipes' },
+      { to: '/competicoes', label: 'Competições', icone: 'competicoes' },
+      { to: '/jogadores', label: 'Amigos', icone: 'jogadores' },
+    ],
+  },
+  {
+    // Granadas/Táticas são públicos pra visualização (só criar/editar é admin — cada
+    // página já esconde os controles de edição sozinha via isSuperAdmin).
+    titulo: 'Biblioteca',
+    itens: [
+      { to: '/granadas', label: 'Granadas', icone: 'granadas' },
+      { to: '/taticas', label: 'Táticas', icone: 'taticas' },
+      { to: '/curso', label: 'Curso de mira', icone: 'curso' },
+    ],
+  },
+  {
+    titulo: 'Conta',
+    itens: [{ to: '/conta', label: 'Minha conta', icone: 'perfil' }],
+  },
 ]
-const ITENS = ITENS_BASE.map((item, i) => ({ ...item, num: String(i + 1).padStart(2, '0') }))
 
-// Itens admin-only, numerados em sequência aos de ITENS (ver numerarItem abaixo) —
-// ficam num array separado só porque exigem o gate isSuperAdmin na renderização.
-const ITENS_ADMIN = [
-  { to: '/admin', label: 'Admin', icone: 'admin' },
-  { to: '/partidas-pro', label: 'Partidas pro', icone: 'partidasPro' },
-]
-
-// Deriva o número (2 dígitos) do índice do item na lista combinada, em vez de
-// hardcodear — assim a numeração nunca mais dessincroniza quando um item é
-// adicionado/removido (ex.: a remoção de Grupos/Ranking Público/Times deixou um
-// gap de "09" pra "12" que só existia porque os números eram fixos no JSX).
-function numerarItem(indice) {
-  return String(indice + 1).padStart(2, '0')
+// Itens admin-only — grupo separado só porque exigem o gate isSuperAdmin.
+const GRUPO_ADMIN = {
+  titulo: 'Admin',
+  itens: [
+    { to: '/admin', label: 'Admin', icone: 'admin' },
+    { to: '/partidas-pro', label: 'Partidas pro', icone: 'partidasPro' },
+  ],
 }
 
 // Itens da barra inferior mobile (estilo app da FACEIT): 4 rotas principais
@@ -176,13 +187,23 @@ const NAV_INFERIOR_BASE = [
 
 function itemClasse(colapsada) {
   return ({ isActive }) =>
-    `group flex items-center gap-3 border-l-2 px-3 py-2.5 text-sm uppercase tracking-wide transition-colors ${
+    `group relative mx-2 flex h-9 items-center gap-2.5 rounded-[var(--radius-pequeno)] px-2.5 text-sm font-medium transition-colors duration-150 [&_svg]:h-[18px] [&_svg]:w-[18px] ${
       colapsada ? 'lg:justify-center lg:px-0' : ''
     } ${
       isActive
-        ? 'border-destaque bg-destaque/10 text-texto'
-        : 'border-transparent text-texto-fraco hover:border-destaque/40 hover:bg-superficie-alta hover:text-texto'
+        ? 'bg-superficie-topo text-texto [&_svg]:text-destaque'
+        : 'text-texto-fraco hover:bg-superficie-alta hover:text-texto'
     }`
+}
+
+// Marca: quadrado com corte diagonal e um "R" — mesma silhueta dos painéis.
+function Marca({ tamanho = 'md' }) {
+  const lado = tamanho === 'sm' ? 'h-6 w-6 text-[13px]' : 'h-7 w-7 text-sm'
+  return (
+    <span aria-hidden="true" className={`flex shrink-0 items-center justify-center rounded-[var(--radius-pequeno)] bg-destaque font-sans font-bold leading-none text-sobre-destaque ${lado}`}>
+      R
+    </span>
+  )
 }
 
 // Ponto pulsante sobreposto ao ícone de Competições — mesmo padrão visual (bg-destaque +
@@ -191,7 +212,7 @@ function itemClasse(colapsada) {
 function IndicadorCompeticaoAtiva() {
   return (
     <span className="absolute -right-0.5 -top-0.5 inline-flex h-2.5 w-2.5">
-      <span className="absolute inline-flex h-full w-full animate-pulso-sinal rounded-full bg-destaque shadow-[0_0_6px_var(--color-destaque)]" />
+      <span className="absolute inline-flex h-full w-full animate-pulso-sinal rounded-full bg-destaque" />
       <span className="sr-only">Competição ativa</span>
     </span>
   )
@@ -255,7 +276,7 @@ export default function Shell({ children }) {
           instantâneo enquanto o painel deslizava suavemente, duas velocidades pra uma
           única ação. */}
       <div
-        className={`fixed inset-0 z-30 bg-fundo/70 transition-opacity duration-200 lg:hidden ${
+        className={`fixed inset-0 z-30 bg-fundo/70 backdrop-blur-sm transition-opacity duration-200 lg:hidden ${
           menuAberto ? 'opacity-100' : 'pointer-events-none opacity-0'
         }`}
         onClick={fecharMenu}
@@ -264,81 +285,54 @@ export default function Shell({ children }) {
       {/* lg:sticky + h-screen: no desktop a sidebar vira uma coluna fixa de altura total,
           então o botão de recolher (no rodapé dela) fica SEMPRE visível sem rolar a página. */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-60 shrink-0 flex-col border-r border-borda bg-superficie transition-[transform,width] duration-200 lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 flex w-60 shrink-0 flex-col border-r border-borda bg-fundo transition-[transform,width] duration-200 lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 ${
           menuAberto ? 'translate-x-0' : '-translate-x-full'
-        } ${colapsada ? 'lg:w-16' : 'lg:w-60'}`}
+        } ${colapsada ? 'lg:w-[60px]' : 'lg:w-60'}`}
       >
-        <div className={`border-b border-borda px-5 py-5 ${colapsada ? 'lg:px-0 lg:text-center' : ''}`}>
-          <h1 className="font-display text-2xl font-bold uppercase tracking-widest text-texto">
-            <span className={colapsada ? 'lg:hidden' : ''}>Resenha</span>
-            <span className={`hidden ${colapsada ? 'lg:inline' : ''}`}>R</span>
-            <span className="text-destaque">.</span>
-          </h1>
-          <p className={`mt-0.5 font-mono text-[10px] uppercase tracking-[0.2em] text-texto-fraco ${colapsada ? 'lg:hidden' : ''}`}>
-            resenha cs2 // ops
-          </p>
+        <div className={`flex h-14 items-center gap-2.5 px-4 ${colapsada ? 'lg:justify-center lg:px-0' : ''}`}>
+          <Marca />
+          <div className={colapsada ? 'lg:hidden' : ''}>
+            <h1 className="font-display text-[15px] font-semibold leading-none text-texto">Resenha</h1>
+            <p className="mt-1 text-xs leading-none text-texto-fraco">CS2 do grupo</p>
+          </div>
         </div>
-        <nav className="flex-1 overflow-y-auto py-3">
-          {ITENS.map((item, indice) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              className={classeItem}
-              onClick={fecharMenu}
-              title={colapsada ? item.label : undefined}
-              aria-label={colapsada ? item.label : undefined}
-            >
-              <span className="relative shrink-0">
-                {NAV_ICONES[item.icone]}
-                {item.to === '/competicoes' && temCompeticaoAtiva && <IndicadorCompeticaoAtiva />}
-              </span>
-              <span className={`font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque ${colapsada ? 'lg:hidden' : ''}`}>
-                {numerarItem(indice)}
-              </span>
-              <span className={colapsada ? 'lg:hidden' : ''}>{item.label}</span>
-            </NavLink>
-          ))}
-          {jogador?.isSuperAdmin && (
-            <>
-              {/* Separador visual dos itens admin-only, no mesmo estilo dos outros
-                  rótulos micro do app (font-mono uppercase tracking largo) — a linha
-                  (border-t) fica mesmo com a sidebar colapsada, só o rótulo "Admin"
-                  some (como os demais textos nesse estado). */}
-              <div className={`mx-3 mt-3 border-t border-borda pt-2 ${colapsada ? 'lg:mx-2' : ''}`}>
-                <span className={`block pb-1 font-mono text-[10px] uppercase tracking-[0.2em] text-texto-fraco/60 ${colapsada ? 'lg:hidden' : ''}`}>
-                  Admin
-                </span>
+        <nav className="flex-1 space-y-5 overflow-y-auto py-3" aria-label="Menu">
+          {[...GRUPOS, ...(jogador?.isSuperAdmin ? [GRUPO_ADMIN] : [])].map((grupo) => (
+            <div key={grupo.titulo}>
+              <div className={`mb-1 px-4 text-xs font-medium text-texto-fraco/70 ${colapsada ? 'lg:hidden' : ''}`}>{grupo.titulo}</div>
+              <div className={`mx-4 mb-1 hidden h-px bg-borda ${colapsada ? 'lg:block' : ''}`} aria-hidden="true" />
+              <div className="space-y-0.5">
+                {grupo.itens.map((item) => (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    end={item.end}
+                    className={classeItem}
+                    onClick={fecharMenu}
+                    title={colapsada ? item.label : undefined}
+                    aria-label={colapsada ? item.label : undefined}
+                  >
+                    <span className="relative shrink-0">
+                      {NAV_ICONES[item.icone]}
+                      {item.to === '/competicoes' && temCompeticaoAtiva && <IndicadorCompeticaoAtiva />}
+                    </span>
+                    <span className={colapsada ? 'lg:hidden' : ''}>{item.label}</span>
+                  </NavLink>
+                ))}
               </div>
-              {ITENS_ADMIN.map((item, indice) => (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  className={classeItem}
-                  onClick={fecharMenu}
-                  title={colapsada ? item.label : undefined}
-                  aria-label={colapsada ? item.label : undefined}
-                >
-                  <span className="shrink-0">{NAV_ICONES[item.icone]}</span>
-                  <span className={`font-mono text-[10px] text-texto-fraco/70 group-hover:text-destaque ${colapsada ? 'lg:hidden' : ''}`}>
-                    {numerarItem(ITENS.length + indice)}
-                  </span>
-                  <span className={colapsada ? 'lg:hidden' : ''}>{item.label}</span>
-                </NavLink>
-              ))}
-            </>
-          )}
+            </div>
+          ))}
         </nav>
-        <div className="hidden border-t border-borda p-2 lg:flex">
+        <div className="hidden p-2 lg:flex">
           <button
             type="button"
             onClick={() => setColapsada((v) => !v)}
             aria-label={colapsada ? 'Expandir menu' : 'Recolher menu'}
             title={colapsada ? 'Expandir menu' : 'Recolher menu'}
-            className="panel-cut-sm flex h-10 w-full cursor-pointer items-center justify-center gap-2 text-texto-fraco transition-colors duration-200 hover:bg-superficie-alta hover:text-texto"
+            className="flex h-9 w-full cursor-pointer items-center justify-center gap-2 rounded-[var(--radius-pequeno)] text-texto-fraco transition-colors duration-150 hover:bg-superficie-alta hover:text-texto"
           >
             {NAV_ICONES[colapsada ? 'expandir' : 'colapsar']}
-            {!colapsada && <span className="text-[10px] font-mono uppercase tracking-wide">Recolher</span>}
+            {!colapsada && <span className="text-[13px]">Recolher</span>}
           </button>
         </div>
       </aside>
@@ -346,50 +340,54 @@ export default function Shell({ children }) {
           carrossel de Resenhas) impede o flex-item de encolher, alarga o body além do
           viewport e o iOS reduz o zoom da página INTEIRA pra caber (tudo fica miúdo). */}
       <div className="min-w-0 flex-1">
-        <header className="flex items-center justify-between gap-2 border-b border-borda bg-superficie/60 px-3 py-3 backdrop-blur lg:justify-end lg:gap-3 lg:px-6">
+        <header className="sticky top-0 z-20 flex h-14 items-center justify-between gap-2 border-b border-borda bg-fundo/80 px-3 backdrop-blur-md lg:justify-end lg:gap-2 lg:px-6">
           {/* Sem hambúrguer aqui: a barra inferior mobile cobre as rotas
               principais e o botão "Mais" abre este mesmo drawer, então um
               segundo gatilho no header seria redundante. */}
-          <div className="flex shrink-0 items-center gap-3 lg:hidden">
-            <h1 className="font-display text-lg font-bold uppercase tracking-widest text-texto">
-              Resenha<span className="text-destaque">.</span>
-            </h1>
+          <div className="flex shrink-0 items-center gap-2.5 lg:hidden">
+            <Marca tamanho="sm" />
+            <h1 className="font-display text-[15px] font-semibold text-texto">Resenha</h1>
           </div>
-          <div className="flex min-w-0 items-center gap-1.5 lg:gap-3">
-            <Link to={`/jogador/${jogador?.steamId}`} title="Meu perfil" className="group flex min-w-0 shrink-0 items-center gap-2">
-              {jogador?.avatarUrl && (
-                <img
-                  src={jogador.avatarUrl}
-                  alt=""
-                  className="panel-cut-sm h-8 w-8 shrink-0 border border-borda object-cover transition-colors group-hover:border-destaque/60"
-                />
-              )}
-              <span className="max-w-[64px] truncate font-mono text-sm text-texto transition-colors group-hover:text-destaque sm:max-w-none">{jogador?.nick}</span>
-            </Link>
+          <div className="flex min-w-0 items-center gap-1.5 lg:gap-2">
             <Link
               to="/apoie"
               title="Apoie o Resenha"
-              className="panel-cut-sm flex min-h-10 shrink-0 items-center gap-1.5 border border-destaque px-2 py-1 text-xs uppercase tracking-wide text-destaque transition-colors hover:bg-destaque/10 lg:min-h-0 lg:px-2.5"
+              aria-label="Apoie"
+              className={classesBotao({ variante: 'contorno', tamanho: 'sm', className: 'px-2 [&_svg]:h-4 [&_svg]:w-4 lg:px-2.5' })}
             >
-              <span className="shrink-0 [&>svg]:h-5 [&>svg]:w-5 lg:[&>svg]:h-6 lg:[&>svg]:w-6">{NAV_ICONES.apoie}</span>
+              {NAV_ICONES.apoie}
               <span className="hidden lg:inline">Apoie</span>
             </Link>
             <Link
               to="/tour"
               title="Como usar o Resenha"
-              className="panel-cut-sm flex min-h-10 shrink-0 items-center border border-borda px-2 py-1 text-xs uppercase tracking-wide text-texto-fraco transition-colors hover:border-destaque/50 hover:text-destaque lg:min-h-0 lg:px-2.5"
+              className={classesBotao({ variante: 'fantasma', tamanho: 'sm', className: 'px-2 lg:px-3' })}
             >
               Ajuda
             </Link>
+            <span className="mx-1 hidden h-6 w-px bg-borda lg:block" aria-hidden="true" />
+            <Link
+              to={`/jogador/${jogador?.steamId}`}
+              title="Meu perfil"
+              className="group flex h-9 min-w-0 shrink-0 items-center gap-2 rounded-[var(--radius-pequeno)] py-1 pl-1 pr-2.5 transition-colors duration-150 hover:bg-superficie-alta"
+            >
+              <span aria-hidden="true"><Avatar p={jogador ? { ...jogador, team: null } : null} size={28} /></span>
+              <span className="max-w-[56px] truncate text-[13px] font-medium text-texto sm:max-w-[140px]">{jogador?.nick}</span>
+            </Link>
             <button
               onClick={sair}
-              className="panel-cut-sm min-h-10 shrink-0 border border-borda px-2 py-1 text-xs uppercase tracking-wide text-texto-fraco transition-colors hover:border-perigo/50 hover:text-perigo lg:min-h-0 lg:px-2.5"
+              title="Sair"
+              aria-label="Sair"
+              className={classesBotao({ variante: 'fantasma', tamanho: 'icone', className: 'hover:!text-perigo' })}
             >
-              Sair
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px]" aria-hidden="true">
+                <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3" />
+                <path d="M10 17l-5-5 5-5M5 12h11" />
+              </svg>
             </button>
           </div>
         </header>
-        <main className="px-4 pb-20 pt-4 lg:px-6 lg:py-6">{children}</main>
+        <main className="mx-auto w-full max-w-[1320px] px-4 pb-24 pt-5 lg:px-10 lg:py-8">{children}</main>
       </div>
       <BarraInferior menuAberto={menuAberto} onAbrirMenu={() => setMenuAberto(true)} temCompeticaoAtiva={temCompeticaoAtiva} />
     </div>
@@ -411,8 +409,8 @@ function BarraInferior({ menuAberto, onAbrirMenu, temCompeticaoAtiva }) {
     : NAV_INFERIOR_BASE
 
   function itemNavClasse({ isActive }) {
-    return `flex h-14 flex-col items-center justify-center gap-1 text-[10px] font-mono uppercase tracking-wide transition-colors ${
-      isActive ? 'text-destaque' : 'text-texto-fraco'
+    return `relative flex h-16 flex-col items-center justify-center gap-1 text-[11px] font-medium transition-colors duration-150 [&_svg]:h-[22px] [&_svg]:w-[22px] ${
+      isActive ? 'text-texto [&_svg]:text-destaque' : 'text-texto-fraco'
     }`
   }
 
@@ -426,7 +424,7 @@ function BarraInferior({ menuAberto, onAbrirMenu, temCompeticaoAtiva }) {
 
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-20 grid border-t border-borda bg-superficie pb-[env(safe-area-inset-bottom)] lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-20 grid border-t border-borda bg-fundo/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-md lg:hidden"
       style={{ gridTemplateColumns: `repeat(${itens.length + 1}, minmax(0, 1fr))` }}
       aria-label="Navegação principal"
     >
@@ -444,8 +442,8 @@ function BarraInferior({ menuAberto, onAbrirMenu, temCompeticaoAtiva }) {
         onClick={onAbrirMenu}
         aria-label="Mais opções"
         aria-expanded={menuAberto}
-        className={`flex h-14 flex-col items-center justify-center gap-1 text-[10px] font-mono uppercase tracking-wide transition-colors ${
-          maisAtivo || !rotaCobertaPelasPrincipais ? 'text-destaque' : 'text-texto-fraco'
+        className={`relative flex h-16 flex-col items-center justify-center gap-1 text-[11px] font-medium transition-colors duration-150 [&_svg]:h-[22px] [&_svg]:w-[22px] ${
+          maisAtivo || !rotaCobertaPelasPrincipais ? 'text-texto [&_svg]:text-destaque' : 'text-texto-fraco'
         }`}
       >
         {NAV_ICONES.mais}

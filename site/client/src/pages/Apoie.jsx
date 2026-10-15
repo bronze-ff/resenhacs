@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import QRCode from 'qrcode'
-import { Card, SectionHeader } from '../components/ui'
+import { Button, CabecalhoPagina, Card } from '../components/ui'
 import { montarPayloadPix } from '../lib/pix.js'
 
 const CHAVE_PIX = '98dea706-4b3d-4ae4-b96d-e96a6669bb8a'
@@ -35,7 +35,7 @@ export default function Apoie() {
 
   return (
     <div className="mx-auto max-w-xl">
-      <SectionHeader titulo="Apoie o Resenha" />
+      <CabecalhoPagina eyebrow="PIX" titulo="Apoie o Resenha" />
       <Card className="p-6 text-center">
         <p className="mb-6 text-sm text-texto-fraco">
           O Resenha é mantido de graça pro grupo. Se ele te ajuda e você quiser contribuir com o
@@ -48,15 +48,11 @@ export default function Apoie() {
             className="mx-auto mb-6 h-56 w-56 border border-borda"
           />
         )}
-        <p className="mb-2 text-xs uppercase tracking-wide text-texto-fraco">Chave PIX (aleatória)</p>
+        <p className="rotulo mb-2">Chave PIX (aleatória)</p>
         <p className="mb-4 break-all font-mono text-sm text-texto">{CHAVE_PIX}</p>
-        <button
-          type="button"
-          onClick={copiar}
-          className="panel-cut-sm border border-borda px-4 py-2 text-xs uppercase tracking-wide text-texto-fraco transition-colors hover:border-destaque/50 hover:text-destaque"
-        >
+        <Button variante={copiado ? 'secundario' : 'primario'} onClick={copiar}>
           {copiado ? 'Copiado!' : 'Copiar Pix Copia e Cola'}
-        </button>
+        </Button>
       </Card>
     </div>
   )

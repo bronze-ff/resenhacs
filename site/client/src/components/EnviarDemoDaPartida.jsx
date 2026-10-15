@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { mapaDoCabecalho, cabecalhoDivergeDoMapa } from '../lib/demoHeader.js'
 import { nomeMapa } from '../lib/format.js'
+import { Button, EstadoErro, Campo, classeEntrada } from './ui'
 
 // Envio da Demo de uma Partida FACEIT stats-only, amarrado a ELA (matchId) — o
 // servidor só emite a URL pré-assinada pra quem jogou, e o Coletor só grava se a
@@ -42,7 +43,7 @@ export default function EnviarDemoDaPartida({ partida, euSteamId, onEnviado }) {
 
   if (emAndamento || aguardandoRefetch) {
     return (
-      <div className="panel-cut-sm border border-borda bg-superficie px-3 py-2 font-mono text-xs text-texto-fraco">
+      <div role="status" className="border border-borda bg-superficie px-3 py-2 text-sm text-texto-fraco">
         {aguardandoRefetch && !emAndamento
           ? 'Envio recebido! Processando em até 30 minutos — os dados completos aparecem no Feed quando terminar.'
           : 'Demo em processamento — os dados completos aparecem em até 30 minutos.'}
@@ -114,53 +115,36 @@ export default function EnviarDemoDaPartida({ partida, euSteamId, onEnviado }) {
   return (
     <div className="space-y-2">
       {envio?.status === 'falhou' && envio.enviadoPorVoce && (
-        <div className="panel-cut-sm border border-perigo/40 bg-perigo/10 px-3 py-2 font-mono text-xs text-perigo">
-          O envio anterior foi recusado: {envio.erro}. Você pode enviar outra demo.
-        </div>
+        <EstadoErro mensagem={`O envio anterior foi recusado: ${envio.erro}. Você pode enviar outra demo.`} />
       )}
 
       {!aberto ? (
-        <button
-          type="button"
-          onClick={() => setAberto(true)}
-          className="panel-cut-sm border border-borda bg-superficie px-3 py-1.5 font-mono text-xs uppercase tracking-widest text-texto-fraco hover:border-destaque hover:text-texto"
-        >
+        <Button variante="secundario" tamanho="sm" onClick={() => setAberto(true)}>
           Enviar demo desta partida
-        </button>
+        </Button>
       ) : (
-        <div className="panel-cut-sm space-y-3 border border-borda bg-superficie p-3">
-          <p className="font-mono text-xs text-texto-fraco">
+        <div className="space-y-3 border border-borda bg-superficie p-4">
+          <p className="text-sm text-texto-fraco">
             Baixe a demo desta partida na FACEIT e envie aqui. O processamento roda a cada ~30
             minutos e destrava ADR, KAST, rating, replay e clipes.
           </p>
-          <label htmlFor="demo-da-partida" className="block font-mono text-xs text-texto">
-            Arquivo .dem
-          </label>
-          <input
-            id="demo-da-partida"
-            type="file"
-            accept=".dem"
-            onChange={(e) => escolher(e.target.files, e.target)}
-            className="block w-full font-mono text-xs text-texto-fraco"
-          />
+          <Campo rotulo="Arquivo .dem" htmlFor="demo-da-partida" erro={erro}>
+            <input
+              id="demo-da-partida"
+              type="file"
+              accept=".dem"
+              onChange={(e) => escolher(e.target.files, e.target)}
+              className={`${classeEntrada} font-mono text-xs file:mr-3 file:border-0 file:bg-superficie-alta file:px-2 file:py-1 file:text-texto`}
+            />
+          </Campo>
           {arquivo && <p className="font-mono text-xs text-texto-fraco">{arquivo.name}</p>}
-          {erro && <p className="font-mono text-xs text-perigo">{erro}</p>}
           <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={enviar}
-              disabled={!arquivo || enviando}
-              className="panel-cut-sm border border-destaque bg-destaque/10 px-3 py-1.5 font-mono text-xs uppercase tracking-widest text-destaque disabled:opacity-40"
-            >
+            <Button variante="primario" tamanho="sm" onClick={enviar} disabled={!arquivo || enviando}>
               {enviando ? 'Enviando…' : 'Enviar'}
-            </button>
-            <button
-              type="button"
-              onClick={() => { setAberto(false); setArquivo(null); setErro(null) }}
-              className="panel-cut-sm border border-borda px-3 py-1.5 font-mono text-xs uppercase tracking-widest text-texto-fraco"
-            >
+            </Button>
+            <Button variante="fantasma" tamanho="sm" onClick={() => { setAberto(false); setArquivo(null); setErro(null) }}>
               Cancelar
-            </button>
+            </Button>
           </div>
         </div>
       )}
