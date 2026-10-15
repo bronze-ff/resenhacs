@@ -1,3 +1,4 @@
+import pytest
 from datetime import datetime, timezone
 
 from coletor import faceit
@@ -135,3 +136,18 @@ def test_baixar_demo_aceita_download_url_na_raiz_e_bytes_nao_gzipados():
         http_get_bytes=lambda url: b"raw dem sem gzip",
     )
     assert out == b"raw dem sem gzip"
+
+
+def test_descomprimir_gzip_com_teto_barra_bomba():
+    import gzip as _gz
+    from coletor import faceit as _f
+    bomba = _gz.compress(b"\0" * 2_000_000)
+    with pytest.raises(RuntimeError, match="teto"):
+        _f._descomprimir_gzip_com_teto(bomba, max_bytes=1_000_000)
+    assert _f._descomprimir_gzip_com_teto(_gz.compress(b"demo")) == b"demo"
+
+
+def test_http_get_bytes_exige_https():
+    from coletor import faceit as _f
+    with pytest.raises(RuntimeError, match="https"):
+        _f._http_get_bytes("http://demos.faceit.com/x.dem.gz")

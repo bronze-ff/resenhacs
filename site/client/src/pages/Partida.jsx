@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, Fragment } from 'react'
 import { useParams, useSearchParams, Link } from 'react-router-dom'
+import { hrefSeguro } from '../lib/urlSegura.js'
 import { nomeMapa, dataHora, origemPartida, nomeArma, corRating, TIPO_COMPRA } from '../lib/format.js'
 import { orientarPlacar } from '../lib/resultado.js'
 import {
@@ -1710,7 +1711,7 @@ export default function Partida() {
               {m.clips.map((c) => (
                 <a
                   key={c.id}
-                  href={c.url}
+                  href={hrefSeguro(c.url)}
                   target="_blank"
                   rel="noreferrer"
                   className="panel-cut-sm flex items-center gap-3 border border-borda bg-superficie p-3 font-mono text-sm transition-colors hover:border-destaque/60"

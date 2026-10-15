@@ -24,7 +24,9 @@ export function createClipesRouter({ db, requireAuth }) {
   const router = Router()
 
   router.get('/', requireAuth, async (req, res) => {
-    const periodo = PERIODOS[req.query.periodo] !== undefined ? req.query.periodo : 'sempre'
+    // Object.hasOwn: ?periodo=constructor achava a chave herdada do Object.prototype e
+    // jogava o texto da função dentro do SQL (500 garantido).
+    const periodo = Object.hasOwn(PERIODOS, String(req.query.periodo)) ? req.query.periodo : 'sempre'
     const eu = req.player.steamId
     const { rows } = await db.query(
       `select ac.id, ac.clip_url, ac.clip_snapshot_url, ac.pontuacao_total, ac.pontuacao_detalhe,
@@ -40,7 +42,8 @@ export function createClipesRouter({ db, requireAuth }) {
        left join match_players mp on mp.match_id = ac.match_id and mp.steam_id64 = ac.steam_id64
        left join steam_avatares sa on sa.steam_id64 = ac.steam_id64
        where ac.status = 'Processed' and ${partidaVisivelExpr('m', '$1')} ${PERIODOS[periodo]}
-       order by ac.pontuacao_total desc nulls last`,
+       order by ac.pontuacao_total desc nulls last
+       limit 200`,
       [eu],
     )
 

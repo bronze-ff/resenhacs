@@ -30,11 +30,24 @@ const MAX_UPLOAD_BYTES = 400 * 1024 * 1024
 // baixa do R2 e processa. Mesmo padrão já usado pela fila de Partidas Pro
 // (site/server/src/routes/partidasPro.js), mas aberto a qualquer jogador logado,
 // não só super admin.
+const MAX_UPLOADS_PENDENTES = 5
+
 export function createUploadRouter({ db, requireAuth, r2Client, r2Bucket }) {
   const router = Router()
 
   router.post('/upload-url', limiteEstrito, requireAuth, async (req, res) => {
     if (!r2Client) return res.status(503).json({ erro: 'Arquivamento (R2) não configurado' })
+
+    // Login é aberto a qualquer conta Steam: sem teto, uma conta descartável pedia URLs
+    // em laço e enchia o R2 (cada PUT aceita até o limite do presign). Poucos uploads
+    // pendentes por jogador cobrem o uso real (o Coletor processa de hora em hora).
+    const pendentesQ = await db.query(
+      "select count(*)::int as n from uploads_pendentes where adicionado_por = $1 and status = 'pendente'",
+      [req.player.steamId],
+    )
+    if ((pendentesQ.rows[0]?.n ?? 0) >= MAX_UPLOADS_PENDENTES) {
+      return res.status(429).json({ erro: `Você já tem ${MAX_UPLOADS_PENDENTES} demos esperando processamento. Aguarde o Coletor processar antes de enviar mais.` })
+    }
 
     const filename = String(req.body?.filename ?? '').trim()
     if (!filename.toLowerCase().endsWith('.dem')) {

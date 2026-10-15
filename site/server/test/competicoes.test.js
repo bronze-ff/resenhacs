@@ -10,7 +10,7 @@ const cookieAdmin = `resenha_token=${signToken({ steamId: '999', isSuperAdmin: t
 function appWith(handlers) {
   const db = {
     query: vi.fn().mockImplementation((sql, params) => {
-      if (sql.includes('is_super_admin from players')) return Promise.resolve({ rows: [{ is_super_admin: true }] })
+      if (sql.includes('is_super_admin from players')) return Promise.resolve({ rows: [{ is_super_admin: params?.[0] === '999' }] })
       for (const [needle, rows] of handlers) if (sql.includes(needle)) return Promise.resolve({ rows })
       return Promise.resolve({ rows: [] })
     }),
@@ -652,7 +652,7 @@ describe('PUT /api/competicoes/:id/tradelink', () => {
     const { app, db } = appWith([
       ['from competicoes where id', [{ id: COMP_ID, data_fim: '2026-07-01', vencedor_steam_id64: '765', vencedor_confirmado_em: '2026-07-02T00:00:00Z' }]],
     ])
-    const res = await request(app).put(`/api/competicoes/${COMP_ID}/tradelink`).set('Cookie', cookieJogador).send({ tradelink: 'https://steamcommunity.com/tradeoffer/x' })
+    const res = await request(app).put(`/api/competicoes/${COMP_ID}/tradelink`).set('Cookie', cookieJogador).send({ tradelink: 'https://steamcommunity.com/tradeoffer/new/?partner=12345&token=AbC-1_x' })
     expect(res.status).toBe(200)
     const update = db.query.mock.calls.find(([sql]) => sql.includes('update competicoes set tradelink_vencedor'))
     expect(update).toBeTruthy()

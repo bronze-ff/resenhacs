@@ -1,11 +1,15 @@
 const STEAM_OPENID_URL = 'https://steamcommunity.com/openid/login'
 const NONCE_MAX_AGE_MS = 5 * 60 * 1000
 
-export function buildSteamRedirectUrl(appUrl) {
+// `state`: valor aleatório que também vai num cookie httpOnly do navegador que iniciou o
+// login (ver routes/auth.js). Volta no return_to e precisa bater com o cookie — sem isso
+// um atacante podia fazer a vítima concluir o login DELE (login CSRF).
+export function buildSteamRedirectUrl(appUrl, state = null) {
+  const returnTo = `${appUrl}/api/auth/steam/return${state ? `?state=${encodeURIComponent(state)}` : ''}`
   const params = new URLSearchParams({
     'openid.ns': 'http://specs.openid.net/auth/2.0',
     'openid.mode': 'checkid_setup',
-    'openid.return_to': `${appUrl}/api/auth/steam/return`,
+    'openid.return_to': returnTo,
     'openid.realm': appUrl,
     'openid.identity': 'http://specs.openid.net/auth/2.0/identifier_select',
     'openid.claimed_id': 'http://specs.openid.net/auth/2.0/identifier_select',

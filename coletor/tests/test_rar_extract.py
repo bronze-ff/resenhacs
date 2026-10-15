@@ -51,8 +51,15 @@ def test_rar_sem_dem_dentro_da_erro():
 
 
 class _FakeRarInfo:
-    def __init__(self, file_size):
+    def __init__(self, file_size, symlink=False):
         self.file_size = file_size
+        self._symlink = symlink
+
+    def is_file(self):
+        return not self._symlink
+
+    def is_symlink(self):
+        return self._symlink
 
 
 class _FakeRarFile:
@@ -60,8 +67,10 @@ class _FakeRarFile:
     extrair_dems_de_rar sem precisar montar um .rar real malicioso (o que exigiria uma
     ferramenta externa capaz de gravar entradas com nome ../.. — a maioria recusa)."""
 
-    def __init__(self, tamanhos_por_nome):
+    def __init__(self, tamanhos_por_nome, symlinks=(), bytes_reais=b"x"):
         self._tamanhos = tamanhos_por_nome
+        self._symlinks = set(symlinks)
+        self._bytes_reais = bytes_reais
 
     def __enter__(self):
         return self
@@ -73,10 +82,10 @@ class _FakeRarFile:
         return list(self._tamanhos)
 
     def getinfo(self, nome):
-        return _FakeRarInfo(self._tamanhos[nome])
+        return _FakeRarInfo(self._tamanhos[nome], symlink=nome in self._symlinks)
 
     def extract(self, nome, path):
-        (Path(path) / nome).write_bytes(b"x")
+        (Path(path) / nome).write_bytes(self._bytes_reais)
 
 
 def test_extrai_dems_de_rar_rejeita_travessia_de_diretorio(monkeypatch, tmp_path):
@@ -124,3 +133,21 @@ def test_caminho_seguro_aceita_nome_normal_dentro_do_destino(tmp_path):
     destino.mkdir()
     resolvido = rar_extract._caminho_seguro(destino, "mapa1.dem")
     assert resolvido.startswith(str(destino.resolve()))
+
+
+def test_extrai_dems_de_rar_rejeita_link_simbolico(monkeypatch, tmp_path):
+    fake = _FakeRarFile({"m1.dem": 10}, symlinks={"m1.dem"})
+    monkeypatch.setattr(rar_extract.rarfile, "RarFile", lambda p: fake)
+    with pytest.raises(RuntimeError, match="arquivo comum"):
+        extrair_dems_de_rar(tmp_path / "fake.rar", tmp_path / "saida")
+
+
+def test_extrai_dems_de_rar_confere_tamanho_real_e_apaga_o_que_extraiu(monkeypatch, tmp_path):
+    # Cabeçalho declara 1 byte, mas a extração escreve mais que o teto.
+    monkeypatch.setattr(rar_extract, "_MAX_DESCOMPRIMIDO_BYTES", 100)
+    fake = _FakeRarFile({"m1.dem": 1}, bytes_reais=b"x" * 101)
+    monkeypatch.setattr(rar_extract.rarfile, "RarFile", lambda p: fake)
+    saida = tmp_path / "saida"
+    with pytest.raises(RuntimeError, match="teto"):
+        extrair_dems_de_rar(tmp_path / "fake.rar", saida)
+    assert not (saida / "m1.dem").exists()

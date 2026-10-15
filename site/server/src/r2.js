@@ -48,9 +48,17 @@ export async function presignDownload(client, bucket, key, expiresInSeconds = 72
   return getSignedUrl(client, cmd, { expiresIn: expiresInSeconds })
 }
 
-export async function streamObject(client, bucket, key, res) {
+// `baixarComo`: nome do arquivo pra objetos que vêm de upload de usuário (demo). Força
+// octet-stream + attachment em vez de repassar o ContentType gravado no R2 — servido na
+// MESMA origem do site, um tipo text/html ali viraria página executável.
+export async function streamObject(client, bucket, key, res, { baixarComo = null } = {}) {
   const obj = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }))
-  if (obj.ContentType) res.type(obj.ContentType)
+  if (baixarComo) {
+    res.type('application/octet-stream')
+    res.attachment(baixarComo)
+  } else if (obj.ContentType) {
+    res.type(obj.ContentType)
+  }
   // Repassa o Content-Encoding cru (replays novos: gzip). Não descomprime e não
   // recomprime: o fetch().json() do navegador descomprime sozinho. Objeto antigo
   // sem o header segue como JSON puro e continua parseando.

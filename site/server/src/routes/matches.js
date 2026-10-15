@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import { limiteEstrito } from '../rateLimit.js'
 import { keyFromR2Url, streamObject, presignDownload } from '../r2.js'
 import { partidaVisivelExpr } from '../friendships.js'
 import { calcularStatsPorLado } from '../statsLado.js'
@@ -662,7 +663,8 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
   // clipe de OUTRO jogador — bug real reportado pelo usuário); BP aceita steamId,
   // então garante que o clipe é sempre daquele jogador, mas ainda é "a melhor jogada
   // DELE na partida inteira", não um round escolhido. Ver allstarClip.js.
-  router.post('/:id/jogador/:steamId/clipe', requireAuth, async (req, res) => {
+  // limiteEstrito: cada pedido aceito custa crédito pago no Allstar.
+  router.post('/:id/jogador/:steamId/clipe', limiteEstrito, requireAuth, async (req, res) => {
     if (!config.allstarApiKey || !r2Client) {
       return res.status(503).json({ erro: 'Integração com o Allstar não configurada' })
     }
@@ -715,8 +717,10 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
       await db.query('insert into allstar_clips (match_id, steam_id64, request_id) values ($1, $2, $3)', [id, steamId, requestId])
       res.json({ status: 'Submitted' })
     } catch (e) {
-      console.error(`allstar: falha ao pedir clipe do jogador ${steamId} na partida ${id}:`, e)
-      res.status(502).json({ erro: `Falha ao pedir o clipe ao Allstar: ${e.message}` })
+      // Detalhe (trecho da resposta do Allstar) só no log do servidor, sem o SteamID;
+      // o client recebe mensagem genérica.
+      console.error(`allstar: falha ao pedir clipe na partida ${id}: ${e.message}`)
+      res.status(502).json({ erro: 'Falha ao pedir o clipe ao Allstar. Tente de novo em alguns minutos.' })
     }
   })
 
@@ -772,7 +776,7 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
     const key = keyFromR2Url(rows[0]?.demo_url, r2Bucket)
     if (!key) return res.status(404).json({ erro: 'Demo não disponível' })
     try {
-      await streamObject(r2Client, r2Bucket, key, res)
+      await streamObject(r2Client, r2Bucket, key, res, { baixarComo: `${req.params.id}.dem` })
     } catch {
       res.status(502).json({ erro: 'Falha ao buscar o demo no R2' })
     }

@@ -432,7 +432,9 @@ export default function Landing() {
           <span className="font-display text-base font-semibold text-texto">
             Resenha
           </span>
-          <p className="rotulo">Feito pro grupo, não pra internet</p>
+          <p className="rotulo">
+            Feito pro grupo, não pra internet · <a href="/privacidade" className="hover:text-texto">Privacidade</a>
+          </p>
         </div>
       </footer>
 

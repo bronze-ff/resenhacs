@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { Badge, Button, CabecalhoPagina, Card, EstadoErro, Input, classesBotao } from '../components/ui'
 import { useAuth } from '../auth/AuthContext.jsx'
 import PassoAPassoSteam from '../components/PassoAPassoSteam.jsx'
+import PrivacidadeConta from '../components/PrivacidadeConta.jsx'
 
 // Seta que gira 90° quando aberto — mesmo ícone pros dois estados, só rotaciona.
 function SetaExpandir({ aberto }) {
@@ -132,6 +133,7 @@ export default function Perfil() {
           </p>
         )}
       </section>
+      <PrivacidadeConta />
       </div>
       </div>
     </div>

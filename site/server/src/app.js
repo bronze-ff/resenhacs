@@ -4,6 +4,7 @@ import cookieParser from 'cookie-parser'
 import { createAuthRouter } from './routes/auth.js'
 import { createFriendshipsRouter } from './routes/friendships.js'
 import { createPlayersRouter } from './routes/players.js'
+import { createMinhaContaRouter } from './routes/minhaConta.js'
 import { createFaceitRouter } from './routes/faceit.js'
 import { createMatchesRouter } from './routes/matches.js'
 import { createProfileRouter } from './routes/profile.js'
@@ -67,6 +68,8 @@ export function createApp({
   faceitFetchImpl,
 } = {}) {
   const app = express()
+  // Não anunciar a stack (X-Powered-By: Express) pra quem varre o site atrás de alvo.
+  app.disable('x-powered-by')
   // Em produção (Vercel) a função fica atrás de UM proxy (o edge deles), que sempre manda
   // X-Forwarded-For; sem confiar nesse hop o express-rate-limit não consegue identificar o
   // IP do cliente e lança erro de validação em TODA requisição (ERR_ERL_UNEXPECTED_X_FORWARDED_FOR),
@@ -92,6 +95,7 @@ export function createApp({
   app.use('/api/auth', createAuthRouter({ config, db, verifySteamLogin, fetchPersona, fetchFriendList, requireAuth }))
   app.use('/api/amigos', createFriendshipsRouter({ db, requireAuth }))
   app.use('/api/players', createPlayersRouter({ db, requireAuth, fetchBans }))
+  app.use('/api/minha-conta', createMinhaContaRouter({ db, requireAuth, config }))
   app.use('/api/faceit', requireAuth, createFaceitRouter({ config, db, ...(faceitFetchImpl ? { fetchImpl: faceitFetchImpl } : {}) }))
   app.use('/api/matches', createMatchesRouter({ db, requireAuth, r2Client, r2Bucket: config.r2Bucket, config }))
   app.use('/api/profile', createProfileRouter({ db, requireAuth }))
@@ -125,7 +129,9 @@ export function createApp({
   // eslint-disable-next-line no-unused-vars
   app.use((err, req, res, next) => {
     capturarErro(err)
-    console.error(`erro não tratado em ${req.method} ${req.path}:`, err)
+    // Só mensagem e código no log: o objeto inteiro de erro do pg traz `detail` com
+    // valores das linhas (SteamID, nick). O Sentry já recebe o erro completo, com scrub.
+    console.error(`erro não tratado em ${req.method} ${req.path}: ${err?.code ?? ''} ${err?.message ?? err}`)
     if (!res.headersSent) res.status(500).json({ erro: 'Erro interno' })
   })
 

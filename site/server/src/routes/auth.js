@@ -1,7 +1,16 @@
 import { Router } from 'express'
+import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { buildSteamRedirectUrl } from '../steam/openid.js'
 import { signToken, verifyToken } from '../auth/jwt.js'
 import { parCanonico } from '../friendships.js'
+
+const COOKIE_STATE = 'resenha_openid_state'
+
+function mesmoValor(a, b) {
+  const ba = Buffer.from(a)
+  const bb = Buffer.from(b)
+  return ba.length === bb.length && timingSafeEqual(ba, bb)
+}
 
 export function createAuthRouter({ config, db, verifySteamLogin, fetchPersona, fetchFriendList, requireAuth }) {
   const router = Router()
@@ -12,10 +21,19 @@ export function createAuthRouter({ config, db, verifySteamLogin, fetchPersona, f
     if (/^\/[a-zA-Z0-9/_-]*$/.test(returnTo)) {
       res.cookie('resenha_post_login', returnTo, { httpOnly: true, secure: config.isProduction, sameSite: 'lax', maxAge: 5 * 60 * 1000 })
     }
-    res.redirect(buildSteamRedirectUrl(config.appUrl))
+    const state = randomBytes(24).toString('base64url')
+    res.cookie(COOKIE_STATE, state, { httpOnly: true, secure: config.isProduction, sameSite: 'lax', maxAge: 10 * 60 * 1000 })
+    res.redirect(buildSteamRedirectUrl(config.appUrl, state))
   })
 
   router.get('/steam/return', async (req, res) => {
+    // Login CSRF: o retorno só vale no MESMO navegador que começou o login. O state do
+    // cookie tem que bater com o que voltou no return_to (comparação em tempo constante).
+    const esperado = String(req.cookies?.[COOKIE_STATE] ?? '')
+    const recebido = String(req.query.state ?? '')
+    res.clearCookie(COOKIE_STATE)
+    if (!esperado || !mesmoValor(esperado, recebido)) return res.redirect(`${config.appUrl}/?erro=login-invalido`)
+
     const login = await verifySteamLogin(req.query, config.appUrl)
     if (!login) return res.redirect(`${config.appUrl}/?erro=login-invalido`)
     const { steamId, nonce } = login

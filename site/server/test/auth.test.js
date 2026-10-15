@@ -77,52 +77,58 @@ describe('GET /api/auth/steam', () => {
   })
 })
 
+const STATE = 'estado-de-teste'
+const RETORNO = `/api/auth/steam/return?openid.mode=id_res&state=${STATE}`
+const COOKIE_STATE = `resenha_openid_state=${STATE}`
+const cookieToken = (res) => (res.headers['set-cookie'] ?? []).find((c) => c.startsWith('resenha_token=')) ?? ''
+
 describe('GET /api/auth/steam/return', () => {
   it('whitelistado: seta cookie e redireciona para o app', async () => {
     const { app } = appWith({ rows: [JOGADOR] })
-    const res = await request(app).get('/api/auth/steam/return?openid.mode=id_res')
+    const res = await request(app).get(RETORNO).set('Cookie', COOKIE_STATE)
     expect(res.status).toBe(302)
     expect(res.headers.location).toBe(config.appUrl)
-    const cookie = res.headers['set-cookie'][0]
+    const cookie = cookieToken(res)
     expect(cookie).toContain('resenha_token=')
     expect(cookie).toContain('HttpOnly')
   })
 
   it('primeiro login (fora da whitelist antiga): cria o jogador e loga mesmo assim', async () => {
     const { app } = appWith({ rows: [{ ...JOGADOR, is_super_admin: false }] })
-    const res = await request(app).get('/api/auth/steam/return?openid.mode=id_res')
+    const res = await request(app).get(RETORNO).set('Cookie', COOKIE_STATE)
     expect(res.status).toBe(302)
     expect(res.headers.location).toBe(config.appUrl)
-    expect(res.headers['set-cookie'][0]).toContain('resenha_token=')
+    expect(cookieToken(res)).toContain('resenha_token=')
   })
 
   it('com returnTo salvo em cookie: redireciona pro destino pós-login', async () => {
     const { app } = appWith({ rows: [JOGADOR] })
     const agent = request.agent(app)
-    await agent.get('/api/auth/steam?returnTo=/convite/tok1')
-    const res = await agent.get('/api/auth/steam/return?openid.mode=id_res')
+    const inicio = await agent.get('/api/auth/steam?returnTo=/convite/tok1')
+    const state = new URL(new URL(inicio.headers.location).searchParams.get('openid.return_to')).searchParams.get('state')
+    const res = await agent.get(`/api/auth/steam/return?openid.mode=id_res&state=${state}`)
     expect(res.status).toBe(302)
     expect(res.headers.location).toBe(`${config.appUrl}/convite/tok1`)
   })
 
   it('assinatura inválida: redireciona com erro', async () => {
     const { app } = appWith({ login: null })
-    const res = await request(app).get('/api/auth/steam/return?openid.mode=id_res')
+    const res = await request(app).get(RETORNO).set('Cookie', COOKIE_STATE)
     expect(res.status).toBe(302)
     expect(res.headers.location).toBe(`${config.appUrl}/?erro=login-invalido`)
   })
 
   it('nonce reutilizado (replay): redireciona com erro sem cookie', async () => {
     const { app } = appWith({ rows: [JOGADOR], nonceReplay: true })
-    const res = await request(app).get('/api/auth/steam/return?openid.mode=id_res')
+    const res = await request(app).get(RETORNO).set('Cookie', COOKIE_STATE)
     expect(res.status).toBe(302)
     expect(res.headers.location).toBe(`${config.appUrl}/?erro=login-invalido`)
-    expect(res.headers['set-cookie']).toBeUndefined()
+    expect(cookieToken(res)).toBe('')
   })
 
   it('marca conta_criada_em no upsert de players (mantendo valor existente via coalesce)', async () => {
     const { app, db } = appWith({ rows: [JOGADOR] })
-    await request(app).get('/api/auth/steam/return?openid.mode=id_res')
+    await request(app).get(RETORNO).set('Cookie', COOKIE_STATE)
     const queries = db.query.mock.calls
     expect(queries.some(([sql]) => sql.includes('conta_criada_em = coalesce'))).toBe(true)
   })
@@ -134,7 +140,7 @@ describe('GET /api/auth/steam/return', () => {
       fetchFriendList,
       amigosComConta: [{ steam_id64: '222' }], // só 222 tem conta; 333 é ignorado
     })
-    const res = await request(app).get('/api/auth/steam/return?openid.mode=id_res')
+    const res = await request(app).get(RETORNO).set('Cookie', COOKIE_STATE)
     expect(res.status).toBe(302)
     expect(fetchFriendList).toHaveBeenCalledWith(JOGADOR.steam_id64)
     const queries = db.query.mock.calls
@@ -146,7 +152,7 @@ describe('GET /api/auth/steam/return', () => {
 
   it('auto-friend: perfil Steam privado (fetchFriendList vazio) não cria amizade nenhuma', async () => {
     const { app, db } = appWith({ rows: [JOGADOR], fetchFriendList: vi.fn().mockResolvedValue([]) })
-    await request(app).get('/api/auth/steam/return?openid.mode=id_res')
+    await request(app).get(RETORNO).set('Cookie', COOKIE_STATE)
     const queries = db.query.mock.calls
     expect(queries.some(([sql]) => sql.includes('insert into friendships'))).toBe(false)
   })
@@ -154,10 +160,10 @@ describe('GET /api/auth/steam/return', () => {
   it('auto-friend: falha no fetchFriendList não quebra o login (best-effort)', async () => {
     const fetchFriendList = vi.fn().mockRejectedValue(new Error('steam fora do ar'))
     const { app } = appWith({ rows: [JOGADOR], fetchFriendList })
-    const res = await request(app).get('/api/auth/steam/return?openid.mode=id_res')
+    const res = await request(app).get(RETORNO).set('Cookie', COOKIE_STATE)
     expect(res.status).toBe(302)
     expect(res.headers.location).toBe(config.appUrl)
-    expect(res.headers['set-cookie'][0]).toContain('resenha_token=')
+    expect(cookieToken(res)).toContain('resenha_token=')
   })
 })
 
@@ -230,5 +236,33 @@ describe('requireAuth: revogação de sessão', () => {
     const { app } = appWith({ rows: [{ ...JOGADOR, tokens_validos_apos: null }] })
     const res = await request(app).get('/api/auth/me').set('Cookie', cookieFor())
     expect(res.status).toBe(200)
+  })
+})
+
+
+describe('login CSRF (state do OpenID)', () => {
+  it('/steam grava o state num cookie httpOnly e manda o mesmo valor no return_to', async () => {
+    const { app } = appWith({ rows: [JOGADOR] })
+    const res = await request(app).get('/api/auth/steam')
+    const cookie = res.headers['set-cookie'].find((c) => c.startsWith('resenha_openid_state='))
+    expect(cookie).toContain('HttpOnly')
+    const valor = cookie.split(';')[0].split('=')[1]
+    const returnTo = new URL(res.headers.location).searchParams.get('openid.return_to')
+    expect(new URL(returnTo).searchParams.get('state')).toBe(valor)
+  })
+
+  it('retorno sem o cookie de state (outro navegador) é recusado sem falar com a Steam', async () => {
+    const { app, verifySteamLogin } = appWith({ rows: [JOGADOR] })
+    const res = await request(app).get(RETORNO)
+    expect(res.headers.location).toBe(`${config.appUrl}/?erro=login-invalido`)
+    expect(cookieToken(res)).toBe('')
+    if (verifySteamLogin?.mock) expect(verifySteamLogin).not.toHaveBeenCalled()
+  })
+
+  it('state diferente do cookie é recusado', async () => {
+    const { app } = appWith({ rows: [JOGADOR] })
+    const res = await request(app).get(RETORNO).set('Cookie', 'resenha_openid_state=outro-valor')
+    expect(res.headers.location).toBe(`${config.appUrl}/?erro=login-invalido`)
+    expect(cookieToken(res)).toBe('')
   })
 })

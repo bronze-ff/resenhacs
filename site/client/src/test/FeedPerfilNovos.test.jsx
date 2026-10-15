@@ -152,3 +152,14 @@ describe('PontosFortes', () => {
     expect(container.textContent).toBe('')
   })
 })
+
+describe('hrefSeguro', () => {
+  it('só deixa passar http(s)', async () => {
+    const { hrefSeguro } = await import('../lib/urlSegura.js')
+    expect(hrefSeguro('https://allstar.gg/clip?x=1')).toBe('https://allstar.gg/clip?x=1')
+    expect(hrefSeguro('javascript:alert(1)')).toBeUndefined()
+    expect(hrefSeguro('data:text/html,oi')).toBeUndefined()
+    expect(hrefSeguro('nada')).toBeUndefined()
+    expect(hrefSeguro(null)).toBeUndefined()
+  })
+})

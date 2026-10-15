@@ -239,3 +239,20 @@ describe('evento do PostHog', () => {
     expect(fonte).toMatch(/chaveSensivel/)
   })
 })
+
+describe('anonimização de ids nas URLs', () => {
+  it('troca SteamID e id de partida em campos de URL, mas mantém o distinct_id', async () => {
+    const { limparEventoPosthog } = await import('../observabilidade/posthog.js')
+    const evento = limparEventoPosthog({
+      event: '$pageview',
+      distinct_id: '76561198000000001',
+      properties: {
+        $current_url: 'https://resenha.app/jogador/76561198000000002',
+        $pathname: '/partida/0f8fad5b-d9cb-469f-a165-70867728950e',
+      },
+    })
+    expect(evento.distinct_id).toBe('76561198000000001')
+    expect(evento.properties.$current_url).toBe('https://resenha.app/jogador/:steamid')
+    expect(evento.properties.$pathname).toBe('/partida/:id')
+  })
+})
