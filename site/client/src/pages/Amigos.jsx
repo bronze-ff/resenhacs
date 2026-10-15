@@ -1,12 +1,12 @@
 import { useEffect, useState, useCallback } from 'react'
 import { Link } from 'react-router-dom'
-import { Card, SectionHeader, Badge } from '../components/ui'
+import { Avatar, Badge, Button, CabecalhoPagina, Card, EstadoErro, EstadoVazio, Input } from '../components/ui'
 
 function LinhaJogador({ j, ban, acao }) {
   return (
     <Card className="flex items-center gap-3 p-3">
-      {j.avatarUrl && <img src={j.avatarUrl} alt="" className="panel-cut-sm h-8 w-8 shrink-0 border border-borda object-cover" />}
-      <Link to={`/jogador/${j.steamId}`} className="min-w-0 flex-1 truncate font-mono text-sm text-texto hover:text-destaque">
+      <Avatar p={j} size={36} />
+      <Link to={`/jogador/${j.steamId}`} className="min-w-0 flex-1 truncate font-display text-base font-semibold text-texto hover:text-destaque">
         {j.nick || j.steamId}
       </Link>
       {ban?.vacBanned && <Badge tom="perigo" title={`VAC ban — ${ban.numVacBans} conta(s)`}>VAC ban</Badge>}
@@ -55,34 +55,39 @@ export default function Amigos() {
   const aceitar = async (steamId) => { await fetch(`/api/amigos/${steamId}/aceitar`, { method: 'POST' }); recarregar() }
   const remover = async (steamId) => { await fetch(`/api/amigos/${steamId}`, { method: 'DELETE' }); recarregar() }
 
-  const btn = 'panel-cut-sm shrink-0 border px-2 py-1 font-mono text-[11px] uppercase tracking-wide'
-
   return (
     <div className="space-y-6">
-      <SectionHeader titulo="Amigos" acao={<span className="font-mono text-xs text-texto-fraco">{dados.amigos.length} amigo(s)</span>} />
+      <CabecalhoPagina
+        eyebrow="Social"
+        titulo="Amigos"
+        descricao="Adicione amigos pelo SteamID e acompanhe pedidos."
+        acoes={<span className="font-mono text-xs text-texto-fraco">{dados.amigos.length} amigo(s)</span>}
+        className="!mb-0"
+      />
 
       <Card className="p-4">
-        <h3 className="mb-3 font-display text-sm font-semibold uppercase tracking-wide text-texto">Adicionar amigo</h3>
+        <h3 className="rotulo mb-3">Adicionar amigo</h3>
         <form onSubmit={pedir} className="flex gap-2">
-          <input
+          <Input
             value={novo}
             onChange={(e) => setNovo(e.target.value)}
             placeholder="SteamID64 ou link do perfil"
-            className="panel-cut-sm min-h-10 flex-1 border border-borda bg-superficie px-3 py-2 font-mono text-sm"
+            aria-label="SteamID64 ou link do perfil"
+            className="flex-1 font-mono"
           />
-          <button type="submit" disabled={!novo.trim()} className={`${btn} border-destaque bg-destaque text-fundo disabled:opacity-40`}>Pedir</button>
+          <Button type="submit" variante="primario" disabled={!novo.trim()}>Pedir</Button>
         </form>
-        {erro && <p className="mt-2 font-mono text-sm text-perigo">{erro}</p>}
+        {erro && <EstadoErro mensagem={erro} className="mt-3" />}
       </Card>
 
       {dados.recebidos.length > 0 && (
         <section className="space-y-2">
-          <h3 className="font-display text-sm font-semibold uppercase tracking-wide text-texto-fraco">Pedidos recebidos</h3>
+          <h3 className="rotulo">Pedidos recebidos</h3>
           {dados.recebidos.map((j) => (
             <LinhaJogador key={j.steamId} j={j} ban={bans?.get(j.steamId)} acao={
-              <span className="flex gap-1">
-                <button onClick={() => aceitar(j.steamId)} className={`${btn} border-sucesso text-sucesso`}>Aceitar</button>
-                <button onClick={() => remover(j.steamId)} className={`${btn} border-borda text-texto-fraco`}>Recusar</button>
+              <span className="flex gap-2">
+                <Button variante="primario" tamanho="sm" onClick={() => aceitar(j.steamId)}>Aceitar</Button>
+                <Button variante="fantasma" tamanho="sm" onClick={() => remover(j.steamId)}>Recusar</Button>
               </span>
             } />
           ))}
@@ -91,22 +96,22 @@ export default function Amigos() {
 
       {dados.enviados.length > 0 && (
         <section className="space-y-2">
-          <h3 className="font-display text-sm font-semibold uppercase tracking-wide text-texto-fraco">Pedidos enviados</h3>
+          <h3 className="rotulo">Pedidos enviados</h3>
           {dados.enviados.map((j) => (
             <LinhaJogador key={j.steamId} j={j} ban={bans?.get(j.steamId)} acao={
-              <button onClick={() => remover(j.steamId)} className={`${btn} border-borda text-texto-fraco`}>Cancelar</button>
+              <Button variante="fantasma" tamanho="sm" onClick={() => remover(j.steamId)}>Cancelar</Button>
             } />
           ))}
         </section>
       )}
 
       <section className="space-y-2">
-        <h3 className="font-display text-sm font-semibold uppercase tracking-wide text-texto-fraco">Amigos</h3>
+        <h3 className="rotulo">Amigos</h3>
         {dados.amigos.length === 0
-          ? <p className="font-mono text-sm text-texto-fraco">Você ainda não tem amigos. Adicione pelo SteamID acima.</p>
+          ? <EstadoVazio titulo="Nenhum amigo ainda" descricao="Você ainda não tem amigos. Adicione pelo SteamID acima." />
           : dados.amigos.map((j) => (
             <LinhaJogador key={j.steamId} j={j} ban={bans?.get(j.steamId)} acao={
-              <button onClick={() => remover(j.steamId)} className={`${btn} border-borda text-texto-fraco hover:border-perigo hover:text-perigo`}>Remover</button>
+              <Button variante="perigo" tamanho="sm" onClick={() => remover(j.steamId)}>Remover</Button>
             } />
           ))}
       </section>

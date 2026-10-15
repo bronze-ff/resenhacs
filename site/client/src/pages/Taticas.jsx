@@ -25,13 +25,14 @@ export default function Taticas() {
   if (!mapa || !MAPAS_POOL.includes(mapa)) {
     return (
       <ExplorarMapas
+        eyebrow="Táticas"
         contagens={contagens}
         onEscolher={(m) => setSearchParams({ map: m })}
         subtitulo="Escolha um mapa pra ver o playbook curado do grupo."
         badges={(m) => {
           const total = contagens?.find((c) => c.map === m)?.total ?? 0
           return (
-            <Badge tom="destaque" className="!bg-fundo/80">
+            <Badge tom={total > 0 ? 'destaque' : 'neutro'} className="!bg-fundo/80 tabular-nums">
               {total} {total === 1 ? 'tática' : 'táticas'}
             </Badge>
           )

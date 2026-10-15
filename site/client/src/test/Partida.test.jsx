@@ -85,7 +85,7 @@ describe('Partida — destaque do MVP', () => {
 
 async function abrirClipeDoJogador(partida) {
   montar(partida)
-  fireEvent.click(await screen.findByRole('button', { name: 'Clipes' }))
+  fireEvent.click(await screen.findByRole('tab', { name: 'Clipes' }))
   // O seletor de jogador e o <select> "Anexar clipe" expõem o mesmo nick.
   const [seletor] = screen.getAllByRole('button', { name: /fih/i })
   fireEvent.click(seletor)

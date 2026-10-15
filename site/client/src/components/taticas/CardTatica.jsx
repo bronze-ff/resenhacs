@@ -31,8 +31,8 @@ export default function CardTatica({ tatica, onSelecionar }) {
         </Badge>
       </div>
       <div className="min-w-0 flex-1 p-2">
-        <p className="truncate font-display text-sm font-semibold uppercase text-texto">{tatica.titulo}</p>
-        <p className="font-mono text-[10px] uppercase text-texto-fraco">
+        <p className="truncate font-display text-sm font-semibold text-texto">{tatica.titulo}</p>
+        <p className="font-mono text-[11px] text-texto-fraco">
           {tatica.lado} · {ROTULO_ARMAS[tatica.armas] ?? tatica.armas}
         </p>
       </div>

@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from 'react'
-import { Card, SectionHeader } from '../components/ui'
+import { CabecalhoPagina, Card, EstadoErro, EstadoVazio, SkeletonLista } from '../components/ui'
 
 function formatarTempo(segundos) {
   const m = Math.floor(segundos / 60)
@@ -72,10 +72,10 @@ export default function Curso() {
 
   return (
     <div className="max-w-3xl space-y-4">
-      <SectionHeader titulo="Curso de mira" />
+      <CabecalhoPagina eyebrow="Treino" titulo="Curso de mira" descricao="Seu progresso fica salvo — volte de onde parou." className="mb-2" />
       {urlAtivo && (
         <Card className="p-3">
-          <p className="mb-2 font-display text-sm font-semibold uppercase text-texto">{videoAtivo?.titulo}</p>
+          <p className="mb-3 font-display text-lg font-semibold text-texto">{videoAtivo?.titulo}</p>
           {/* eslint-disable-next-line jsx-a11y/media-has-caption -- curso pessoal sem legendas */}
           <video
             key={slugAtivo}
@@ -90,7 +90,9 @@ export default function Curso() {
           />
         </Card>
       )}
-      {erro && <p className="font-mono text-sm text-perigo">{erro}</p>}
+      {erro && <EstadoErro mensagem={erro} />}
+      {videos === null && <SkeletonLista linhas={5} altura="h-14" rotulo="Carregando vídeos" />}
+      {videos?.length === 0 && <EstadoVazio titulo="Nenhum vídeo disponível ainda." />}
       <div className="space-y-2">
         {videos?.map((v) => (
           <Card
@@ -99,14 +101,14 @@ export default function Curso() {
             interativo={v.disponivel}
             disabled={!v.disponivel}
             onClick={() => abrir(v)}
-            className={`flex w-full items-center justify-between gap-3 px-3 py-2 text-left ${
+            className={`flex min-h-14 w-full items-center justify-between gap-3 px-4 py-3 text-left ${
               v.disponivel ? '' : 'opacity-50'
             }`}
           >
-            <p className="font-display text-sm font-semibold uppercase text-texto">{v.titulo}</p>
+            <p className={`font-display text-base font-semibold ${slugAtivo === v.slug ? 'text-destaque' : 'text-texto'}`}>{v.titulo}</p>
             <span className="flex flex-col items-end gap-0.5 font-mono text-xs text-texto-fraco">
               {!v.disponivel && <span>ainda não disponível</span>}
-              {v.disponivel && v.concluido && <span>✓ concluído</span>}
+              {v.disponivel && v.concluido && <span className="text-sucesso">✓ concluído</span>}
               {v.disponivel && v.posicaoSegundos > 0 && !v.concluido && (
                 <span>{`continuar de ${formatarTempo(v.posicaoSegundos)}`}</span>
               )}

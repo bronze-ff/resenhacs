@@ -184,7 +184,7 @@ describe('GET /api/profile/:steamId', () => {
     expect(res.body.stats.avgBlindDuration).toBe(3) // 60/20 (landed_count/duration, não enemies_flashed)
     expect(res.body.sinergia[0]).toMatchObject({ nick: 'parça', partidas: 8, vitorias: 6, winrate: 75 })
     // fixture simula "order by played_at desc" (m1 é o mais recente); evolucaoRating inverte pra cronológico
-    expect(res.body.evolucao).toEqual([{ matchId: 'm2', playedAt: null, rating: 1.4 }, { matchId: 'm1', playedAt: null, rating: 1.1 }])
+    expect(res.body.evolucao).toEqual([{ matchId: 'm2', playedAt: null, rating: 1.4, won: null }, { matchId: 'm1', playedAt: null, rating: 1.1, won: null }])
     // classificação exata (qual dimensão vence) já é coberta em analise.test.js;
     // aqui só confere que o endpoint calcula e devolve alguma coisa.
     expect(res.body.estilo).not.toBeNull()
@@ -477,5 +477,33 @@ describe('GET /api/profile/compare', () => {
     const confrontoSql = db.query.mock.calls.find((c) => c[0].includes('join match_players mp_b'))[0]
     expect(confrontoSql).toContain('from friendships f')
     expect(confrontoSql).not.toContain('group_id')
+  })
+})
+
+describe('GET /api/profile/:steamId — atividade e pontos fortes', () => {
+  it('devolve atividade por dia e pontos fortes calculados contra o grupo visível', async () => {
+    const grupo = (steamId, util) => ({
+      steam_id64: steamId, partidas: 10, dano: '16000', rounds: '200', kills: '150', hs: '60', tiros: '2000',
+      tiros_acertados: '500', kast: '70', util, entry_kills: '10', entry_deaths: '10', clutch: '2', flash_assists: '10',
+    })
+    const { app, db } = appWith([
+      ['where p.steam_id64 = $1', [{ steam_id64: '765', nick: 'fih', avatar_url: null, faceit_nick: null, faceit_elo: null, faceit_skill_level: null }]],
+      ['as tem', [{ tem: true }]],
+      ["'YYYY-MM-DD') as dia", [{ dia: '2026-10-13', partidas: 3 }]],
+      ['sum(mp.flash_assists) as flash_assists', [grupo('765', '3000'), grupo('a', '1000'), grupo('b', '900')]],
+      ['group by mp.steam_id64', []],
+      ['count(*)::int as partidas', [{
+        partidas: 0, vitorias: 0, kills: 0, deaths: 0, assists: 0, hs: 0, damage: 0, rounds: 0, rating: null,
+        he_thrown: 0, he_damage: 0, he_team_damage: 0, molotovs_thrown: 0, molotov_damage: 0, molotov_team_damage: 0,
+        flashes_thrown: 0, enemies_flashed: 0, enemy_flash_duration: '0', flash_assists: 0,
+        enemy_flash_landed_count: 0, enemy_flash_landed_duration_sum: '0',
+      }]],
+    ])
+    const res = await request(app).get('/api/profile/765').set('Cookie', cookie)
+    expect(res.status).toBe(200)
+    expect(res.body.atividade).toEqual([{ dia: '2026-10-13', partidas: 3 }])
+    expect(res.body.pontosFortes[0]).toMatchObject({ chave: 'utilitaria', percentil: 100, valor: 300 })
+    const sqlGrupo = db.query.mock.calls.find(([s]) => s.includes('sum(mp.flash_assists) as flash_assists'))[0]
+    expect(sqlGrupo).toContain('from friendships f')
   })
 })

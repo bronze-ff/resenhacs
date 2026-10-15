@@ -13,4 +13,4 @@ export function duracaoSegundos(frameCount, tickRate) {
   return frameCount / tickRate
 }
 
-export const COR_TIME = { A: '#f5a524', B: '#4fb6ff' }
+export const COR_TIME = { A: '#e9b949', B: '#5aa9ff' }

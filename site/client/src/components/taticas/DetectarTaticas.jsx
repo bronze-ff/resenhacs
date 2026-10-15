@@ -4,6 +4,7 @@ import { detectar, montarTatica } from '../../lib/deteccaoTaticas.js'
 import { ROTULO_TIPO_TATICA } from './CardTatica.jsx'
 import { useTransicaoModal } from '../../lib/useTransicaoModal.js'
 import MiniRadarTatica from './MiniRadarTatica.jsx'
+import { Badge, Button, EstadoErro, EstadoVazio, Modal, Skeleton } from '../ui'
 
 // Duas granadas do mesmo tipo/lado com alvo a menos de 0.03 (posições 0..1)
 // contam como "já cadastrada" pro dedupe — mesmo limiar do gerarBiblioteca de
@@ -143,42 +144,39 @@ export default function DetectarTaticas({ mapa, callouts, onFechar, onCriada }) 
   }
 
   return (
-    <div
-      className={`fixed inset-0 z-50 flex items-center justify-center bg-fundo/80 p-0 transition-opacity duration-200 lg:p-4 ${visivel ? 'opacity-100' : 'opacity-0'}`}
-      onClick={fechar}
+    <Modal
+      visivel={visivel}
+      onFechar={fechar}
+      tamanho="lg"
+      titulo="Detectar táticas"
+      subtitulo="Padrões de execute/setup encontrados na utilitária extraída das demos processadas."
     >
-      <button
-        type="button"
-        onClick={(e) => { e.stopPropagation(); fechar() }}
-        aria-label="Fechar"
-        className="panel-cut-sm fixed right-3 top-3 z-[60] flex min-h-10 min-w-10 items-center justify-center border border-borda bg-superficie font-mono text-sm text-texto-fraco hover:text-texto lg:hidden"
-      >✕</button>
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className={`h-full w-full space-y-3 overflow-y-auto border border-borda bg-superficie p-5 transition-all duration-200 lg:panel-cut lg:h-auto lg:max-h-[90vh] lg:w-full lg:max-w-4xl ${visivel ? 'opacity-100 lg:scale-100' : 'opacity-0 lg:scale-95'}`}
-      >
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <h3 className="font-display text-lg font-bold uppercase text-texto">Detectar táticas</h3>
-            <p className="font-mono text-xs text-texto-fraco">
-              Padrões de execute/setup encontrados na utilitária extraída das demos processadas.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={fechar}
-            className="hidden min-h-10 px-3 py-1.5 font-mono text-xs uppercase text-texto-fraco hover:text-texto lg:block lg:min-h-0"
-          >Fechar</button>
-        </div>
+      <div className="flex flex-col gap-4">
+        {erroCarga && <EstadoErro mensagem={erroCarga} />}
+        {erroCriacao && <EstadoErro mensagem={erroCriacao} />}
 
-        {candidatos === null && <p className="font-mono text-sm text-texto-fraco">Analisando rounds…</p>}
-        {erroCarga && <p className="font-mono text-sm text-perigo">{erroCarga}</p>}
-        {candidatos && candidatos.length === 0 && !erroCarga && (
-          <p className="font-mono text-sm text-texto-fraco">
-            Nenhum padrão recorrente encontrado ainda (precisa de pelo menos 3 granadas do mesmo lado numa janela curta, em região classificável).
-          </p>
+        {candidatos === null && (
+          <div role="status" aria-label="Analisando rounds" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="panel-cut-sm flex flex-col border border-borda bg-fundo/40">
+                <Skeleton className="aspect-square w-full" />
+                <div className="flex flex-col gap-2 p-3">
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-3 w-1/2" />
+                  <Skeleton className="mt-1 h-9 w-full" />
+                </div>
+              </div>
+            ))}
+            <span className="sr-only">Analisando rounds…</span>
+          </div>
         )}
-        {erroCriacao && <p className="font-mono text-sm text-perigo">{erroCriacao}</p>}
+
+        {candidatos && candidatos.length === 0 && !erroCarga && (
+          <EstadoVazio
+            titulo="Nenhum padrão recorrente"
+            descricao="Precisa de pelo menos 3 granadas do mesmo lado numa janela curta, em região classificável."
+          />
+        )}
 
         {candidatos && candidatos.length > 0 && (
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -188,45 +186,39 @@ export default function DetectarTaticas({ mapa, callouts, onFechar, onCriada }) 
               const emCriacao = criandoChave === chave
               const jaCriada = criadas.has(chave)
               return (
-                <div key={chave} className="panel-cut-sm flex flex-col overflow-hidden border border-borda bg-fundo">
+                <div key={chave} className="panel-cut-sm flex flex-col overflow-hidden border border-borda bg-fundo/40">
                   <div className="relative">
                     <MiniRadarTatica mapa={mapa} granadas={c.granadasRepresentativas} />
                     <div className="absolute left-1.5 top-1.5 flex flex-wrap gap-1">
-                      <span className="panel-cut-sm border border-borda bg-fundo/80 px-1.5 py-0.5 font-mono text-[10px] uppercase text-texto-fraco">
-                        {c.regiao}
-                      </span>
-                      <span className="panel-cut-sm border border-destaque/40 bg-fundo/80 px-1.5 py-0.5 font-mono text-[10px] uppercase text-destaque">
-                        {ROTULO_TIPO_TATICA[tatica.tipo] ?? tatica.tipo}
-                      </span>
-                      <span className="panel-cut-sm border border-borda bg-fundo/80 px-1.5 py-0.5 font-mono text-[10px] uppercase text-texto-fraco">
-                        {c.lado}
-                      </span>
+                      <Badge tom="neutro" className="!bg-fundo/80">{c.regiao}</Badge>
+                      <Badge tom="destaque" className="!bg-fundo/80">{ROTULO_TIPO_TATICA[tatica.tipo] ?? tatica.tipo}</Badge>
+                      <Badge tom="neutro" className="!bg-fundo/80">{c.lado}</Badge>
                     </div>
                   </div>
 
-                  <div className="min-w-0 flex-1 space-y-1 p-2.5">
-                    <p className="truncate font-display text-sm font-semibold uppercase text-texto">{tatica.titulo}</p>
-                    <p className="font-mono text-[11px] uppercase text-texto-fraco">
-                      visto em {c.rounds.length} {c.rounds.length === 1 ? 'round' : 'rounds'}
-                      {c.times.length > 0 && <> · {c.times.join(', ')}</>}
+                  <div className="flex min-w-0 flex-1 flex-col gap-1.5 p-3">
+                    <p className="truncate font-display text-base font-semibold text-texto">{tatica.titulo}</p>
+                    <p className="flex items-baseline gap-1.5 text-xs text-texto-fraco">
+                      <span className="font-display text-lg font-semibold tabular-nums leading-none text-texto">{c.rounds.length}</span>
+                      <span className="rotulo">{c.rounds.length === 1 ? 'round' : 'rounds'}</span>
+                      {c.times.length > 0 && <span className="truncate">· {c.times.join(', ')}</span>}
                     </p>
-                    <p className="font-mono text-[11px] text-texto-fraco">
+                    <p className="text-xs text-texto-fraco">
                       {tatica.papeis.length} {tatica.papeis.length === 1 ? 'papel' : 'papéis'} ·{' '}
                       {c.granadasRepresentativas.map((g) => ROTULO_TIPO_GRANADA[g.tipo] ?? g.tipo).join(', ')}
                     </p>
 
-                    <button
-                      type="button"
+                    <Button
+                      variante={jaCriada ? 'secundario' : 'contorno'}
+                      tamanho="sm"
+                      larguraTotal
+                      className="mt-auto"
                       onClick={() => criarTatica(c)}
                       disabled={!!criandoChave || jaCriada}
-                      className={`panel-cut-sm mt-2 min-h-10 w-full border px-3 py-1.5 font-mono text-xs uppercase transition-colors lg:min-h-0 ${
-                        jaCriada
-                          ? 'border-borda text-texto-fraco'
-                          : 'border-destaque text-destaque hover:bg-destaque/10 disabled:opacity-50'
-                      }`}
+                      carregando={emCriacao}
                     >
                       {jaCriada ? 'Criada ✓' : emCriacao ? `Criando ${progresso?.atual ?? 0}/${progresso?.total ?? 0}…` : 'Criar tática'}
-                    </button>
+                    </Button>
                   </div>
                 </div>
               )
@@ -234,6 +226,6 @@ export default function DetectarTaticas({ mapa, callouts, onFechar, onCriada }) 
           </div>
         )}
       </div>
-    </div>
+    </Modal>
   )
 }

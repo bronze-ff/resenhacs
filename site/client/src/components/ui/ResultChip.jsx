@@ -35,11 +35,11 @@ export default function ResultChip({ resultado, a, b, size = 'compacto' }) {
       </svg>
       <div>
         {r && (
-          <div className={`font-mono font-bold uppercase tracking-wide ${grande ? 'text-xs' : 'text-[10px]'} ${r.texto}`}>
+          <div className={`font-mono font-bold ${grande ? 'text-xs' : 'text-[10px]'} ${r.texto}`}>
             {r.rotulo}
           </div>
         )}
-        <div className={`font-display font-bold leading-none tabular-nums ${grande ? 'text-3xl' : 'text-lg'}`}>
+        <div className={`font-display font-semibold leading-none tabular-nums ${grande ? 'text-3xl' : 'text-lg'}`}>
           <span className={r?.texto ?? 'text-texto'}>{a ?? '–'}</span>
           <span className="text-texto-fraco">:{b ?? '–'}</span>
         </div>

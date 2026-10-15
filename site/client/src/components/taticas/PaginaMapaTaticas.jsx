@@ -6,7 +6,8 @@ import CardTatica, { ROTULO_ARMAS, ROTULO_TIPO_TATICA } from './CardTatica.jsx'
 import CardTaticaReplay from './CardTaticaReplay.jsx'
 import DetalheTatica from './DetalheTatica.jsx'
 import FormTatica from './FormTatica.jsx'
-import { SectionHeader, Select } from '../ui'
+import ListaFiltro from '../granadas/ListaFiltro.jsx'
+import { Abas, Button, CabecalhoPagina, EstadoErro, EstadoVazio, MapIcon, SectionHeader, Select, Skeleton, SkeletonLista } from '../ui'
 
 const TIPOS = [['todas', 'Todas'], ...Object.entries(ROTULO_TIPO_TATICA)]
 const LOCAIS = [['todas', 'Todas'], ['A', 'A'], ['B', 'B'], ['MID', 'MID']]
@@ -61,127 +62,122 @@ export default function PaginaMapaTaticas({ mapa, onTrocarMapa }) {
   ), [taticas, tipo, local, armas])
 
   return (
-    <div className="flex flex-col gap-4 lg:flex-row">
-      <aside className="w-full space-y-3 lg:w-56 lg:space-y-4">
-        <h2 className="font-display text-2xl font-bold uppercase tracking-wide text-texto">{nomeMapa(mapa)}</h2>
+    <div>
+      <CabecalhoPagina
+        eyebrow="Táticas"
+        titulo={
+          <span className="flex items-center gap-3">
+            <MapIcon map={mapa} size={36} />
+            {nomeMapa(mapa)}
+          </span>
+        }
+        descricao="Playbook curado do grupo: execute, fake e setup com o papel de cada jogador."
+        acoes={isAdmin && (
+          <Button variante="primario" onClick={() => setFormAberto({})} icone={<IconeMais />}>
+            Adicionar tática
+          </Button>
+        )}
+      />
 
-        {/* Mesmo padrão mobile de Granadas/PaginaMapa: ribbon flex-wrap no topo,
-            coluna vertical no desktop (lg:). */}
-        <div className="flex flex-wrap items-start gap-2 lg:block lg:items-stretch lg:gap-0 lg:space-y-4">
-          <div className="w-36 lg:w-auto">
-            <p className="mb-1 font-mono text-xs uppercase text-texto-fraco">Trocar mapa</p>
-            <Select value={mapa} onChange={(e) => onTrocarMapa(e.target.value)} className="w-full">
-              {MAPAS_POOL.map((m) => <option key={m} value={m}>{nomeMapa(m)}</option>)}
-            </Select>
-          </div>
+      <div className="flex flex-col gap-6 lg:flex-row">
+        <aside className="w-full lg:w-56 lg:shrink-0">
+          {/* Mesmo padrão mobile de Granadas/PaginaMapa: ribbon flex-wrap no topo,
+              coluna vertical no desktop (lg:). */}
+          <div className="flex flex-wrap items-start gap-3 lg:flex-col lg:flex-nowrap lg:items-stretch lg:gap-5">
+            <div className="flex w-40 flex-col gap-1.5 lg:w-auto">
+              <p className="rotulo">Trocar mapa</p>
+              <Select value={mapa} onChange={(e) => onTrocarMapa(e.target.value)} className="w-full" selectClassName="min-h-10">
+                {MAPAS_POOL.map((m) => <option key={m} value={m}>{nomeMapa(m)}</option>)}
+              </Select>
+            </div>
 
-          <div className="w-24 lg:w-auto">
-            <p className="mb-1 font-mono text-xs uppercase text-texto-fraco">Trocar lado</p>
-            <div className="panel-cut-sm flex overflow-hidden border border-borda font-mono text-xs uppercase">
-              {['T', 'CT'].map((v) => (
-                <button
-                  key={v}
-                  onClick={() => setLado(v)}
-                  className={`min-h-10 flex-1 px-3 py-1.5 transition-colors lg:min-h-0 ${lado === v ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'}`}
-                >
-                  {v}
-                </button>
-              ))}
+            <div className="flex flex-col gap-1.5">
+              <p className="rotulo">Lado</p>
+              <Abas
+                rotulo="Lado"
+                larguraTotal
+                valor={lado}
+                onChange={setLado}
+                itens={[{ valor: 'T', rotulo: 'T' }, { valor: 'CT', rotulo: 'CT' }]}
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <p className="rotulo">Local</p>
+              <Abas
+                rotulo="Local"
+                larguraTotal
+                valor={local}
+                onChange={setLocal}
+                itens={LOCAIS.map(([v, l]) => ({ valor: v, rotulo: l }))}
+              />
+            </div>
+
+            <div className="flex w-full flex-col gap-1.5">
+              <p className="rotulo">Tipo</p>
+              <ListaFiltro
+                rotulo="Tipo de tática"
+                valor={tipo}
+                onChange={setTipo}
+                itens={TIPOS.map(([v, l]) => ({ valor: v, rotulo: l }))}
+              />
+            </div>
+
+            <div className="flex w-full flex-col gap-1.5">
+              <p className="rotulo">Armas</p>
+              <ListaFiltro
+                rotulo="Armas"
+                valor={armas}
+                onChange={setArmas}
+                itens={ARMAS.map(([v, l]) => ({ valor: v, rotulo: l }))}
+              />
             </div>
           </div>
+        </aside>
 
-          <div className="w-36 lg:w-auto">
-            <p className="mb-1 font-mono text-xs uppercase text-texto-fraco">Tipo</p>
-            <div className="flex flex-wrap gap-1 lg:block lg:space-y-1">
-              {TIPOS.map(([v, label]) => (
-                <button
-                  key={v}
-                  onClick={() => setTipo(v)}
-                  className={`panel-cut-sm min-h-10 border px-3 py-1.5 font-mono text-xs uppercase transition-colors lg:min-h-0 lg:block lg:w-full ${
-                    tipo === v ? 'border-destaque bg-destaque/10 text-destaque' : 'border-borda text-texto-fraco hover:text-texto'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
+        <div className="flex min-w-0 flex-1 flex-col gap-8">
+          <section className="flex flex-col gap-3">
+            {taticas && (
+              <p className="rotulo">
+                <span className="tabular-nums text-texto">{visiveis.length}</span> {visiveis.length === 1 ? 'Tática' : 'Táticas'}
+              </p>
+            )}
+            {!taticas && (
+              <div role="status" aria-label="Carregando táticas" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {[0, 1, 2].map((i) => <Skeleton key={i} className="panel-cut aspect-[5/6] w-full" />)}
+                <span className="sr-only">Carregando…</span>
+              </div>
+            )}
+            {taticas && visiveis.length === 0 && (
+              <EstadoVazio
+                titulo="Nenhuma tática curada"
+                descricao="Nenhuma tática curada pra esses filtros ainda."
+                acao={isAdmin && (
+                  <Button variante="contorno" tamanho="sm" onClick={() => setFormAberto({})}>Adicionar tática</Button>
+                )}
+              />
+            )}
+            {visiveis.length > 0 && (
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {visiveis.map((t) => (
+                  <CardTatica key={t.id} tatica={t} onSelecionar={setSelecionada} />
+                ))}
+              </div>
+            )}
+          </section>
 
-          <div className="w-auto lg:w-auto">
-            <p className="mb-1 font-mono text-xs uppercase text-texto-fraco">Local</p>
-            <div className="panel-cut-sm flex overflow-hidden border border-borda font-mono text-xs uppercase">
-              {LOCAIS.map(([v, label]) => (
-                <button
-                  key={v}
-                  onClick={() => setLocal(v)}
-                  className={`min-h-10 flex-1 px-2 py-1.5 transition-colors lg:min-h-0 ${local === v ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'}`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="w-32 lg:w-auto">
-            <p className="mb-1 font-mono text-xs uppercase text-texto-fraco">Armas</p>
-            <div className="flex flex-wrap gap-1 lg:block lg:space-y-1">
-              {ARMAS.map(([v, label]) => (
-                <button
-                  key={v}
-                  onClick={() => setArmas(v)}
-                  className={`panel-cut-sm min-h-10 border px-3 py-1.5 font-mono text-xs uppercase transition-colors lg:min-h-0 lg:block lg:w-full ${
-                    armas === v ? 'border-destaque bg-destaque/10 text-destaque' : 'border-borda text-texto-fraco hover:text-texto'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {isAdmin && (
-            <button
-              onClick={() => setFormAberto({})}
-              className="panel-cut-sm min-h-10 w-full border border-destaque bg-destaque px-3 py-2 font-display text-sm font-semibold uppercase text-fundo lg:min-h-0"
-            >
-              Adicionar tática
-            </button>
-          )}
-        </div>
-      </aside>
-
-      <div className="min-w-0 flex-1 space-y-6">
-        <div>
-          {!taticas && <p className="font-mono text-sm text-texto-fraco">Carregando…</p>}
-          {taticas && visiveis.length === 0 && (
-            <p className="font-mono text-sm text-texto-fraco">Nenhuma tática curada pra esses filtros ainda.</p>
-          )}
-          {visiveis.length > 0 && (
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {visiveis.map((t) => (
-                <CardTatica key={t.id} tatica={t} onSelecionar={setSelecionada} />
-              ))}
-            </div>
-          )}
-          {taticas && (
-            <p className="mt-3 font-mono text-xs uppercase text-texto-fraco">
-              {visiveis.length} {visiveis.length === 1 ? 'Tática' : 'Táticas'}
-            </p>
-          )}
-        </div>
-
-        <div className="border-t border-borda pt-4">
-          <SectionHeader titulo="Do grupo (replays)" className="mb-1" />
-          <p className="font-mono text-xs text-texto-fraco">Táticas sugeridas em partidas reais e aprovadas no Admin.</p>
-          {!antigas && <p className="mt-2 font-mono text-sm text-texto-fraco">Carregando…</p>}
-          {antigas && antigas.length === 0 && (
-            <p className="mt-2 font-mono text-sm text-texto-fraco">Nenhuma tática aprovada nesse mapa ainda.</p>
-          )}
-          {antigas && antigas.length > 0 && (
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              {antigas.map((t) => <CardTaticaReplay key={t.id} t={t} />)}
-            </div>
-          )}
+          <section className="border-t border-borda pt-6">
+            <SectionHeader titulo="Do grupo (replays)" subtitulo="Táticas sugeridas em partidas reais e aprovadas no Admin." />
+            {!antigas && <SkeletonLista linhas={2} altura="h-20" />}
+            {antigas && antigas.length === 0 && (
+              <p className="text-sm text-texto-fraco">Nenhuma tática aprovada nesse mapa ainda.</p>
+            )}
+            {antigas && antigas.length > 0 && (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {antigas.map((t) => <CardTaticaReplay key={t.id} t={t} />)}
+              </div>
+            )}
+          </section>
         </div>
       </div>
 
@@ -200,15 +196,11 @@ export default function PaginaMapaTaticas({ mapa, onTrocarMapa }) {
           tatica={selecionada}
           onFechar={() => setSelecionada(null)}
           acoesAdmin={isAdmin && (
-            <div className="mt-4 flex justify-end gap-2 border-t border-borda pt-3">
-              <button
-                onClick={() => {
-                  setFormAberto({ inicial: selecionada })
-                  setSelecionada(null)
-                }}
-                className="min-h-10 px-3 py-1.5 font-mono text-xs uppercase text-texto-fraco hover:text-texto lg:min-h-0"
-              >Editar</button>
-              <button
+            <>
+              <Button
+                variante="perigo"
+                tamanho="sm"
+                className="mr-auto"
                 onClick={async () => {
                   if (!window.confirm(`Excluir "${selecionada.titulo}"?`)) return
                   setErro(null)
@@ -216,18 +208,33 @@ export default function PaginaMapaTaticas({ mapa, onTrocarMapa }) {
                   if (res?.ok) { setSelecionada(null); recarregar() }
                   else setErro('Não foi possível excluir a tática. Tente de novo.')
                 }}
-                className="min-h-10 px-3 py-1.5 font-mono text-xs uppercase text-perigo hover:brightness-125 lg:min-h-0"
-              >Excluir</button>
-            </div>
+              >Excluir</Button>
+              <Button
+                variante="secundario"
+                tamanho="sm"
+                onClick={() => {
+                  setFormAberto({ inicial: selecionada })
+                  setSelecionada(null)
+                }}
+              >Editar</Button>
+            </>
           )}
         />
       )}
 
       {erro && (
-        <p className="fixed bottom-4 right-4 z-[70] panel-cut-sm border border-perigo bg-superficie px-3 py-2 font-mono text-xs text-perigo shadow-lg">
-          {erro}
-        </p>
+        <div className="fixed bottom-4 right-4 z-[70] max-w-[calc(100vw-2rem)] bg-superficie shadow-flutuante">
+          <EstadoErro mensagem={erro} />
+        </div>
       )}
     </div>
+  )
+}
+
+function IconeMais() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" className="h-4 w-4" aria-hidden="true">
+      <path d="M12 5v14M5 12h14" />
+    </svg>
   )
 }

@@ -24,9 +24,20 @@ import Tour from './pages/Tour.jsx'
 import Apoie from './pages/Apoie.jsx'
 import Curso from './pages/Curso.jsx'
 
+// Tela de espera enquanto /api/auth/me responde: marca pulsando no centro, em vez de
+// um "Carregando…" solto no canto.
+function TelaCarregando() {
+  return (
+    <div role="status" className="flex min-h-screen flex-col items-center justify-center gap-4">
+      <span aria-hidden="true" className="panel-cut-sm flex h-12 w-12 animate-pulso-sinal items-center justify-center bg-destaque font-sans text-2xl font-bold text-sobre-destaque">R</span>
+      <span className="rotulo">Carregando…</span>
+    </div>
+  )
+}
+
 function RotaProtegida({ children }) {
   const { carregando, jogador } = useAuth()
-  if (carregando) return <p className="p-8 text-texto-fraco">Carregando…</p>
+  if (carregando) return <TelaCarregando />
   if (!jogador) return <Navigate to="/entrar" replace />
   if (!jogador.tourConcluido) return <Navigate to="/tour" replace />
   return <Shell>{children}</Shell>
@@ -36,7 +47,7 @@ function RotaProtegida({ children }) {
 // mesma lógica de RotaProtegida, só que "sem jogador" não é mais um redirect, é a landing.
 function RotaRaiz() {
   const { carregando, jogador } = useAuth()
-  if (carregando) return <p className="p-8 text-texto-fraco">Carregando…</p>
+  if (carregando) return <TelaCarregando />
   if (!jogador) return <Landing />
   if (!jogador.tourConcluido) return <Navigate to="/tour" replace />
   return <Shell><Feed /></Shell>
@@ -44,7 +55,7 @@ function RotaRaiz() {
 
 function RotaAdmin({ children }) {
   const { carregando, jogador } = useAuth()
-  if (carregando) return <p className="p-8 text-texto-fraco">Carregando…</p>
+  if (carregando) return <TelaCarregando />
   if (!jogador) return <Navigate to="/entrar" replace />
   if (!jogador.tourConcluido) return <Navigate to="/tour" replace />
   if (!jogador.isSuperAdmin) return <Navigate to="/" replace />
@@ -87,7 +98,7 @@ export default function App() {
 // Tour é a única página protegida que NÃO exige tourConcluido (é ela quem zera a flag).
 function RotaTour({ children }) {
   const { carregando, jogador } = useAuth()
-  if (carregando) return <p className="p-8 text-texto-fraco">Carregando…</p>
+  if (carregando) return <TelaCarregando />
   if (!jogador) return <Navigate to="/entrar" replace />
   return children
 }
