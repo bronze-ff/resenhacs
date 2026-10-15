@@ -19,9 +19,9 @@ export default function CardTaticaReplay({ t }) {
   return (
     <Card className="p-3">
       <button onClick={abrir} className="w-full text-left">
-        <p className="font-display text-sm font-semibold uppercase text-texto">{t.nome}</p>
+        <p className="font-display text-sm font-semibold text-texto">{t.nome}</p>
         <p className="font-mono text-xs text-texto-fraco">{t.descricao}</p>
-        <p className="mt-1 font-mono text-[10px] uppercase text-texto-fraco/70">sugerida por {t.criadoPorNick || t.criadoPor}</p>
+        <p className="mt-1 font-mono text-[11px] text-texto-fraco/70">sugerida por {t.criadoPorNick || t.criadoPor}</p>
       </button>
       {aberta && replay && (
         <div className="mt-3">

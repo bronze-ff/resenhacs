@@ -1,9 +1,11 @@
 // site/client/src/components/FormCompeticao.jsx
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { datetimeLocalBrasiliaParaIso, paraDatetimeLocalBrasilia } from '../lib/format.js'
+import { useTransicaoModal } from '../lib/useTransicaoModal.js'
+import { Button, EstadoErro, Input, Modal, Textarea, classeEntrada } from './ui'
 
-// Mesmo padrão de modal já usado em granadas/FormGranada.jsx e
-// SeletorClipesCompeticao.jsx — fixed inset-0 com backdrop clicável fechando o form.
+// Casca de modal padrão (ui/Modal): Escape, backdrop e X fecham; no mobile vira folha
+// que sobe da base. Botões ficam no rodapé fixo, ligados ao <form> pelo atributo form.
 
 const MERCADO_STEAM_PREFIXO = 'https://steamcommunity.com/market/'
 
@@ -21,6 +23,8 @@ export default function FormCompeticao({ inicial = null, onSalvo, onCancelar }) 
   const [minimoParaRankear, setMinimoParaRankear] = useState(inicial?.minimoParaRankear ?? 3)
   const [erro, setErro] = useState(null)
   const [salvando, setSalvando] = useState(false)
+  const { visivel, iniciarSaida } = useTransicaoModal()
+  const fechar = () => iniciarSaida(onCancelar)
 
   async function salvar(e) {
     e.preventDefault()
@@ -51,102 +55,88 @@ export default function FormCompeticao({ inicial = null, onSalvo, onCancelar }) 
       body: JSON.stringify(corpo),
     }).catch(() => null)
     setSalvando(false)
-    if (res?.ok) return onSalvo()
+    if (res?.ok) return iniciarSaida(onSalvo)
     const body = await res?.json().catch(() => ({}))
     setErro(body?.erro ?? 'Erro ao salvar.')
   }
 
+  const formId = useId()
+  const classeData = `${classeEntrada} font-mono [color-scheme:dark]`
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-fundo/80 p-0 lg:p-4" onClick={onCancelar}>
-      {/* Mobile: form ocupa a tela inteira, backdrop clicável some; X fixo é o único
-          jeito de fechar sem rolar até o fim. Desktop fecha pelo clique fora também. */}
-      <button
-        type="button"
-        onClick={(e) => { e.stopPropagation(); onCancelar() }}
-        aria-label="Fechar"
-        className="panel-cut-sm fixed right-3 top-3 z-[60] flex min-h-10 min-w-10 items-center justify-center border border-borda bg-superficie font-mono text-sm text-texto-fraco hover:text-texto lg:hidden"
-      >✕</button>
-      <form
-        onSubmit={salvar}
-        onClick={(e) => e.stopPropagation()}
-        className="panel-cut h-full w-full space-y-3 overflow-y-auto border border-borda bg-superficie p-5 lg:h-auto lg:max-h-[90vh] lg:w-full lg:max-w-lg"
-      >
-        <h2 className="font-display text-lg font-bold text-texto">{inicial ? 'Editar' : 'Nova'} competição</h2>
-        {erro && <p className="mt-2 font-mono text-xs text-perigo">{erro}</p>}
-        <label className="mt-3 block font-mono text-xs text-texto-fraco">
-          Nome
-          <input value={nome} onChange={(e) => setNome(e.target.value)} className="mt-1 min-h-10 w-full border border-borda bg-fundo px-2 font-mono text-sm text-texto" />
-        </label>
-        <label className="mt-3 block font-mono text-xs text-texto-fraco">
-          Descrição
-          <textarea value={descricao} onChange={(e) => setDescricao(e.target.value)} className="mt-1 w-full border border-borda bg-fundo px-2 py-1 font-mono text-sm text-texto" />
-        </label>
-        <label className="mt-3 block font-mono text-xs text-texto-fraco">
-          Prêmio
-          <input value={premioDescricao} onChange={(e) => setPremioDescricao(e.target.value)} className="mt-1 min-h-10 w-full border border-borda bg-fundo px-2 font-mono text-sm text-texto" />
-        </label>
-        <label className="mt-3 block font-mono text-xs text-texto-fraco">
-          Link da imagem da skin
-          <input
+    <Modal
+      visivel={visivel}
+      onFechar={fechar}
+      titulo={`${inicial ? 'Editar' : 'Nova'} competição`}
+      subtitulo={inicial ? inicial.nome : 'Prêmio, prazo e limites de envio'}
+      tamanho="md"
+      rodape={
+        <>
+          <Button variante="fantasma" onClick={fechar}>Cancelar</Button>
+          <Button variante="primario" type="submit" form={formId} carregando={salvando}>
+            Salvar
+          </Button>
+        </>
+      }
+    >
+      <form id={formId} onSubmit={salvar} className="flex flex-col gap-6">
+        {erro && <EstadoErro mensagem={erro} />}
+
+        <section className="flex flex-col gap-4">
+          <h4 className="rotulo">Competição</h4>
+          <Input rotulo="Nome" value={nome} onChange={(e) => setNome(e.target.value)} />
+          <Textarea rotulo="Descrição" rows={3} value={descricao} onChange={(e) => setDescricao(e.target.value)} />
+        </section>
+
+        <section className="flex flex-col gap-4 border-t border-borda pt-5">
+          <h4 className="rotulo">Prêmio</h4>
+          <Input rotulo="Prêmio" placeholder="Ex.: AK-47 | Redline (FT)" value={premioDescricao} onChange={(e) => setPremioDescricao(e.target.value)} />
+          <div className="flex items-start gap-3">
+            <Input
+              type="url"
+              rotulo="Link da imagem da skin"
+              campoClassName="min-w-0 flex-1"
+              className="font-mono"
+              value={premioImagemUrl}
+              onChange={(e) => { setPremioImagemUrl(e.target.value); setImagemComErro(false) }}
+              erro={premioImagemUrl && imagemComErro ? 'Não foi possível carregar essa imagem.' : null}
+            />
+            <div className="panel-cut-sm mt-[22px] flex h-20 w-20 shrink-0 items-center justify-center border border-borda bg-fundo/70">
+              {premioImagemUrl && !imagemComErro ? (
+                <img
+                  src={premioImagemUrl}
+                  alt="Prévia da skin"
+                  className="h-full w-full object-contain p-1"
+                  onError={() => setImagemComErro(true)}
+                />
+              ) : (
+                <span className="rotulo text-center">Prévia</span>
+              )}
+            </div>
+          </div>
+          <Input
             type="url"
-            value={premioImagemUrl}
-            onChange={(e) => { setPremioImagemUrl(e.target.value); setImagemComErro(false) }}
-            className="mt-1 min-h-10 w-full border border-borda bg-fundo px-2 font-mono text-sm text-texto"
-          />
-        </label>
-        {premioImagemUrl && !imagemComErro && (
-          <img
-            src={premioImagemUrl}
-            alt="Prévia da skin"
-            className="mt-2 h-20 w-20 border border-borda object-cover"
-            onError={() => setImagemComErro(true)}
-          />
-        )}
-        {premioImagemUrl && imagemComErro && (
-          <p className="mt-2 font-mono text-xs text-perigo">Não foi possível carregar essa imagem.</p>
-        )}
-        <label className="mt-3 block font-mono text-xs text-texto-fraco">
-          Link no mercado da Steam
-          <input
-            type="url"
+            rotulo="Link no mercado da Steam"
+            className="font-mono"
+            placeholder={MERCADO_STEAM_PREFIXO}
             value={premioMercadoUrl}
             onChange={(e) => setPremioMercadoUrl(e.target.value)}
-            className="mt-1 min-h-10 w-full border border-borda bg-fundo px-2 font-mono text-sm text-texto"
           />
-        </label>
-        <div className="mt-3 grid grid-cols-2 gap-3">
-          <label className="block font-mono text-xs text-texto-fraco">
-            Início
-            <input type="datetime-local" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} className="mt-1 min-h-10 w-full border border-borda bg-fundo px-2 font-mono text-sm text-texto" />
-            <span className="mt-1 block text-[10px]">Horário de Brasília</span>
-          </label>
-          <label className="block font-mono text-xs text-texto-fraco">
-            Fim
-            <input type="datetime-local" value={dataFim} onChange={(e) => setDataFim(e.target.value)} className="mt-1 min-h-10 w-full border border-borda bg-fundo px-2 font-mono text-sm text-texto" />
-            <span className="mt-1 block text-[10px]">Horário de Brasília</span>
-          </label>
-        </div>
-        <div className="mt-3 grid grid-cols-3 gap-3">
-          <label className="block font-mono text-xs text-texto-fraco">
-            Limite/dia
-            <input type="number" min="1" value={limiteDiario} onChange={(e) => setLimiteDiario(e.target.value)} className="mt-1 min-h-10 w-full border border-borda bg-fundo px-2 font-mono text-sm text-texto" />
-          </label>
-          <label className="block font-mono text-xs text-texto-fraco">
-            Limite total
-            <input type="number" min="1" value={limiteTotal} onChange={(e) => setLimiteTotal(e.target.value)} className="mt-1 min-h-10 w-full border border-borda bg-fundo px-2 font-mono text-sm text-texto" />
-          </label>
-          <label className="block font-mono text-xs text-texto-fraco">
-            Mínimo p/ rankear
-            <input type="number" min="1" value={minimoParaRankear} onChange={(e) => setMinimoParaRankear(e.target.value)} className="mt-1 min-h-10 w-full border border-borda bg-fundo px-2 font-mono text-sm text-texto" />
-          </label>
-        </div>
-        <div className="mt-4 flex justify-end gap-2">
-          <button type="button" onClick={onCancelar} className="panel-cut-sm min-h-10 border border-borda px-3 font-mono text-xs uppercase text-texto-fraco">cancelar</button>
-          <button type="submit" disabled={salvando} className="panel-cut-sm min-h-10 border border-destaque bg-destaque/10 px-3 font-mono text-xs uppercase text-destaque disabled:opacity-50">
-            {salvando ? '…' : 'salvar'}
-          </button>
-        </div>
+        </section>
+
+        <section className="flex flex-col gap-4 border-t border-borda pt-5">
+          <h4 className="rotulo">Prazo e limites</h4>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Input type="datetime-local" rotulo="Início" ajuda="Horário de Brasília" className={classeData} value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} />
+            <Input type="datetime-local" rotulo="Fim" ajuda="Horário de Brasília" className={classeData} value={dataFim} onChange={(e) => setDataFim(e.target.value)} />
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <Input type="number" min="1" rotulo="Limite/dia" className="font-mono tabular-nums" value={limiteDiario} onChange={(e) => setLimiteDiario(e.target.value)} />
+            <Input type="number" min="1" rotulo="Limite total" className="font-mono tabular-nums" value={limiteTotal} onChange={(e) => setLimiteTotal(e.target.value)} />
+            <Input type="number" min="1" rotulo="Mínimo p/ rankear" className="font-mono tabular-nums" value={minimoParaRankear} onChange={(e) => setMinimoParaRankear(e.target.value)} />
+          </div>
+        </section>
       </form>
-    </div>
+    </Modal>
   )
 }

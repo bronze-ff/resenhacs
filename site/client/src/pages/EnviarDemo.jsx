@@ -1,5 +1,23 @@
 import { useState, useCallback } from 'react'
-import { Card, SectionHeader } from '../components/ui'
+import { Button, CabecalhoPagina, Card, Campo, EstadoErro, Input, Select } from '../components/ui'
+
+function IconeUpload({ className = 'h-7 w-7' }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+      <path d="M12 16V4M7 9l5-5 5 5" />
+      <path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4" />
+    </svg>
+  )
+}
+
+function IconeArquivo({ className = 'h-6 w-6' }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" className={className} aria-hidden="true">
+      <path d="M6 3h8l4 4v14H6z" />
+      <path d="M14 3v4h4" />
+    </svg>
+  )
+}
 
 function formatarTamanho(bytes) {
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
@@ -90,117 +108,129 @@ export default function EnviarDemo() {
   ]
 
   return (
-    <div className="max-w-5xl space-y-6">
-      <SectionHeader
+    <div className="max-w-5xl">
+      <CabecalhoPagina
+        eyebrow="Upload manual"
         titulo="Enviar demo"
-        subtitulo="Baixe o .dem em CS2 → Assistir → Suas Partidas (ou do Faceit/GC) e envie aqui. O processamento roda a cada ~30 minutos — a Partida aparece no Feed quando terminar."
+        descricao="Baixe o .dem em CS2 → Assistir → Suas Partidas (ou do Faceit/GC) e envie aqui. O processamento roda a cada ~30 minutos — a Partida aparece no Feed quando terminar."
       />
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(17rem,0.48fr)]">
-      <Card className="p-4 sm:p-6">
-        <form onSubmit={enviar} className="space-y-5">
-          <label
-            htmlFor="arquivo"
-            onDragOver={(e) => { e.preventDefault(); setArrastando(true) }}
-            onDragLeave={() => setArrastando(false)}
-            onDrop={onDrop}
-            className={`flex min-h-48 cursor-pointer flex-col items-center justify-center gap-3 border border-dashed px-4 py-10 text-center transition-colors duration-200 ${
-              arrastando ? 'border-destaque bg-destaque/5' : 'border-borda hover:border-destaque/60'
-            }`}
-          >
-            <span className="block w-full truncate px-2 text-center font-display text-base font-semibold uppercase tracking-wide text-texto" title={arquivo?.name}>
-              {arquivo ? arquivo.name : 'Arraste o .dem aqui ou clique pra escolher'}
-            </span>
-            {!arquivo && <span className="font-mono text-xs text-texto-fraco">Arquivos de demo do Counter-Strike 2</span>}
-            {arquivo && (
-              <span className="font-mono text-xs text-texto-fraco">{formatarTamanho(arquivo.size)}</span>
-            )}
-            <input
-              id="arquivo"
-              type="file"
-              accept=".dem"
-              onChange={(e) => escolherArquivo(e.target.files)}
-              className="hidden"
-            />
-          </label>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <label className="block font-mono text-xs uppercase tracking-wide text-texto-fraco" htmlFor="shareCode">
-              Share code (opcional, evita duplicar se descoberto automaticamente)
-            </label>
-            <input
-              id="shareCode"
-              value={shareCode}
-              onChange={(e) => setShareCode(e.target.value)}
-              placeholder="CSGO-xxxxx-xxxxx-xxxxx-xxxxx-xxxxx"
-              className="panel-cut-sm mt-1 min-h-10 w-full border border-borda bg-fundo px-3 py-2 font-mono text-sm lg:min-h-0"
-            />
-          </div>
-          <div>
-            <label className="block font-mono text-xs uppercase tracking-wide text-texto-fraco" htmlFor="playedAt">
-              Quando foi jogada (opcional — sem isso, a data pode sair aproximada)
-            </label>
-            <input
-              id="playedAt"
-              type="datetime-local"
-              value={playedAt}
-              onChange={(e) => setPlayedAt(e.target.value)}
-              className="panel-cut-sm mt-1 min-h-10 w-full border border-borda bg-fundo px-3 py-2 font-mono text-sm lg:min-h-0"
-            />
-          </div>
-          </div>
-          <div>
-            <label className="block font-mono text-xs uppercase tracking-wide text-texto-fraco" htmlFor="plataforma">
-              Onde foi jogada (opcional — vira o badge da plataforma na Partida)
-            </label>
-            <select
-              id="plataforma"
-              value={plataforma}
-              onChange={(e) => setPlataforma(e.target.value)}
-              className="panel-cut-sm mt-1 min-h-10 w-full border border-borda bg-fundo px-3 py-2 font-mono text-sm lg:min-h-0"
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(17rem,0.48fr)]">
+        <Card className="p-4 sm:p-6">
+          <form onSubmit={enviar} className="flex flex-col gap-6">
+            <label
+              htmlFor="arquivo"
+              onDragOver={(e) => { e.preventDefault(); setArrastando(true) }}
+              onDragLeave={() => setArrastando(false)}
+              onDrop={onDrop}
+              className={`group flex min-h-56 cursor-pointer flex-col items-center justify-center gap-4 border-2 border-dashed px-4 py-10 text-center transition-colors duration-200 ${
+                arrastando
+                  ? 'border-destaque bg-destaque/10'
+                  : arquivo
+                    ? 'border-sucesso/50 bg-sucesso/5'
+                    : 'border-borda-forte bg-fundo/40 hover:border-destaque/60 hover:bg-destaque/5'
+              }`}
             >
-              {PLATAFORMAS.map((p) => (
-                <option key={p.valor} value={p.valor}>{p.label}</option>
-              ))}
-            </select>
-          </div>
-          <button
-            type="submit"
-            disabled={!arquivo || enviando}
-            className="panel-cut-sm min-h-10 w-full border border-destaque bg-destaque px-5 py-2 font-display text-sm font-semibold uppercase tracking-wide text-fundo transition-colors duration-200 hover:bg-destaque/85 disabled:opacity-40 lg:min-h-0 lg:w-auto"
-          >
-            {enviando ? 'Enviando…' : 'Enviar'}
-          </button>
-        </form>
-
-        {erro && <p className="mt-4 font-mono text-sm text-perigo">{erro}</p>}
-        {resultado && (
-          <p className="mt-4 font-mono text-sm text-sucesso">
-            Envio recebido! Processando em até 30 minutos — a Partida aparece no Feed quando terminar.
-          </p>
-        )}
-      </Card>
-
-      <Card className="h-fit p-5">
-        <p className="font-display text-base font-semibold uppercase tracking-wide text-texto">Rota da demo</p>
-        <p className="mt-1 font-mono text-xs leading-relaxed text-texto-fraco">Depois do envio, o coletor processa o arquivo e entrega a partida pronta no seu feed.</p>
-        <p className="mb-4 mt-5 font-mono text-[10px] uppercase tracking-wide text-texto-fraco">Acompanhamento</p>
-        <ol className="space-y-3">
-          {PASSOS.map((p, i) => (
-            <li key={p.titulo} className="flex items-start gap-3">
               <span
-                className={`panel-cut-sm mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center border font-mono text-[10px] font-bold ${
-                  p.feito ? 'border-destaque bg-destaque/10 text-destaque' : 'border-borda text-texto-fraco'
+                className={`panel-cut-sm flex h-14 w-14 items-center justify-center border transition-colors duration-200 ${
+                  arquivo
+                    ? 'border-sucesso/50 bg-sucesso/10 text-sucesso'
+                    : arrastando
+                      ? 'border-destaque bg-destaque/15 text-destaque'
+                      : 'border-borda bg-superficie-alta text-texto-fraco group-hover:text-destaque'
                 }`}
               >
-                {i + 1}
+                {arquivo ? <IconeArquivo /> : <IconeUpload />}
               </span>
-              <span className={`font-mono text-xs leading-snug ${p.feito ? 'text-texto' : 'text-texto-fraco'}`}>{p.titulo}</span>
-            </li>
-          ))}
-        </ol>
-      </Card>
+              <span className="block w-full truncate px-2 text-center font-display text-lg font-semibold text-texto" title={arquivo?.name}>
+                {arquivo ? arquivo.name : arrastando ? 'Solte pra anexar' : 'Arraste o .dem aqui ou clique pra escolher'}
+              </span>
+              {!arquivo && <span className="text-sm text-texto-fraco">Arquivos de demo do Counter-Strike 2</span>}
+              {arquivo && (
+                <span className="flex items-center gap-3 font-mono text-xs text-texto-fraco">
+                  <span className="tabular-nums text-texto">{formatarTamanho(arquivo.size)}</span>
+                  <span aria-hidden="true">·</span>
+                  <span className="underline-offset-2 group-hover:text-destaque group-hover:underline">Trocar arquivo</span>
+                </span>
+              )}
+              <input
+                id="arquivo"
+                type="file"
+                accept=".dem"
+                onChange={(e) => escolherArquivo(e.target.files)}
+                className="hidden"
+              />
+            </label>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Input
+                id="shareCode"
+                rotulo="Share code (opcional)"
+                ajuda="Evita duplicar se descoberto automaticamente."
+                value={shareCode}
+                onChange={(e) => setShareCode(e.target.value)}
+                placeholder="CSGO-xxxxx-xxxxx-xxxxx-xxxxx-xxxxx"
+                className="font-mono"
+              />
+              <Input
+                id="playedAt"
+                type="datetime-local"
+                rotulo="Quando foi jogada (opcional)"
+                ajuda="Sem isso, a data pode sair aproximada."
+                value={playedAt}
+                onChange={(e) => setPlayedAt(e.target.value)}
+                className="font-mono [color-scheme:dark]"
+              />
+            </div>
+            <Campo rotulo="Onde foi jogada (opcional)" ajuda="Vira o badge da plataforma na Partida.">
+              <div role="group" aria-label="Onde foi jogada">
+                <Select value={plataforma} onChange={(e) => setPlataforma(e.target.value)}>
+                  {PLATAFORMAS.map((p) => (
+                    <option key={p.valor} value={p.valor}>{p.label}</option>
+                  ))}
+                </Select>
+              </div>
+            </Campo>
+
+            {erro && <EstadoErro mensagem={erro} />}
+            {resultado && (
+              <div role="status" className="panel-cut-sm flex items-start gap-3 border border-sucesso/40 bg-sucesso/5 px-4 py-3 text-sm text-texto">
+                <span aria-hidden="true" className="text-sucesso">✓</span>
+                <span>Envio recebido! Processando em até 30 minutos — a Partida aparece no Feed quando terminar.</span>
+              </div>
+            )}
+
+            <div className="flex flex-col-reverse gap-3 border-t border-borda pt-5 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs text-texto-fraco">{arquivo ? 'Pronto pra enviar.' : 'Escolha um arquivo .dem pra liberar o envio.'}</p>
+              <Button type="submit" variante="primario" tamanho="lg" carregando={enviando} disabled={!arquivo}>
+                {enviando ? 'Enviando…' : 'Enviar'}
+              </Button>
+            </div>
+          </form>
+        </Card>
+
+        <Card className="h-fit p-5">
+          <h3 className="font-display text-lg font-semibold text-texto">Rota da demo</h3>
+          <p className="mt-1 text-sm leading-relaxed text-texto-fraco">Depois do envio, o Coletor processa o arquivo e entrega a partida pronta no seu feed.</p>
+          <p className="rotulo mb-4 mt-5">Acompanhamento</p>
+          <ol className="relative">
+            {PASSOS.map((p, i) => (
+              <li key={p.titulo} className="relative flex items-start gap-3 pb-4 last:pb-0">
+                {i < PASSOS.length - 1 && (
+                  <span className={`absolute left-[11px] top-6 h-[calc(100%-1.5rem)] w-px ${p.feito ? 'bg-destaque/60' : 'bg-borda'}`} aria-hidden="true" />
+                )}
+                <span
+                  className={`relative flex h-6 w-6 shrink-0 items-center justify-center border font-mono text-[10px] font-bold ${
+                    p.feito ? 'border-destaque bg-destaque/15 text-destaque' : 'border-borda bg-superficie text-texto-fraco'
+                  }`}
+                >
+                  {p.feito ? '✓' : i + 1}
+                </span>
+                <span className={`pt-0.5 text-sm leading-snug ${p.feito ? 'text-texto' : 'text-texto-fraco'}`}>{p.titulo}</span>
+              </li>
+            ))}
+          </ol>
+        </Card>
       </div>
     </div>
   )

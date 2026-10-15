@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { dataHora } from '../lib/format.js'
 import LinhaEvolucao from '../components/LinhaEvolucao.jsx'
 import FiltroPeriodo from '../components/FiltroPeriodo.jsx'
-import { Card, SectionHeader, StatTile, RatingBadge, Select } from '../components/ui'
+import { CabecalhoPagina, Card, EstadoErro, EstadoVazio, SectionHeader, SkeletonLista, StatTile, RatingBadge, Select } from '../components/ui'
 
 const LINHAS_STAT = [
   { rotulo: 'Rating', chave: 'rating', formato: (v) => v?.toFixed(2) ?? '–', rating: true },
@@ -20,7 +20,7 @@ const LINHAS_STAT = [
 
 function AvatarFallback({ nick }) {
   return (
-    <div className="panel-cut-sm flex h-16 w-16 shrink-0 items-center justify-center border border-borda bg-fundo font-display text-lg font-bold uppercase text-texto-fraco sm:h-20 sm:w-20">
+    <div className="panel-cut-sm flex h-16 w-16 shrink-0 items-center justify-center border border-borda bg-fundo font-display text-lg font-semibold text-texto-fraco sm:h-20 sm:w-20">
       {(nick || '?').slice(0, 2)}
     </div>
   )
@@ -39,7 +39,7 @@ function CabecalhoJogador({ p, alinhamento }) {
         <AvatarFallback nick={p.nick} />
       )}
       <div className="flex min-w-0 flex-col items-center gap-1 sm:items-start">
-        <span className="w-full truncate font-display text-base font-semibold uppercase tracking-wide text-texto sm:text-lg">
+        <span className="w-full truncate font-display text-lg font-semibold text-texto sm:text-2xl">
           {p.nick || p.steamId}
         </span>
         <RatingBadge valor={p.stats?.rating} className="text-sm" />
@@ -55,7 +55,7 @@ function BarraComparacao({ va, vb }) {
   const total = Math.abs(va) + Math.abs(vb)
   const pctA = total ? (Math.abs(va) / total) * 100 : 50
   return (
-    <div className="mt-1 flex h-1 w-full overflow-hidden rounded-full bg-fundo">
+    <div className="mt-1 flex h-1 w-full overflow-hidden bg-fundo">
       <div className="bg-time-a" style={{ width: `${pctA}%` }} />
       <div className="bg-time-b" style={{ width: `${100 - pctA}%` }} />
     </div>
@@ -97,21 +97,23 @@ export default function Comparar() {
 
   return (
     <div className="space-y-6">
-      <SectionHeader
+      <CabecalhoPagina
+        eyebrow="Duelo"
         titulo="Comparar Jogadores"
-        subtitulo="Rating, stats e confronto direto entre dois Jogadores do grupo."
+        descricao="Rating, stats e confronto direto entre dois Jogadores do grupo."
+        className="!mb-0"
       />
 
       <Card className="p-4 sm:p-5">
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
           <div>
-            <p className="mb-2 font-mono text-xs uppercase tracking-wide text-texto-fraco">Duelo</p>
+            <p className="rotulo mb-2">Duelo</p>
             <div className="grid items-center gap-2 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
               <Select value={a} onChange={(e) => setA(e.target.value)} className="w-full">
             <option value="">Jogador A…</option>
             {jogadores.map((j) => <option key={j.steamId} value={j.steamId}>{j.nick || j.steamId}</option>)}
           </Select>
-              <span className="panel-cut-sm mx-auto flex h-9 w-9 items-center justify-center border border-borda bg-fundo font-display text-xs uppercase tracking-wide text-texto-fraco">vs</span>
+              <span className="panel-cut-sm mx-auto flex h-9 w-9 items-center justify-center border border-borda bg-fundo font-display text-xs text-texto-fraco">vs</span>
               <Select value={b} onChange={(e) => setB(e.target.value)} className="w-full">
             <option value="">Jogador B…</option>
             {jogadores.map((j) => <option key={j.steamId} value={j.steamId}>{j.nick || j.steamId}</option>)}
@@ -119,30 +121,25 @@ export default function Comparar() {
             </div>
           </div>
           <div>
-            <p className="mb-2 font-mono text-xs uppercase tracking-wide text-texto-fraco">Recorte</p>
+            <p className="rotulo mb-2">Recorte</p>
             <FiltroPeriodo de={de} ate={ate} onDe={setDe} onAte={setAte} />
           </div>
         </div>
       </Card>
 
-      {erro && <p className="font-mono text-sm text-perigo">{erro}</p>}
+      {erro && <EstadoErro mensagem={erro} />}
+
+      {!dados && !erro && a && b && <SkeletonLista linhas={6} altura="h-12" rotulo="Comparando Jogadores" />}
 
       {/* Estado vazio: sem os dois jogadores escolhidos, `dados` é null — em vez de
           deixar a página em branco, mostra uma instrução clara. */}
-      {!dados && !erro && (
-        <Card className="grid gap-6 p-5 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center sm:p-8">
-          <div className="panel-cut flex h-16 w-16 items-center justify-center border border-destaque/50 bg-destaque/10 font-display text-2xl font-bold text-destaque">VS</div>
-          <div>
-            <span className="font-display text-xl font-semibold uppercase tracking-wide text-texto">Prepare o confronto</span>
-            <p className="mt-1 max-w-xl font-mono text-xs leading-relaxed text-texto-fraco">
-              Selecione um jogador de cada lado. O relatório mostra a vantagem por métrica, o desempenho recente e o histórico das partidas que jogaram juntos.
-            </p>
-            <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 font-mono text-xs text-texto-fraco">
-              <span><b className="text-destaque">01</b> Escolha os jogadores</span>
-              <span><b className="text-destaque">02</b> Ajuste o período se quiser</span>
-            </div>
-          </div>
-        </Card>
+      {/* Estado vazio: sem os dois jogadores escolhidos, `dados` é null — em vez de
+          deixar a página em branco, mostra uma instrução clara. */}
+      {!dados && !erro && (!a || !b) && (
+        <EstadoVazio
+          titulo="Prepare o confronto"
+          descricao="Selecione um jogador de cada lado. O relatório mostra a vantagem por métrica, o desempenho recente e o histórico das partidas que jogaram juntos."
+        />
       )}
 
       {dados && (
@@ -150,7 +147,7 @@ export default function Comparar() {
           <Card className="p-4 sm:p-5">
             <div className="flex items-start justify-between gap-3">
               <CabecalhoJogador p={dados.a} alinhamento="esquerda" />
-              <div className="shrink-0 pt-2 font-display text-xs uppercase tracking-widest text-texto-fraco sm:pt-6">vs</div>
+              <div className="shrink-0 pt-4 font-display text-2xl font-semibold text-texto-fraco sm:pt-6">vs</div>
               <CabecalhoJogador p={dados.b} alinhamento="direita" />
             </div>
 
@@ -162,12 +159,14 @@ export default function Comparar() {
                 const bGanha = typeof va === 'number' && typeof vb === 'number' && vb > va
                 return (
                   <div key={linha.chave} className="grid grid-cols-3 items-center gap-2 py-2.5">
-                    <span className={`text-right font-mono text-sm font-bold tabular-nums ${aGanha ? 'text-destaque' : 'text-texto'}`}>
+                    <span className={`text-right font-display text-xl font-semibold tabular-nums ${aGanha ? 'text-time-a' : 'text-texto'}`}>
+                      {aGanha && <span aria-hidden="true" className="mr-1.5 text-xs">◀</span>}
                       {linha.formato(va, dados.a.stats)}
                     </span>
-                    <span className="text-center text-[10px] font-display uppercase tracking-wider text-texto-fraco">{linha.rotulo}</span>
-                    <span className={`text-left font-mono text-sm font-bold tabular-nums ${bGanha ? 'text-destaque' : 'text-texto'}`}>
+                    <span className="rotulo text-center">{linha.rotulo}</span>
+                    <span className={`text-left font-display text-xl font-semibold tabular-nums ${bGanha ? 'text-time-b' : 'text-texto'}`}>
                       {linha.formato(vb, dados.b.stats)}
+                      {bGanha && <span aria-hidden="true" className="ml-1.5 text-xs">▶</span>}
                     </span>
                     <div className="col-span-3">
                       <BarraComparacao va={typeof va === 'number' ? va : 0} vb={typeof vb === 'number' ? vb : 0} />
@@ -181,7 +180,7 @@ export default function Comparar() {
           <section>
             <SectionHeader titulo="Confronto direto" />
             {dados.confronto.partidasJuntos === 0 ? (
-              <p className="font-mono text-sm text-texto-fraco">Esses dois nunca jogaram a mesma Partida ainda.</p>
+              <EstadoVazio titulo="Nunca se cruzaram" descricao="Esses dois nunca jogaram a mesma Partida ainda." />
             ) : (
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <StatTile rotulo="Partidas juntos" valor={dados.confronto.partidasJuntos} />

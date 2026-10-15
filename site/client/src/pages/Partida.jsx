@@ -2,7 +2,10 @@ import { useEffect, useRef, useState, Fragment } from 'react'
 import { useParams, useSearchParams, Link } from 'react-router-dom'
 import { nomeMapa, dataHora, origemPartida, nomeArma, corRating, TIPO_COMPRA } from '../lib/format.js'
 import { orientarPlacar } from '../lib/resultado.js'
-import { Avatar, MapIcon, SectionHeader, Select, ResultChip, PlataformaBadge, SteamIcon, Badge } from '../components/ui'
+import {
+  Avatar, MapIcon, SectionHeader, Select, PlataformaBadge, SteamIcon, Badge, Button, Modal, Abas,
+  Skeleton, SkeletonLista, EstadoVazio, EstadoErro, Input, Textarea, classesBotao,
+} from '../components/ui'
 import ReplayViewer from '../components/ReplayViewer.jsx'
 import MapaCalor from '../components/MapaCalor.jsx'
 import SeletorClipesCompeticao from '../components/SeletorClipesCompeticao.jsx'
@@ -71,27 +74,31 @@ export function SecaoReplay({ replayUrl, seek, onSelecionarPonto }) {
 
   if (!replayUrl) {
     return (
-      <p className="font-mono text-sm text-texto-fraco">
-        Replay 2D indisponível — gerado pelo Coletor quando o demo é processado (Fase 4).
-      </p>
+      <EstadoVazio
+        titulo="Replay 2D indisponível"
+        descricao="O Replay 2D é gerado pelo Coletor quando a Demo da Partida é processada."
+      />
     )
   }
-  if (erro) return <p className="font-mono text-sm text-perigo">Não foi possível carregar o replay.</p>
-  if (!replay) return <p className="font-mono text-sm text-texto-fraco">Carregando replay…</p>
+  if (erro) return <EstadoErro mensagem="Não foi possível carregar o replay." />
+  if (!replay) {
+    return (
+      <div role="status" aria-label="Carregando replay" className="space-y-3">
+        <Skeleton className="panel-cut-tr h-10 w-64" />
+        <Skeleton className="panel-cut mx-auto aspect-square w-full max-w-[640px]" />
+        <span className="sr-only">Carregando replay…</span>
+      </div>
+    )
+  }
 
   return (
-    <div className="space-y-3">
-      <div className="panel-cut-sm flex overflow-hidden border border-borda font-mono text-xs uppercase">
-        {[['replay', 'Replay 2D'], ['calor', 'Mapa de calor']].map(([v, label]) => (
-          <button
-            key={v}
-            onClick={() => setAba(v)}
-            className={`flex min-h-10 items-center px-3 py-1.5 transition-colors lg:min-h-0 ${aba === v ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'}`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+    <div className="space-y-4">
+      <Abas
+        rotulo="Visualização do replay"
+        itens={[{ valor: 'replay', rotulo: 'Replay 2D' }, { valor: 'calor', rotulo: 'Mapa de calor' }]}
+        valor={aba}
+        onChange={setAba}
+      />
       {aba === 'replay' ? (
         <ReplayViewer replay={replay} seek={seek} />
       ) : (
@@ -116,7 +123,7 @@ function NomeJogador({ p, mostrarTagGrupo = true, className = '' }) {
         <span className="max-w-[92px] truncate sm:max-w-none">{p.nick || p.steamId}</span>
       </Link>
       {mostrarTagGrupo && p.isTracked && (
-        <span className="hidden shrink-0 text-[10px] uppercase tracking-widest text-destaque sm:inline">grupo</span>
+        <span className="hidden shrink-0 rounded-full bg-superficie-topo px-1.5 text-[11px] text-texto-fraco sm:inline">grupo</span>
       )}
       <a
         href={`https://steamcommunity.com/profiles/${p.steamId}`}
@@ -139,13 +146,15 @@ function NomeJogador({ p, mostrarTagGrupo = true, className = '' }) {
 function DestaqueMvp({ mvp }) {
   if (!mvp || mvp.rating == null) return null
   return (
-    <div className="panel-cut-sm flex items-center gap-2 border border-borda bg-superficie px-3 py-2 font-mono text-sm">
-      <span className="text-[10px] uppercase tracking-widest text-destaque">MVP</span>
+    <div className="flex min-w-0 items-center gap-2.5 font-mono text-sm">
+      <span className="panel-cut-tr border border-ouro/40 bg-ouro/10 px-1.5 py-0.5 text-[11px] font-bold text-ouro">MVP</span>
       <Avatar p={mvp} size={28} />
       <Link to={`/jogador/${mvp.steamId}`} className="min-w-0 truncate text-texto transition-colors hover:text-destaque">
         {mvp.nick || mvp.steamId}
       </Link>
-      <span className={`tabular-nums ${corRating(mvp.rating)}`}>{mvp.rating.toFixed(2)}</span>
+      <span className={`font-display text-lg font-semibold leading-none tabular-nums ${corRating(mvp.rating)}`} title="Rating na partida">
+        {mvp.rating.toFixed(2)}
+      </span>
     </div>
   )
 }
@@ -167,14 +176,14 @@ function SetaExpandir({ aberto }) {
 // jogado de uma arma específica e o grupo quer confirmar).
 function ArmasDoJogador({ weapons, onAbrirDetalhe }) {
   return (
-    <div className="flex flex-wrap items-center gap-2 px-1 py-2">
+    <div className="flex flex-wrap items-center gap-2 px-3 py-2.5">
       {(!weapons || weapons.length === 0) ? (
-        <p className="font-mono text-xs text-texto-fraco">Sem kills registrados nessa partida.</p>
+        <p className="text-xs text-texto-fraco">Sem kills registrados nessa partida.</p>
       ) : (
         weapons.map((w) => (
           <div
             key={w.weapon}
-            className="panel-cut-sm flex items-center gap-2 border border-borda bg-superficie px-2 py-1 font-mono text-xs"
+            className="panel-cut-tr flex items-center gap-2 border border-borda bg-superficie-alta px-2 py-1 font-mono text-xs"
           >
             <span className="font-semibold text-texto">{nomeArma(w.weapon)}</span>
             <span className="text-texto-fraco">{w.kills} kill{w.kills === 1 ? '' : 's'}</span>
@@ -182,12 +191,9 @@ function ArmasDoJogador({ weapons, onAbrirDetalhe }) {
           </div>
         ))
       )}
-      <button
-        onClick={onAbrirDetalhe}
-        className="ml-auto panel-cut-sm border border-borda px-2 py-1 font-mono text-xs text-texto-fraco transition-colors hover:border-destaque hover:text-destaque"
-      >
+      <Button variante="fantasma" tamanho="sm" onClick={onAbrirDetalhe} className="ml-auto">
         Ver detalhe por round →
-      </button>
+      </Button>
     </div>
   )
 }
@@ -203,11 +209,11 @@ function LinhaComparativa({ label, valorA, valorB, corA = 'bg-time-a', corB = 'b
   return (
     <div className="flex items-center gap-2 font-mono text-xs">
       <span className="w-8 shrink-0 text-right tabular-nums text-texto">{valorA}</span>
-      <div className="flex h-3 flex-1 flex-row-reverse overflow-hidden rounded-sm bg-fundo">
+      <div className="flex h-3 flex-1 flex-row-reverse overflow-hidden bg-fundo">
         <div className={`h-full ${corA}`} style={{ width: `${(valorA / max) * 100}%` }} />
       </div>
-      <span className="w-16 shrink-0 text-center uppercase tracking-wide text-texto-fraco">{label}</span>
-      <div className="flex h-3 flex-1 overflow-hidden rounded-sm bg-fundo">
+      <span className="w-16 shrink-0 text-center text-texto-fraco">{label}</span>
+      <div className="flex h-3 flex-1 overflow-hidden bg-fundo">
         <div className={`h-full ${corB}`} style={{ width: `${(valorB / max) * 100}%` }} />
       </div>
       <span className="w-8 shrink-0 tabular-nums text-texto">{valorB}</span>
@@ -269,27 +275,37 @@ function AbaHeadToHead({ matchId, jogadores, jogadorLogado }) {
 
   return (
     <div className="space-y-3">
-      <label className="flex flex-wrap items-center gap-2 font-mono text-xs text-texto-fraco">
-        Comparando:
-        <Select value={referenciaId} onChange={(e) => setReferenciaId(e.target.value)} selectClassName="py-1.5 text-xs">
-          <option value="">Escolha um jogador…</option>
-          {jogadores.map((p) => (
-            <option key={p.steamId} value={p.steamId}>{p.nick || p.steamId}</option>
-          ))}
-        </Select>
-      </label>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <label className="flex flex-wrap items-center gap-2">
+          <span className="rotulo">Comparando</span>
+          <Select value={referenciaId} onChange={(e) => setReferenciaId(e.target.value)} selectClassName="py-1.5 text-xs">
+            <option value="">Escolha um jogador…</option>
+            {jogadores.map((p) => (
+              <option key={p.steamId} value={p.steamId}>{p.nick || p.steamId}</option>
+            ))}
+          </Select>
+        </label>
+        {referencia && (
+          <p className="flex items-center gap-3 font-mono text-[11px] text-texto-fraco">
+            <span className="flex items-center gap-1.5"><span className={`h-2 w-2 ${corReferencia}`} aria-hidden="true" />dano causado</span>
+            <span className="flex items-center gap-1.5"><span className={`h-2 w-2 ${corAdversario}`} aria-hidden="true" />dano recebido</span>
+          </p>
+        )}
+      </div>
 
-      {!referenciaId && <p className="font-mono text-sm text-texto-fraco">Escolha um jogador pra comparar contra o time adversário.</p>}
-      {referenciaId && erro && <p className="font-mono text-sm text-perigo">Não foi possível carregar o comparativo.</p>}
-      {referenciaId && !erro && !dados && <p className="font-mono text-sm text-texto-fraco">Carregando…</p>}
-      {dados && dados.oponentes.length === 0 && <p className="font-mono text-sm text-texto-fraco">Sem adversários pra comparar.</p>}
+      {!referenciaId && (
+        <EstadoVazio titulo="Escolha um jogador" descricao="Escolha um jogador pra comparar contra o time adversário." />
+      )}
+      {referenciaId && erro && <EstadoErro mensagem="Não foi possível carregar o comparativo." />}
+      {referenciaId && !erro && !dados && <SkeletonLista linhas={5} altura="h-12" rotulo="Carregando comparativo" />}
+      {dados && dados.oponentes.length === 0 && <EstadoVazio titulo="Sem adversários pra comparar." />}
 
       {dados?.oponentes.map((o) => {
         const aberto = expandido === o.steamId
         const categorias = CATEGORIAS_ARMA_ORDEM.filter((c) => o.killsPorCategoria[c] || o.killsPorCategoriaRecebido[c])
         const semFlash = o.flashes.porMim.vezes === 0 && o.flashes.porEle.vezes === 0
         return (
-          <div key={o.steamId} className="panel-cut-sm overflow-x-auto border border-borda bg-superficie">
+          <div key={o.steamId} className={`panel-cut-sm overflow-x-auto border bg-superficie transition-colors ${aberto ? 'border-borda-forte' : 'border-borda'}`}>
             <button
               onClick={() => setExpandido(aberto ? null : o.steamId)}
               aria-expanded={aberto}
@@ -299,11 +315,11 @@ function AbaHeadToHead({ matchId, jogadores, jogadorLogado }) {
                 <Avatar p={referencia} />
                 <span className="w-6 shrink-0 text-right font-semibold tabular-nums text-texto">{o.kills}</span>
               </span>
-              <div className="flex h-3 min-w-[36px] flex-1 flex-row-reverse overflow-hidden rounded-sm bg-fundo sm:min-w-[80px]">
+              <div className="flex h-3 min-w-[36px] flex-1 flex-row-reverse overflow-hidden bg-fundo sm:min-w-[80px]">
                 <div className={`h-full ${corReferencia}`} style={{ width: `${(o.dano / Math.max(o.dano, o.danoRecebido, 1)) * 100}%` }} />
               </div>
-              <span className="shrink-0 font-mono text-[10px] uppercase tracking-wide text-texto-fraco">dano</span>
-              <div className="flex h-3 min-w-[36px] flex-1 overflow-hidden rounded-sm bg-fundo sm:min-w-[80px]">
+              <span className="shrink-0 font-mono text-[11px] text-texto-fraco">dano</span>
+              <div className="flex h-3 min-w-[36px] flex-1 overflow-hidden bg-fundo sm:min-w-[80px]">
                 <div className={`h-full ${corAdversario}`} style={{ width: `${(o.danoRecebido / Math.max(o.dano, o.danoRecebido, 1)) * 100}%` }} />
               </div>
               <span className="flex min-w-0 items-center gap-2 font-mono text-sm">
@@ -316,7 +332,7 @@ function AbaHeadToHead({ matchId, jogadores, jogadorLogado }) {
             {aberto && (
               <div className="space-y-1.5 border-t border-borda/60 px-3 py-2.5">
                 {categorias.length === 0 && (
-                  <p className="font-mono text-xs text-texto-fraco">Nenhuma kill entre os dois nessa Partida.</p>
+                  <p className="text-xs text-texto-fraco">Nenhuma kill entre os dois nessa Partida.</p>
                 )}
                 {categorias.map((cat) => (
                   <LinhaComparativa
@@ -329,7 +345,7 @@ function AbaHeadToHead({ matchId, jogadores, jogadorLogado }) {
                   />
                 ))}
                 {semFlash ? (
-                  <p className="font-mono text-xs text-texto-fraco">Nenhum dos dois flashou o outro.</p>
+                  <p className="text-xs text-texto-fraco">Nenhum dos dois flashou o outro.</p>
                 ) : (
                   <LinhaComparativa
                     label="Flashes"
@@ -366,89 +382,79 @@ function ModalDetalhePartida({ matchId, jogador, onFechar }) {
   }, [matchId, jogador.steamId])
 
   return (
-    <div
-      className={`fixed inset-0 z-50 flex items-center justify-center bg-fundo/80 p-0 transition-opacity duration-200 lg:p-4 ${visivel ? 'opacity-100' : 'opacity-0'}`}
-      onClick={fechar}
+    <Modal
+      visivel={visivel}
+      onFechar={fechar}
+      tamanho="md"
+      titulo={
+        <span className="flex min-w-0 items-center gap-2.5">
+          <Avatar p={jogador} size={32} />
+          <span className="min-w-0 truncate">{jogador.nick || jogador.steamId}</span>
+        </span>
+      }
+      subtitulo={
+        jogador.duelWinPct !== null ? (
+          <span title="De todo confronto que terminou em morte envolvendo ele (matou ou morreu), quantos % ele venceu (saiu vivo)">
+            Duelos vencidos: <span className="text-texto">{jogador.duelWinPct}%</span> ({jogador.kills}V/{jogador.deaths}D)
+          </span>
+        ) : null
+      }
     >
-      <div
-        className={`flex h-full w-full flex-col overflow-y-hidden border border-borda bg-superficie transition-all duration-200 lg:panel-cut lg:h-auto lg:max-h-[90vh] lg:w-full lg:max-w-2xl lg:overflow-y-auto lg:p-5 ${visivel ? 'opacity-100 lg:scale-100' : 'opacity-0 lg:scale-95'}`}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-borda bg-superficie px-4 py-3 lg:static lg:border-0 lg:bg-transparent lg:px-0 lg:py-0">
-          <div className="flex min-w-0 items-center gap-2">
-            <Avatar p={jogador} />
-            <div className="min-w-0">
-              <h3 className="truncate font-display text-lg font-bold text-texto">{jogador.nick || jogador.steamId}</h3>
-              {jogador.duelWinPct !== null && (
-                <p className="font-mono text-xs text-texto-fraco" title="De todo confronto que terminou em morte envolvendo ele (matou ou morreu), quantos % ele venceu (saiu vivo)">
-                  Duelos vencidos: <span className="text-texto">{jogador.duelWinPct}%</span> ({jogador.kills}V/{jogador.deaths}D)
-                </p>
-              )}
-            </div>
-          </div>
-          <button onClick={fechar} className="flex min-h-10 min-w-10 shrink-0 items-center justify-center font-mono text-sm uppercase text-texto-fraco hover:text-texto">
-            fechar
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto px-4 py-3 lg:px-0 lg:py-3">
-          {erro && <p className="font-mono text-sm text-perigo">Não foi possível carregar o detalhe.</p>}
-          {!erro && !dados && <p className="font-mono text-sm text-texto-fraco">Carregando…</p>}
-          {dados && dados.rounds.length === 0 && (
-            <p className="font-mono text-sm text-texto-fraco">Sem dados round-a-round pra essa partida (demo antiga).</p>
-          )}
-          {dados && dados.rounds.length > 0 && (
-            <>
-              {/* Legenda fixa: explica de cara o que cada coluna/cor significa, sem
-                  precisar perguntar — mesma dúvida que já apareceu uma vez. */}
-              <p className="mb-3 font-mono text-[11px] leading-relaxed text-texto-fraco">
-                Cada linha é um round: o tipo/valor da compra dele naquele round (com o
-                detalhe de cada item), e do lado direito, em{' '}
-                <span className="text-sucesso">verde</span> as kills (arma e se foi
-                headshot) e em <span className="text-perigo">vermelho</span> a morte dele
-                — arma de quem matou e, entre parênteses, a arma que ELE estava segurando
-                na hora — quando ele sobrevive o round, não aparece nada em vermelho.
-              </p>
-              <div className="space-y-1.5">
-                {dados.rounds.map((r) => (
-                  <div key={r.roundNumber} className="panel-cut-sm flex flex-wrap items-center gap-2 border border-borda bg-fundo px-3 py-2 font-mono text-xs">
-                    <span className="w-14 shrink-0 text-texto-fraco">Round {r.roundNumber}</span>
-                    {r.buyType && (
-                      <span className="text-texto-fraco">
-                        {ROTULO_COMPRA[r.buyType] ?? r.buyType} (${r.equipValue ?? 0})
+      {erro && <EstadoErro mensagem="Não foi possível carregar o detalhe." />}
+      {!erro && !dados && <SkeletonLista linhas={6} altura="h-10" rotulo="Carregando detalhe" />}
+      {dados && dados.rounds.length === 0 && (
+        <EstadoVazio titulo="Sem dados round a round" descricao="Sem dados round-a-round pra essa partida (demo antiga)." />
+      )}
+      {dados && dados.rounds.length > 0 && (
+        <>
+          {/* Legenda fixa: explica de cara o que cada coluna/cor significa, sem
+              precisar perguntar — mesma dúvida que já apareceu uma vez. */}
+          <p className="mb-4 text-xs leading-relaxed text-texto-fraco">
+            Cada linha é um round: o tipo/valor da compra dele naquele round (com o
+            detalhe de cada item), e do lado direito, em{' '}
+            <span className="text-sucesso">verde</span> as kills (arma e se foi
+            headshot) e em <span className="text-perigo">vermelho</span> a morte dele
+            — arma de quem matou e, entre parênteses, a arma que ELE estava segurando
+            na hora — quando ele sobrevive o round, não aparece nada em vermelho.
+          </p>
+          <div className="space-y-1">
+            {dados.rounds.map((r) => (
+              <div key={r.roundNumber} className="panel-cut-tr flex flex-wrap items-center gap-x-3 gap-y-1 border border-borda bg-superficie-alta px-3 py-2 font-mono text-xs">
+                <span className="w-16 shrink-0 font-display text-sm font-semibold text-texto">Round {r.roundNumber}</span>
+                {r.buyType && (
+                  <span className="text-texto-fraco">
+                    {ROTULO_COMPRA[r.buyType] ?? r.buyType} <span className="tabular-nums">(${r.equipValue ?? 0})</span>
+                  </span>
+                )}
+                {r.compras.length > 0 && (
+                  <span className="text-texto-fraco/80">
+                    · comprou: {r.compras.map((c, i) => (
+                      <span key={i}>
+                        {i > 0 && ', '}
+                        {nomeArma(c.item)}{c.cost != null ? ` ($${c.cost})` : ''}
                       </span>
-                    )}
-                    {r.compras.length > 0 && (
-                      <span className="text-texto-fraco/80">
-                        · comprou: {r.compras.map((c, i) => (
-                          <span key={i}>
-                            {i > 0 && ', '}
-                            {nomeArma(c.item)}{c.cost != null ? ` ($${c.cost})` : ''}
-                          </span>
-                        ))}
-                      </span>
-                    )}
-                    <span className="ml-auto flex flex-wrap items-center justify-end gap-x-2">
-                      {r.matou.map((k, i) => (
-                        <span key={i} className="text-sucesso">matou: {nomeArma(k.weapon)}{k.headshot ? ' (HS)' : ''}</span>
-                      ))}
-                      {r.morreu && (
-                        <span className="text-perigo">
-                          morreu: {nomeArma(r.morreu.weapon)}
-                          {r.morreu.victimWeapon && r.morreu.victimWeapon !== r.morreu.weapon && (
-                            <> (segurando: {nomeArma(r.morreu.victimWeapon)})</>
-                          )}
-                        </span>
+                    ))}
+                  </span>
+                )}
+                <span className="ml-auto flex flex-wrap items-center justify-end gap-x-3">
+                  {r.matou.map((k, i) => (
+                    <span key={i} className="text-sucesso">▲ matou: {nomeArma(k.weapon)}{k.headshot ? ' (HS)' : ''}</span>
+                  ))}
+                  {r.morreu && (
+                    <span className="text-perigo">
+                      ▼ morreu: {nomeArma(r.morreu.weapon)}
+                      {r.morreu.victimWeapon && r.morreu.victimWeapon !== r.morreu.weapon && (
+                        <> (segurando: {nomeArma(r.morreu.victimWeapon)})</>
                       )}
                     </span>
-                  </div>
-                ))}
+                  )}
+                </span>
               </div>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
+            ))}
+          </div>
+        </>
+      )}
+    </Modal>
   )
 }
 
@@ -463,44 +469,76 @@ function ComEstrela({ valor, melhor, children }) {
   )
 }
 
-export function Scoreboard({ time, jogadores, matchId, podePromover, onPromover, promovendo, melhores, carregando }) {
+// Cabeçalho de coluna com tooltip (title) — sublinhado pontilhado indica que tem explicação.
+function Th({ titulo, children, className = '', escondeMobile = false }) {
+  return (
+    <th
+      title={titulo}
+      className={`cursor-help px-2 py-2.5 text-right font-medium underline decoration-dotted decoration-texto-fraco/40 underline-offset-4 ${escondeMobile ? 'hidden sm:table-cell' : ''} ${className}`}
+    >
+      {children}
+    </th>
+  )
+}
+
+export function Scoreboard({ time, jogadores, matchId, podePromover, onPromover, promovendo, melhores, carregando, placar = null, doGrupo = false }) {
   const [expandido, setExpandido] = useState(null)
   const [detalheAberto, setDetalheAberto] = useState(null)
   // Coluna de pontos por partida: Premier (valve_mm) OU ELO FACEIT (faceit) — o dado
   // certo pro tipo da partida; nunca os dois ao mesmo tempo.
   const temPontos = jogadores.some((p) => p.premierBefore != null || p.faceitEloBefore != null)
+  const corTime = time === 'A' ? 'text-time-a' : 'text-time-b'
+  const fundoTime = time === 'A' ? 'bg-time-a' : 'bg-time-b'
   return (
-    // O modal (fixed inset-0) precisa ficar FORA do painel com panel-cut: clip-path
-    // cria um containing block novo pra descendentes fixed (igual transform/filter) —
-    // por dentro do card, o modal ficava preso e minúsculo em vez de cobrir a tela.
+    // O modal vai por portal (Modal) — não fica preso no clip-path do painel.
     <>
-    <div className={`panel-cut overflow-x-auto border border-borda transition-opacity ${carregando ? 'opacity-50' : ''}`}>
+    <div className={`panel-cut overflow-hidden border border-borda bg-superficie realce-topo transition-opacity ${carregando ? 'opacity-50' : ''}`}>
+      <div className="flex items-center justify-between gap-3 border-b border-borda px-3 py-2.5 sm:px-4">
+        <div className="flex items-center gap-2.5">
+          <span className={`h-2.5 w-2.5 ${fundoTime}`} aria-hidden="true" />
+          <span className={`font-display text-lg font-semibold ${corTime}`}>Time {time}</span>
+          {doGrupo && (
+            <span className="rounded-full border border-borda-forte bg-superficie-alta px-2 py-0.5 text-[11px] font-medium text-texto-fraco">
+              seu time
+            </span>
+          )}
+        </div>
+        {placar != null && (
+          <span className={`font-display text-3xl font-semibold leading-none tabular-nums ${corTime}`}>{placar}</span>
+        )}
+      </div>
+      <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
-          <tr className="bg-superficie text-left font-mono text-[10px] uppercase tracking-wider text-texto-fraco">
-            <th className="px-3 py-2">Time {time}</th>
-            <th className="cursor-help px-2 py-2 text-right underline decoration-dotted underline-offset-2" title="Kills — abates confirmados (fogo amigo não conta)">K</th>
-            <th className="hidden cursor-help px-2 py-2 text-right underline decoration-dotted underline-offset-2 sm:table-cell" title="Team kills (não contam pro K nem pro rating)">TK</th>
-            <th className="cursor-help px-2 py-2 text-right underline decoration-dotted underline-offset-2" title="Deaths — vezes que morreu">D</th>
-            <th className="hidden cursor-help px-2 py-2 text-right underline decoration-dotted underline-offset-2 sm:table-cell" title="Assists — dano/flash que ajudou a matar sem ser o abate final">A</th>
-            <th className="hidden cursor-help px-2 py-2 text-right underline decoration-dotted underline-offset-2 sm:table-cell" title="Average Damage per Round — dano médio causado por round (contando também rounds sem kill)">ADR</th>
-            <th className="hidden cursor-help px-2 py-2 text-right underline decoration-dotted underline-offset-2 sm:table-cell" title="% dos abates que foram headshot">HS%</th>
-            <th className="hidden cursor-help px-2 py-2 text-right underline decoration-dotted underline-offset-2 sm:table-cell" title="KAST — % dos rounds em que ele teve kill, assist, sobreviveu ou foi vingado (trade)">KAST</th>
+          <tr className="bg-superficie-alta/60 text-left font-mono text-[11px] text-texto-fraco">
+            <th className="px-3 py-2.5 font-medium sm:px-4">Jogador</th>
+            <Th titulo="Kills — abates confirmados (fogo amigo não conta)">K</Th>
+            <Th titulo="Team kills (não contam pro K nem pro rating)" escondeMobile>TK</Th>
+            <Th titulo="Deaths — vezes que morreu">D</Th>
+            <Th titulo="Assists — dano/flash que ajudou a matar sem ser o abate final" escondeMobile>A</Th>
+            <Th titulo="Average Damage per Round — dano médio causado por round (contando também rounds sem kill)" escondeMobile>ADR</Th>
+            <Th titulo="% dos abates que foram headshot" escondeMobile>HS%</Th>
+            <Th titulo="KAST — % dos rounds em que ele teve kill, assist, sobreviveu ou foi vingado (trade)" escondeMobile>KAST</Th>
             {temPontos && (
-              <th className="hidden cursor-help px-2 py-2 text-right underline decoration-dotted underline-offset-2 sm:table-cell" title="Pontuação (Premier ou ELO FACEIT) antes dessa partida, e quanto ganhou/perdeu">Pontos</th>
+              <Th titulo="Pontuação (Premier ou ELO FACEIT) antes dessa partida, e quanto ganhou/perdeu" escondeMobile>Pontos</Th>
             )}
-            <th className="cursor-help px-3 py-2 text-right underline decoration-dotted underline-offset-2" title="Aproximação do HLTV Rating 1.0: combina kills/round, sobrevivência/round e multi-kills (2K/3K/4K/5K) num único número — acima de 1.00 é acima da média">Rating</th>
+            <Th
+              titulo="Aproximação do HLTV Rating 1.0: combina kills/round, sobrevivência/round e multi-kills (2K/3K/4K/5K) num único número — acima de 1.00 é acima da média"
+              className="px-3 sm:px-4"
+            >
+              Rating
+            </Th>
           </tr>
         </thead>
-        <tbody>
+        <tbody className="font-mono">
           {jogadores.map((p) => {
             const adr = p.roundsPlayed ? Math.round((p.damage / p.roundsPlayed) * 10) / 10 : 0
             const hs = p.kills ? Math.round((p.headshotKills / p.kills) * 100) : 0
             const aberto = expandido === p.steamId
             return (
               <Fragment key={p.steamId}>
-                <tr className="border-t border-borda transition-colors hover:bg-superficie-alta">
-                  <td className="px-3 py-2">
+                <tr className={`border-t border-borda transition-colors hover:bg-superficie-alta ${aberto ? 'bg-superficie-alta/60' : ''}`}>
+                  <td className="px-3 py-2 sm:px-4">
                     <span className="flex items-center gap-2">
                       <button
                         onClick={() => setExpandido(aberto ? null : p.steamId)}
@@ -512,24 +550,25 @@ export function Scoreboard({ time, jogadores, matchId, podePromover, onPromover,
                       </button>
                       <NomeJogador p={p} />
                       {!p.isTracked && podePromover && (
-                        <button
+                        <Button
+                          variante="fantasma"
+                          tamanho="xs"
                           onClick={() => onPromover(p.steamId)}
-                          disabled={promovendo === p.steamId}
-                          className="panel-cut-sm border border-borda px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-texto-fraco transition-colors hover:border-destaque hover:text-destaque disabled:opacity-50"
+                          carregando={promovendo === p.steamId}
                         >
-                          {promovendo === p.steamId ? '…' : '+ grupo'}
-                        </button>
+                          {promovendo === p.steamId ? null : '+ grupo'}
+                        </Button>
                       )}
                     </span>
                   </td>
-                  <td className="px-2 py-2 text-right tabular-nums">
+                  <td className="px-2 py-2 text-right tabular-nums text-texto">
                     <ComEstrela valor={p.kills} melhor={melhores?.kills ?? 0}>{p.kills}</ComEstrela>
                   </td>
-                  <td className={`hidden px-2 py-2 text-right tabular-nums sm:table-cell ${p.teamKills > 0 ? 'text-perigo' : 'text-texto-fraco'}`}>
+                  <td className={`hidden px-2 py-2 text-right tabular-nums sm:table-cell ${p.teamKills > 0 ? 'text-perigo' : 'text-texto-fraco/60'}`}>
                     {p.teamKills || 0}
                   </td>
-                  <td className="px-2 py-2 text-right tabular-nums">{p.deaths}</td>
-                  <td className="hidden px-2 py-2 text-right tabular-nums sm:table-cell">
+                  <td className="px-2 py-2 text-right tabular-nums text-texto-fraco">{p.deaths}</td>
+                  <td className="hidden px-2 py-2 text-right tabular-nums text-texto-fraco sm:table-cell">
                     <ComEstrela valor={p.assists} melhor={melhores?.assists ?? 0}>{p.assists}</ComEstrela>
                   </td>
                   <td className="hidden px-2 py-2 text-right tabular-nums sm:table-cell">
@@ -551,9 +590,9 @@ export function Scoreboard({ time, jogadores, matchId, podePromover, onPromover,
                         if (antes == null) return null
                         return (
                           <>
-                            <span className="font-mono text-xs tabular-nums text-texto-fraco">{Math.round(antes)}</span>
+                            <span className="text-xs tabular-nums text-texto-fraco">{Math.round(antes)}</span>
                             {depois != null && (
-                              <span className={`ml-1 font-mono text-xs font-semibold tabular-nums ${depois >= antes ? 'text-sucesso' : 'text-perigo'}`}>
+                              <span className={`ml-1 text-xs font-semibold tabular-nums ${depois >= antes ? 'text-sucesso' : 'text-perigo'}`}>
                                 {depois >= antes ? '▲' : '▼'}{Math.abs(Math.round(depois - antes))}
                               </span>
                             )}
@@ -562,7 +601,7 @@ export function Scoreboard({ time, jogadores, matchId, podePromover, onPromover,
                       })()}
                     </td>
                   )}
-                  <td className={`px-3 py-2 text-right font-semibold tabular-nums ${corRating(p.rating)}`}>
+                  <td className={`px-3 py-2 text-right font-display text-base font-semibold tabular-nums sm:px-4 ${corRating(p.rating)}`}>
                     {p.rating != null ? (
                       <ComEstrela valor={p.rating} melhor={melhores?.rating ?? 0}>{p.rating.toFixed(2)}</ComEstrela>
                     ) : '–'}
@@ -580,6 +619,7 @@ export function Scoreboard({ time, jogadores, matchId, podePromover, onPromover,
           })}
         </tbody>
       </table>
+      </div>
     </div>
     {detalheAberto && (
       <ModalDetalhePartida matchId={matchId} jogador={detalheAberto} onFechar={() => setDetalheAberto(null)} />
@@ -596,12 +636,12 @@ export function Scoreboard({ time, jogadores, matchId, podePromover, onPromover,
 function SugerirTatica({ matchId, map, roundNumber, onFechar, variante = 'bloco' }) {
   const classesSucesso =
     variante === 'absoluta'
-      ? 'panel-cut absolute left-0 top-full z-10 mt-1 w-56 border border-sucesso/40 bg-superficie p-3 font-mono text-xs text-sucesso'
-      : 'panel-cut mt-2 w-full border border-sucesso/40 bg-superficie p-3 font-mono text-xs text-sucesso sm:w-64'
+      ? 'panel-cut absolute left-0 top-full z-10 mt-1 w-56 border border-sucesso/40 bg-superficie p-3 text-xs text-sucesso shadow-flutuante'
+      : 'panel-cut mt-3 w-full border border-sucesso/40 bg-superficie p-3 text-xs text-sucesso sm:w-72'
   const classesForm =
     variante === 'absoluta'
-      ? 'panel-cut absolute left-0 top-full z-10 mt-1 w-64 space-y-2 border border-borda bg-superficie p-3 text-left'
-      : 'panel-cut mt-2 w-full space-y-2 border border-borda bg-superficie p-3 text-left sm:w-64'
+      ? 'panel-cut absolute left-0 top-full z-10 mt-1 w-72 space-y-2.5 border border-borda-forte bg-superficie p-3 text-left shadow-flutuante'
+      : 'panel-cut mt-3 w-full space-y-2.5 border border-borda-forte bg-superficie p-3 text-left sm:w-72'
   const [nome, setNome] = useState('')
   const [descricao, setDescricao] = useState('')
   const [enviando, setEnviando] = useState(false)
@@ -643,33 +683,29 @@ function SugerirTatica({ matchId, map, roundNumber, onFechar, variante = 'bloco'
       onClick={(e) => e.stopPropagation()}
       className={classesForm}
     >
-      <p className="font-mono text-[10px] uppercase tracking-widest text-texto-fraco">Sugerir tática · round {roundNumber}</p>
-      <input
+      <p className="rotulo">Sugerir tática · round {roundNumber}</p>
+      <Input
         value={nome}
         onChange={(e) => setNome(e.target.value)}
         placeholder="Nome curto"
+        aria-label="Nome da tática"
         required
-        className="panel-cut-sm w-full border border-borda bg-fundo px-2 py-1.5 font-mono text-xs"
       />
-      <textarea
+      <Textarea
         value={descricao}
         onChange={(e) => setDescricao(e.target.value)}
         placeholder="Descrição"
+        aria-label="Descrição da tática"
         rows={2}
-        className="panel-cut-sm w-full border border-borda bg-fundo px-2 py-1.5 font-mono text-xs"
       />
-      {erro && <p className="font-mono text-xs text-perigo">{erro}</p>}
+      {erro && <p className="text-xs text-perigo">{erro}</p>}
       <div className="flex justify-end gap-2">
-        <button type="button" onClick={onFechar} className="font-mono text-xs text-texto-fraco hover:text-texto">
-          cancelar
-        </button>
-        <button
-          type="submit"
-          disabled={enviando}
-          className="panel-cut-sm border border-destaque bg-destaque px-2 py-1 font-mono text-xs font-semibold uppercase text-fundo disabled:opacity-50"
-        >
-          {enviando ? '…' : 'sugerir'}
-        </button>
+        <Button variante="fantasma" tamanho="sm" onClick={onFechar}>
+          Cancelar
+        </Button>
+        <Button type="submit" variante="primario" tamanho="sm" carregando={enviando}>
+          Sugerir
+        </Button>
       </div>
     </form>
   )
@@ -688,17 +724,35 @@ function LinhaDoTempoRounds({ rounds, highlights, timeDoGrupo, onClicarHighlight
     porRound.get(h.roundNumber).push(h)
   }
   return (
-    <div className="panel-cut border border-borda bg-superficie p-3">
+    <div className="panel-cut border border-borda bg-superficie p-3 realce-topo sm:p-4">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <span className="rotulo">Rounds</span>
+        {timeDoGrupo && (
+          <span className="flex items-center gap-3 font-mono text-[11px] text-texto-fraco">
+            <span className="flex items-center gap-1"><span className="text-sucesso" aria-hidden="true">▲</span>vencido</span>
+            <span className="flex items-center gap-1"><span className="text-perigo" aria-hidden="true">▼</span>perdido</span>
+            <span className="flex items-center gap-1"><span className="text-destaque" aria-hidden="true">●</span>highlight</span>
+          </span>
+        )}
+      </div>
       <div className="flex gap-1 overflow-x-auto pb-1 lg:flex-wrap lg:overflow-visible">
         {rounds.map((r) => {
           const hs = porRound.get(r.roundNumber) ?? []
           const vencedorGrupo = timeDoGrupo ? r.winnerTeam === timeDoGrupo : null
           const cor =
-            vencedorGrupo === true ? 'border-sucesso/50 bg-sucesso/10' : vencedorGrupo === false ? 'border-perigo/50 bg-perigo/10' : 'border-borda bg-fundo'
+            vencedorGrupo === true
+              ? 'border-sucesso/50 bg-sucesso/10'
+              : vencedorGrupo === false
+                ? 'border-perigo/40 bg-perigo/5'
+                : 'border-borda bg-superficie-alta'
           const conteudo = (
-            <div className={`panel-cut-sm flex h-9 w-9 flex-shrink-0 flex-col items-center justify-center border ${cor} font-mono text-[10px]`}>
+            <div className={`panel-cut-tr relative flex h-10 w-10 flex-shrink-0 flex-col items-center justify-center border ${cor} font-mono text-[11px] tabular-nums transition-colors hover:border-texto-fraco/60`}>
               <span className="text-texto">{r.roundNumber}</span>
-              {hs.length > 0 && <span className="leading-none text-destaque">●</span>}
+              <span className="flex h-2 items-center gap-0.5 text-[8px] leading-none">
+                {vencedorGrupo === true && <span className="text-sucesso" aria-label="vencido">▲</span>}
+                {vencedorGrupo === false && <span className="text-perigo" aria-label="perdido">▼</span>}
+                {hs.length > 0 && <span className="text-destaque">●</span>}
+              </span>
             </div>
           )
           const primeiroComFrame = hs.find((h) => h.frame != null)
@@ -739,7 +793,7 @@ function LinhaDoTempoRounds({ rounds, highlights, timeDoGrupo, onClicarHighlight
           <SugerirTatica matchId={matchId} map={map} roundNumber={roundAberto} onFechar={() => setRoundAberto(null)} variante="bloco" />
         </div>
       )}
-      <p className="mt-2 font-mono text-[11px] text-texto-fraco">
+      <p className="mt-3 text-xs leading-relaxed text-texto-fraco">
         Verde/vermelho = round vencido/perdido pelo grupo. ● = teve highlight nesse round (clique pra assistir). Rounds sem
         highlight: clique pra sugerir como tática.
       </p>
@@ -766,9 +820,9 @@ function CabecalhoTimeEconomia({ time, jogadores, timeDoGrupo }) {
   const cor = time === 'A' ? 'text-time-a' : 'text-time-b'
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <span className={`font-display text-sm font-bold uppercase tracking-widest ${cor}`}>Time {time}</span>
+      <span className={`font-display text-base font-semibold ${cor}`}>Time {time}</span>
       {timeDoGrupo === time && (
-        <span className="panel-cut-sm border border-destaque/40 bg-destaque/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-widest text-destaque">
+        <span className="rounded-full border border-borda-forte bg-superficie-alta px-2 py-0.5 text-[11px] font-medium text-texto-fraco">
           seu time
         </span>
       )}
@@ -800,7 +854,7 @@ function LinhaDoTempoEconomia({ economia, timeDoGrupo, timeA, timeB }) {
   const rounds = [...porRound.keys()].sort((a, b) => a - b)
 
   return (
-    <div className="panel-cut border border-borda bg-superficie p-3">
+    <div className="panel-cut border border-borda bg-superficie p-3 realce-topo sm:p-4">
       <div className="mb-3">
         <CabecalhoTimeEconomia time="A" jogadores={timeA} timeDoGrupo={timeDoGrupo} />
       </div>
@@ -815,7 +869,7 @@ function LinhaDoTempoEconomia({ economia, timeDoGrupo, timeA, timeB }) {
           const b = r.B
           return (
             <div key={rn} className="flex min-w-[40px] flex-1 flex-col items-center">
-              <span className="whitespace-nowrap font-mono text-[10px] font-semibold tabular-nums text-time-a">
+              <span className="whitespace-nowrap font-mono text-[11px] font-semibold tabular-nums text-time-a">
                 {a ? fmtEquip(a.equipValue) : '–'}
               </span>
               <div className="flex w-full items-end justify-center" style={{ height: ALTURA_MAX }}>
@@ -825,11 +879,11 @@ function LinhaDoTempoEconomia({ economia, timeDoGrupo, timeA, timeB }) {
                       ? `Round ${rn} · Time A: $${a.equipValue} (${TIPO_COMPRA[a.buyType]?.label ?? a.buyType})`
                       : `Round ${rn} · Time A: sem dado`
                   }
-                  className={`w-6 rounded-t-sm border-2 ${a ? `${COR_BARRA_COMPRA[a.buyType]} border-time-a/70` : 'border-borda bg-borda'}`}
+                  className={`w-6 border-2 ${a ? `${COR_BARRA_COMPRA[a.buyType]} border-time-a/70` : 'border-borda bg-borda'}`}
                   style={{ height: altura(a?.equipValue) }}
                 />
               </div>
-              <div className="relative my-1 w-full border-t border-borda text-center font-mono text-[10px] font-semibold text-texto-fraco">
+              <div className="relative my-1 w-full border-t border-borda text-center font-mono text-[11px] font-semibold text-texto-fraco">
                 <span className="relative -top-[9px] bg-superficie px-1.5">{rn}</span>
               </div>
               <div className="flex w-full items-start justify-center" style={{ height: ALTURA_MAX }}>
@@ -839,11 +893,11 @@ function LinhaDoTempoEconomia({ economia, timeDoGrupo, timeA, timeB }) {
                       ? `Round ${rn} · Time B: $${b.equipValue} (${TIPO_COMPRA[b.buyType]?.label ?? b.buyType})`
                       : `Round ${rn} · Time B: sem dado`
                   }
-                  className={`w-6 rounded-b-sm border-2 ${b ? `${COR_BARRA_COMPRA[b.buyType]} border-time-b/70` : 'border-borda bg-borda'}`}
+                  className={`w-6 border-2 ${b ? `${COR_BARRA_COMPRA[b.buyType]} border-time-b/70` : 'border-borda bg-borda'}`}
                   style={{ height: altura(b?.equipValue) }}
                 />
               </div>
-              <span className="whitespace-nowrap font-mono text-[10px] font-semibold tabular-nums text-time-b">
+              <span className="whitespace-nowrap font-mono text-[11px] font-semibold tabular-nums text-time-b">
                 {b ? fmtEquip(b.equipValue) : '–'}
               </span>
             </div>
@@ -858,7 +912,7 @@ function LinhaDoTempoEconomia({ economia, timeDoGrupo, timeA, timeB }) {
       <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-borda pt-2 font-mono text-[11px] text-texto-fraco">
         {Object.entries(TIPO_COMPRA).map(([tipo, info]) => (
           <span key={tipo} className="flex items-center gap-1">
-            <span className={`inline-block h-2 w-2 rounded-sm ${COR_BARRA_COMPRA[tipo]}`} />
+            <span className={`inline-block h-2 w-2 ${COR_BARRA_COMPRA[tipo]}`} />
             {info.label}
           </span>
         ))}
@@ -872,23 +926,23 @@ function LinhaDoTempoEconomia({ economia, timeDoGrupo, timeA, timeB }) {
 // Recebe só os jogadores de UM time — o split A/B é feito no TabelaUtilitaria logo abaixo.
 function TabelaUtilitariaTime({ time, jogadores }) {
   const cor = time === 'A' ? 'text-time-a' : 'text-time-b'
-  const borda = time === 'A' ? 'border-time-a/30' : 'border-time-b/30'
+  const fundoTime = time === 'A' ? 'bg-time-a' : 'bg-time-b'
   return (
-    <div className={`panel-cut overflow-x-auto border ${borda}`}>
+    <div className="panel-cut overflow-x-auto border border-borda bg-superficie realce-topo">
       <table className="w-full text-sm">
         <thead>
-          <tr className={`border-b ${borda} bg-superficie text-left`}>
+          <tr className="border-b border-borda text-left">
             {/* Abaixo de 640px "Cegou aliado"/"Flash assist" somem (hidden sm:table-cell),
                 então a tabela tem só 5 colunas — a super-linha precisa de um colSpan
                 diferente por breakpoint, senão descasa da grade real. */}
-            <th className="px-3 py-2 sm:hidden" colSpan={5}>
-              <span className={`font-display text-xs font-bold uppercase tracking-widest ${cor}`}>Time {time}</span>
+            <th className="px-3 py-2.5 sm:hidden" colSpan={5}>
+              <span className={`flex items-center gap-2.5 font-display text-lg font-semibold ${cor}`}><span className={`h-2.5 w-2.5 ${fundoTime}`} aria-hidden="true" />Time {time}</span>
             </th>
-            <th className="hidden px-3 py-2 sm:table-cell" colSpan={7}>
-              <span className={`font-display text-xs font-bold uppercase tracking-widest ${cor}`}>Time {time}</span>
+            <th className="hidden px-3 py-2.5 sm:table-cell" colSpan={7}>
+              <span className={`flex items-center gap-2.5 font-display text-lg font-semibold ${cor}`}><span className={`h-2.5 w-2.5 ${fundoTime}`} aria-hidden="true" />Time {time}</span>
             </th>
           </tr>
-          <tr className="bg-superficie text-left font-mono text-[10px] uppercase tracking-wider text-texto-fraco">
+          <tr className="bg-superficie-alta/60 text-left font-mono text-[11px] text-texto-fraco [&>th]:font-medium">
             <th className="px-3 py-2">Jogador</th>
             <th className="px-2 py-2 text-right" title="Smokes / Flashes / HEs / Molotovs jogadas">Granadas</th>
             <th className="px-2 py-2 text-right" title="Inimigos cegados por mais de 1.1s (vezes) e segundos totais — cegueira rápida/de raspão não conta">Cegou inimigo</th>
@@ -898,7 +952,7 @@ function TabelaUtilitariaTime({ time, jogadores }) {
             <th className="px-2 py-2 text-right" title="Dano de molotov/incendiary em inimigo (fogo amigo à parte, entre parênteses)">Dano fogo</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody className="font-mono">
           {jogadores.map((p) => {
             const u = p.utilitaria ?? {}
             return (
@@ -931,7 +985,7 @@ function TabelaUtilitariaTime({ time, jogadores }) {
           })}
           {jogadores.length === 0 && (
             <tr>
-              <td colSpan={7} className="px-3 py-4 text-center font-mono text-xs text-texto-fraco">
+              <td colSpan={7} className="px-3 py-4 text-center text-xs text-texto-fraco">
                 Sem jogadores nesse time.
               </td>
             </tr>
@@ -949,7 +1003,7 @@ function TabelaUtilitaria({ timeA, timeB }) {
         <TabelaUtilitariaTime time="A" jogadores={timeA} />
         <TabelaUtilitariaTime time="B" jogadores={timeB} />
       </div>
-      <p className="panel-cut-sm border border-borda bg-superficie px-3 py-2 font-mono text-[11px] leading-relaxed text-texto-fraco">
+      <p className="max-w-4xl text-xs leading-relaxed text-texto-fraco">
         Granadas = smokes/flashes/HEs/molotovs jogadas (não necessariamente acertaram alguém).{' '}
         Cegou = vezes que a flash pegou alguém por mais de 1.1s (cegueira de raspão não conta — mesmo critério do Leetify), com o total de segundos causados. Auto-flash conta como "cegou aliado".{' '}
         Dano HE/fogo = só em inimigo; número em <span className="text-perigo">vermelho entre parênteses</span> é fogo amigo.
@@ -966,14 +1020,29 @@ function BotaoJogadorClipe({ p, selecionado, onClick }) {
   return (
     <button
       onClick={onClick}
-      className={`panel-cut-sm flex min-h-10 items-center gap-1.5 border px-2 py-1.5 font-mono text-xs transition-colors lg:min-h-0 ${
-        selecionado ? 'border-destaque bg-destaque/10 text-destaque' : 'border-borda bg-superficie text-texto-fraco hover:border-destaque/40 hover:text-texto'
+      aria-pressed={selecionado}
+      className={`panel-cut-tr flex min-h-10 items-center gap-2 border px-2.5 py-1.5 font-mono text-xs transition-colors lg:min-h-9 ${
+        selecionado
+          ? 'border-destaque/70 bg-destaque/10 text-texto'
+          : 'border-borda bg-superficie text-texto-fraco hover:border-borda-forte hover:bg-superficie-alta hover:text-texto'
       }`}
     >
       <Avatar p={p} size={20} />
       <span className="max-w-[7rem] truncate">{p.nick || p.steamId}</span>
-      {temClipeProcessado && <span title="Já tem clipe pronto">🎬</span>}
+      {temClipeProcessado && (
+        <span title="Já tem clipe pronto" className="h-1.5 w-1.5 rounded-full bg-sucesso">
+          <span className="sr-only">Já tem clipe pronto</span>
+        </span>
+      )}
     </button>
+  )
+}
+
+function IconePlay({ className = 'h-3.5 w-3.5' }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+      <path d="M7 5v14l12-7z" />
+    </svg>
   )
 }
 
@@ -984,94 +1053,87 @@ function PainelClipeJogador({ jogador, clip, pedindo, erro, aberto, onAbrir, onG
   // demo_url nulo (cleanup de 14 dias, ou Partida que nunca teve .dem): o servidor
   // responde 404. Esconde a ação em vez de deixar o clique falhar.
   const semDemo = !m.demoUrl
+  const nome = jogador.nick || jogador.steamId
   const avisoSemDemo = (
-    <span className="font-mono text-xs text-texto-fraco">
+    <span className="text-xs text-texto-fraco">
       Demo não arquivada — não dá pra gerar clipe nem baixar o .dem.
     </span>
   )
+  const casca = 'mt-4 panel-cut border border-borda bg-superficie p-4 realce-topo'
   if (!clip) {
     return (
-      <div className="mt-4 panel-cut-sm border border-borda bg-superficie p-4">
+      <div className={casca}>
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <span className="font-mono text-sm text-texto">{jogador.nick || jogador.steamId}</span>
+          <span className="flex items-center gap-2 font-mono text-sm text-texto"><Avatar p={jogador} size={24} />{nome}</span>
           {semDemo ? avisoSemDemo : (
-            <button
-              onClick={onGerar}
-              disabled={pedindo}
-              className="panel-cut-sm border border-borda bg-superficie px-3 py-2 font-mono text-xs uppercase text-texto-fraco transition-colors hover:border-destaque/60 hover:text-destaque disabled:opacity-50"
-            >
-              {pedindo ? '…' : '🎬 gerar melhor clipe da partida'}
-            </button>
+            <Button variante="primario" onClick={onGerar} carregando={pedindo}>
+              gerar melhor clipe da partida
+            </Button>
           )}
         </div>
-        {erro && <p className="mt-2 font-mono text-xs text-perigo">{erro}</p>}
+        {erro && <EstadoErro mensagem={erro} className="mt-3" />}
       </div>
     )
   }
   if (clip.status === 'Submitted') {
     return (
-      <div className="mt-4 panel-cut-sm border border-borda bg-superficie p-4 font-mono text-sm text-texto-fraco">
-        Gerando o melhor clipe de {jogador.nick || jogador.steamId}… pode levar alguns minutos.
+      <div className={`${casca} flex items-center gap-3 text-sm text-texto-fraco`} role="status">
+        <span className="h-2 w-2 shrink-0 animate-pulso-sinal rounded-full bg-destaque" aria-hidden="true" />
+        Gerando o melhor clipe de {nome}… pode levar alguns minutos.
       </div>
     )
   }
   if (clip.status === 'Error') {
     return (
-      <div className="mt-4 panel-cut-sm border border-borda bg-superficie p-4">
-        <p className="font-mono text-sm text-perigo">Falha ao gerar o clipe de {jogador.nick || jogador.steamId}.</p>
-        {semDemo ? (
-          <p className="mt-2">{avisoSemDemo}</p>
-        ) : (
-          <button
-            onClick={onGerar}
-            disabled={pedindo}
-            className="mt-2 panel-cut-sm border border-borda bg-superficie px-3 py-2 font-mono text-xs uppercase text-texto-fraco transition-colors hover:border-destaque/60 hover:text-destaque disabled:opacity-50"
-          >
-            {pedindo ? '…' : 'tentar de novo'}
-          </button>
-        )}
-        {erro && <p className="mt-2 font-mono text-xs text-perigo">{erro}</p>}
+      <div className={`${casca} space-y-3`}>
+        <EstadoErro
+          mensagem={`Falha ao gerar o clipe de ${nome}.`}
+          acao={semDemo ? null : (
+            <Button variante="secundario" tamanho="sm" onClick={onGerar} carregando={pedindo}>
+              tentar de novo
+            </Button>
+          )}
+        />
+        {semDemo && <p>{avisoSemDemo}</p>}
+        {erro && <p className="text-xs text-perigo">{erro}</p>}
       </div>
     )
   }
   // Processed
   return (
-    <div className="mt-4 panel-cut-sm border border-borda bg-superficie p-4">
+    <div className={casca}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="font-mono text-sm text-texto">{jogador.nick || jogador.steamId}{clip.roundNumber ? ` · round ${clip.roundNumber}` : ''}</span>
-        <span className="flex items-center gap-3">
-          <button
-            onClick={onAbrir}
-            className="panel-cut-sm border border-destaque/60 bg-destaque/10 px-2 py-1 font-mono text-xs uppercase text-destaque transition-colors hover:bg-destaque/20"
-          >
-            {aberto ? 'fechar' : '▶ assistir'}
-          </button>
+        <span className="flex items-center gap-2 font-mono text-sm text-texto">
+          <Avatar p={jogador} size={24} />
+          {nome}{clip.roundNumber ? <span className="text-texto-fraco"> · round {clip.roundNumber}</span> : ''}
+        </span>
+        <span className="flex flex-wrap items-center gap-2">
           {podeEnviarCompeticao && (
-            <button
-              onClick={onAbrirSeletorCompeticao}
-              className="font-mono text-xs uppercase text-texto-fraco underline hover:text-destaque"
-            >
+            <Button variante="fantasma" tamanho="sm" onClick={onAbrirSeletorCompeticao}>
               Enviar pra competição →
-            </button>
+            </Button>
           )}
+          <Button variante={aberto ? 'secundario' : 'contorno'} tamanho="sm" onClick={onAbrir} icone={aberto ? null : <IconePlay />}>
+            {aberto ? 'fechar' : 'assistir'}
+          </Button>
         </span>
       </div>
       {aberto && (
-        <div className="mt-3 flex flex-col gap-4 lg:flex-row">
+        <div className="mt-4 flex flex-col gap-4 lg:flex-row">
           <div className="aspect-video w-full lg:max-w-xl">
             <iframe
               src={`${clip.clipUrl}&UID=${viewerSteamId ?? ''}&location=matchResults`}
               allow="autoplay; encrypted-media; picture-in-picture; clipboard-write; fullscreen"
               allowFullScreen
               className="h-full w-full border border-borda"
-              title={`Melhor clipe de ${jogador.nick || jogador.steamId}`}
+              title={`Melhor clipe de ${nome}`}
             />
           </div>
-          <div className="panel-cut-sm flex-1 space-y-3 border border-borda bg-superficie-alta p-4 lg:max-w-xs">
+          <div className="flex-1 space-y-3 border-t border-borda pt-4 lg:max-w-xs lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0">
             <div>
               <Badge tom="destaque">MELHOR MOMENTO</Badge>
               <p className="mt-2 font-mono text-sm text-texto">
-                {jogador.nick || jogador.steamId}{clip.roundNumber ? ` · round ${clip.roundNumber}` : ''}
+                {nome}{clip.roundNumber ? ` · round ${clip.roundNumber}` : ''}
               </p>
             </div>
             <div className="space-y-1 font-mono text-xs text-texto-fraco">
@@ -1082,7 +1144,7 @@ function PainelClipeJogador({ jogador, clip, pedindo, erro, aberto, onAbrir, onG
               href={clip.clipUrl}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-1 font-mono text-xs uppercase tracking-wide text-destaque hover:underline"
+              className={classesBotao({ variante: 'fantasma', tamanho: 'sm', className: '-ml-3' })}
             >
               Abrir no Allstar.gg ↗
             </a>
@@ -1119,31 +1181,33 @@ function FormClipe({ matchId, jogadores, onAdicionado }) {
   }
 
   return (
-    <form onSubmit={enviar} className="panel-cut flex flex-wrap items-end gap-2 border border-borda bg-superficie p-3">
-      <Select value={steamId} onChange={(e) => setSteamId(e.target.value)}>
-        {doGrupo.map((p) => (
-          <option key={p.steamId} value={p.steamId}>{p.nick || p.steamId}</option>
-        ))}
-      </Select>
-      <input
-        value={url}
-        onChange={(e) => setUrl(e.target.value)}
-        placeholder="Link do Allstar/Medal/YouTube"
-        className="panel-cut-sm min-h-10 flex-1 border border-borda bg-fundo px-3 py-2 font-mono text-sm lg:min-h-0"
-      />
-      <input
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        placeholder="Título (opcional)"
-        className="panel-cut-sm min-h-10 w-full border border-borda bg-fundo px-3 py-2 font-mono text-sm sm:w-40 lg:min-h-0"
-      />
-      <button
-        type="submit"
-        className="panel-cut-sm border border-destaque bg-destaque px-4 py-2 font-display text-sm font-semibold uppercase tracking-wide text-fundo"
-      >
-        Anexar clipe
-      </button>
-      {erro && <p className="w-full font-mono text-sm text-perigo">{erro}</p>}
+    <form onSubmit={enviar} className="panel-cut space-y-3 border border-borda bg-superficie p-4 realce-topo">
+      <p className="rotulo">Anexar clipe externo</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <Select value={steamId} onChange={(e) => setSteamId(e.target.value)}>
+          {doGrupo.map((p) => (
+            <option key={p.steamId} value={p.steamId}>{p.nick || p.steamId}</option>
+          ))}
+        </Select>
+        <Input
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          placeholder="Link do Allstar/Medal/YouTube"
+          aria-label="Link do clipe"
+          className="min-w-0 flex-1 basis-56"
+        />
+        <Input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="Título (opcional)"
+          aria-label="Título do clipe"
+          className="sm:w-44"
+        />
+        <Button type="submit" variante="primario">
+          Anexar clipe
+        </Button>
+      </div>
+      {erro && <p className="text-sm text-perigo">{erro}</p>}
     </form>
   )
 }
@@ -1156,24 +1220,99 @@ const ABAS = [
   { id: 'utilitaria', label: 'Utilitária' },
   { id: 'clipes', label: 'Clipes' },
 ]
+const ITENS_ABAS = ABAS.map((a) => ({ valor: a.id, rotulo: a.label }))
 
-// Barra de abas da Partida — mesmo padrão visual do toggle Replay 2D/Mapa de
-// calor (botões num trilho, aba ativa em destaque), só que ocupando a largura
-// toda e com scroll horizontal no mobile (6 abas não cabem em 375px).
-function BarraAbas({ abas, ativa, onSelecionar }) {
+const LADOS_PLACAR = [
+  { valor: 'all', rotulo: 'Ambos' },
+  { valor: 'T', rotulo: 'T' },
+  { valor: 'CT', rotulo: 'CT' },
+]
+
+// Resultado do grupo no hero: ícone + rótulo + cor (Regra do Sinal Duplo — nunca só cor).
+const RESULTADO_HERO = {
+  vitoria: { rotulo: 'Vitória', texto: 'text-sucesso', path: 'M12 19V5M6 11l6-6 6 6' },
+  derrota: { rotulo: 'Derrota', texto: 'text-perigo', path: 'M12 5v14M6 13l6 6 6-6' },
+  empate: { rotulo: 'Empate', texto: 'text-texto-fraco', path: 'M5 12h14' },
+  misto: { rotulo: 'Grupo dividido', texto: 'text-texto-fraco', path: null },
+}
+
+// Hero da Partida: mapa, placar grande do ponto de vista do grupo, resultado, plataforma
+// e data. Abaixo, uma faixa com o MVP e o placar por time (cores de time).
+function HeroPartida({ m, resultadoGrupo, placar }) {
+  const r = RESULTADO_HERO[resultadoGrupo]
+  const origem = origemPartida(m.source, m.temDemo)
+  const temMvp = m.mvp && m.mvp.rating != null
   return (
-    <div className="panel-cut-sm flex overflow-x-auto border border-borda font-mono text-xs uppercase">
-      {abas.map((a) => (
-        <button
-          key={a.id}
-          onClick={() => onSelecionar(a.id)}
-          className={`flex-shrink-0 whitespace-nowrap px-3 py-2 transition-colors ${
-            ativa === a.id ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'
-          }`}
-        >
-          {a.label}
-        </button>
-      ))}
+    <section className="panel-cut relative overflow-hidden border border-borda bg-superficie">
+      <div className="relative flex flex-col gap-6 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+        <div className="min-w-0">
+          <Link to="/" className="rotulo inline-flex items-center gap-1.5 transition-colors hover:text-texto">
+            <span aria-hidden="true">←</span> Partidas
+          </Link>
+          <div className="mt-3 flex items-center gap-4">
+            <MapIcon map={m.map} size={56} />
+            <div className="min-w-0">
+              <h2 className="truncate font-display text-4xl font-semibold leading-none text-texto sm:text-5xl">
+                {nomeMapa(m.map)}
+              </h2>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <PlataformaBadge source={m.source} plataformaManual={m.plataformaManual} />
+                <span
+                  title={origem.title}
+                  className="panel-cut-tr border border-borda bg-superficie-alta px-1.5 py-0.5 font-mono text-[11px] text-texto-fraco"
+                >
+                  {origem.label}
+                </span>
+                <span className="font-mono text-xs text-texto-fraco">{dataHora(m.playedAt)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex shrink-0 flex-col items-start sm:items-end" title={r?.rotulo === 'Grupo dividido' ? 'O grupo jogou dividido nos dois times' : undefined}>
+          {r && (
+            <span className={`flex items-center gap-1.5 font-mono text-xs font-bold ${r.texto}`}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
+                {r.path ? <path d={r.path} /> : <circle cx="12" cy="12" r="6" />}
+              </svg>
+              {r.rotulo}
+            </span>
+          )}
+          <div className="mt-1 font-display text-6xl font-semibold leading-none tabular-nums sm:text-7xl" aria-label={`Placar ${placar.a} a ${placar.b}`}>
+            <span className={r?.texto === 'text-texto-fraco' || !r ? 'text-texto' : r.texto}>{placar.a ?? '–'}</span>
+            <span className="mx-1.5 text-texto-fraco/50">:</span>
+            <span className="text-texto-fraco">{placar.b ?? '–'}</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="relative flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-t border-borda bg-fundo/40 px-4 py-3 sm:px-6">
+        {temMvp ? <DestaqueMvp mvp={m.mvp} /> : <span className="rotulo">Sem MVP do grupo</span>}
+        <div className="flex items-center gap-4 font-mono text-xs">
+          <span className="flex items-center gap-2 text-texto-fraco">
+            <span className="h-2 w-2 bg-time-a" aria-hidden="true" />Time A
+            <span className="font-display text-xl font-semibold leading-none tabular-nums text-time-a">{m.scoreA ?? '–'}</span>
+          </span>
+          <span className="flex items-center gap-2 text-texto-fraco">
+            <span className="font-display text-xl font-semibold leading-none tabular-nums text-time-b">{m.scoreB ?? '–'}</span>
+            Time B<span className="h-2 w-2 bg-time-b" aria-hidden="true" />
+          </span>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function SkeletonPartida() {
+  return (
+    <div role="status" aria-label="Carregando partida" className="space-y-6">
+      <Skeleton className="panel-cut h-48 w-full sm:h-44" />
+      <Skeleton className="h-11 w-full" />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Skeleton className="panel-cut h-72 w-full" />
+        <Skeleton className="panel-cut h-72 w-full" />
+      </div>
+      <span className="sr-only">Carregando…</span>
     </div>
   )
 }
@@ -1327,8 +1466,15 @@ export default function Partida() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [abaAtiva])
 
-  if (erro && !m) return <p className="font-mono text-sm text-texto-fraco">Partida não encontrada.</p>
-  if (!m) return <p className="font-mono text-sm text-texto-fraco">Carregando…</p>
+  if (erro && !m) {
+    return (
+      <EstadoVazio
+        titulo="Partida não encontrada."
+        acao={<Button as={Link} to="/" variante="secundario">← Partidas</Button>}
+      />
+    )
+  }
+  if (!m) return <SkeletonPartida />
 
   // Aplica o filtro de lado (se ativo e já carregado) por cima dos dados base da
   // Partida — mantém nick/avatar/weapons/isTracked/premier (só o /lado/:filtro não
@@ -1379,70 +1525,44 @@ export default function Partida() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <Link to="/" className="font-mono text-sm text-texto-fraco hover:text-texto">← Partidas</Link>
-          <div className="mt-1 flex flex-wrap items-center gap-2">
-            <MapIcon map={m.map} size={40} />
-            <h2 className="font-display text-2xl font-bold uppercase tracking-wide text-texto">{nomeMapa(m.map)}</h2>
-            <PlataformaBadge source={m.source} plataformaManual={m.plataformaManual} />
-            <span
-              title={origemPartida(m.source, m.temDemo).title}
-              className="panel-cut-sm border border-borda bg-superficie px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-widest text-texto-fraco"
-            >
-              {origemPartida(m.source, m.temDemo).label}
-            </span>
-          </div>
-          <p className="font-mono text-sm text-texto-fraco">{dataHora(m.playedAt)}</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <DestaqueMvp mvp={m.mvp} />
-          <ResultChip resultado={resultadoGrupo} a={placar.a} b={placar.b} size="normal" />
-        </div>
-      </div>
+      <HeroPartida m={m} resultadoGrupo={resultadoGrupo} placar={placar} />
 
       {m.endedEarly && (
-        <div className="panel-cut-sm border border-perigo/40 bg-perigo/10 px-3 py-2 font-mono text-xs text-perigo">
-          ⚠ Partida encerrada antes do fim — nenhum time chegou a 13 rounds, então isso não foi uma vitória normal.
-          {m.abandonedBy
-            ? ` Provável motivo: ${m.abandonedBy.nick || m.abandonedBy.steamId} desconectou e não voltou.`
-            : ' Provavelmente por desistência/desconexão de algum jogador (não deu pra identificar quem com certeza).'}
-        </div>
+        <EstadoErro
+          mensagem={
+            <>
+              Partida encerrada antes do fim — nenhum time chegou a 13 rounds, então isso não foi uma vitória normal.
+              {m.abandonedBy
+                ? ` Provável motivo: ${m.abandonedBy.nick || m.abandonedBy.steamId} desconectou e não voltou.`
+                : ' Provavelmente por desistência/desconexão de algum jogador (não deu pra identificar quem com certeza).'}
+            </>
+          }
+        />
       )}
 
       <EnviarDemoDaPartida partida={m} euSteamId={jogador?.steamId} onEnviado={carregar} />
 
-      <BarraAbas abas={ABAS} ativa={abaAtiva} onSelecionar={setAbaAtiva} />
+      <Abas variante="sublinhado" rotulo="Seções da partida" itens={ITENS_ABAS} valor={abaAtiva} onChange={setAbaAtiva} larguraTotal />
 
       {abaAtiva === 'geral' && (
         <>
-          <div className="flex items-center gap-2">
-            <div className="panel-cut-sm flex overflow-hidden border border-borda font-mono text-xs uppercase">
-              {[['all', 'All'], ['T', 'T'], ['CT', 'CT']].map(([v, label]) => (
-                <button
-                  key={v}
-                  onClick={() => setLadoFiltro(v)}
-                  className={`min-h-10 px-3 py-1.5 transition-colors lg:min-h-0 ${ladoFiltro === v ? 'bg-destaque text-fundo' : 'bg-superficie text-texto-fraco hover:text-texto'}`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="rotulo">Lado</span>
+            <Abas rotulo="Filtrar por lado" itens={LADOS_PLACAR} valor={ladoFiltro} onChange={setLadoFiltro} />
             {carregandoLado && <span className="font-mono text-xs text-texto-fraco">recalculando…</span>}
             {semDadoDeLado && (
-              <span className="font-mono text-xs text-texto-fraco">
+              <span className="text-xs text-texto-fraco">
                 Essa partida ainda não tem o dado de lado (processada antes do fix) — precisa reprocessar.
               </span>
             )}
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Scoreboard time="A" jogadores={timeA} matchId={m.id} podePromover={jogador?.isSuperAdmin} onPromover={promover} promovendo={promovendo} melhores={melhores} carregando={carregandoLado} />
-            <Scoreboard time="B" jogadores={timeB} matchId={m.id} podePromover={jogador?.isSuperAdmin} onPromover={promover} promovendo={promovendo} melhores={melhores} carregando={carregandoLado} />
+          <div className="grid gap-4">
+            <Scoreboard time="A" placar={m.scoreA} doGrupo={timeDoGrupo === 'A'} jogadores={timeA} matchId={m.id} podePromover={jogador?.isSuperAdmin} onPromover={promover} promovendo={promovendo} melhores={melhores} carregando={carregandoLado} />
+            <Scoreboard time="B" placar={m.scoreB} doGrupo={timeDoGrupo === 'B'} jogadores={timeB} matchId={m.id} podePromover={jogador?.isSuperAdmin} onPromover={promover} promovendo={promovendo} melhores={melhores} carregando={carregandoLado} />
           </div>
         </>
       )}
-
       {abaAtiva === 'h2h' && (
         <section>
           <AbaHeadToHead matchId={m.id} jogadores={m.players} jogadorLogado={jogador} />
@@ -1479,7 +1599,7 @@ export default function Partida() {
                   const podeAssistir = h.frame != null && m.replayUrl
                   const conteudo = (
                     <>
-                      <span className="font-display font-semibold uppercase text-destaque">{h.kind}</span>{' '}
+                      <span className="font-display font-semibold text-destaque">{h.kind}</span>{' '}
                       <span className="text-texto">{h.nick || h.steamId}</span>{' '}
                       <span className="text-texto-fraco">round {h.roundNumber}</span>
                       {podeAssistir && <span className="ml-1.5 text-texto-fraco">▶</span>}
@@ -1489,13 +1609,13 @@ export default function Partida() {
                     <button
                       key={h.id}
                       onClick={() => irParaHighlight(h)}
-                      className="panel-cut-sm border border-borda bg-superficie px-3 py-2 font-mono text-sm transition-colors hover:border-destaque/60 hover:bg-superficie-alta"
+                      className="border border-borda bg-superficie px-3 py-2 font-mono text-sm transition-colors hover:border-borda-forte hover:bg-superficie-alta"
                       title="Assistir nesse momento"
                     >
                       {conteudo}
                     </button>
                   ) : (
-                    <div key={h.id} className="panel-cut-sm border border-borda bg-superficie px-3 py-2 font-mono text-sm">
+                    <div key={h.id} className="border border-borda bg-superficie px-3 py-2 font-mono text-sm">
                       {conteudo}
                     </div>
                   )
@@ -1511,7 +1631,7 @@ export default function Partida() {
           {m.economia?.length > 0 ? (
             <LinhaDoTempoEconomia economia={m.economia} timeDoGrupo={timeDoGrupo} timeA={timeA} timeB={timeB} />
           ) : (
-            <p className="font-mono text-sm text-texto-fraco">Sem dados de economia pra essa Partida (demo antiga).</p>
+            <EstadoVazio titulo="Sem dados de economia" descricao="Sem dados de economia pra essa Partida (demo antiga)." />
           )}
         </section>
       )}
@@ -1526,7 +1646,7 @@ export default function Partida() {
         <section className="space-y-6">
           <div>
             <SectionHeader titulo="Melhor clipe do jogador (Allstar)" margem="pequena" />
-            <p className="mb-3 font-mono text-xs text-texto-fraco">
+            <p className="mb-3 text-sm text-texto-fraco">
               A Allstar escolhe sozinha o melhor momento do jogador na partida inteira — não dá
               pra escolher um round específico. Selecione um jogador:
             </p>
@@ -1540,7 +1660,7 @@ export default function Partida() {
                   />
                 ))}
               </div>
-              <span className="font-mono text-xs uppercase text-texto-fraco">vs</span>
+              <span className="font-mono text-xs text-texto-fraco">vs</span>
               <div className="flex flex-wrap gap-2">
                 {timeB.map((p) => (
                   <BotaoJogadorClipe
@@ -1584,7 +1704,9 @@ export default function Partida() {
 
           <div>
             <div className="mb-3 space-y-2">
-              {m.clips.length === 0 && <p className="font-mono text-sm text-texto-fraco">Nenhum clipe anexado ainda.</p>}
+              {m.clips.length === 0 && (
+                <EstadoVazio titulo="Nenhum clipe anexado ainda." descricao="Cole abaixo um link do Allstar, Medal ou YouTube." />
+              )}
               {m.clips.map((c) => (
                 <a
                   key={c.id}
@@ -1593,7 +1715,7 @@ export default function Partida() {
                   rel="noreferrer"
                   className="panel-cut-sm flex items-center gap-3 border border-borda bg-superficie p-3 font-mono text-sm transition-colors hover:border-destaque/60"
                 >
-                  <span className="panel-cut-sm flex-shrink-0 bg-fundo px-2 py-1 text-xs uppercase tracking-wide text-destaque">{c.provider}</span>
+                  <span className="panel-cut-sm flex-shrink-0 bg-fundo px-2 py-1 text-xs text-destaque">{c.provider}</span>
                   <span className="min-w-0 flex-1 truncate text-texto">{c.title || c.url}</span>
                 </a>
               ))}

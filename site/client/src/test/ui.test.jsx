@@ -85,7 +85,7 @@ describe('primitivos de UI', () => {
 
   it('PlataformaBadge mostra PREMIER/FACEIT com logo e nada pra outros sources', () => {
     const { getByText, container } = render(<PlataformaBadge source="valve_mm" />)
-    expect(getByText('PREMIER')).toBeInTheDocument()
+    expect(getByText('Premier')).toBeInTheDocument()
     expect(container.querySelector('svg')).not.toBeNull()
     const { getByText: getFaceit } = render(<PlataformaBadge source="faceit" />)
     expect(getFaceit('FACEIT')).toBeInTheDocument()

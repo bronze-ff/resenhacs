@@ -4,7 +4,7 @@ export default function DataTable({ head, children, className = '', ...props }) 
     <div className="overflow-x-auto">
       <table className={`w-full border-collapse text-sm ${className}`.trim()} {...props}>
         {head && (
-          <thead className="border-b border-borda text-left font-mono text-[10px] uppercase tracking-wide text-texto-fraco">
+          <thead className="border-b border-borda text-left text-xs font-medium text-texto-fraco">
             {head}
           </thead>
         )}

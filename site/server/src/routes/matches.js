@@ -50,6 +50,35 @@ function mvpDaLinha(mvp) {
   return mvp ? { ...mvp, rating: mvp.rating === null ? null : Number(mvp.rating) } : null
 }
 
+// Linha do PRÓPRIO viewer na Partida (card do Feed mostra o K/D/A e o rating de quem
+// está olhando, estilo Leetify). null quando o viewer não jogou — a Partida aparece por
+// ser de um amigo. jsonb pelo mesmo motivo do lateralMvp (entra no group by).
+function lateralEu(aliasPartida, paramViewer) {
+  return `left join lateral (
+         select jsonb_build_object(
+           'kills', mpe.kills, 'deaths', mpe.deaths, 'assists', mpe.assists,
+           'rating', mpe.rating, 'damage', mpe.damage, 'roundsPlayed', mpe.rounds_played,
+           'won', mpe.won, 'team', mpe.team
+         ) as eu
+         from match_players mpe
+         where mpe.match_id = ${aliasPartida}.id and mpe.steam_id64 = ${paramViewer}
+         limit 1
+       ) eu on true`
+}
+
+function euDaLinha(eu) {
+  if (!eu) return null
+  return {
+    kills: eu.kills,
+    deaths: eu.deaths,
+    assists: eu.assists,
+    rating: eu.rating == null ? null : Number(eu.rating),
+    adr: eu.roundsPlayed ? Math.round((eu.damage / eu.roundsPlayed) * 10) / 10 : null,
+    won: eu.won,
+    team: eu.team,
+  }
+}
+
 // Filtro por plataforma/comunidade, cruzando as DUAS origens do dado: `source`
 // (integração automática — valve_mm/faceit) e `plataforma_manual` (rótulo que o
 // jogador escolhe no Enviar Demo — ver migração 0041). FACEIT aparece nos dois
@@ -126,12 +155,14 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
          m.team_a_name, m.team_b_name, m.plataforma_manual, m.tem_demo,
          coalesce(json_agg(json_build_object('steamId', mp.steam_id64, 'nick', mp.nick, 'won', mp.won))
            filter (where mp.is_tracked), '[]') as tracked,
-         mvp.mvp
+         mvp.mvp, eu.eu,
+         (select count(*)::int from highlights h where h.match_id = m.id) as n_highlights
        from matches m
        left join match_players mp on mp.match_id = m.id
        ${lateralMvp('m')}
+       ${lateralEu('m', '$1')}
        where ${cond.join(' and ')}
-       group by m.id, mvp.mvp
+       group by m.id, mvp.mvp, eu.eu
        order by m.played_at desc nulls last, m.created_at desc
        limit $${params.length + 1} offset $${params.length + 2}`,
       [...params, limit, offset],
@@ -150,6 +181,8 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
         teamBName: m.team_b_name,
         tracked: m.tracked,
         mvp: mvpDaLinha(m.mvp),
+        eu: euDaLinha(m.eu),
+        highlights: m.n_highlights ?? 0,
       })),
     )
   })

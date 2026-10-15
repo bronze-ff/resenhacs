@@ -1,93 +1,138 @@
 @import 'tailwindcss';
 
 /*
-  Direção: HUD tático / mission control. Painéis com cantos cortados (ecoando os
-  próprios painéis do HUD do CS2), acento âmbar único e decisivo, dados sempre em
-  monoespaçada (leitura tabular rápida), fundo com grid sutil de "radar".
+  Direção: "Studio" — ferramenta de análise profissional, no espírito de Linear/Vercel.
+  Neutro escuro, hairlines em vez de sombra, um único acento laranja pra ação/seleção,
+  Geist pra tudo que é interface e Geist Mono pra tudo que é número. Cantos
+  levemente arredondados, caixa de frase (nada de CAIXA ALTA em título/botão).
+  Detalhe em docs/produto/DESIGN.md.
 */
 
 @theme {
-  --font-sans: 'Inter', sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
-  --font-display: 'Rajdhani', sans-serif;
+  --font-sans: 'Geist', 'Inter', system-ui, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, 'SFMono-Regular', monospace;
+  /* "display" agora é o mesmo Geist, só com peso e tracking de título. */
+  --font-display: 'Geist', 'Inter', system-ui, sans-serif;
 
-  --color-fundo: #0a0a0c;
-  --color-superficie: #141419;
-  --color-superficie-alta: #1d1d24;
-  --color-borda: #2a2a32;
-  --color-texto: #f1f2f4;
-  --color-texto-fraco: #8b8b96;
+  /* Superfícies: fundo → superficie → superficie-alta → superficie-topo. */
+  --color-fundo: #0a0a0b;
+  --color-superficie: #111113;
+  --color-superficie-alta: #18181b;
+  --color-superficie-topo: #212125;
+  --color-borda: #232327;
+  --color-borda-forte: #303036;
+  --color-texto: #ededef;
+  --color-texto-fraco: #8a8a93;
 
-  --color-destaque: #ff2e43;
-  --color-destaque-fraco: #4a1219;
-  --color-time-a: #f5a524;
-  --color-time-b: #4fb6ff;
-  --color-sucesso: #24d17e;
-  --color-perigo: #ff3b4e;
+  /* Acento único de ação/seleção. Nunca usado pra julgar bom/ruim. */
+  --color-destaque: #ff6a1a;
+  --color-destaque-forte: #ff8240;
+  --color-destaque-fraco: #3a1a08;
+  /* Texto sobre o acento cheio (botão primário). */
+  --color-sobre-destaque: #1c0a00;
 
-  /* Medalhas do Ranking (1º/2º/3º lugar) — mesmos tons que já estavam hardcoded como
-     text-yellow-400/text-slate-300/text-amber-600, agora como token pra não depender da
-     paleta padrão do Tailwind. */
+  /* Times — seguem o time real do jogador mostrado. Time A é dourado (não laranja)
+     pra não competir com o acento. */
+  --color-time-a: #e9b949;
+  --color-time-b: #5aa9ff;
+
+  /* Julgamento bom/ruim. */
+  --color-sucesso: #3ddc97;
+  --color-perigo: #f2555a;
+
   --color-ouro: #facc15;
   --color-prata: #cbd5e1;
   --color-bronze: #d97706;
-  /* Aviso (ex.: mapa sem calibração de radar) — mesmo tom já usado nos 3 componentes de replay/mapa. */
   --color-aviso: #fbbf24;
+
+  --radius-pequeno: 6px;
+  --radius-medio: 8px;
+  --radius-grande: 12px;
+
+  --shadow-flutuante: 0 16px 48px -12px rgb(0 0 0 / 0.7), 0 0 0 1px rgb(255 255 255 / 0.06);
+  --shadow-acento: 0 0 0 1px rgb(255 106 26 / 0.4);
+
+  --ease-saida: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 body {
   background-color: var(--color-fundo);
   color: var(--color-texto);
   font-family: var(--font-sans);
-  background-image:
-    radial-gradient(ellipse 900px 500px at 15% -10%, rgba(255, 46, 67, 0.05), transparent 60%),
-    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
-  background-size: auto, 44px 44px, 44px 44px;
+  font-size: 14px;
+  line-height: 1.5;
+  /* Só um halo neutro no topo — o resto é chapado. */
+  background-image: radial-gradient(ellipse 1200px 480px at 50% -220px, rgb(255 255 255 / 0.045), transparent 70%);
+  background-repeat: no-repeat;
   background-attachment: fixed;
 }
 
 h1, h2, h3, .font-display {
   font-family: var(--font-display);
-  letter-spacing: 0.02em;
+  letter-spacing: -0.02em;
 }
 
 /* Todo dado numérico tabular vira monoespaçado — sem precisar tocar em cada JSX. */
 .tabular-nums {
   font-family: var(--font-mono);
-}
-
-/* Tracking negativo sutil pros tamanhos grandes de display (valores de stat, números FACEIT). */
-.display-tight {
+  font-variant-numeric: tabular-nums;
   letter-spacing: -0.01em;
 }
 
+.display-tight {
+  letter-spacing: -0.03em;
+}
+
 ::selection {
-  background: var(--color-destaque);
-  color: var(--color-fundo);
+  background: rgb(255 106 26 / 0.35);
+  color: var(--color-texto);
 }
 
 * {
-  scrollbar-color: var(--color-borda) var(--color-fundo);
+  scrollbar-color: var(--color-borda-forte) transparent;
   scrollbar-width: thin;
 }
 *::-webkit-scrollbar { width: 10px; height: 10px; }
-*::-webkit-scrollbar-track { background: var(--color-fundo); }
+*::-webkit-scrollbar-track { background: transparent; }
 *::-webkit-scrollbar-thumb {
-  background: var(--color-borda);
-  border-radius: 0;
-  border: 2px solid var(--color-fundo);
+  background: var(--color-borda-forte);
+  border-radius: 999px;
+  border: 3px solid var(--color-fundo);
 }
-*::-webkit-scrollbar-thumb:hover { background: var(--color-destaque-fraco); }
 
-/* Painel com cantos cortados — a assinatura visual do site (ecoa os HUDs do jogo). */
+/*
+  Os antigos "cortes diagonais" viraram raios. Os nomes ficam porque estão espalhados
+  pelo site inteiro (e em variantes lg:panel-cut); trocar o significado aqui muda a
+  geometria de tudo de uma vez.
+*/
 @utility panel-cut {
-  clip-path: polygon(
-    14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px
-  );
+  border-radius: var(--radius-grande);
 }
 @utility panel-cut-sm {
-  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+  border-radius: var(--radius-pequeno);
+}
+@utility panel-cut-tr {
+  border-radius: var(--radius-pequeno);
+}
+
+/* Rótulo micro padrão (eyebrow/legenda de stat). */
+@utility rotulo {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 1.4;
+  font-weight: 500;
+  color: var(--color-texto-fraco);
+}
+
+/* Realce de 1px no topo do painel — profundidade sem sombra. */
+@utility realce-topo {
+  box-shadow: inset 0 1px 0 0 rgb(255 255 255 / 0.03);
 }
 
 @keyframes pulso-sinal {
@@ -99,25 +144,38 @@ h1, h2, h3, .font-display {
 }
 
 @keyframes surgir {
-  from { opacity: 0; transform: translateY(10px); }
+  from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
 }
 .animate-surgir {
-  animation: surgir 0.45s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  animation: surgir 0.45s var(--ease-saida) backwards;
 }
 
-/* Entrada sutil do painel de opções do Select (fade + leve translate/scale) — sem saída
-   animada porque o painel some do DOM assim que fecha (ver Select.jsx). */
 @keyframes surgir-painel {
   from { opacity: 0; transform: translateY(-4px) scale(0.98); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 .animate-surgir-painel {
-  animation: surgir-painel 0.12s ease-out;
+  animation: surgir-painel 0.14s var(--ease-saida);
 }
 
-/* Respeita a preferência do SO por menos movimento — anula qualquer animação/transição/
-   scroll suave do site (cobre .animate-surgir-painel acima e tudo mais). */
+/* Skeleton: faixa clara varrendo o bloco. Substitui "Carregando…" em texto cru. */
+@keyframes brilho-skeleton {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+.animate-skeleton {
+  border-radius: var(--radius-pequeno);
+  background-image: linear-gradient(
+    90deg,
+    var(--color-superficie-alta) 0%,
+    var(--color-superficie-topo) 50%,
+    var(--color-superficie-alta) 100%
+  );
+  background-size: 200% 100%;
+  animation: brilho-skeleton 1.4s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
@@ -127,14 +185,14 @@ h1, h2, h3, .font-display {
   }
 }
 
-/* Foco visível por teclado — cobre a maioria dos interativos sem precisar tocar em cada
-   componente (Select.jsx cancela outline explicitamente, tratado à parte nele mesmo). */
+/* Foco visível por teclado — anel no acento, afastado 2px. */
 button:not(:disabled):focus-visible,
 a:focus-visible,
 [tabindex]:focus-visible,
 input:focus-visible,
+textarea:focus-visible,
 select:focus-visible {
   outline: 2px solid var(--color-destaque);
   outline-offset: 2px;
-  border-radius: 2px;
+  border-radius: var(--radius-pequeno);
 }

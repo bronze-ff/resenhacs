@@ -4,6 +4,8 @@
 // existiria em três variantes parecidas-mas-não-iguais.
 import { PlayerClipe, SnapshotPlaceholder, nomeDoKind } from './ui/PlayerClipe.jsx'
 import { nomeMapa, dataHora } from '../lib/format.js'
+import { Badge, Button } from './ui'
+import { IconeFechar } from './ui/Modal.jsx'
 
 // Breakdown como TEXTO, não tooltip: a decisão "essa jogada foi boa?" é tomada
 // olhando o card, e no celular não existe hover. Só entram os componentes que
@@ -37,12 +39,14 @@ export default function CardClipeCompeticao({
   const abrirOuFechar = () => onAbrir(aberto ? null : chave)
   const rotuloAssistir = `Assistir clipe de ${nomeMapa(clipe.map)} round ${clipe.roundNumber}`
 
+  const partes = partesDaPontuacao(clipe.pontuacao)
+
   return (
-    <div className="panel-cut-sm border border-borda p-3">
+    <div className="panel-cut-sm flex flex-col border border-borda bg-superficie-alta/30 p-3 transition-colors duration-200 hover:border-borda-forte">
       {autor && (
-        <div className="flex items-center gap-2">
+        <div className="mb-3 flex items-center gap-2">
           {clipe.avatarUrl && (
-            <img src={clipe.avatarUrl} alt="" className="panel-cut-sm h-6 w-6 border border-borda object-cover" />
+            <img src={clipe.avatarUrl} alt="" className="h-6 w-6 border border-borda object-cover" />
           )}
           <span className="min-w-0 truncate font-mono text-xs text-texto">{clipe.nick}</span>
         </div>
@@ -50,13 +54,11 @@ export default function CardClipeCompeticao({
 
       {aberto ? (
         <>
-          <button
-            type="button"
-            onClick={abrirOuFechar}
-            className="mt-3 font-mono text-xs uppercase text-texto-fraco hover:text-texto"
-          >
-            fechar
-          </button>
+          <div className="mb-2 flex justify-end">
+            <Button variante="fantasma" tamanho="sm" icone={<IconeFechar className="h-3.5 w-3.5" />} onClick={abrirOuFechar}>
+              Fechar
+            </Button>
+          </div>
           <PlayerClipe
             clipUrl={clipe.clipUrl}
             viewerSteamId={viewerSteamId}
@@ -69,11 +71,14 @@ export default function CardClipeCompeticao({
           type="button"
           onClick={abrirOuFechar}
           aria-label={rotuloAssistir}
-          className="relative mt-3 block aspect-video w-full border border-borda"
+          className="group relative block aspect-video w-full overflow-hidden border border-borda"
         >
-          <img src={clipe.clipSnapshotUrl} alt="" className="h-full w-full object-cover" />
-          <span className="absolute inset-0 flex items-center justify-center bg-fundo/40 font-mono text-xs uppercase tracking-widest text-texto">
-            ▶ assistir
+          <img src={clipe.clipSnapshotUrl} alt="" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]" />
+          <span className="absolute inset-0 flex items-center justify-center bg-fundo/45 transition-colors duration-200 group-hover:bg-fundo/25">
+            <span className="panel-cut-tr flex items-center gap-2 border border-texto/30 bg-fundo/70 px-3 py-1.5 font-display text-sm font-semibold text-texto">
+              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15l13-7.5z" /></svg>
+              Assistir
+            </span>
           </span>
         </button>
       ) : (
@@ -82,21 +87,22 @@ export default function CardClipeCompeticao({
         </button>
       )}
 
-      <div className="mt-3 flex items-start justify-between gap-2">
+      <div className="mt-3 flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <span className="panel-cut-sm border border-destaque/40 bg-destaque/10 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-widest text-destaque">
-            {rotuloDaJogada(clipe)}
-          </span>
-          <p className="mt-1 font-mono text-xs text-texto-fraco">
+          <Badge tom="destaque">{rotuloDaJogada(clipe)}</Badge>
+          <p className="mt-1.5 truncate font-mono text-xs text-texto-fraco">
             {nomeMapa(clipe.map)} · {dataHora(clipe.playedAt)} · round {clipe.roundNumber}
           </p>
         </div>
-        <span className="font-display text-lg font-bold text-destaque">{clipe.pontuacao.total}</span>
+        <div className="shrink-0 text-right">
+          <span className="block font-display text-2xl font-semibold leading-none tabular-nums text-destaque">{clipe.pontuacao.total}</span>
+          <span className="rotulo">pts</span>
+        </div>
       </div>
 
-      {partesDaPontuacao(clipe.pontuacao).length > 0 && (
-        <p className="mt-1 font-mono text-[11px] text-texto-fraco">
-          {partesDaPontuacao(clipe.pontuacao).join(' · ')}
+      {partes.length > 0 && (
+        <p className="mt-2 border-t border-borda pt-2 font-mono text-[11px] text-texto-fraco">
+          {partes.join(' · ')}
         </p>
       )}
 

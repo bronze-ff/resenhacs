@@ -5,8 +5,8 @@
 // tamanho da fonte) continua em cada um via `className`; aqui só mora o que é comum
 // aos cinco: tom (cor), ícone opcional e o tamanho do padding.
 const PADDING = {
-  compacto: 'px-1.5 py-0.5',
-  normal: 'px-2 py-1',
+  compacto: 'px-1.5 py-px',
+  normal: 'px-2 py-0.5',
 }
 
 export default function Chip({ toneClassName = '', size = 'compacto', icon = null, className = '', children, ...props }) {

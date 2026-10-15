@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { partidaVisivelExpr } from '../friendships.js'
+import { recordesPessoais } from '../recordesPessoais.js'
 
 // Mesmo gap de "Resenha" que sessions.js usa pra agrupar Partidas da mesma noite —
 // duplicado aqui (não importado) porque é só uma linha de lógica e criar um módulo
@@ -136,6 +137,45 @@ export function createRecordesRouter({ db, requireAuth }) {
     }
 
     res.json({ maisKills, melhorAdr, maiorSequencia, maisClutchesNaNoite })
+  })
+
+  // Recordes PESSOAIS do viewer batidos nos últimos 14 dias (aviso do Feed). Só olha as
+  // Partidas do próprio viewer — são sempre visíveis pra ele, não precisa do filtro de
+  // amizade. As últimas 750 Partidas vêm linha a linha; o que é mais velho que isso entra
+  // só como agregado (máximo e contagem por métrica) — sem ele, um recorde de carreira
+  // fora da janela sumiria e uma marca menor seria anunciada como recorde.
+  router.get('/pessoais', requireAuth, async (req, res) => {
+    const janela = `select m.id from match_players mp join matches m on m.id = mp.match_id
+         where mp.steam_id64 = $1 and m.status = 'parsed'
+         order by m.played_at desc nulls last, m.id desc limit 750`
+    const [recentesQ, baseQ] = await Promise.all([
+      db.query(
+        `select mp.match_id, m.map, m.played_at, mp.kills, mp.damage, mp.rounds_played,
+                mp.rating, mp.utility_damage
+         from match_players mp join matches m on m.id = mp.match_id
+         where mp.steam_id64 = $1 and m.id in (${janela})
+         order by m.played_at asc nulls last, m.id asc`,
+        [req.player.steamId],
+      ),
+      db.query(
+        `select max(mp.kills) as kills_max, count(*)::int as kills_n,
+                max(round(mp.damage::numeric / mp.rounds_played, 1)) filter (where mp.rounds_played > 0) as adr_max,
+                count(*) filter (where mp.rounds_played > 0)::int as adr_n,
+                max(mp.rating) as rating_max, count(mp.rating)::int as rating_n,
+                max(mp.utility_damage) as utilitaria_max, count(mp.utility_damage)::int as utilitaria_n
+         from match_players mp join matches m on m.id = mp.match_id
+         where mp.steam_id64 = $1 and m.status = 'parsed' and m.id not in (${janela})`,
+        [req.player.steamId],
+      ),
+    ])
+    const b = baseQ.rows[0] ?? {}
+    const base = {}
+    for (const chave of ['kills', 'adr', 'rating', 'utilitaria']) {
+      const max = b[`${chave}_max`]
+      if (max != null) base[chave] = { max: Number(max), n: Number(b[`${chave}_n`] ?? 0) }
+    }
+    const desde = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000)
+    res.json(recordesPessoais(recentesQ.rows, { desde, base }))
   })
 
   return router

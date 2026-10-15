@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { frameIndexAt, duracaoSegundos } from '../lib/replayEngine.js'
 import { nomeMapa, nomeArma, categoriaArma } from '../lib/format.js'
 import { CORES } from '../lib/colors.js'
-import { Select } from './ui'
+import { Select, Button } from './ui'
 
 const TAM = 640 // lado do canvas em px
 // Cor por LADO real (CT/T), não pelo time fixo A/B — pedido do usuário: no jogo de
@@ -347,7 +347,7 @@ export default function ReplayViewer({ replay, seek }) {
   return (
     <div className="space-y-3">
       {!replay.calibrated && (
-        <p className="font-mono text-xs uppercase tracking-wide" style={{ color: CORES.aviso }}>
+        <p className="font-mono text-xs" style={{ color: CORES.aviso }}>
           Mapa sem calibração de radar — posições em coordenadas cruas (adicione a calibração no Coletor).
         </p>
       )}
@@ -360,12 +360,9 @@ export default function ReplayViewer({ replay, seek }) {
             <option key={r.round} value={i}>Round {r.round}</option>
           ))}
         </Select>
-        <button
-          onClick={() => setTocando((t) => !t)}
-          className="panel-cut-sm flex min-h-10 items-center justify-center border border-destaque bg-destaque px-4 py-1 font-display text-sm font-semibold uppercase tracking-wide text-fundo lg:min-h-0"
-        >
+        <Button variante="primario" onClick={() => setTocando((t) => !t)} className="min-w-24">
           {tocando ? 'Pausar' : 'Play'}
-        </button>
+        </Button>
         <Select value={velocidade} onChange={(e) => setVelocidade(Number(e.target.value))}>
           {[0.5, 1, 2, 4].map((v) => <option key={v} value={v}>{v}x</option>)}
         </Select>
@@ -393,7 +390,7 @@ export default function ReplayViewer({ replay, seek }) {
           {feed.map((k, i) => (
             <div
               key={`${k.t}-${i}`}
-              className="flex flex-wrap items-center gap-1.5 border border-borda/60 bg-black/75 px-2 py-1 font-mono text-xs lg:flex-nowrap"
+              className="flex flex-wrap items-center gap-1.5 border border-borda bg-fundo/85 px-2 py-1 font-mono text-xs lg:flex-nowrap"
             >
               {k.killer ? (
                 <>
