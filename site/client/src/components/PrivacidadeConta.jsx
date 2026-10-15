@@ -50,9 +50,13 @@ function ModalExcluir({ onFechar }) {
       <div className="space-y-4 text-sm text-texto-fraco">
         <p>
           Apagamos seu nick, avatar, códigos da Steam, vínculo FACEIT, amizades, clipes e envios, e você sai do site.
-          As estatísticas das partidas continuam, mas sob “Jogador removido” — elas também são dos outros jogadores.
         </p>
-        <p>Isso não pode ser desfeito. Se entrar de novo com a Steam, começa uma conta do zero.</p>
+        <p>
+          As estatísticas das partidas continuam, sob “Jogador removido”, ligadas ao seu SteamID: elas vêm das demos e
+          também são dos outros jogadores. Por isso, se você entrar de novo com a mesma conta Steam, suas partidas antigas
+          voltam a aparecer pra você. Nick, amizades, códigos e vínculos não voltam.
+        </p>
+        <p>Isso não pode ser desfeito.</p>
         <Input rotulo="Digite EXCLUIR para confirmar" value={texto} onChange={(e) => setTexto(e.target.value)} autoComplete="off" />
         {erro && <EstadoErro mensagem={erro} />}
       </div>

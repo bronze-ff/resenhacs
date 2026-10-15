@@ -68,3 +68,18 @@ describe('POST /api/upload/upload-url', () => {
     expect(res.status).toBe(429)
   })
 })
+
+describe('GET /api/matches/:id/demo', () => {
+  it('serve como anexo octet-stream com o nome real do objeto (.dem.bz2)', async () => {
+    const { Readable } = await import('node:stream')
+    const send = vi.fn().mockResolvedValue({ ContentType: 'text/html', Body: Readable.from([Buffer.from('BZh')]) })
+    const { app } = appWith(
+      [['select demo_url from matches', [{ demo_url: 'https://pub.r2.dev/resenha-demos/demos/m1.dem.bz2' }]]],
+      { r2Client: { send } },
+    )
+    const res = await request(app).get('/api/matches/00000000-0000-4000-8000-000000000001/demo').set('Cookie', token('765'))
+    expect(res.status).toBe(200)
+    expect(res.headers['content-type']).toContain('application/octet-stream')
+    expect(res.headers['content-disposition']).toMatch(/^attachment; filename="?m1.dem.bz2"?$/)
+  })
+})

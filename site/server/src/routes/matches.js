@@ -776,7 +776,9 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
     const key = keyFromR2Url(rows[0]?.demo_url, r2Bucket)
     if (!key) return res.status(404).json({ erro: 'Demo não disponível' })
     try {
-      await streamObject(r2Client, r2Bucket, key, res, { baixarComo: `${req.params.id}.dem` })
+      // Nome do arquivo = nome do objeto no R2 (hoje demos/<id>.dem.bz2, comprimido); um
+      // ".dem" fixo entregaria bytes bz2 com extensão de demo crua.
+      await streamObject(r2Client, r2Bucket, key, res, { baixarComo: key.split('/').pop() })
     } catch {
       res.status(502).json({ erro: 'Falha ao buscar o demo no R2' })
     }

@@ -151,3 +151,17 @@ def test_http_get_bytes_exige_https():
     from coletor import faceit as _f
     with pytest.raises(RuntimeError, match="https"):
         _f._http_get_bytes("http://demos.faceit.com/x.dem.gz")
+
+
+def test_baixar_demo_usa_o_descompressor_com_teto(monkeypatch):
+    import gzip as _gz
+    from coletor import faceit as _f
+    monkeypatch.setattr(_f, "MAX_DEMO_BYTES", 1_000_000)
+    monkeypatch.setattr(_f._descomprimir_gzip_com_teto, "__defaults__", (1_000_000,))
+    bomba = _gz.compress(bytes(2_000_000))
+    with pytest.raises(RuntimeError, match="teto"):
+        _f.baixar_demo(
+            "k", "https://demos.faceit.com/x.dem.gz",
+            http_post_json=lambda url, key, body: {"payload": {"download_url": "https://d/x"}},
+            http_get_bytes=lambda url: bomba,
+        )

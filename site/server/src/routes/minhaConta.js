@@ -5,8 +5,14 @@ import { Router } from 'express'
 //
 // "Excluir" é anonimização, não DELETE da linha de players: partidas, táticas, granadas e
 // competições apontam pra players por FK, e as Partidas também são dado legítimo dos
-// outros 9 participantes. Some tudo que identifica a pessoa; os números da partida ficam
-// sob "Jogador removido".
+// outros 9 participantes. Some o que a conta guarda (nick, avatar, códigos, vínculos,
+// amizades, clipes, envios); os números da partida ficam sob "Jogador removido".
+//
+// Limite assumido e dito na interface e em /privacidade: as estatísticas continuam
+// ligadas ao SteamID, que vem da própria demo (e volta a cada demo reprocessada com essa
+// pessoa). Por isso, se ela entrar de novo com a mesma Steam, as partidas antigas voltam
+// a aparecer pra ela. Re-chavear o SteamID nas ~15 tabelas de estatística não resolveria:
+// a próxima demo com esse jogador traria o SteamID de volta.
 const NICK_REMOVIDO = 'Jogador removido'
 
 export function createMinhaContaRouter({ db, requireAuth, config }) {
@@ -74,10 +80,12 @@ export function createMinhaContaRouter({ db, requireAuth, config }) {
       await cliente.query('delete from curso_progresso where steam_id64 = $1', [eu])
       await cliente.query('delete from competicao_submissoes where steam_id64 = $1', [eu])
       await cliente.query('delete from allstar_clips where steam_id64 = $1', [eu])
-      await cliente.query(
-        "delete from uploads_pendentes where adicionado_por = $1 and status = 'pendente'",
-        [eu],
-      )
+      // Todos os status (pendente, processando, falhou, concluida, limpo): a linha guarda
+      // quem enviou e o share code. O Coletor não lê adicionado_por depois de pegar o
+      // item, então apagar um "processando" só faz o update final dele não achar a linha;
+      // a Partida que ele terminar de ingerir é dado dos 10 jogadores, não desta conta.
+      // O arquivo no R2 vira órfão e cai na limpeza de uploads órfãos do Coletor.
+      await cliente.query('delete from uploads_pendentes where adicionado_por = $1', [eu])
       await cliente.query('update matches set discovered_by = null where discovered_by = $1', [eu])
       await cliente.query(
         'update match_players set nick = $2, is_tracked = false where steam_id64 = $1',

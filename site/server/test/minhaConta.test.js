@@ -54,6 +54,9 @@ describe('DELETE /api/minha-conta', () => {
     expect(sqls[0]).toBe('begin')
     expect(sqls.at(-1)).toBe('commit')
     expect(sqls.some((s) => s.includes('delete from friendships'))).toBe(true)
+    // envios em QUALQUER status, não só 'pendente'
+    const uploads = sqls.find((s) => s.includes('delete from uploads_pendentes'))
+    expect(uploads).not.toContain('status')
     expect(sqls.some((s) => s.includes('update players set') && s.includes('tokens_validos_apos = now()'))).toBe(true)
     for (const [sql, params] of cliente.query.mock.calls) if (params) expect(params[0]).toBe(EU)
     expect(cliente.release).toHaveBeenCalled()

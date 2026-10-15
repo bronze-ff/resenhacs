@@ -48,7 +48,9 @@ do git, todas as rotas com dado pessoal exigem login e aplicam a visibilidade po
 - **`POST /api/amigos`** diz se um SteamID tem conta (404 x 201). Útil para a interface, mas
   permite enumerar quem usa o site.
 - **Excluir conta** anonimiza (não apaga) as estatísticas das partidas, porque elas também
-  são dos outros 9 jogadores.
+  são dos outros 9 jogadores. Elas continuam ligadas ao SteamID (que vem da demo); se a
+  pessoa entrar de novo com a mesma Steam, as partidas antigas voltam a aparecer pra ela.
+  Isso está dito na interface e em `/privacidade`.
 
 ## Recomendações maiores (não feitas nesta revisão)
 

@@ -125,7 +125,7 @@ def baixar_demo(api_key, demo_resource_url, http_post_json=_http_post_json,
         raise RuntimeError(f"Downloads API sem download_url (chaves: {sorted(resp.keys())})")
     dados = http_get_bytes(assinada)
     if dados[:2] == b"\x1f\x8b":  # magic do gzip
-        return gzip.decompress(dados)
+        return _descomprimir_gzip_com_teto(dados)
     return dados
 
 

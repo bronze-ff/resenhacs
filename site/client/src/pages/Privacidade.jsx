@@ -77,7 +77,7 @@ export default function Privacidade() {
           <p>Pela LGPD você pode, a qualquer momento:</p>
           <ul className="list-disc space-y-2 pl-5">
             <li><strong>Baixar seus dados</strong> — em Minha conta, “Baixar meus dados”.</li>
-            <li><strong>Excluir sua conta</strong> — em Minha conta. Apagamos seu nick, avatar, códigos, vínculos, amizades, clipes e envios; as estatísticas das partidas ficam sob “Jogador removido”, porque também são dos outros participantes.</li>
+            <li><strong>Excluir sua conta</strong> — em Minha conta. Apagamos seu nick, avatar, códigos, vínculos, amizades, clipes e envios. As estatísticas das partidas ficam sob “Jogador removido”, ainda ligadas ao seu SteamID, porque vêm das demos e também são dos outros participantes; se você entrar de novo com a mesma Steam, elas voltam a aparecer pra você.</li>
             <li><strong>Desligar as métricas de uso</strong> — em Minha conta.</li>
             <li><strong>Pedir correção, informação ou remoção</strong> — pelo contato acima. Isso vale também para quem aparece numa partida sem ter conta no Resenha.</li>
           </ul>

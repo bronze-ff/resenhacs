@@ -54,8 +54,9 @@ export async function presignDownload(client, bucket, key, expiresInSeconds = 72
 export async function streamObject(client, bucket, key, res, { baixarComo = null } = {}) {
   const obj = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }))
   if (baixarComo) {
-    res.type('application/octet-stream')
+    // attachment() também define o tipo pela extensão; o octet-stream vem depois pra valer.
     res.attachment(baixarComo)
+    res.type('application/octet-stream')
   } else if (obj.ContentType) {
     res.type(obj.ContentType)
   }
