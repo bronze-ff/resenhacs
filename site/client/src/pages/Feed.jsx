@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { nomeMapa, dataHora, origemPartida, corRating } from '../lib/format.js'
-import { orientarPlacar } from '../lib/resultado.js'
+import { nomeMapa, dataHora, corRating } from '../lib/format.js'
 import FiltroPeriodo from '../components/FiltroPeriodo.jsx'
+import CardPartidaFeed from '../components/feed/CardPartidaFeed.jsx'
+import SessaoDeHoje, { sessaoDeHoje } from '../components/feed/SessaoDeHoje.jsx'
+import AvisoRecorde from '../components/feed/AvisoRecorde.jsx'
 import {
-  Abas, Avatar, Badge, Button, CabecalhoPagina, Card, EstadoVazio, MapIcon, PlataformaBadge, ResultChip, Select, SkeletonLista,
+  Abas, Avatar, Button, CabecalhoPagina, Card, EstadoVazio, Select, SkeletonLista,
 } from '../components/ui'
 
 const MAPAS = ['de_anubis', 'de_ancient', 'de_cache', 'de_dust2', 'de_inferno', 'de_mirage', 'de_nuke', 'de_overpass', 'de_train', 'de_vertigo']
@@ -30,87 +32,6 @@ function resultadoDoGrupo(m) {
   if (t.every((x) => x.won === false)) return 'derrota'
   if (t.every((x) => x.won === null)) return 'empate'
   return 'misto'
-}
-
-// Jogadores do grupo na Partida, com rosto: pilha de avatares (o /api/matches não
-// manda avatar no `tracked`, então o Feed cruza com a lista de /api/players que já
-// carrega pro filtro) + nicks. O MVP vem por último, destacado. Partida pro mostra os
-// nomes dos times no lugar.
-function GrupoDaPartida({ m, avatares }) {
-  const comAvatar = (p) => ({ ...p, avatarUrl: p.avatarUrl ?? avatares.get(p.steamId) ?? null })
-  const mvp = m.mvp ? comAvatar(m.mvp) : null
-  const mvpChip = mvp && (
-    <span className="inline-flex items-center gap-1.5 align-middle">
-      <span className="font-mono text-[11px] font-bold text-ouro">MVP</span>
-      <span className="text-texto">{mvp.nick}</span>
-    </span>
-  )
-  if (m.source === 'pro' && m.teamAName && m.teamBName) {
-    return (
-      <div className="truncate font-mono text-xs text-texto-fraco">
-        <span className="text-texto">{m.teamAName}</span> x <span className="text-texto">{m.teamBName}</span>
-        {mvpChip && <span> · {mvpChip}</span>}
-      </div>
-    )
-  }
-  if (!m.tracked?.length) return null
-  const outros = m.tracked.filter((t) => t.steamId !== m.mvp?.steamId)
-  const rostos = [...outros, ...(mvp ? [mvp] : [])].map(comAvatar)
-  const extras = rostos.length - 5
-  return (
-    <div className="flex min-w-0 items-center gap-2.5">
-      <span className="flex shrink-0 -space-x-1.5">
-        {rostos.slice(0, 5).map((p) => (
-          <Avatar key={p.steamId} p={p} size={22} />
-        ))}
-        {extras > 0 && (
-          <span className="panel-cut-sm flex h-[22px] min-w-[22px] items-center justify-center border border-borda bg-superficie-alta px-1 font-mono text-[11px] text-texto-fraco">
-            +{extras}
-          </span>
-        )}
-      </span>
-      <span className="min-w-0 truncate font-mono text-xs text-texto-fraco">
-        {outros.map((t) => t.nick).join(', ')}
-        {mvpChip && <span>{outros.length > 0 && ' · '}{mvpChip}</span>}
-      </span>
-    </div>
-  )
-}
-
-// Uma linha por Partida — layout único que reflui (não duas árvores JSX mobile/desktop
-// separadas): mapa+nome+badges numa ponta, chip de resultado sempre grudado na outra,
-// e a linha inteira quebra pro card empilhar em telas estreitas sem duplicar código.
-// Sem side-stripe colorido pra indicar vitória/derrota (ver
-// docs/produto/DESIGN.md, Don't) — o chip preenchido + ícone já comunicam isso sozinhos.
-function CardPartida({ m, avatares }) {
-  const resultado = resultadoDoGrupo(m)
-  const origem = origemPartida(m.source, m.temDemo)
-  const { a, b } = orientarPlacar(m.scoreA, m.scoreB, resultado)
-
-  return (
-    <Card as={Link} interativo to={`/partida/${m.id}`} className="block">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-3 p-4">
-        <MapIcon map={m.map} size={48} />
-        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="truncate font-display text-xl font-semibold leading-none text-texto">
-              {nomeMapa(m.map)}
-            </span>
-            {m.source === 'pro' && <Badge tom="destaque" className="shrink-0">PRO</Badge>}
-            <PlataformaBadge source={m.source} plataformaManual={m.plataformaManual} className="shrink-0" />
-            <Badge tom="neutro" title={origem.title} className="shrink-0">{origem.label}</Badge>
-          </div>
-          {dataHora(m.playedAt) && <div className="font-mono text-xs text-texto-fraco">{dataHora(m.playedAt)}</div>}
-        </div>
-        <div className="ml-auto">
-          <ResultChip resultado={resultado} a={a} b={b} />
-        </div>
-        <div className="w-full min-w-0 empty:hidden sm:pl-16">
-          <GrupoDaPartida m={m} avatares={avatares} />
-        </div>
-      </div>
-    </Card>
-  )
 }
 
 // Quantas Partidas descobertas ainda faltam baixar/parsear (o Coletor roda de hora
@@ -191,16 +112,7 @@ function CardResenha({ s, ativo, onClick }) {
 // "Resenhas": partidas jogadas seguidas (gap < 3h) resumidas — quem se destacou,
 // quantas venceu/perdeu, sem precisar abrir partida por partida. Clicar num card
 // filtra a lista de Partidas abaixo pra só as dessa Resenha (clicar de novo limpa).
-function Resenhas({ sessaoAtiva, onEscolher }) {
-  const [sessoes, setSessoes] = useState(null)
-
-  useEffect(() => {
-    fetch('/api/sessions?limit=5')
-      .then((res) => (res.ok ? res.json() : []))
-      .then(setSessoes)
-      .catch(() => setSessoes([]))
-  }, [])
-
+function Resenhas({ sessoes, sessaoAtiva, onEscolher }) {
   if (!sessoes || sessoes.length === 0) return null
 
   return (
@@ -240,6 +152,16 @@ export default function Feed() {
   const [temMais, setTemMais] = useState(false)
   const [carregandoMais, setCarregandoMais] = useState(false)
   const [sessaoAtiva, setSessaoAtiva] = useState(null)
+  // Resenhas (sessões) buscadas uma vez aqui: alimentam o carrossel E o card "Sessão de
+  // hoje" da lateral.
+  const [sessoes, setSessoes] = useState(null)
+
+  useEffect(() => {
+    fetch('/api/sessions?limit=5')
+      .then((res) => (res.ok ? res.json() : []))
+      .then((d) => setSessoes(Array.isArray(d) ? d : []))
+      .catch(() => setSessoes([]))
+  }, [])
 
   // Guard de corrida: cada busca (troca de filtro ou "carregar mais") incrementa
   // este contador; só a resposta da requisição mais recente pode aplicar estado.
@@ -319,6 +241,8 @@ export default function Feed() {
     return partidas.filter((m) => resultadoDoGrupo(m) === resultado)
   }, [partidas, resultado])
 
+  const resultados = useMemo(() => new Map((partidas ?? []).map((m) => [m.id, resultadoDoGrupo(m)])), [partidas])
+  const hoje = sessaoDeHoje(sessoes)
   const avatares = useMemo(() => new Map(jogadores.filter((j) => j.avatarUrl).map((j) => [j.steamId, j.avatarUrl])), [jogadores])
   const temFiltro = Boolean(de || ate || mapa || origem || plataforma || resultado || jogador)
   function limparFiltros() {
@@ -340,7 +264,8 @@ export default function Feed() {
         className="!mb-0"
       />
       <SincStatus />
-      <Resenhas sessaoAtiva={sessaoAtiva} onEscolher={setSessaoAtiva} />
+      <AvisoRecorde />
+      <Resenhas sessoes={sessoes} sessaoAtiva={sessaoAtiva} onEscolher={setSessaoAtiva} />
 
       {sessaoAtiva && (
         <div className="panel-cut-sm flex flex-wrap items-center gap-3 border border-destaque/50 bg-superficie px-4 py-2 font-mono text-xs">
@@ -425,17 +350,23 @@ export default function Feed() {
           acao={temFiltro ? <Button variante="secundario" tamanho="sm" onClick={limparFiltros}>Limpar filtros</Button> : null}
         />
       )}
-      <div className="space-y-2">
-        {visiveis?.map((m) => <CardPartida key={m.id} m={m} avatares={avatares} />)}
-      </div>
-
-      {temMais && (
-        <div className="flex justify-center">
-          <Button variante="secundario" onClick={carregarMais} carregando={carregandoMais}>
-            {carregandoMais ? 'Carregando…' : 'Carregar mais'}
-          </Button>
+      <div className={hoje ? 'grid gap-6 xl:grid-cols-[minmax(0,1fr)_300px] xl:items-start' : ''}>
+        <div className="min-w-0 space-y-3">
+          {visiveis?.map((m) => <CardPartidaFeed key={m.id} m={m} resultado={resultadoDoGrupo(m)} avatares={avatares} />)}
+          {temMais && (
+            <div className="flex justify-center pt-1">
+              <Button variante="secundario" onClick={carregarMais} carregando={carregandoMais}>
+                {carregandoMais ? 'Carregando…' : 'Carregar mais'}
+              </Button>
+            </div>
+          )}
         </div>
-      )}
+        {hoje && (
+          <aside className="order-first xl:sticky xl:top-20 xl:order-none">
+            <SessaoDeHoje sessao={hoje} resultados={resultados} onVerSessao={setSessaoAtiva} />
+          </aside>
+        )}
+      </div>
     </div>
   )
 }
