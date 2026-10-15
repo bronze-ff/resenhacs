@@ -12,17 +12,17 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1093.0",
-    "@aws-sdk/s3-request-presigner": "^3.1092.0",
+    "@aws-sdk/client-s3": "^3.1146.0",
+    "@aws-sdk/s3-request-presigner": "^3.1146.0",
     "@sentry/node": "^11.7.0",
     "cookie-parser": "^1.4.7",
     "express": "^5.3.0",
-    "express-rate-limit": "^8.6.0",
+    "express-rate-limit": "^8.7.1",
     "jsonwebtoken": "^9.0.2",
-    "pg": "^8.13.1"
+    "pg": "^8.23.1"
   },
   "devDependencies": {
-    "supertest": "^7.0.0",
+    "supertest": "^7.3.1",
     "vitest": "^4.1.10"
   }
 }
