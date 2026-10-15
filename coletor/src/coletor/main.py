@@ -20,7 +20,9 @@ import argparse
 import sys
 
 import bz2
+import hashlib
 import json
+import urllib.parse
 import urllib.request
 
 from . import db as dbmod
@@ -48,7 +50,7 @@ def cmd_discover(config, conn):
         try:
             novos = steam_api.walk_chain(config.steam_api_key, steam_id64, auth_code, last_code)
         except Exception as e:  # noqa: BLE001
-            print(f"{steam_id64}: erro ao andar a corrente ({e}) — pulando")
+            print(f"{_ref(steam_id64)}: erro ao andar a corrente ({e}) — pulando")
             continue
         for code in novos:
             if sharecode.is_valid(code):
@@ -56,9 +58,17 @@ def cmd_discover(config, conn):
                 total += 1
         if novos:
             dbmod.set_last_share_code(conn, steam_id64, novos[-1])
-        print(f"{steam_id64}: {len(novos)} share codes novos")
+        print(f"{_ref(steam_id64)}: {len(novos)} share codes novos")
     print(f"discover: {total} Partidas pendentes registradas")
     return total
+
+
+# Logs do Coletor saem no GitHub Actions de um repositório PÚBLICO: SteamID64 e share
+# code não podem aparecer em claro (o share code baixa a demo, com os 10 jogadores).
+# `_ref` dá uma referência curta e estável (mesmo valor -> mesma ref) pra cruzar linhas
+# de log sem expor o dado.
+def _ref(valor):
+    return "#" + hashlib.sha256(str(valor).encode("utf-8")).hexdigest()[:8]
 
 
 def _resolver_demo_urls(codes, bot_dir, node_bin):
@@ -95,6 +105,14 @@ def _resolver_demo_urls(codes, bot_dir, node_bin):
     return json.loads(proc.stdout)
 
 
+# Tetos do download de demo da Valve. Uma demo de CS2 real fica na casa de dezenas a
+# poucas centenas de MB descomprimida; os tetos ficam bem acima disso pra nunca barrar
+# partida legítima, só lixo/ataque.
+_MAX_DEM_COMPRIMIDO_BYTES = 1_000_000_000
+_MAX_DEM_BYTES = 3_000_000_000
+_BLOCO_DESCOMPRESSAO = 8 << 20
+
+
 def _baixar_e_descomprimir(url, destino_dem):
     """Baixa um .dem.bz2 da Valve e descomprime em streaming pro caminho .dem indicado.
 
@@ -105,17 +123,35 @@ def _baixar_e_descomprimir(url, destino_dem):
     decompressor bz2 terminou o stream de verdade (dec.eof), não só parou de receber
     bytes — cobre o caso de a CDN não mandar Content-Length.
     """
+    # Segurança: a URL vem do Game Coordinator via bot, mas só http(s) entra (urllib
+    # também abriria file:// e ftp://), e o .dem descomprimido tem teto — sem ele um
+    # bz2 pequeno e malicioso (bomba de descompressão) enchia o disco do runner.
+    if urllib.parse.urlsplit(url).scheme not in ("http", "https"):
+        raise RuntimeError(f"URL de demo com esquema não permitido: {url[:40]}")
     dec = bz2.BZ2Decompressor()
     with urllib.request.urlopen(url, timeout=120) as resp, open(destino_dem, "wb") as out:
         content_length = resp.headers.get("Content-Length")
         esperado = int(content_length) if content_length is not None else None
         recebido = 0
+        escrito = 0
         while True:
             chunk = resp.read(1 << 20)
             if not chunk:
                 break
             recebido += len(chunk)
-            out.write(dec.decompress(chunk))
+            if recebido > _MAX_DEM_COMPRIMIDO_BYTES:
+                raise RuntimeError(f"download excedeu o teto de {_MAX_DEM_COMPRIMIDO_BYTES} bytes")
+            # max_length limita a saída de cada chamada; o laço drena o resto sem
+            # nunca materializar mais do que um bloco por vez.
+            parte = dec.decompress(chunk, max_length=_BLOCO_DESCOMPRESSAO)
+            while True:
+                escrito += len(parte)
+                if escrito > _MAX_DEM_BYTES:
+                    raise RuntimeError(f"demo descomprimida excedeu o teto de {_MAX_DEM_BYTES} bytes")
+                out.write(parte)
+                if dec.eof or dec.needs_input:
+                    break
+                parte = dec.decompress(b"", max_length=_BLOCO_DESCOMPRESSAO)
 
     if esperado is not None and recebido != esperado:
         raise RuntimeError(f"download truncado: recebido {recebido} bytes, esperado {esperado}")
@@ -194,10 +230,10 @@ def cmd_fetch(config, conn, since=None, bot_dir=None, node_bin="node"):
     for r in resolvidos:
         code, url, mt = r.get("shareCode"), r.get("demoUrl"), r.get("matchTime")
         if not url:
-            print(f"  {code}: sem link de demo (GC não devolveu) — deixando pendente")
+            print(f"  {_ref(code)}: sem link de demo (GC não devolveu) — deixando pendente")
             continue
         if since_ts is not None and mt is not None and mt < since_ts:
-            print(f"  {code}: antes de {since} — marcando como skipped")
+            print(f"  {_ref(code)}: antes de {since} — marcando como skipped")
             dbmod.mark_skipped(conn, code)
             continue
         played_at = (
@@ -209,13 +245,13 @@ def cmd_fetch(config, conn, since=None, bot_dir=None, node_bin="node"):
                 # Auditoria finding #10: nunca logar a URL assinada de download — ela
                 # dá acesso direto ao .dem por tempo limitado, sem exigir autenticação
                 # nenhuma; o share code já identifica a Partida sem vazar isso.
-                print(f"  {code}: baixando demo")
+                print(f"  {_ref(code)}: baixando demo")
                 _baixar_e_descomprimir(url, dem)
                 mid = ingest_demo(
                     config, conn, dem, share_code=code, source="valve_mm",
                     upload=True, played_at=played_at,
                 )
-                print(f"  {code}: ingerida {mid} (played_at={played_at})")
+                print(f"  {_ref(code)}: ingerida {mid} (played_at={played_at})")
                 total += 1
         except Exception as e:  # noqa: BLE001
             # Uma partida com demo problemático não derruba o lote; registra a tentativa
@@ -225,7 +261,7 @@ def cmd_fetch(config, conn, since=None, bot_dir=None, node_bin="node"):
             # tentativas; até lá fica 'pending' e é re-baixada automaticamente no
             # próximo ciclo do fetch.
             conn.rollback()
-            print(f"  {code}: FALHOU ({e})")
+            print(f"  {_ref(code)}: FALHOU ({e})")
             dbmod.falhar_fetch_pendente(conn, code, e, max_tentativas=_MAX_TENTATIVAS_FETCH)
 
     print(f"fetch: {total} Partida(s) ingerida(s)")
@@ -319,7 +355,9 @@ def cmd_processar_fila_pro(config, conn):
                 tmp = Path(tmp)
                 if arquivo_r2_key:
                     print(f"  {fila_id}: baixando do R2 ({arquivo_r2_key})")
-                    dados = storage_r2.download_bytes(client, config.r2_bucket, arquivo_r2_key)
+                    dados = storage_r2.download_bytes(
+                        client, config.r2_bucket, arquivo_r2_key, max_bytes=_MAX_HLTV_DOWNLOAD_BYTES,
+                    )
                     ext = Path(arquivo_r2_key).suffix.lower()
                 else:
                     print(f"  {fila_id}: baixando {hltv_url}")
@@ -977,10 +1015,10 @@ def cmd_sincronizar_faceit(config, conn, limite=10):
                 dbmod.enfileirar_faceit(conn, item["faceit_match_id"], steam_id64)
                 conhecidas.add(item["faceit_match_id"])
             if novas:
-                print(f"  descoberta {steam_id64}: {len(novas)} partida(s) nova(s)")
+                print(f"  descoberta {_ref(steam_id64)}: {len(novas)} partida(s) nova(s)")
         except Exception as e:  # noqa: BLE001
             conn.rollback()
-            print(f"  descoberta {steam_id64}: FALHOU ({e})")
+            print(f"  descoberta {_ref(steam_id64)}: FALHOU ({e})")
 
     # 2. Processamento — lote limitado; falha de um item não derruba os outros
     vinculados_por_steam = {s: f for s, f in vinculados}
@@ -1058,7 +1096,7 @@ def cmd_sincronizar_faceit(config, conn, limite=10):
             dbmod.atualizar_elo(conn, steam_id64, elo, level)
         except Exception as e:  # noqa: BLE001
             conn.rollback()
-            print(f"  elo {steam_id64}: FALHOU ({e})")
+            print(f"  elo {_ref(steam_id64)}: FALHOU ({e})")
 
     print(f"sincronizar-faceit: {total} partida(s) processada(s)")
     return total

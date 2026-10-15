@@ -47,6 +47,19 @@ function chaveDeAtribuicao(chave) {
   )
 }
 
+// URL de página carrega identificador de TERCEIRO (/jogador/<SteamID64 de outra pessoa>,
+// /partida/<uuid>). O pageview só precisa saber QUE página foi — o id vira placeholder.
+const STEAM_ID = /\b7656119\d{10}\b/g
+const UUID = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi
+
+// Só campos de URL/caminho: o distinct_id (SteamID do próprio usuário, via identify)
+// precisa continuar intacto.
+const CAMPO_DE_URL = /url|pathname|referrer|href/i
+
+export function anonimizarIds(texto) {
+  return texto.replace(STEAM_ID, ':steamid').replace(UUID, ':id')
+}
+
 function objetoPlano(valor) {
   if (!valor || typeof valor !== 'object' || Array.isArray(valor)) return false
   const proto = Object.getPrototypeOf(valor)
@@ -59,7 +72,10 @@ function limparValor(valor, chave, noTopo) {
   if (chave === 'token' && tokenDoProjeto(valor)) return valor
   if (noTopo && typeof chave === 'string' && isentoNoTopo(chave, valor)) return valor
   if (chaveSensivel(chave)) return REDACTED
-  if (typeof valor === 'string') return redigirString(valor)
+  if (typeof valor === 'string') {
+    const ehUrl = typeof chave === 'string' && CAMPO_DE_URL.test(chave)
+    return redigirString(ehUrl ? anonimizarIds(valor) : valor)
+  }
   if (Array.isArray(valor)) return valor.map((item) => limparValor(item, undefined, false))
   // Date e outras instâncias não são objeto plano. Object.entries(date) é [] e viraria {}.
   if (valor && typeof valor === 'object' && objetoPlano(valor)) {
@@ -82,8 +98,37 @@ export function limparEventoPosthog(evento) {
   return limparValor(evento, undefined, true)
 }
 
+// Opção "não medir meu uso" (LGPD: oposição ao tratamento por interesse legítimo). Fica
+// só neste navegador; sem acesso ao storage, vale o padrão (medir, sem cookie).
+const CHAVE_SEM_METRICAS = 'resenha_sem_metricas'
+
+export function metricasDesligadas() {
+  try {
+    return localStorage.getItem(CHAVE_SEM_METRICAS) === '1'
+  } catch {
+    return false
+  }
+}
+
+export function definirMetricas(ativas) {
+  try {
+    if (ativas) localStorage.removeItem(CHAVE_SEM_METRICAS)
+    else localStorage.setItem(CHAVE_SEM_METRICAS, '1')
+  } catch {
+    // storage indisponível: só a sessão atual respeita a escolha
+  }
+  if (!chave) return
+  if (ativas) {
+    iniciarPosthog()
+    if (iniciado) posthog.opt_in_capturing()
+  } else if (iniciado) {
+    posthog.opt_out_capturing()
+    posthog.reset()
+  }
+}
+
 export function iniciarPosthog() {
-  if (!chave || iniciado) return
+  if (!chave || iniciado || metricasDesligadas()) return
   posthog.init(chave, {
     api_host: host || 'https://eu.i.posthog.com',
     person_profiles: 'identified_only',
@@ -107,6 +152,7 @@ export function iniciarPosthog() {
 export function identificarJogador(steamId) {
   if (!chave || steamId == null || steamId === '') return
   iniciarPosthog()
+  if (!iniciado) return
   posthog.identify(String(steamId))
 }
 

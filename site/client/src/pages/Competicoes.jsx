@@ -1,4 +1,5 @@
 // site/client/src/pages/Competicoes.jsx
+import { hrefSeguro } from '../lib/urlSegura.js'
 import { useEffect, useState } from 'react'
 import { Badge, Button, CabecalhoPagina, Card, EstadoErro, EstadoVazio, Input, SectionHeader, Skeleton, classesBotao } from '../components/ui'
 import { useAuth } from '../auth/AuthContext.jsx'
@@ -215,7 +216,7 @@ function CardCompeticao({ comp, viewerSteamId, onTradelinkEnviado, destaque = fa
               )}
               {comp.premioMercadoUrl && (
                 <a
-                  href={comp.premioMercadoUrl}
+                  href={hrefSeguro(comp.premioMercadoUrl)}
                   target="_blank"
                   rel="noreferrer"
                   className={classesBotao({ variante: 'secundario', tamanho: 'sm', className: 'mt-3' })}

@@ -6,6 +6,7 @@ Formatos confirmados no swagger oficial (open.faceit.com/data/v4/docs/swagger.js
 """
 
 import gzip
+import zlib
 import json
 import urllib.parse
 import urllib.request
@@ -34,9 +35,42 @@ def _http_post_json(url, api_key, body):
     return _req_json(url, api_key, body=body)
 
 
-def _http_get_bytes(url, timeout=120):
+# Tetos da demo da FACEIT (mesma ordem de grandeza do download da Valve em main.py):
+# a resposta e o gzip descomprimido não podem crescer sem limite na memória do runner.
+MAX_DEMO_COMPRIMIDA_BYTES = 1_000_000_000
+MAX_DEMO_BYTES = 3_000_000_000
+
+
+def _http_get_bytes(url, timeout=120, max_bytes=MAX_DEMO_COMPRIMIDA_BYTES):
+    if urllib.parse.urlsplit(url).scheme != "https":
+        raise RuntimeError("URL assinada da FACEIT sem https")
+    partes = []
+    total = 0
     with urllib.request.urlopen(url, timeout=timeout) as resp:
-        return resp.read()
+        while True:
+            chunk = resp.read(1 << 20)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > max_bytes:
+                raise RuntimeError(f"demo da FACEIT excedeu o teto de {max_bytes} bytes")
+            partes.append(chunk)
+    return b"".join(partes)
+
+
+def _descomprimir_gzip_com_teto(dados, max_bytes=MAX_DEMO_BYTES):
+    dec = zlib.decompressobj(16 + zlib.MAX_WBITS)
+    saida = bytearray()
+    restante = dados
+    while restante:
+        saida += dec.decompress(restante, max_bytes + 1 - len(saida))
+        if len(saida) > max_bytes:
+            raise RuntimeError(f"demo da FACEIT descomprimida excedeu o teto de {max_bytes} bytes")
+        restante = dec.unconsumed_tail
+    saida += dec.flush()
+    if len(saida) > max_bytes:
+        raise RuntimeError(f"demo da FACEIT descomprimida excedeu o teto de {max_bytes} bytes")
+    return bytes(saida)
 
 
 def listar_historico_5v5(api_key, faceit_player_id, ja_vistas, andar_tudo=False,
@@ -91,7 +125,7 @@ def baixar_demo(api_key, demo_resource_url, http_post_json=_http_post_json,
         raise RuntimeError(f"Downloads API sem download_url (chaves: {sorted(resp.keys())})")
     dados = http_get_bytes(assinada)
     if dados[:2] == b"\x1f\x8b":  # magic do gzip
-        return gzip.decompress(dados)
+        return _descomprimir_gzip_com_teto(dados)
     return dados
 
 

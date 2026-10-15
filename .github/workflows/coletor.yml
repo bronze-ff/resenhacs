@@ -93,9 +93,12 @@ jobs:
         # sem aviso prévio. Quando o relatório estiver limpo/triado, trocar por gate real.
         working-directory: coletor
         continue-on-error: true
+        # Versão fixa e venv próprio: o pip-audit (e as dependências dele) não entram no
+        # ambiente Python que os passos seguintes usam com os segredos de produção.
         run: |
-          pip install pip-audit
-          pip-audit -r requirements.txt
+          python -m venv "$RUNNER_TEMP/pip-audit"
+          "$RUNNER_TEMP/pip-audit/bin/pip" install pip-audit==2.10.1
+          "$RUNNER_TEMP/pip-audit/bin/pip-audit" -r requirements.txt
       - name: Instalar dependências do bot
         working-directory: bot
         run: npm ci

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { hrefSeguro } from '../lib/urlSegura.js'
 import { Button, CabecalhoPagina, Card, EstadoVazio, Input, SectionHeader, SkeletonLista, classesBotao } from '../components/ui'
 import FormCompeticao from '../components/FormCompeticao.jsx'
 
@@ -252,7 +253,7 @@ export default function Admin() {
                   <div className="mt-2 space-y-1">
                     {c.vencedorSubmissoes?.map((s) => (
                       <div key={s.id} className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 font-mono text-xs text-texto-fraco">
-                        <a href={s.clipUrl} target="_blank" rel="noreferrer" className="truncate hover:text-destaque">
+                        <a href={hrefSeguro(s.clipUrl)} target="_blank" rel="noreferrer" className="truncate hover:text-destaque">
                           clipe · {s.pontuacao.total} pts
                         </a>
                         {s.origemNaoVerificada && (

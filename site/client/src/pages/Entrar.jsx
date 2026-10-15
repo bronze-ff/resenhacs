@@ -47,7 +47,8 @@ export default function Entrar() {
           className="animate-surgir rotulo mt-10 max-w-md leading-relaxed"
           style={{ animationDelay: '360ms' }}
         >
-          Depois de entrar, adicione seus amigos na aba Amigos — quem já é seu amigo na Steam entra automático
+          Depois de entrar, adicione seus amigos na aba Amigos — quem já é seu amigo na Steam entra automático.
+          Ao entrar, você concorda com o <a href="/privacidade" className="underline hover:text-texto">aviso de privacidade</a>.
         </p>
       </div>
 

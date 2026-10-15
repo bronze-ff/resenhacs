@@ -161,6 +161,8 @@ async function contarSubmissoes(db, competicaoId, steamId) {
   return { hoje: Number(rows[0].hoje), total: Number(rows[0].total) }
 }
 
+const TRADELINK_RE = /^https:\/\/steamcommunity\.com\/tradeoffer\/new\/\?partner=\d{1,12}&token=[A-Za-z0-9_-]{1,32}$/
+
 export function createCompeticoesRouter({ db, requireAuth }) {
   const router = Router()
   const requireSuperAdmin = createRequireSuperAdmin(db)
@@ -175,12 +177,16 @@ export function createCompeticoesRouter({ db, requireAuth }) {
        from competicoes
        order by data_inicio desc`,
     )
+    // Admin conferido no BANCO, não no claim do JWT: um admin rebaixado continuaria vendo
+    // tradelinks até o token expirar (7 dias).
+    const adminQ = await db.query('select is_super_admin from players where steam_id64 = $1', [req.player.steamId])
+    const ehAdmin = adminQ.rows[0]?.is_super_admin === true
     const agora = new Date()
     async function montar(c) {
       const vencedorSteamId = await calcularOuLerVencedor(db, c)
       const leaderboard = await buscarLeaderboard(db, c.id, c.minimo_para_rankear)
       const clipesRecentes = await buscarClipesRecentes(db, c.id)
-      const ehVencedorOuAdmin = req.player.steamId === vencedorSteamId || req.player.isSuperAdmin
+      const ehVencedorOuAdmin = req.player.steamId === vencedorSteamId || ehAdmin
       const vencedorNaoConfirmado = Boolean(vencedorSteamId) && !c.vencedor_confirmado_em
       return {
         ...mapCompeticao({ ...c, vencedor_steam_id64: vencedorSteamId }),
@@ -489,6 +495,11 @@ export function createCompeticoesRouter({ db, requireAuth }) {
     if (!comp.vencedor_confirmado_em) return res.status(400).json({ erro: 'aguardando confirmação do admin' })
     const tradelink = String(req.body?.tradelink ?? '').trim()
     if (!tradelink) return res.status(400).json({ erro: 'tradelink obrigatório' })
+    // Só o formato oficial de link de troca da Steam (e com teto de tamanho): o campo é
+    // exibido pro admin como link — não pode virar porta pra URL qualquer ou texto gigante.
+    if (tradelink.length > 200 || !TRADELINK_RE.test(tradelink)) {
+      return res.status(400).json({ erro: 'tradelink inválido (use o link de troca da Steam: steamcommunity.com/tradeoffer/new/?partner=…&token=…)' })
+    }
     await db.query('update competicoes set tradelink_vencedor = $1 where id = $2', [tradelink, req.params.id])
     res.json({ ok: true })
   })

@@ -79,7 +79,12 @@ def extrair_dems_de_rar(caminho_rar, destino_dir):
         total_descomprimido = 0
         for nome in dem_nomes:
             _caminho_seguro(destino_dir, nome)
-            total_descomprimido += rf.getinfo(nome).file_size
+            info = rf.getinfo(nome)
+            # Link simbólico/hardlink com nome .dem faria o parser ler outro arquivo
+            # do runner — só arquivo comum entra.
+            if not info.is_file() or info.is_symlink():
+                raise RuntimeError(f"{caminho_rar}: membro {nome!r} não é um arquivo comum")
+            total_descomprimido += info.file_size
         if total_descomprimido > _MAX_DESCOMPRIMIDO_BYTES:
             raise RuntimeError(
                 f"{caminho_rar}: {total_descomprimido} bytes descomprimidos, "
@@ -87,7 +92,17 @@ def extrair_dems_de_rar(caminho_rar, destino_dir):
             )
 
         caminhos = []
+        total_real = 0
         for nome in dem_nomes:
             rf.extract(nome, path=str(destino_dir))
-            caminhos.append(destino_dir / nome)
+            caminho = destino_dir / nome
+            # O tamanho declarado no cabeçalho pode mentir; confere o que foi escrito.
+            total_real += caminho.stat().st_size
+            if total_real > _MAX_DESCOMPRIMIDO_BYTES:
+                for c in [*caminhos, caminho]:
+                    c.unlink(missing_ok=True)
+                raise RuntimeError(
+                    f"{caminho_rar}: extração passou do teto de {_MAX_DESCOMPRIMIDO_BYTES} bytes"
+                )
+            caminhos.append(caminho)
         return caminhos

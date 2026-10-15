@@ -23,6 +23,7 @@ import ReplayDemo from './pages/ReplayDemo.jsx'
 import Tour from './pages/Tour.jsx'
 import Apoie from './pages/Apoie.jsx'
 import Curso from './pages/Curso.jsx'
+import Privacidade from './pages/Privacidade.jsx'
 
 // Tela de espera enquanto /api/auth/me responde: marca pulsando no centro, em vez de
 // um "Carregando…" solto no canto.
@@ -71,6 +72,7 @@ export default function App() {
           <Route path="/entrar" element={<Entrar />} />
           <Route path="/acesso-negado" element={<AcessoNegado />} />
           <Route path="/replay-demo" element={<ReplayDemo />} />
+          <Route path="/privacidade" element={<Privacidade />} />
           <Route path="/tour" element={<RotaTour><Tour /></RotaTour>} />
           <Route path="/" element={<RotaRaiz />} />
           <Route path="/partida/:id" element={<RotaProtegida><Partida /></RotaProtegida>} />

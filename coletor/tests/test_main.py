@@ -350,7 +350,7 @@ def test_cmd_reprocess_marca_reprocessed_at_apos_sucesso(monkeypatch):
 
     monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
     monkeypatch.setattr(main.storage_r2, "key_from_url", lambda url, bucket: url.rsplit("/", 1)[-1])
-    monkeypatch.setattr(main.storage_r2, "download_bytes", lambda client, bucket, key: b"dem-bytes")
+    monkeypatch.setattr(main.storage_r2, "download_bytes", lambda client, bucket, key, **kw: b"dem-bytes")
     monkeypatch.setattr(main, "_descomprimir_dem_arquivado", lambda dados: b"dem-real")
     monkeypatch.setattr(
         main.parsemod, "parse_demo",
@@ -473,7 +473,7 @@ def test_processar_fila_pro_com_arquivo_r2_key_baixa_do_r2_e_nao_chama_urlopen(m
     downloads = []
     monkeypatch.setattr(
         main.storage_r2, "download_bytes",
-        lambda client, bucket, key: (downloads.append((client, bucket, key)), b"dem-bytes")[1],
+        lambda client, bucket, key, **kw: (downloads.append((client, bucket, key)), b"dem-bytes")[1],
     )
     deletes = []
     monkeypatch.setattr(
@@ -515,7 +515,7 @@ def test_processar_fila_pro_mantem_staging_no_r2_quando_falha(monkeypatch):
     config = _config_com_r2()
 
     monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
-    monkeypatch.setattr(main.storage_r2, "download_bytes", lambda client, bucket, key: b"dem-bytes")
+    monkeypatch.setattr(main.storage_r2, "download_bytes", lambda client, bucket, key, **kw: b"dem-bytes")
     deletes = []
     monkeypatch.setattr(
         main.storage_r2, "delete_object",
@@ -1459,7 +1459,10 @@ def test_cmd_fetch_nao_loga_url_assinada_do_dem(monkeypatch, capsys):
 
     saida = capsys.readouterr().out
     assert url_secreta not in saida
-    assert code in saida
+    # Repositório público: o share code (que baixa a demo) não pode sair em claro no
+    # log do Actions — só a referência curta de _ref.
+    assert code not in saida
+    assert main._ref(code) in saida
 
 
 # ---- retry de erro transitório no fetch (CDN da Valve) em vez de failed direto ----
@@ -1641,3 +1644,18 @@ def test_cmd_limpar_uploads_orfaos_erro_num_item_nao_derruba_os_outros(monkeypat
     assert total == 1
     assert marcados == ["u-bom"]
     assert "R2 fora do ar" in capsys.readouterr().out
+
+
+def test_baixar_e_descomprimir_recusa_esquema_que_nao_e_http(tmp_path):
+    with pytest.raises(RuntimeError, match="esquema"):
+        main._baixar_e_descomprimir("file:///etc/passwd", tmp_path / "match.dem")
+
+
+def test_baixar_e_descomprimir_aborta_bomba_de_descompressao(tmp_path, monkeypatch):
+    comprimido = bz2.compress(b"\0" * 5_000_000)
+    _patch_urlopen(monkeypatch, _FakeResp(comprimido, content_length=len(comprimido)))
+    monkeypatch.setattr(main, "_MAX_DEM_BYTES", 1_000_000)
+    monkeypatch.setattr(main, "_BLOCO_DESCOMPRESSAO", 64 * 1024)
+    destino = tmp_path / "match.dem"
+    with pytest.raises(RuntimeError, match="teto"):
+        main._baixar_e_descomprimir("https://replay1.valve.net/x.dem.bz2", destino)
