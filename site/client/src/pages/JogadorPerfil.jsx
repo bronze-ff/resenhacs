@@ -7,6 +7,7 @@ import DesempenhoRecente from '../components/perfil/DesempenhoRecente.jsx'
 import MapaAtividade from '../components/perfil/MapaAtividade.jsx'
 import PontosFortes from '../components/perfil/PontosFortes.jsx'
 import Rivalidades from '../components/perfil/Rivalidades.jsx'
+import DuelosAbertura from '../components/perfil/DuelosAbertura.jsx'
 import FiltroPeriodo from '../components/FiltroPeriodo.jsx'
 import TagEstilo from '../components/TagEstilo.jsx'
 import PosicionamentoAgregado from '../components/PosicionamentoAgregado.jsx'
@@ -372,6 +373,7 @@ export default function JogadorPerfil() {
       </div>
       <PontosFortes pontos={data.pontosFortes ?? []} proprio={viewer?.steamId === jogador.steamId} />
       <Rivalidades steamId={jogador.steamId} proprio={viewer?.steamId === jogador.steamId} />
+      <DuelosAbertura steamId={jogador.steamId} />
 
       {badges.length > 0 && (
         <section>

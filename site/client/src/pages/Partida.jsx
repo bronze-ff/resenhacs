@@ -12,6 +12,7 @@ import MapaCalor from '../components/MapaCalor.jsx'
 import SeletorClipesCompeticao from '../components/SeletorClipesCompeticao.jsx'
 import EnviarDemoDaPartida from '../components/EnviarDemoDaPartida.jsx'
 import SecaoClipe2D from '../components/clipes/SecaoClipe2D.jsx'
+import DuelosPartida from '../components/DuelosPartida.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { useTransicaoModal } from '../lib/useTransicaoModal.js'
 
@@ -1217,6 +1218,7 @@ function FormClipe({ matchId, jogadores, onAdicionado }) {
 const ABAS = [
   { id: 'geral', label: 'Visão Geral' },
   { id: 'h2h', label: 'Head to Head' },
+  { id: 'duelos', label: 'Duelos' },
   { id: 'replay', label: 'Replay 2D' },
   { id: 'economia', label: 'Economia' },
   { id: 'utilitaria', label: 'Utilitária' },
@@ -1582,6 +1584,8 @@ export default function Partida() {
           <AbaHeadToHead matchId={m.id} jogadores={m.players} jogadorLogado={jogador} />
         </section>
       )}
+
+      {abaAtiva === 'duelos' && <DuelosPartida matchId={m.id} />}
 
       {abaAtiva === 'replay' && (
         <>

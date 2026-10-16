@@ -15,6 +15,7 @@ import Competicoes from './pages/Competicoes.jsx'
 import Granadas from './pages/Granadas.jsx'
 import Taticas from './pages/Taticas.jsx'
 import Ranking from './pages/Ranking.jsx'
+import Mapas from './pages/Mapas.jsx'
 import EnviarDemo from './pages/EnviarDemo.jsx'
 import Perfil from './pages/Perfil.jsx'
 import Admin from './pages/Admin.jsx'
@@ -78,6 +79,7 @@ export default function App() {
           <Route path="/" element={<RotaRaiz />} />
           <Route path="/partida/:id" element={<RotaProtegida><Partida /></RotaProtegida>} />
           <Route path="/ranking" element={<RotaProtegida><Ranking /></RotaProtegida>} />
+          <Route path="/mapas" element={<RotaProtegida><Mapas /></RotaProtegida>} />
           <Route path="/enviar-demo" element={<RotaProtegida><EnviarDemo /></RotaProtegida>} />
           <Route path="/clipes" element={<RotaProtegida><Clipes /></RotaProtegida>} />
           <Route path="/jogadores" element={<RotaProtegida><Amigos /></RotaProtegida>} />

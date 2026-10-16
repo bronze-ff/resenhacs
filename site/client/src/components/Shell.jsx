@@ -15,6 +15,7 @@ const GRUPOS = [
     itens: [
       { to: '/', end: true, label: 'Partidas', icone: 'partidas' },
       { to: '/ranking', label: 'Ranking', icone: 'ranking' },
+      { to: '/mapas', label: 'Mapas', icone: 'mapas' },
       { to: '/comparar', label: 'Comparar', icone: 'comparar' },
       { to: '/enviar-demo', label: 'Enviar demo', icone: 'enviarDemo' },
     ],
@@ -62,6 +63,11 @@ const NAV_ICONES = {
       <line x1="4" y1="6" x2="20" y2="6" />
       <line x1="4" y1="12" x2="20" y2="12" />
       <line x1="4" y1="18" x2="14" y2="18" />
+    </svg>
+  ),
+  mapas: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
+      <path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14" />
     </svg>
   ),
   ranking: (
