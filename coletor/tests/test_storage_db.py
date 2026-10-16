@@ -491,8 +491,23 @@ def test_store_parsed_grava_posicoes_de_kill():
     insert = next(c for c in conn.calls if c[0].startswith("insert into kill_positions"))
     assert insert[1] == (
         "00000000-0000-0000-0000-000000000001", 1, 500, "A", "B", "ak47", "usp_silencer", True,
-        100.0, 200.0, 150.0, 250.0, "C",
+        100.0, 200.0, 150.0, 250.0, "C", False, False, False, False, False,
     )
+
+
+def test_store_parsed_grava_team_kill_e_flags_da_kill():
+    conn = FakeConn()
+    parsed = _parsed()
+    parsed["kill_positions"] = [{
+        "round_number": 3, "tick": 900, "killer": "A", "victim": "C", "weapon": "hegrenade",
+        "victim_weapon": None, "assister": None, "headshot": False,
+        "is_team_kill": True, "wallbang": True, "thrusmoke": True, "attackerblind": True, "noscope": True,
+        "killer_x": None, "killer_y": None, "victim_x": 1.0, "victim_y": 2.0,
+    }]
+    db.store_parsed(conn, parsed, share_code="CSGO-x", source="upload")
+    insert = next(c for c in conn.calls if c[0].startswith("insert into kill_positions"))
+    assert "is_team_kill, wallbang, thrusmoke, attackerblind, noscope" in insert[0]
+    assert insert[1][-5:] == (True, True, True, True, True)
 
 
 def test_store_parsed_grava_dano_por_round():

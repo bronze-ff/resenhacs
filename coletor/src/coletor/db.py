@@ -373,13 +373,17 @@ def _write_kill_positions(cur, match_id, kill_positions):
             """
             insert into kill_positions
               (match_id, round_number, tick, killer, victim, weapon, victim_weapon, headshot,
-               killer_x, killer_y, victim_x, victim_y, assister)
-            values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+               killer_x, killer_y, victim_x, victim_y, assister,
+               is_team_kill, wallbang, thrusmoke, attackerblind, noscope)
+            values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 match_id, k["round_number"], k["tick"], k.get("killer"), k["victim"],
                 k.get("weapon", ""), k.get("victim_weapon"), k.get("headshot", False),
                 k.get("killer_x"), k.get("killer_y"), k["victim_x"], k["victim_y"], k.get("assister"),
+                bool(k.get("is_team_kill", False)), bool(k.get("wallbang", False)),
+                bool(k.get("thrusmoke", False)), bool(k.get("attackerblind", False)),
+                bool(k.get("noscope", False)),
             ),
         )
 

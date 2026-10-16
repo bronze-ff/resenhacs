@@ -8,6 +8,7 @@ import { createMinhaContaRouter } from './routes/minhaConta.js'
 import { createPrimeirosPassosRouter } from './routes/primeirosPassos.js'
 import { createFaceitRouter } from './routes/faceit.js'
 import { createMatchesRouter } from './routes/matches.js'
+import { createKillsRouter } from './routes/kills.js'
 import { createProfileRouter } from './routes/profile.js'
 import { createClipsRouter } from './routes/clips.js'
 import { createClipesRouter } from './routes/clipes.js'
@@ -99,6 +100,7 @@ export function createApp({
   app.use('/api/minha-conta', createMinhaContaRouter({ db, requireAuth, config }))
   app.use('/api/primeiros-passos', createPrimeirosPassosRouter({ db, requireAuth }))
   app.use('/api/faceit', requireAuth, createFaceitRouter({ config, db, ...(faceitFetchImpl ? { fetchImpl: faceitFetchImpl } : {}) }))
+  app.use('/api/matches', createKillsRouter({ db, requireAuth }))
   app.use('/api/matches', createMatchesRouter({ db, requireAuth, r2Client, r2Bucket: config.r2Bucket, config }))
   app.use('/api/profile', createProfileRouter({ db, requireAuth }))
   app.use('/api/clips', createClipsRouter({ db, requireAuth }))
