@@ -1,4 +1,4 @@
-// Lógica pura do seletor de kills do Clipe 2D (o componente fica em
+// Lógica pura do seletor de kills dos clipes (o componente fica em
 // components/clipes/SeletorKills.jsx). Kill no formato de
 // GET /api/matches/:id/kills?jogador=<steamId64>.
 

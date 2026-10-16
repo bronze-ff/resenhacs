@@ -97,6 +97,25 @@ A Data API (histórico, partida, stats, ELO) vem com qualquer chave. O download 
 
 Partidas com mais de 4 semanas não têm mais Demo na FACEIT. Para elas, só o envio manual na própria Partida ("Enviar demo desta partida").
 
+## Clipe de vídeo das kills (DEMO-SLAP)
+
+Na aba Clipes da Partida, o Jogador marca uma kill (vira um clipe) ou várias (vira uma montagem num vídeo só) e escolhe a visão de quem matou ou de quem morreu. Quem grava é a DEMO-SLAP, num CS2 de verdade, a partir da Demo no R2. A Allstar não faz isso: a API de parceiro dela só escolhe sozinha a melhor jogada (ver `site/server/src/allstarClip.js`).
+
+Ligar:
+
+1. Criar conta em https://demo-slap.net e pedir a chave da API pelo Discord deles (link no topo de https://api-doc.demo-slap.net).
+2. Pôr a chave em `DEMOSLAP_API_KEY` no projeto Vercel `resenhacs` (Production). Sem ela, a aba Clipes mostra "Clipe de vídeo ainda não configurado".
+3. Aplicar a migration `0059_clipes_reais.sql`.
+
+Como funciona:
+
+- A primeira vez que alguém pede clipe de uma Partida, a API manda a Demo para análise (1 crédito). As próximas reaproveitam a mesma análise.
+- Cada trecho custa por segundo (cerca de 0,1 crédito/s). Kill sozinha: 4 s antes e 3 s depois. Montagem: 3 s antes e 2 s depois de cada kill, e depois a junção.
+- Não há worker. O pedido avança quando alguém está com a aba Clipes aberta (ela consulta a cada 10 s). Se ninguém olhar, o clipe fica parado e continua de onde parou na próxima visita.
+- Tetos: 10 kills por pedido e 10 pedidos por Jogador por dia.
+- Só dá para pedir enquanto a Demo está no R2 (14 dias, ADR-0006). A DEMO-SLAP apaga os vídeos dela em 90 dias.
+- A recusa da DEMO-SLAP (por exemplo, "Not enough credits") aparece no próprio clipe, com a mensagem deles.
+
 ## Rollback
 
 Vercel: no projeto afetado, Promote do deployment anterior. O client e a API são independentes; voltar um não volta o outro.
