@@ -52,6 +52,14 @@ describe('SecaoClipeReal', () => {
     expect(screen.queryByRole('button', { name: 'Gerar clipe' })).not.toBeInTheDocument()
   })
 
+  it('lista que não carrega: mostra o erro e não oferece gerar clipe', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((url) =>
+      resposta(url.includes('/kills?') ? KILLS : { erro: 'x' }, url.includes('/kills?'))))
+    render(<SecaoClipeReal matchId="m1" jogadores={JOGADORES} viewerSteamId="eu" />)
+    expect(await screen.findByText('Não foi possível carregar os clipes dessa Partida.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Gerar/ })).not.toBeInTheDocument()
+  })
+
   it('TK de granada na visão de quem morreu: manda tick, round e o pov da vítima', async () => {
     const post = vi.fn().mockReturnValue(resposta({
       clipes: [{ id: 'c1', status: 'renderizando', kills: [{ tick: 9000, round: 4, pov: 'amigo' }], pedidoPor: { nick: 'fih' } }],
