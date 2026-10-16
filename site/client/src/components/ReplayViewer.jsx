@@ -4,7 +4,7 @@ import { nomeMapa, nomeArma, categoriaArma } from '../lib/format.js'
 import { CORES } from '../lib/colors.js'
 import { Select, Button } from './ui'
 
-const TAM = 640 // lado do canvas em px
+export const TAM = 640 // lado do canvas em px (exportado pro gravador de Clipe 2D)
 // Cor por LADO real (CT/T), não pelo time fixo A/B — pedido do usuário: no jogo de
 // verdade CT é sempre azul e T sempre laranja, trocando no intervalo; usar o time fixo
 // (como Economia/Scoreboard fazem, de propósito, pra somar stats da partida inteira)
@@ -137,7 +137,7 @@ function desenharTracadoDeBala(ctx, round, f, replay, hz, aoCarregarIcone) {
   for (const h of round.hits || []) desenharUmTiro(ctx, h.t, h, round, f, replay, hz, false, aoCarregarIcone)
 }
 
-function desenharFrame(ctx, round, f, radar, replay, aoCarregarIcone) {
+export function desenharFrame(ctx, round, f, radar, replay, aoCarregarIcone) {
   ctx.clearRect(0, 0, TAM, TAM)
   // Fundo: imagem de radar se carregada; senão, grade neutra.
   if (radar && radar.complete && radar.naturalWidth > 0) {
