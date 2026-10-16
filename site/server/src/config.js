@@ -42,5 +42,8 @@ export function loadConfig(env = process.env) {
     // Valida o webhook de retorno — o mesmo valor cadastrado no dashboard deles
     // ("Webhook Auth"). Sem isso, /api/allstar/webhook rejeita tudo.
     allstarWebhookAuth: env.ALLSTAR_WEBHOOK_AUTH ?? null,
+    // Clipe real das kills escolhidas (DEMO-SLAP, src/demoSlap.js). Sem a chave, a aba
+    // Clipes mostra que o recurso não está configurado e o POST devolve 503.
+    demoSlapApiKey: env.DEMOSLAP_API_KEY ?? null,
   }
 }

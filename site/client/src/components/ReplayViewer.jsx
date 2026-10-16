@@ -5,7 +5,7 @@ import { nomeMapa, nomeArma, categoriaArma } from '../lib/format.js'
 import { CORES } from '../lib/colors.js'
 import { Select, Button } from './ui'
 
-export const TAM = 640 // lado do canvas em px (exportado pro gravador de Clipe 2D)
+export const TAM = 640 // lado do canvas em px
 // Cor por LADO real (CT/T), não pelo time fixo A/B — pedido do usuário: no jogo de
 // verdade CT é sempre azul e T sempre laranja, trocando no intervalo; usar o time fixo
 // (como Economia/Scoreboard fazem, de propósito, pra somar stats da partida inteira)

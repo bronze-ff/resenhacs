@@ -21,7 +21,7 @@ function CelulaArma({ weapon }) {
   )
 }
 
-// Seletor de kills do Clipe 2D: escolhe o Jogador, lista as kills dele na Partida e
+// Seletor de kills do clipe: escolhe o Jogador, lista as kills dele na Partida e
 // devolve as marcadas por `onMudarSelecao(kills)` (ordem round/tick).
 export default function SeletorKills({ matchId, jogadores, viewerSteamId, onMudarSelecao }) {
   const [jogadorId, setJogadorId] = useState(() => jogadorPadrao(jogadores, viewerSteamId))

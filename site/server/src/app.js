@@ -10,6 +10,7 @@ import { createFaceitRouter } from './routes/faceit.js'
 import { createFaceitSincronizacaoRouter } from './routes/faceitSincronizacao.js'
 import { createMatchesRouter } from './routes/matches.js'
 import { createKillsRouter } from './routes/kills.js'
+import { createClipesReaisRouter } from './routes/clipesReais.js'
 import { createProfileRouter } from './routes/profile.js'
 import { createClipsRouter } from './routes/clips.js'
 import { createClipesRouter } from './routes/clipes.js'
@@ -74,6 +75,7 @@ export function createApp({
   staticDir,
   r2Client: r2ClientOverride,
   faceitFetchImpl,
+  demoSlap,
 } = {}) {
   const app = express()
   // Não anunciar a stack (X-Powered-By: Express) pra quem varre o site atrás de alvo.
@@ -108,6 +110,7 @@ export function createApp({
   app.use('/api/faceit-sincronizacao', createFaceitSincronizacaoRouter({ db, requireAuth }))
   app.use('/api/faceit', requireAuth, createFaceitRouter({ config, db, ...(faceitFetchImpl ? { fetchImpl: faceitFetchImpl } : {}) }))
   app.use('/api/matches', createKillsRouter({ db, requireAuth }))
+  app.use('/api/matches', createClipesReaisRouter({ db, requireAuth, r2Client, r2Bucket: config.r2Bucket, config, demoSlap }))
   app.use('/api/matches', createMatchesRouter({ db, requireAuth, r2Client, r2Bucket: config.r2Bucket, config }))
   app.use('/api/profile', createProfileRouter({ db, requireAuth }))
   app.use('/api/clips', createClipsRouter({ db, requireAuth }))

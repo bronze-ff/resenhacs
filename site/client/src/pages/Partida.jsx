@@ -10,7 +10,7 @@ import {
 import ReplayViewer from '../components/ReplayViewer.jsx'
 import MapaCalor from '../components/MapaCalor.jsx'
 import SeletorClipesCompeticao from '../components/SeletorClipesCompeticao.jsx'
-import SecaoClipe2D from '../components/clipes/SecaoClipe2D.jsx'
+import SecaoClipeReal from '../components/clipes/SecaoClipeReal.jsx'
 import DuelosPartida from '../components/DuelosPartida.jsx'
 import AvisoPartidaSemDemo from '../components/AvisoPartidaSemDemo.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
@@ -1742,10 +1742,8 @@ export default function Partida() {
             })()}
           </div>
 
-          <SecaoClipe2D
+          <SecaoClipeReal
             matchId={m.id}
-            replayUrl={m.replayUrl}
-            mapa={m.map}
             jogadores={m.players}
             viewerSteamId={jogador?.steamId}
           />

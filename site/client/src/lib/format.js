@@ -112,6 +112,8 @@ const NOMES_ARMA = {
   ump45: 'UMP-45', p90: 'P90', bizon: 'PP-Bizon', mp5sd: 'MP5-SD',
   nova: 'Nova', xm1014: 'XM1014', mag7: 'MAG-7', sawedoff: 'Sawed-Off',
   m249: 'M249', negev: 'Negev', hkp2000: 'P2000', knife: 'Faca',
+  hegrenade: 'HE', molotov: 'Molotov', incgrenade: 'Incendiária', inferno: 'Molotov',
+  flashbang: 'Flash', smokegrenade: 'Smoke', decoy: 'Decoy', taser: 'Zeus x27',
 }
 export function nomeArma(weapon) {
   return NOMES_ARMA[weapon] ?? weapon
