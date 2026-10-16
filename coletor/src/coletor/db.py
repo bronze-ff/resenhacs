@@ -781,21 +781,26 @@ def membro_ja_sincronizou_faceit(conn, steam_id64):
         return cur.fetchone() is not None
 
 
-def enfileirar_faceit(conn, faceit_match_id, steam_id64):
+def enfileirar_faceit(conn, faceit_match_id, steam_id64, finished_at=None):
+    """`finished_at` (epoch em segundos, opcional) vem do /history e alimenta a janela
+    da próxima descoberta e a janela de 4 semanas da Demo."""
     with conn.cursor() as cur:
         cur.execute(
-            "insert into faceit_pendentes (faceit_match_id, steam_id64) "
-            "values (%s, %s) on conflict (faceit_match_id) do nothing",
-            (faceit_match_id, steam_id64),
+            "insert into faceit_pendentes (faceit_match_id, steam_id64, finished_at) "
+            "values (%s, %s, to_timestamp(%s)) on conflict (faceit_match_id) do nothing",
+            (faceit_match_id, steam_id64, finished_at),
         )
     conn.commit()
 
 
 def listar_faceit_pendentes(conn, limite=10):
+    """Mais recentes primeiro: a Demo da FACEIT expira, então a Partida de hoje não pode
+    esperar o backlog da primeira varredura (histórico inteiro) acabar."""
     with conn.cursor() as cur:
         cur.execute(
             "select faceit_match_id, steam_id64, tentativas from faceit_pendentes "
-            "where status = 'pending' order by created_at limit %s",
+            "where status = 'pending' order by finished_at desc nulls last, created_at "
+            "limit %s",
             (limite,),
         )
         return cur.fetchall()
@@ -862,3 +867,86 @@ def gravar_elo_partida(conn, match_id, steam_id64, before, after):
             (before, after, match_id, steam_id64),
         )
     conn.commit()
+
+
+# ---------------------------------------------------------------------------
+# FACEIT: janela da descoberta, re-tentativa da Demo e contadores extras (0056)
+
+
+def ultimo_finished_at_faceit(conn, steam_id64):
+    """Data da Partida FACEIT mais recente conhecida desse membro (ingerida com ele no
+    roster, ou enfileirada pela descoberta dele). None = primeira varredura."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "select greatest("
+            "(select max(m.played_at) from matches m "
+            " join match_players mp on mp.match_id = m.id "
+            " where m.faceit_match_id is not null and mp.steam_id64 = %s), "
+            "(select max(finished_at) from faceit_pendentes where steam_id64 = %s))",
+            (steam_id64, steam_id64),
+        )
+        row = cur.fetchone()
+        return row[0] if row else None
+
+
+def marcar_membro_sincronizado_faceit(conn, steam_id64):
+    with conn.cursor() as cur:
+        cur.execute(
+            "update players set faceit_sincronizado_em = now() where steam_id64 = %s",
+            (steam_id64,),
+        )
+    conn.commit()
+
+
+def gravar_extras_faceit(conn, match_id, players):
+    """MVPs e Triple/Quadro/Penta da API (só existem no caminho sem Demo). Não passa
+    por _write_players: o upsert do parser não toca nessas colunas, então elas ficam
+    quando a Demo chega depois."""
+    with conn.cursor() as cur:
+        for p in players:
+            cur.execute(
+                "update match_players set mvps = %s, triple_kills = %s, "
+                "quadro_kills = %s, penta_kills = %s "
+                "where match_id = %s and steam_id64 = %s",
+                (p.get("mvps"), p.get("triple_kills"), p.get("quadro_kills"),
+                 p.get("penta_kills"), match_id, p.get("steam_id64")),
+            )
+    conn.commit()
+
+
+def agendar_retry_demo(conn, faceit_match_id, proxima, tentativas_demo, erro):
+    with conn.cursor() as cur:
+        cur.execute(
+            "update faceit_pendentes set proxima_tentativa_demo = %s, tentativas_demo = %s, "
+            "sem_demo_desde = coalesce(sem_demo_desde, now()), erro_demo = %s "
+            "where faceit_match_id = %s",
+            (proxima, tentativas_demo, str(erro)[:500] if erro else None, faceit_match_id),
+        )
+    conn.commit()
+
+
+def encerrar_retry_demo(conn, faceit_match_id, erro=None):
+    """Tira a Partida da re-tentativa (Demo chegou, expirou ou não confere)."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "update faceit_pendentes set proxima_tentativa_demo = null, "
+            "erro_demo = coalesce(%s, erro_demo) where faceit_match_id = %s",
+            (str(erro)[:500] if erro else None, faceit_match_id),
+        )
+    conn.commit()
+
+
+def listar_retries_demo(conn, agora, limite=3):
+    """Partidas sem Demo cuja re-tentativa venceu: (faceit_match_id, steam_id64,
+    tentativas_demo, finished_at, match_id, tem_demo). match_id None = a Partida sumiu."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "select fp.faceit_match_id, fp.steam_id64, fp.tentativas_demo, "
+            "coalesce(fp.finished_at, m.played_at), m.id, coalesce(m.tem_demo, false) "
+            "from faceit_pendentes fp "
+            "left join matches m on m.faceit_match_id = fp.faceit_match_id "
+            "where fp.proxima_tentativa_demo is not null and fp.proxima_tentativa_demo <= %s "
+            "order by fp.proxima_tentativa_demo limit %s",
+            (agora, limite),
+        )
+        return cur.fetchall()

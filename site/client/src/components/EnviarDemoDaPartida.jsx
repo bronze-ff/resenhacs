@@ -126,7 +126,7 @@ export default function EnviarDemoDaPartida({ partida, euSteamId, onEnviado }) {
         <div className="space-y-3 border border-borda bg-superficie p-4">
           <p className="text-sm text-texto-fraco">
             Baixe a demo desta partida na FACEIT e envie aqui. O processamento roda a cada ~30
-            minutos e destrava ADR, KAST, rating, replay e clipes.
+            minutos e destrava KAST, rating, economia, replay e clipes.
           </p>
           <Campo rotulo="Arquivo .dem" htmlFor="demo-da-partida" erro={erro}>
             <input
