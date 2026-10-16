@@ -354,7 +354,7 @@ export default function Shell({ children }) {
         <div className={`px-3 pb-1 ${colapsada ? 'lg:hidden' : ''}`}>
           <BuscaRapida telas={telasDaBusca} />
         </div>
-        <nav className="flex-1 space-y-5 overflow-y-auto py-3" aria-label="Menu">
+        <nav className="flex-1 space-y-3 overflow-y-auto py-2" aria-label="Menu">
           {[...GRUPOS, ...(jogador?.isSuperAdmin ? [GRUPO_ADMIN] : [])].map((grupo) => (
             <div key={grupo.titulo}>
               <div className={`mb-1 px-4 text-xs font-medium text-texto-fraco/70 ${colapsada ? 'lg:hidden' : ''}`}>{grupo.titulo}</div>

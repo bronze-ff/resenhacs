@@ -62,11 +62,11 @@ export default function MapaAtividade({ atividade }) {
         <span className="text-xs text-texto-fraco">últimas 13 semanas</span>
       </div>
       <div className="mt-4 flex gap-2">
-        <div className="grid grid-rows-7 gap-[3px] pt-4 text-[10px] leading-[12px] text-texto-fraco" aria-hidden="true">
+        <div className="grid grid-rows-7 gap-[3px] pt-4 text-[11px] leading-[12px] text-texto-fraco" aria-hidden="true">
           {NOMES_DIA.map((d, i) => <span key={d} className={i % 2 ? '' : 'invisible'}>{d}</span>)}
         </div>
         <div className="min-w-0 flex-1">
-          <div className="grid gap-[3px] text-[10px] leading-4 text-texto-fraco" style={{ gridTemplateColumns: `repeat(${SEMANAS}, minmax(0, 1fr))` }} aria-hidden="true">
+          <div className="grid gap-[3px] text-[11px] leading-4 text-texto-fraco" style={{ gridTemplateColumns: `repeat(${SEMANAS}, minmax(0, 1fr))` }} aria-hidden="true">
             {meses.map((m, i) => <span key={i} className="truncate">{m}</span>)}
           </div>
           <div

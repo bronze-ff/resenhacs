@@ -164,7 +164,7 @@ export default function Resenha() {
               <span className="text-destaque-forte">{tipo === 'mes' ? 'Resenha do mês' : 'Resenha da semana'}</span>
               <span className="text-texto-fraco">· {rotuloPeriodo(periodo)}</span>
             </div>
-            <h2 className="mt-2.5 max-w-[680px] font-display text-[34px] font-bold leading-none tracking-[-0.035em] text-texto sm:text-[56px]">
+            <h2 className="mt-2.5 max-w-[680px] font-display text-[34px] font-semibold leading-none tracking-[-0.035em] text-texto sm:text-[56px]">
               {manchete(periodo, premios)}
             </h2>
             <div className="mt-8 grid grid-cols-2 gap-3 lg:grid-cols-4">

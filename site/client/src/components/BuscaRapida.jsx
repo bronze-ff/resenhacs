@@ -128,7 +128,7 @@ export default function BuscaRapida({ telas, className = '' }) {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-4 w-4" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
           Buscar
         </span>
-        <kbd className="rounded border border-borda-forte px-1.5 font-mono text-[10px]">Ctrl K</kbd>
+        <kbd className="rounded border border-borda-forte px-1.5 font-mono text-[11px]">Ctrl K</kbd>
       </button>
       {aberta && <PainelBusca telas={telas} onFechar={() => setAberta(false)} />}
     </>

@@ -121,8 +121,8 @@ export default function Rivalidades({ steamId, proprio = false }) {
                 <td className="px-3 py-2 text-right font-mono tabular-nums">{d.matei}</td>
                 <td className="px-3 py-2 text-right font-mono tabular-nums">{d.morri}</td>
                 <td className={`px-3 py-2 text-right font-mono tabular-nums ${d.saldo > 0 ? 'text-sucesso' : d.saldo < 0 ? 'text-perigo' : 'text-texto-fraco'}`}>
-                  {d.saldo > 0 && <span aria-hidden="true" className="mr-1 text-[10px]">▲</span>}
-                  {d.saldo < 0 && <span aria-hidden="true" className="mr-1 text-[10px]">▼</span>}
+                  {d.saldo > 0 && <span aria-hidden="true" className="mr-1 text-[11px]">▲</span>}
+                  {d.saldo < 0 && <span aria-hidden="true" className="mr-1 text-[11px]">▼</span>}
                   {d.saldo > 0 ? `+${d.saldo}` : d.saldo}
                 </td>
                 <td className="hidden px-3 py-2 text-right font-mono tabular-nums text-texto-fraco sm:table-cell">{d.partidasContra}</td>

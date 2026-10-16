@@ -424,7 +424,7 @@ export default function JogadorPerfil() {
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                         <span
-                          className={`panel-cut-sm px-1.5 py-0.5 font-display text-[10px] font-bold uppercase ${
+                          className={`panel-cut-sm px-1.5 py-0.5 text-[11px] font-semibold ${
                             r.won === true ? 'bg-sucesso/15 text-sucesso' : r.won === false ? 'bg-perigo/15 text-perigo' : 'bg-superficie-alta text-texto-fraco'
                           }`}
                         >
@@ -480,7 +480,7 @@ export default function JogadorPerfil() {
                       <td className="px-2 py-2">
                         <span className="flex items-center gap-2">
                           <span
-                            className={`panel-cut-sm px-1.5 py-0.5 font-display text-[10px] font-bold uppercase ${
+                            className={`panel-cut-sm px-1.5 py-0.5 text-[11px] font-semibold ${
                               r.won === true ? 'bg-sucesso/15 text-sucesso' : r.won === false ? 'bg-perigo/15 text-perigo' : 'bg-superficie-alta text-texto-fraco'
                             }`}
                           >

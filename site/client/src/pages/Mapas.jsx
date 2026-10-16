@@ -157,7 +157,7 @@ export default function Mapas() {
         if (!r.ok) throw new Error()
         return r.json()
       })
-      .then((j) => vivo && setDados(j))
+      .then((j) => vivo && setDados({ ...j, mapas: Array.isArray(j?.mapas) ? j.mapas : [] }))
       .catch(() => vivo && setErro(true))
     return () => {
       vivo = false
