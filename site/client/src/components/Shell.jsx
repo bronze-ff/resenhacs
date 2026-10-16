@@ -34,6 +34,7 @@ const GRUPOS = [
     itens: [
       { to: '/granadas', label: 'Granadas', icone: 'granadas' },
       { to: '/taticas', label: 'Táticas', icone: 'taticas' },
+      { to: '/quadro', label: 'Quadro tático', icone: 'quadro' },
       { to: '/curso', label: 'Curso de mira', icone: 'curso' },
     ],
   },
@@ -82,6 +83,14 @@ const NAV_ICONES = {
       <rect x="4" y="4" width="16" height="14" rx="1" />
       <path d="M8 9L11 12L8 15" />
       <line x1="13" y1="15" x2="16" y2="15" />
+    </svg>
+  ),
+  quadro: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
+      <rect x="3" y="4" width="18" height="16" rx="1" />
+      <circle cx="8" cy="9" r="1.5" />
+      <path d="M8 15L15 10" />
+      <path d="M12 10h3v3" />
     </svg>
   ),
   mais: (

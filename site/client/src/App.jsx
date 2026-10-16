@@ -14,6 +14,7 @@ import Clipes from './pages/Clipes.jsx'
 import Competicoes from './pages/Competicoes.jsx'
 import Granadas from './pages/Granadas.jsx'
 import Taticas from './pages/Taticas.jsx'
+import Quadro from './pages/Quadro.jsx'
 import Ranking from './pages/Ranking.jsx'
 import EnviarDemo from './pages/EnviarDemo.jsx'
 import Perfil from './pages/Perfil.jsx'
@@ -85,6 +86,7 @@ export default function App() {
           <Route path="/competicoes" element={<RotaProtegida><Competicoes /></RotaProtegida>} />
           <Route path="/granadas" element={<RotaProtegida><Granadas /></RotaProtegida>} />
           <Route path="/taticas" element={<RotaProtegida><Taticas /></RotaProtegida>} />
+          <Route path="/quadro" element={<RotaProtegida><Quadro /></RotaProtegida>} />
           <Route path="/conta" element={<RotaProtegida><Perfil /></RotaProtegida>} />
           <Route path="/apoie" element={<RotaProtegida><Apoie /></RotaProtegida>} />
           <Route path="/curso" element={<RotaProtegida><Curso /></RotaProtegida>} />

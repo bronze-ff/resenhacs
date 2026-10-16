@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { frameIndexAt, duracaoSegundos } from '../lib/replayEngine.js'
 import { nomeMapa, nomeArma, categoriaArma } from '../lib/format.js'
 import { CORES } from '../lib/colors.js'
@@ -269,7 +270,9 @@ function desenharFrame(ctx, round, f, radar, replay, aoCarregarIcone) {
   }
 }
 
-export default function ReplayViewer({ replay, seek }) {
+// `matchId` (opcional): liga o botão "Levar pro quadro", que abre o Quadro tático com os
+// jogadores vivos do frame atual. Sem ele (demo pública, card de tática) o botão não aparece.
+export default function ReplayViewer({ replay, seek, matchId = null }) {
   const canvasRef = useRef(null)
   const radarRef = useRef(null)
   const rafRef = useRef(0)
@@ -377,6 +380,16 @@ export default function ReplayViewer({ replay, seek }) {
         <span className="w-24 text-right font-mono text-xs tabular-nums text-texto-fraco">
           {(frameAtual / replay.tickRate).toFixed(1)}s / {dur.toFixed(1)}s
         </span>
+        {matchId && round && total > 0 && (
+          <Button
+            as={Link}
+            tamanho="sm"
+            to={`/quadro?partida=${encodeURIComponent(matchId)}&round=${round.round}&tick=${frameAtual}`}
+            onClick={() => setTocando(false)}
+          >
+            Levar pro quadro
+          </Button>
+        )}
       </div>
       <div className="relative mx-auto w-full max-w-[640px]">
         <canvas

@@ -22,7 +22,7 @@ function roundVazio(meta) {
   return { ...meta, frames: [], kills: [], hits: [] }
 }
 
-export function SecaoReplay({ replayUrl, seek, onSelecionarPonto }) {
+export function SecaoReplay({ replayUrl, seek, onSelecionarPonto, matchId = null }) {
   const [replay, setReplay] = useState(null)
   const [erro, setErro] = useState(false)
   const [aba, setAba] = useState('replay') // replay | calor
@@ -101,7 +101,7 @@ export function SecaoReplay({ replayUrl, seek, onSelecionarPonto }) {
         onChange={setAba}
       />
       {aba === 'replay' ? (
-        <ReplayViewer replay={replay} seek={seek} />
+        <ReplayViewer replay={replay} seek={seek} matchId={matchId} />
       ) : (
         <MapaCalor replay={replay} onSelecionarPonto={onSelecionarPonto} />
       )}
@@ -1576,6 +1576,7 @@ export default function Partida() {
             <SecaoReplay
               replayUrl={m.replayUrl}
               seek={seek}
+              matchId={m.id}
               onSelecionarPonto={({ round, frame }) => irParaMomento(round, frame)}
             />
           </section>
