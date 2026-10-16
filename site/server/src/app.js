@@ -15,6 +15,8 @@ import { createRankingRouter } from './routes/ranking.js'
 import { createSessionsRouter } from './routes/sessions.js'
 import { createRecordesRouter } from './routes/recordes.js'
 import { createLadoPorMapaRouter } from './routes/ladoPorMapa.js'
+import { createMapasRouter } from './routes/mapas.js'
+import { createDuelosPerfilRouter, createDuelosPartidaRouter } from './routes/duelos.js'
 import { createAllstarRouter } from './routes/allstar.js'
 import { createUploadRouter } from './routes/upload.js'
 import { createLineupsRouter } from './routes/lineups.js'
@@ -106,6 +108,9 @@ export function createApp({
   app.use('/api/sessions', createSessionsRouter({ db, requireAuth }))
   app.use('/api/recordes', createRecordesRouter({ db, requireAuth }))
   app.use('/api/lado-mapa', createLadoPorMapaRouter({ db, requireAuth }))
+  app.use('/api/mapas', createMapasRouter({ db, requireAuth }))
+  app.use('/api/profile', createDuelosPerfilRouter({ db, requireAuth }))
+  app.use('/api/matches', createDuelosPartidaRouter({ db, requireAuth }))
   app.use('/api/allstar', createAllstarRouter({ db, config }))
   app.use('/api/lineups', createLineupsRouter({ db, requireAuth }))
   app.use('/api/taticas', createTaticasRouter({ db, requireAuth }))
