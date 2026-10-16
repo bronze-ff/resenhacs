@@ -30,6 +30,7 @@ import { createGranadasRouter } from './routes/granadas.js'
 import { createCursoRouter } from './routes/curso.js'
 import { createRivalidadesRouter } from './routes/rivalidades.js'
 import { createPremiosRouter } from './routes/premios.js'
+import { createQuadrosRouter } from './routes/quadros.js'
 import { createRequireAuth } from './auth/middleware.js'
 import { capturarErro } from './observabilidade/sentry.js'
 import { limiteGeral } from './rateLimit.js'
@@ -128,6 +129,7 @@ export function createApp({
   app.use('/api/curso', createCursoRouter({ db, requireAuth, r2Client, r2Bucket: config.r2Bucket }))
   app.use('/api/rivalidades', createRivalidadesRouter({ db, requireAuth }))
   app.use('/api/premios', createPremiosRouter({ db, requireAuth }))
+  app.use('/api/quadros', createQuadrosRouter({ db, requireAuth }))
 
   app.use('/api/upload', createUploadRouter({ db, requireAuth, r2Client, r2Bucket: config.r2Bucket }))
 
