@@ -11,6 +11,7 @@ import ReplayViewer from '../components/ReplayViewer.jsx'
 import MapaCalor from '../components/MapaCalor.jsx'
 import SeletorClipesCompeticao from '../components/SeletorClipesCompeticao.jsx'
 import EnviarDemoDaPartida from '../components/EnviarDemoDaPartida.jsx'
+import SecaoClipe2D from '../components/clipes/SecaoClipe2D.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { useTransicaoModal } from '../lib/useTransicaoModal.js'
 
@@ -1646,7 +1647,7 @@ export default function Partida() {
       {abaAtiva === 'clipes' && (
         <section className="space-y-6">
           <div>
-            <SectionHeader titulo="Melhor clipe do jogador (Allstar)" margem="pequena" />
+            <SectionHeader titulo="Clipe do jogo (Allstar, escolhe a melhor jogada)" margem="pequena" />
             <p className="mb-3 text-sm text-texto-fraco">
               A Allstar escolhe sozinha o melhor momento do jogador na partida inteira — não dá
               pra escolher um round específico. Selecione um jogador:
@@ -1702,6 +1703,14 @@ export default function Partida() {
               )
             })()}
           </div>
+
+          <SecaoClipe2D
+            matchId={m.id}
+            replayUrl={m.replayUrl}
+            mapa={m.map}
+            jogadores={m.players}
+            viewerSteamId={jogador?.steamId}
+          />
 
           <div>
             <div className="mb-3 space-y-2">
