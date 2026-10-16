@@ -28,6 +28,7 @@ import urllib.request
 from . import db as dbmod
 from . import parse as parsemod
 from . import replay as replaymod
+from . import lineups as lineupsmod
 from . import sharecode
 from . import steam_api
 from . import faceit
@@ -627,8 +628,9 @@ def _montar_lineups(rdata, replay_json, mapa, source):
         return replaymod.world_to_radar(x, y, cal) if cal else (x, y)
 
     lineups = []
+    frames = lineupsmod.frames_por_granada(rdata, replay_json)
     for chave, tipo in TIPO_POR_CHAVE.items():
-        for g in rdata.get(chave, []):
+        for i, g in enumerate(rdata.get(chave, [])):
             if g.get("throwerX") is None or g.get("throwerY") is None:
                 continue
             tx, ty = norm(g["throwerX"], g["throwerY"])
@@ -643,6 +645,9 @@ def _montar_lineups(rdata, replay_json, mapa, source):
                 "tick": g.get("tickStart", g.get("tick")),
                 "origem": "pro" if source == "pro" else "grupo",
                 "lado": g.get("throwerLado"),
+                # 0055: mundo (setpos de treino) + frame do Replay 2D — nullable.
+                **lineupsmod.campos_mundo(g),
+                "replay_frame": frames.get((chave, i)),
             })
     return lineups
 

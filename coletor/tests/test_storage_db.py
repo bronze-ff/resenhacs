@@ -643,7 +643,27 @@ def test_store_parsed_grava_lineups():
     assert insert[1] == (
         "00000000-0000-0000-0000-000000000001", 5, "de_mirage", "smoke",
         "A", "bronze", 100.0, 200.0, 45.0, -10.0, 300.0, 400.0, 5000, "grupo", "T",
+        None, None, None, None, None, None, None,
     )
+
+
+def test_store_parsed_grava_coordenadas_de_mundo_e_frame_da_lineup():
+    # 0055: setpos de treino (mundo) + frame do Replay 2D; colunas nullable.
+    conn = FakeConn()
+    parsed = _parsed()
+    parsed["lineups"] = [{
+        "round_number": 5, "map": "de_mirage", "tipo": "smoke",
+        "thrower_steam_id": "A", "thrower_nick": "bronze",
+        "thrower_x": 0.1, "thrower_y": 0.2, "thrower_yaw": 45.0, "thrower_pitch": -10.0,
+        "target_x": 0.3, "target_y": 0.4, "tick": 5000, "origem": "grupo", "lado": "T",
+        "thrower_world_x": 1136.0, "thrower_world_y": -255.5, "thrower_world_z": -167.97,
+        "target_world_x": 300.0, "target_world_y": 400.0, "target_world_z": -100.0,
+        "replay_frame": 42,
+    }]
+    db.store_parsed(conn, parsed, share_code="CSGO-x", source="upload")
+    insert = next(c for c in conn.calls if c[0].startswith("insert into lineups"))
+    assert "thrower_world_z" in insert[0] and "replay_frame" in insert[0]
+    assert insert[1][-7:] == (1136.0, -255.5, -167.97, 300.0, 400.0, -100.0, 42)
 
 
 def test_store_parsed_grava_nome_de_time():

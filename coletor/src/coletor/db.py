@@ -406,14 +406,20 @@ def _write_lineups(cur, match_id, lineups):
             insert into lineups
               (match_id, round_number, map, tipo, thrower_steam_id, thrower_nick,
                thrower_x, thrower_y, thrower_yaw, thrower_pitch, target_x, target_y,
-               tick, origem, lado)
-            values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+               tick, origem, lado,
+               thrower_world_x, thrower_world_y, thrower_world_z,
+               target_world_x, target_world_y, target_world_z, replay_frame)
+            values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 match_id, l["round_number"], l["map"], l["tipo"],
                 l["thrower_steam_id"], l.get("thrower_nick", ""),
                 l["thrower_x"], l["thrower_y"], l.get("thrower_yaw", 0), l.get("thrower_pitch", 0),
                 l["target_x"], l["target_y"], l["tick"], l["origem"], l.get("lado"),
+                l.get("thrower_world_x"), l.get("thrower_world_y"), l.get("thrower_world_z"),
+                l.get("target_world_x"), l.get("target_world_y"), l.get("target_world_z"),
+                l.get("replay_frame"),
             ),
         )
 
