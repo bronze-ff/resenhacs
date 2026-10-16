@@ -51,6 +51,8 @@ URL do demo entraria.
 - `DATABASE_URL` — Session Pooler do Supabase (IPv4).
 - `STEAM_API_KEY` — https://steamcommunity.com/dev/apikey.
 - `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` — Cloudflare R2 (para `ingest`).
+- `DISCORD_WEBHOOK_URL` — opcional. Webhook do canal do grupo no Discord. Quando uma Partida com Jogador do grupo termina de ser ingerida (`fetch`, uploads, FACEIT; Partida pro não), posta um embed com mapa, placar, resultado do grupo, MVP do grupo (rating) e o link `${APP_URL}/partida/<id>`. Sem SteamID. Vazio = no-op; erro de rede só vira aviso no log (sem a URL), nunca derruba o job. Ver `src/coletor/discord.py`.
+- `APP_URL` — base do link do embed do Discord.
 
 ## Dependência de sistema: `unar` (extração de `.rar` do HLTV)
 
