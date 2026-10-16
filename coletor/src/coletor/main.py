@@ -26,6 +26,7 @@ import urllib.parse
 import urllib.request
 
 from . import db as dbmod
+from . import discord
 from . import parse as parsemod
 from . import replay as replaymod
 from . import sharecode
@@ -911,6 +912,11 @@ def ingest_demo(config, conn, path, share_code=None, source="upload", upload=Tru
             raise DemoNaoConfereError("esta demo já foi processada em outra partida") from e
         raise
     _atualizar_avatares(config, conn, [p["steam_id64"] for p in parsed.get("players", [])])
+    if source != "pro":
+        try:
+            discord.notificar_partida(conn, match_id)
+        except Exception as e:  # noqa: BLE001 — Discord nunca derruba o ingest
+            print(f"aviso: Discord não notificado ({type(e).__name__})")
     return match_id
 
 

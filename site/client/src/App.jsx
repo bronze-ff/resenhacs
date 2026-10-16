@@ -24,6 +24,7 @@ import Tour from './pages/Tour.jsx'
 import Apoie from './pages/Apoie.jsx'
 import Curso from './pages/Curso.jsx'
 import Privacidade from './pages/Privacidade.jsx'
+import Resenha from './pages/Resenha.jsx'
 
 // Tela de espera enquanto /api/auth/me responde: marca pulsando no centro, em vez de
 // um "Carregando…" solto no canto.
@@ -83,6 +84,7 @@ export default function App() {
           <Route path="/jogador/:steamId" element={<RotaProtegida><JogadorPerfil /></RotaProtegida>} />
           <Route path="/comparar" element={<RotaProtegida><Comparar /></RotaProtegida>} />
           <Route path="/competicoes" element={<RotaProtegida><Competicoes /></RotaProtegida>} />
+          <Route path="/resenha" element={<RotaProtegida><Resenha /></RotaProtegida>} />
           <Route path="/granadas" element={<RotaProtegida><Granadas /></RotaProtegida>} />
           <Route path="/taticas" element={<RotaProtegida><Taticas /></RotaProtegida>} />
           <Route path="/conta" element={<RotaProtegida><Perfil /></RotaProtegida>} />

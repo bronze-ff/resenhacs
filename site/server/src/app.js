@@ -23,6 +23,8 @@ import { createTaticasCuradasRouter } from './routes/taticasCuradas.js'
 import { createPartidasProRouter } from './routes/partidasPro.js'
 import { createGranadasRouter } from './routes/granadas.js'
 import { createCursoRouter } from './routes/curso.js'
+import { createRivalidadesRouter } from './routes/rivalidades.js'
+import { createPremiosRouter } from './routes/premios.js'
 import { createRequireAuth } from './auth/middleware.js'
 import { capturarErro } from './observabilidade/sentry.js'
 import { limiteGeral } from './rateLimit.js'
@@ -113,6 +115,8 @@ export function createApp({
   app.use('/api/partidas-pro-fila', createPartidasProRouter({ db, requireAuth, r2Client, r2Bucket: config.r2Bucket }))
   app.use('/api/granadas', createGranadasRouter({ db, requireAuth }))
   app.use('/api/curso', createCursoRouter({ db, requireAuth, r2Client, r2Bucket: config.r2Bucket }))
+  app.use('/api/rivalidades', createRivalidadesRouter({ db, requireAuth }))
+  app.use('/api/premios', createPremiosRouter({ db, requireAuth }))
 
   app.use('/api/upload', createUploadRouter({ db, requireAuth, r2Client, r2Bucket: config.r2Bucket }))
 
