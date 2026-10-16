@@ -716,6 +716,28 @@ def fundir_partes_mesmo_mapa(partes, rdatas=None):
     return parsed_fundido, rdata_fundido
 
 
+def _snapshot_arremessos(registros):
+    """{(tick, steamid): {x, y, z, yaw, pitch, lado}} a partir das linhas do parse_ticks
+    nos ticks de weapon_fire de granada. X/Y/Z são coordenadas de MUNDO (origem do pawn,
+    no pé do jogador — é o mesmo valor que `setpos` do console aceita); yaw/pitch são
+    os ângulos de visão no tick do arremesso (mesmo formato do `setang`). Lado é o
+    REAL (T/CT) naquele tick — team_num daqui é o lado atual, não o time fixo A/B."""
+    snap = {}
+    for r in registros:
+        sid = _sid(r.get("steamid"))
+        if not sid:
+            continue
+        snap[(int(r["tick"]), sid)] = {
+            "x": _flt(r.get("X")),
+            "y": _flt(r.get("Y")),
+            "z": _flt(r.get("Z")),
+            "yaw": _flt(r.get("yaw")),
+            "pitch": _flt(r.get("pitch")),
+            "lado": _lado_de_team_num(_num(r.get("team_num"))),
+        }
+    return snap
+
+
 def parse_demo(path):
     import pandas as pd
     from demoparser2 import DemoParser
@@ -1379,21 +1401,8 @@ def extract_replay(path, target_hz=8, demo_tick_rate=64):
     # fire — mesmo padrão de performance já usado pro snapshot de team_num acima.
     snap_fire = {}
     if fire_ticks_unicos:
-        df_fire = parser.parse_ticks(["X", "Y", "yaw", "pitch", "team_num"], ticks=fire_ticks_unicos)
-        for r in df_fire.to_dict("records"):
-            sid = _sid(r.get("steamid"))
-            if not sid:
-                continue
-            # Lado REAL (T/CT) no momento do arremesso — team_num aqui é o lado atual
-            # daquele tick (não o time fixo A/B).
-            lado = _lado_de_team_num(_num(r.get("team_num")))
-            snap_fire[(int(r["tick"]), sid)] = {
-                "x": _flt(r.get("X")),
-                "y": _flt(r.get("Y")),
-                "yaw": _flt(r.get("yaw")),
-                "pitch": _flt(r.get("pitch")),
-                "lado": lado,
-            }
+        df_fire = parser.parse_ticks(["X", "Y", "Z", "yaw", "pitch", "team_num"], ticks=fire_ticks_unicos)
+        snap_fire = _snapshot_arremessos(df_fire.to_dict("records"))
 
     def _dados_arremesso(ev_detonate, detonates):
         """{(detonate_tick, thrower): {thrower, throwerX, throwerY, throwerYaw,
@@ -1411,6 +1420,7 @@ def extract_replay(path, target_hz=8, demo_tick_rate=64):
                 "throwerY": pos["y"] if pos else None,
                 "throwerYaw": pos["yaw"] if pos else None,
                 "throwerPitch": pos["pitch"] if pos else None,
+                "throwerZ": pos["z"] if pos else None,
                 "throwerLado": pos["lado"] if pos else None,
             }
         return saida
@@ -1421,6 +1431,7 @@ def extract_replay(path, target_hz=8, demo_tick_rate=64):
         "throwerY": None,
         "throwerYaw": None,
         "throwerPitch": None,
+        "throwerZ": None,
         "throwerLado": None,
     }
 
@@ -1451,7 +1462,7 @@ def extract_replay(path, target_hz=8, demo_tick_rate=64):
             x, y = _xy(r)
             t0 = int(r["tick"])
             sid = _sid(r.get("user_steamid"))
-            item = {"round": round_do_tick(t0), "x": x, "y": y, "tickStart": t0, "tickEnd": t1}
+            item = {"round": round_do_tick(t0), "x": x, "y": y, "z": _flt(r.get("z")), "tickStart": t0, "tickEnd": t1}
             item.update(arremessos.get((t0, sid), _SEM_ARREMESSO))
             saida.append(item)
         return saida
@@ -1473,7 +1484,7 @@ def extract_replay(path, target_hz=8, demo_tick_rate=64):
             x, y = _xy(r)
             t0 = int(r["tick"])
             sid = _sid(r.get("user_steamid"))
-            item = {"round": round_do_tick(t0), "x": x, "y": y, "tick": t0}
+            item = {"round": round_do_tick(t0), "x": x, "y": y, "z": _flt(r.get("z")), "tick": t0}
             item.update(arremessos.get((t0, sid), _SEM_ARREMESSO))
             saida.append(item)
         return saida

@@ -166,7 +166,7 @@ def _rdata_com_lineups():
             {
                 "round": 1, "x": 100.0, "y": 200.0, "tickStart": 1000, "tickEnd": 1500,
                 "thrower": "A", "throwerX": -3230, "throwerY": 1713, "throwerYaw": 90.0, "throwerPitch": 0.0,
-                "throwerLado": "T",
+                "throwerZ": -167.96875, "z": -100.0, "throwerLado": "T",
             },
             # detonação sem fire correspondente (thrower setado, posição não) — deve
             # ser descartada, não gerar um dict com thrower_x/y = None.
@@ -218,6 +218,43 @@ def test_montar_lineups_e_o_mesmo_independente_de_quem_chama():
     de_reprocess = main._montar_lineups(rdata, {"names": {"A": "bronze"}}, "de_mirage", "upload")
     assert de_ingest == de_reprocess
     assert len(de_reprocess) == 1
+
+
+def test_montar_lineups_grava_coordenadas_de_mundo_pro_setpos():
+    lineups = main._montar_lineups(_rdata_com_lineups(), None, "de_mirage", "upload")
+    l = lineups[0]
+    assert (l["thrower_world_x"], l["thrower_world_y"], l["thrower_world_z"]) == (-3230.0, 1713.0, -167.97)
+    assert (l["target_world_x"], l["target_world_y"], l["target_world_z"]) == (100.0, 200.0, -100.0)
+
+
+def test_montar_lineups_sem_z_deixa_none():
+    rdata = _rdata_com_lineups()
+    del rdata["smokes"][0]["throwerZ"]
+    del rdata["smokes"][0]["z"]
+    l = main._montar_lineups(rdata, None, "de_mirage", "upload")[0]
+    assert l["thrower_world_z"] is None and l["target_world_z"] is None
+
+
+def test_montar_lineups_pega_frame_do_replay_pela_ordem_no_round():
+    rdata = _rdata_com_lineups()
+    replay_json = {"names": {}, "rounds": [
+        {"round": 1, "smokes": [{"x": 0.1, "y": 0.2, "tStart": 37, "tEnd": 90}]},
+        {"round": 2, "smokes": [{"x": 0.1, "y": 0.2, "tStart": 5, "tEnd": 9}]},
+    ]}
+    l = main._montar_lineups(rdata, replay_json, "de_mirage", "upload")[0]
+    assert l["replay_frame"] == 37
+
+
+def test_montar_lineups_round_com_contagem_diferente_no_replay_nao_chuta_frame():
+    rdata = _rdata_com_lineups()
+    replay_json = {"names": {}, "rounds": [{"round": 1, "smokes": []}]}
+    l = main._montar_lineups(rdata, replay_json, "de_mirage", "upload")[0]
+    assert l["replay_frame"] is None
+
+
+def test_montar_lineups_sem_replay_frame_fica_none():
+    l = main._montar_lineups(_rdata_com_lineups(), None, "de_mirage", "upload")[0]
+    assert l["replay_frame"] is None
 
 
 # ---- upload do .dem arquivado no R2 (dívida técnica: subia sem comprimir) ----

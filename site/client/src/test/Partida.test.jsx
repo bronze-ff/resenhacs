@@ -125,3 +125,25 @@ describe('Partida — clipe sem demo arquivada', () => {
     expect(screen.getByRole('button', { name: /assistir/i })).toBeInTheDocument()
   })
 })
+
+describe('Partida — deep link de round (Granadas: "Ver no Replay 2D")', () => {
+  it('?round=&tick=&frame= abre direto a aba do Replay 2D', async () => {
+    // jsdom não implementa scrollIntoView (a Partida rola até o Replay 2D ao abrir)
+    Element.prototype.scrollIntoView = vi.fn()
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((url) => {
+      if (String(url).includes('/api/competicoes')) {
+        return Promise.resolve({ ok: true, json: async () => ({ ativa: null }) })
+      }
+      return Promise.resolve({ ok: true, json: async () => PARTIDA_BASE })
+    }))
+    render(
+      <MemoryRouter initialEntries={['/partida/m1?round=3&tick=5555&frame=40']}>
+        <Routes>
+          <Route path="/partida/:id" element={<Partida />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    // replayUrl null -> a aba do Replay 2D mostra o estado de indisponível
+    expect(await screen.findByText('Replay 2D indisponível')).toBeInTheDocument()
+  })
+})
