@@ -3,28 +3,34 @@ import { Link, NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { esquecerJogador } from '../observabilidade/posthog.js'
 import { Avatar, classesBotao } from './ui'
+import BuscaRapida from './BuscaRapida.jsx'
+import { usePrimeirosPassos } from './inicio/PrimeirosPassos.jsx'
 
 const CHAVE_SIDEBAR_COLAPSADA = 'resenha_sidebar_colapsada'
 
 // Menu agrupado por intenção (analisar, comunidade, biblioteca). Os números "01…12"
 // de antes saíram: viraram ruído quando a lista passou de 10 itens, e os grupos
 // passam a dar a mesma orientação com menos texto.
-const GRUPOS = [
+// Menu por INTENÇÃO (o que a pessoa quer fazer), não por tipo de tela: "Eu" (minhas
+// partidas e números), "Grupo" (comparar e zoar), "Treinar" (melhorar antes de jogar) e
+// "Conta". `to` pode ser função do jogador logado (ex.: o próprio perfil).
+export const GRUPOS = [
   {
-    titulo: 'Análise',
+    titulo: 'Eu',
     itens: [
-      { to: '/', end: true, label: 'Partidas', icone: 'partidas' },
-      { to: '/ranking', label: 'Ranking', icone: 'ranking' },
+      { to: '/', end: true, label: 'Início', icone: 'partidas' },
+      { to: (j) => `/jogador/${j?.steamId ?? ''}`, label: 'Meu desempenho', icone: 'perfil' },
       { to: '/mapas', label: 'Mapas', icone: 'mapas' },
-      { to: '/comparar', label: 'Comparar', icone: 'comparar' },
       { to: '/enviar-demo', label: 'Enviar demo', icone: 'enviarDemo' },
     ],
   },
   {
-    titulo: 'Comunidade',
+    titulo: 'Grupo',
     itens: [
-      { to: '/clipes', label: 'Clipes', icone: 'clipes' },
+      { to: '/ranking', label: 'Ranking', icone: 'ranking' },
+      { to: '/comparar', label: 'Comparar jogadores', icone: 'comparar' },
       { to: '/resenha', label: 'Resenha do mês', icone: 'resenha' },
+      { to: '/clipes', label: 'Clipes', icone: 'clipes' },
       { to: '/competicoes', label: 'Competições', icone: 'competicoes' },
       { to: '/jogadores', label: 'Amigos', icone: 'jogadores' },
     ],
@@ -32,7 +38,7 @@ const GRUPOS = [
   {
     // Granadas/Táticas são públicos pra visualização (só criar/editar é admin — cada
     // página já esconde os controles de edição sozinha via isSuperAdmin).
-    titulo: 'Biblioteca',
+    titulo: 'Treinar',
     itens: [
       { to: '/granadas', label: 'Granadas', icone: 'granadas' },
       { to: '/taticas', label: 'Táticas', icone: 'taticas' },
@@ -44,6 +50,11 @@ const GRUPOS = [
     itens: [{ to: '/conta', label: 'Minha conta', icone: 'perfil' }],
   },
 ]
+
+// Destino de um item (string ou função do jogador logado).
+export function destinoDoItem(item, jogador) {
+  return typeof item.to === 'function' ? item.to(jogador) : item.to
+}
 
 // Itens admin-only — grupo separado só porque exigem o gate isSuperAdmin.
 const GRUPO_ADMIN = {
@@ -209,6 +220,25 @@ function itemClasse(colapsada) {
     }`
 }
 
+// Progresso dos "Primeiros passos" no rodapé do menu, até o jogador terminar o essencial.
+function ProgressoPrimeirosPassos({ oculto, onClick }) {
+  const dados = usePrimeirosPassos()
+  if (!dados || dados.completo) return null
+  const pct = Math.round((dados.feitos / dados.total) * 100)
+  return (
+    <Link
+      to="/"
+      onClick={onClick}
+      className={`mx-3 mb-2 block rounded-[var(--radius-medio)] border border-borda bg-superficie px-3 py-2.5 text-xs text-texto-fraco transition-colors duration-150 hover:border-borda-forte hover:text-texto ${oculto ? 'lg:hidden' : ''}`}
+    >
+      <span className="flex justify-between"><span>Primeiros passos</span><span className="font-mono text-texto">{dados.feitos}/{dados.total}</span></span>
+      <span className="mt-2 block h-1 rounded-full bg-superficie-alta" aria-hidden="true">
+        <span className="block h-1 rounded-full bg-destaque" style={{ width: `${pct}%` }} />
+      </span>
+    </Link>
+  )
+}
+
 // Marca: quadrado com corte diagonal e um "R" — mesma silhueta dos painéis.
 function Marca({ tamanho = 'md' }) {
   const lado = tamanho === 'sm' ? 'h-6 w-6 text-[13px]' : 'h-7 w-7 text-sm'
@@ -281,6 +311,9 @@ export default function Shell({ children }) {
   }
 
   const classeItem = itemClasse(colapsada)
+  const telasDaBusca = [...GRUPOS, ...(jogador?.isSuperAdmin ? [GRUPO_ADMIN] : [])].flatMap((g) =>
+    g.itens.map((item) => ({ to: destinoDoItem(item, jogador), label: item.label, grupo: g.titulo })),
+  )
 
   return (
     <div className="flex min-h-screen">
@@ -309,6 +342,9 @@ export default function Shell({ children }) {
             <p className="mt-1 text-xs leading-none text-texto-fraco">CS2 do grupo</p>
           </div>
         </div>
+        <div className={`px-3 pb-1 ${colapsada ? 'lg:hidden' : ''}`}>
+          <BuscaRapida telas={telasDaBusca} />
+        </div>
         <nav className="flex-1 space-y-5 overflow-y-auto py-3" aria-label="Menu">
           {[...GRUPOS, ...(jogador?.isSuperAdmin ? [GRUPO_ADMIN] : [])].map((grupo) => (
             <div key={grupo.titulo}>
@@ -317,8 +353,8 @@ export default function Shell({ children }) {
               <div className="space-y-0.5">
                 {grupo.itens.map((item) => (
                   <NavLink
-                    key={item.to}
-                    to={item.to}
+                    key={item.label}
+                    to={destinoDoItem(item, jogador)}
                     end={item.end}
                     className={classeItem}
                     onClick={fecharMenu}
@@ -336,6 +372,7 @@ export default function Shell({ children }) {
             </div>
           ))}
         </nav>
+        <ProgressoPrimeirosPassos oculto={colapsada} onClick={fecharMenu} />
         <div className="hidden p-2 lg:flex">
           <button
             type="button"
