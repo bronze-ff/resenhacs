@@ -10,7 +10,7 @@ import {
 import ReplayViewer from '../components/ReplayViewer.jsx'
 import MapaCalor from '../components/MapaCalor.jsx'
 import SeletorClipesCompeticao from '../components/SeletorClipesCompeticao.jsx'
-import EnviarDemoDaPartida from '../components/EnviarDemoDaPartida.jsx'
+import AvisoPartidaSemDemo from '../components/AvisoPartidaSemDemo.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { useTransicaoModal } from '../lib/useTransicaoModal.js'
 
@@ -1541,7 +1541,7 @@ export default function Partida() {
         />
       )}
 
-      <EnviarDemoDaPartida partida={m} euSteamId={jogador?.steamId} onEnviado={carregar} />
+      <AvisoPartidaSemDemo partida={m} euSteamId={jogador?.steamId} onEnviado={carregar} />
 
       <Abas variante="sublinhado" rotulo="Seções da partida" itens={ITENS_ABAS} valor={abaAtiva} onChange={setAbaAtiva} larguraTotal />
 

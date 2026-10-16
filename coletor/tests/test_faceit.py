@@ -12,11 +12,14 @@ def _item(mid, teams_size=5, finished_at=1000):
     return {"match_id": mid, "teams_size": teams_size, "finished_at": finished_at, "status": "FINISHED"}
 
 
-def test_listar_historico_5v5_filtra_teams_size_e_ja_vistas_e_para_na_pagina_toda_conhecida():
+def test_listar_historico_5v5_passa_from_to_e_pagina_ate_o_fim(monkeypatch):
+    monkeypatch.setattr(faceit, "PAGINA", 3)
     paginas = [
-        _pagina([_item("m3", finished_at=300), _item("w1", teams_size=2, finished_at=250), _item("m2", finished_at=200)]),
-        _pagina([_item("m1", finished_at=100)]),  # toda conhecida -> para aqui sem pedir a próxima
-        _pagina([_item("m0", finished_at=50)]),
+        _pagina([_item("m5", finished_at=500), _item("w1", teams_size=2, finished_at=450),
+                 _item("m4", finished_at=400)]),
+        # página cheia mesmo toda conhecida: continua (a janela já limita o volume)
+        _pagina([_item("m3", finished_at=300), _item("m2", finished_at=200), _item("m1", finished_at=150)]),
+        _pagina([_item("m0", finished_at=100)]),  # incompleta = fim, não pede a próxima
     ]
     chamadas = []
 
@@ -24,17 +27,33 @@ def test_listar_historico_5v5_filtra_teams_size_e_ja_vistas_e_para_na_pagina_tod
         chamadas.append(url)
         return paginas[len(chamadas) - 1]
 
-    novas = faceit.listar_historico_5v5("k", "fid", ja_vistas={"m1"}, http_get_json=fake_get)
-    assert [n["faceit_match_id"] for n in novas] == ["m2", "m3"]  # mais antiga primeiro
-    assert len(chamadas) == 2  # não pediu a 3ª página
-    assert "offset=0" in chamadas[0] and "limit=100" in chamadas[0] and "game=cs2" in chamadas[0]
+    res = faceit.listar_historico_5v5("k", "fid", ja_vistas={"m3", "m2"},
+                                      desde=1_700_000_000, ate=1_800_000_000, http_get_json=fake_get)
+    assert [n["faceit_match_id"] for n in res["novas"]] == ["m0", "m1", "m4", "m5"]  # mais antiga primeiro
+    assert res["na_api"] == 7 and res["ja_conhecidas"] == 2 and res["ignoradas"] == 1
+    assert len(chamadas) == 3
+    assert "from=1700000000" in chamadas[0] and "to=1800000000" in chamadas[0]
+    assert "offset=0" in chamadas[0] and "offset=3" in chamadas[1] and "game=cs2" in chamadas[0]
 
 
-def test_listar_historico_5v5_andar_tudo_vai_ate_pagina_vazia():
+def test_listar_historico_5v5_primeira_varredura_pede_desde_o_lancamento_do_cs2():
+    chamadas = []
+
+    def fake_get(url, api_key):
+        chamadas.append(url)
+        return _pagina([])
+
+    res = faceit.listar_historico_5v5("k", "fid", ja_vistas=set(), desde=None, http_get_json=fake_get)
+    assert res["novas"] == [] and res["na_api"] == 0
+    assert f"from={faceit.INICIO_CS2_EPOCH}" in chamadas[0]
+    assert "to=" not in chamadas[0]
+
+
+def test_listar_historico_5v5_ignora_nao_finalizada_e_repetida_entre_paginas(monkeypatch):
+    monkeypatch.setattr(faceit, "PAGINA", 2)
     paginas = [
-        _pagina([_item("m2", finished_at=200)]),
-        _pagina([_item("m1", finished_at=100)]),
-        _pagina([]),
+        _pagina([_item("m2", finished_at=200), {**_item("x", finished_at=250), "status": "CANCELLED"}]),
+        _pagina([_item("m2", finished_at=200)]),  # offset deslizou: m2 de novo
     ]
     chamadas = []
 
@@ -42,9 +61,17 @@ def test_listar_historico_5v5_andar_tudo_vai_ate_pagina_vazia():
         chamadas.append(url)
         return paginas[len(chamadas) - 1]
 
-    novas = faceit.listar_historico_5v5("k", "fid", ja_vistas={"m1"}, andar_tudo=True, http_get_json=fake_get)
-    assert [n["faceit_match_id"] for n in novas] == ["m2"]
-    assert len(chamadas) == 3  # andou até a página vazia mesmo com tudo conhecido no meio
+    res = faceit.listar_historico_5v5("k", "fid", ja_vistas=set(), desde=1, http_get_json=fake_get)
+    assert [n["faceit_match_id"] for n in res["novas"]] == ["m2"]
+    assert res["ignoradas"] == 1
+
+
+def test_sem_acesso_downloads_reconhece_403():
+    import urllib.error
+    erro = urllib.error.HTTPError("https://x", 403, "Forbidden", {}, None)
+    assert faceit.sem_acesso_downloads(erro) is True
+    assert faceit.sem_acesso_downloads(urllib.error.HTTPError("https://x", 500, "x", {}, None)) is False
+    assert faceit.sem_acesso_downloads(RuntimeError("403")) is False
 
 
 def test_elo_atual_extrai_games_cs2_e_tolera_ausencia():
@@ -98,6 +125,59 @@ def test_montar_parsed_stats_only_mapeia_times_placar_e_stats():
     for chave in ("rounds", "kills", "highlights", "round_econ", "player_round_econ",
                   "purchases", "player_damage", "player_flashes", "kill_positions", "lineups"):
         assert parsed[chave] == []
+
+
+# Formato real do /matches/{id}/stats de CS2 (valores vêm como string).
+STATS_CS2 = {"rounds": [{
+    "round_stats": {"Map": "de_ancient", "Score": "13 / 9", "Winner": "t2"},
+    "teams": [
+        {"team_id": "t1", "players": [
+            {"player_id": "f-111", "nickname": "alpha1", "player_stats": {
+                "Kills": "18", "Deaths": "17", "Assists": "5", "Headshots": "8", "Headshots %": "44",
+                "ADR": "84.5", "MVPs": "3", "Double Kills": "4", "Triple Kills": "2",
+                "Quadro Kills": "0", "Penta Kills": "0", "First Kills": "4", "Entry Count": "7",
+                "Entry Wins": "4", "1v1Count": "2", "1v1Wins": "1", "1v2Count": "1", "1v2Wins": "0",
+                "Flash Count": "9", "Enemies Flashed": "6", "Utility Damage": "112",
+                "K/D Ratio": "1.06", "Result": "0"}},
+        ]},
+        {"team_id": "t2", "players": [
+            {"player_id": "f-222", "nickname": "beta1", "player_stats": {
+                "Kills": "25", "Deaths": "12", "Assists": "6", "Headshots %": "40",
+                "Damage": "2310", "ADR": "105", "MVPs": "6", "Triple Kills": "1",
+                "Quadro Kills": "1", "Penta Kills": "1", "Result": "1"}},
+        ]},
+    ],
+}]}
+
+
+def test_montar_parsed_stats_only_cs2_mapeia_adr_mvps_multikills_entry_clutch_e_utilitaria():
+    detalhes = {**DETALHES, "results": {"winner": "faction2", "score": {"faction1": 9, "faction2": 13}}}
+    parsed = faceit.montar_parsed_stats_only(detalhes, STATS_CS2)
+    assert parsed["map"] == "de_ancient"
+    alpha = next(p for p in parsed["players"] if p["steam_id64"] == "111")
+    beta = next(p for p in parsed["players"] if p["steam_id64"] == "222")
+    assert alpha["rounds_played"] == 22  # sem "Rounds": sai do "Score"
+    assert alpha["damage"] == round(84.5 * 22)  # só ADR -> ADR x rounds
+    assert beta["damage"] == 2310  # "Damage" direto vence o ADR
+    assert alpha["headshot_kills"] == 8
+    assert beta["headshot_kills"] == 10  # sem "Headshots": 40% de 25
+    assert (alpha["mvps"], alpha["triple_kills"], alpha["quadro_kills"], alpha["penta_kills"]) == (3, 2, 0, 0)
+    assert (beta["mvps"], beta["triple_kills"], beta["quadro_kills"], beta["penta_kills"]) == (6, 1, 1, 1)
+    assert alpha["entry_kills"] == 4 and alpha["entry_deaths"] == 3
+    assert alpha["clutch_attempts"] == 3 and alpha["clutch_wins"] == 1
+    assert alpha["flashes_thrown"] == 9 and alpha["enemies_flashed"] == 6
+    assert alpha["utility_damage"] == 112
+    # campo ausente não vira número inventado
+    assert "entry_kills" not in beta and "clutch_attempts" not in beta
+
+
+def test_montar_parsed_stats_only_sem_stats_tem_rounds_do_placar_e_extras_nulos():
+    detalhes = {**DETALHES, "voting": {"map": {"pick": ["de_nuke"]}}}
+    parsed = faceit.montar_parsed_stats_only(detalhes, {"rounds": []})
+    assert parsed["map"] == "de_nuke"  # fallback pro mapa votado
+    p = parsed["players"][0]
+    assert p["rounds_played"] == 20 and p["damage"] == 0
+    assert p["mvps"] is None and p["penta_kills"] is None
 
 
 def test_escolher_partida_para_elo_pega_a_mais_recente_depois_do_snapshot():

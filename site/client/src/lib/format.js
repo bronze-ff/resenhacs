@@ -81,13 +81,13 @@ export function dataHora(iso) {
 
 // Tag de origem da Partida. `temDemo` distingue a Partida COMPLETA (veio de um .dem
 // parseado) da stats-only, montada só com o que a API da plataforma devolve — que não
-// tem ADR, KAST, rating, rounds nem Replay 2D. Ver matches.tem_demo.
+// tem KAST, rating, economia nem Replay 2D. Ver matches.tem_demo.
 export function origemPartida(source, temDemo = true) {
   if (source === 'upload') return { label: 'Manual', title: 'Demo enviada manualmente' }
   if (!temDemo) {
     return {
       label: 'SEM DEMO',
-      title: 'Só as estatísticas da plataforma — envie a demo pra completar (ADR, KAST, rating, replay)',
+      title: 'Só as estatísticas da plataforma — envie a demo pra completar (KAST, rating, replay)',
     }
   }
   return { label: 'Auto', title: 'Baixada automaticamente pelo Coletor' }

@@ -4,6 +4,7 @@ import { Badge, Button, CabecalhoPagina, Card, EstadoErro, Input, classesBotao }
 import { useAuth } from '../auth/AuthContext.jsx'
 import PassoAPassoSteam from '../components/PassoAPassoSteam.jsx'
 import PrivacidadeConta from '../components/PrivacidadeConta.jsx'
+import SincronizacaoFaceit from '../components/SincronizacaoFaceit.jsx'
 
 // Seta que gira 90° quando aberto — mesmo ícone pros dois estados, só rotaciona.
 function SetaExpandir({ aberto }) {
@@ -110,6 +111,7 @@ export default function Perfil() {
                 ? `Vinculado como ${jogador.faceitNick}.`
                 : 'Vincule pra importar suas partidas da FACEIT automaticamente.'}
             </p>
+            {jogador?.faceitNick && <SincronizacaoFaceit />}
           </div>
           {jogador?.faceitNick ? (
             <Badge tom="sucesso">Vinculado</Badge>

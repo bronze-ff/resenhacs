@@ -6,6 +6,7 @@ import { createFriendshipsRouter } from './routes/friendships.js'
 import { createPlayersRouter } from './routes/players.js'
 import { createMinhaContaRouter } from './routes/minhaConta.js'
 import { createFaceitRouter } from './routes/faceit.js'
+import { createFaceitSincronizacaoRouter } from './routes/faceitSincronizacao.js'
 import { createMatchesRouter } from './routes/matches.js'
 import { createProfileRouter } from './routes/profile.js'
 import { createClipsRouter } from './routes/clips.js'
@@ -96,6 +97,7 @@ export function createApp({
   app.use('/api/amigos', createFriendshipsRouter({ db, requireAuth }))
   app.use('/api/players', createPlayersRouter({ db, requireAuth, fetchBans }))
   app.use('/api/minha-conta', createMinhaContaRouter({ db, requireAuth, config }))
+  app.use('/api/faceit-sincronizacao', createFaceitSincronizacaoRouter({ db, requireAuth }))
   app.use('/api/faceit', requireAuth, createFaceitRouter({ config, db, ...(faceitFetchImpl ? { fetchImpl: faceitFetchImpl } : {}) }))
   app.use('/api/matches', createMatchesRouter({ db, requireAuth, r2Client, r2Bucket: config.r2Bucket, config }))
   app.use('/api/profile', createProfileRouter({ db, requireAuth }))

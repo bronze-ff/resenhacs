@@ -744,10 +744,46 @@ def test_match_fingerprint_estavel_e_sensivel_ao_conteudo():
 
 def test_enfileirar_faceit_e_idempotente_e_alinha_placeholders():
     conn = FakeConn()
-    db.enfileirar_faceit(conn, "fm1", "111")
+    db.enfileirar_faceit(conn, "fm1", "111", 1784196000)
     sql, params = conn.calls[-1]
     assert "on conflict (faceit_match_id) do nothing" in sql
-    assert sql.count("%s") == len(params) == 2
+    assert "to_timestamp(%s)" in sql
+    assert sql.count("%s") == len(params) == 3
+    assert params == ("fm1", "111", 1784196000)
+
+
+def test_funcoes_novas_da_fila_faceit_alinham_placeholders():
+    import datetime as _dt
+    agora = _dt.datetime(2026, 10, 16, tzinfo=_dt.timezone.utc)
+    chamadas = [
+        lambda c: db.ultimo_finished_at_faceit(c, "111"),
+        lambda c: db.marcar_membro_sincronizado_faceit(c, "111"),
+        lambda c: db.agendar_retry_demo(c, "fm1", agora, 2, RuntimeError("x")),
+        lambda c: db.encerrar_retry_demo(c, "fm1"),
+        lambda c: db.listar_retries_demo(c, agora, 3),
+    ]
+    for chamar in chamadas:
+        conn = FakeConn()
+        chamar(conn)
+        sql, params = conn.calls[-1]
+        assert sql.count("%s") == len(params), sql
+
+
+def test_gravar_extras_faceit_atualiza_so_as_colunas_da_api():
+    conn = FakeConn()
+    db.gravar_extras_faceit(conn, "m1", [
+        {"steam_id64": "111", "mvps": 3, "triple_kills": 2, "quadro_kills": 0, "penta_kills": None},
+    ])
+    sql, params = conn.calls[-1]
+    assert sql.startswith("update match_players set mvps = %s")
+    assert params == (3, 2, 0, None, "m1", "111")
+
+
+def test_listar_faceit_pendentes_mais_recentes_primeiro():
+    conn = FakeConn()
+    db.listar_faceit_pendentes(conn, 10)
+    sql, _ = conn.calls[-1]
+    assert "order by finished_at desc nulls last" in sql
 
 
 def test_falhar_faceit_pendente_incrementa_e_marca_failed_no_limite():
