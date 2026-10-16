@@ -76,7 +76,7 @@ export function createAllstarRouter({ db, config }) {
       if (roundParaPontuar != null) {
         const { rows: kills } = await db.query(
           `select weapon, headshot from kill_positions
-           where match_id = $1 and round_number = $2 and killer = $3`,
+           where match_id = $1 and round_number = $2 and killer = $3 and is_team_kill = false`,
           [clip?.match_id ?? null, roundParaPontuar, clip?.steam_id64 ?? null],
         )
         const { rows: highlightRows } = await db.query(

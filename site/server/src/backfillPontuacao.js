@@ -19,7 +19,7 @@ export async function backfillPontuacao(db) {
   for (const clipe of pendentes) {
     try {
       const { rows: kills } = await db.query(
-        'select weapon, headshot from kill_positions where match_id = $1 and round_number = $2 and killer = $3',
+        'select weapon, headshot from kill_positions where match_id = $1 and round_number = $2 and killer = $3 and is_team_kill = false',
         [clipe.match_id, clipe.round_number, clipe.steam_id64],
       )
       const { rows: highlightRows } = await db.query(

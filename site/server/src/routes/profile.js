@@ -366,7 +366,7 @@ export function createProfileRouter({ db, requireAuth }) {
     const mapasQ = await db.query(
       `select m.map, count(*)::int as n
        from kill_positions kp join matches m on m.id = kp.match_id
-       where (kp.victim = $1 or kp.killer = $1) and ${partidaVisivelExpr('m', '$2')}
+       where (kp.victim = $1 or kp.killer = $1) and kp.is_team_kill = false and ${partidaVisivelExpr('m', '$2')}
        group by m.map order by n desc`,
       [steamId, req.player.steamId],
     )
@@ -378,7 +378,8 @@ export function createProfileRouter({ db, requireAuth }) {
     const { rows } = await db.query(
       `select kp.${coluna}_x as x, kp.${coluna}_y as y
        from kill_positions kp join matches m on m.id = kp.match_id
-       where kp.${coluna} = $1 and m.map = $2 and kp.${coluna}_x is not null and ${partidaVisivelExpr('m', '$3')}`,
+       where kp.${coluna} = $1 and m.map = $2 and kp.${coluna}_x is not null and kp.is_team_kill = false
+         and ${partidaVisivelExpr('m', '$3')}`,
       [steamId, mapa, req.player.steamId],
     )
     const calibrated = isMapaCalibrado(mapa)

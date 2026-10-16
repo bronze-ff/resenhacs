@@ -454,7 +454,7 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
       db.query(
         `select round_number, tick, killer, victim, weapon, victim_weapon, headshot
          from kill_positions
-         where match_id = $1 and (killer = $2 or victim = $2)
+         where match_id = $1 and (killer = $2 or victim = $2) and is_team_kill = false
          order by round_number, tick`,
         [id, steamId],
       ),
@@ -532,7 +532,8 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
     const [kills, damage, flashes] = await Promise.all([
       db.query(
         `select killer, victim, weapon from kill_positions
-         where match_id = $1 and ((killer = $2 and victim = any($3)) or (victim = $2 and killer = any($3)))`,
+         where match_id = $1 and is_team_kill = false
+           and ((killer = $2 and victim = any($3)) or (victim = $2 and killer = any($3)))`,
         [id, steamId, steamIdsOponentes],
       ),
       db.query(
@@ -620,7 +621,7 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
       ),
       db.query('select round_number, side_a from rounds where match_id = $1', [id]),
       db.query(
-        'select round_number, tick, killer, victim, assister, headshot from kill_positions where match_id = $1',
+        'select round_number, tick, killer, victim, assister, headshot from kill_positions where match_id = $1 and is_team_kill = false',
         [id],
       ),
       db.query(
