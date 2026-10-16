@@ -1,5 +1,7 @@
 import { Router } from 'express'
 import { createRequireSuperAdmin } from '../auth/middleware.js'
+import { partidaVisivelExpr } from '../friendships.js'
+import { agruparLineups, normalizarLinha } from '../granadasAutomaticas.js'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const LADOS = new Set(['T', 'CT'])
@@ -161,6 +163,45 @@ export function createGranadasRouter({ db, requireAuth }) {
       .filter((g) => g.granadas.length >= 3)
       .map((g) => ({ ...g, granadas: [...g.granadas].sort((a, b) => a.tick - b.tick) }))
     res.json(resultado)
+  })
+
+  // Biblioteca AUTOMÁTICA: arremessos reais das demos agrupados por spot (tipo+lado,
+  // arremesso e alvo próximos) — sem vídeo, sem cadastro. Lineup do grupo é escopada
+  // por amizade (traz SteamID/nick/partida); lineup de pro é pública (partida pro não
+  // tem jogador do grupo, e o dado é de campeonato aberto).
+  router.get('/automaticas', requireAuth, async (req, res) => {
+    const map = String(req.query?.map ?? '')
+    if (!MAP_RE.test(map)) return res.status(400).json({ erro: 'map é obrigatório' })
+    const params = [req.player.steamId, map]
+    const cond = ['l.map = $2', `(l.origem = 'pro' or ${partidaVisivelExpr('m', '$1')})`]
+    const { tipo, lado, origem } = req.query
+    if (tipo && TIPOS.has(tipo)) {
+      params.push(tipo)
+      cond.push(`l.tipo = $${params.length}`)
+    }
+    if (lado && LADOS.has(lado)) {
+      params.push(lado)
+      cond.push(`l.lado = $${params.length}`)
+    }
+    if (origem === 'grupo' || origem === 'pro') {
+      params.push(origem)
+      cond.push(`l.origem = $${params.length}`)
+    }
+    const min = Math.min(20, Math.max(1, Number.parseInt(req.query?.min, 10) || 1))
+    const { rows } = await db.query(
+      `select l.id, l.match_id, l.round_number, l.map, l.tipo, l.lado, l.origem, l.tick,
+              l.thrower_steam_id, l.thrower_nick, l.thrower_x, l.thrower_y,
+              l.thrower_yaw, l.thrower_pitch, l.target_x, l.target_y,
+              l.thrower_world_x, l.thrower_world_y, l.thrower_world_z, l.replay_frame
+       from lineups l join matches m on m.id = l.match_id
+       where ${cond.join(' and ')}
+       order by l.created_at desc
+       limit 5000`,
+      params,
+    )
+    // `pros` sai só com nick (sem SteamID); `jogadores` (grupo) traz SteamID pro link do Perfil.
+    const clusters = agruparLineups(rows.map(normalizarLinha), { minUsos: min })
+    res.json(clusters.slice(0, 200))
   })
 
   router.post('/', requireAuth, requireSuperAdmin, async (req, res) => {

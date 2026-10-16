@@ -1456,6 +1456,18 @@ export default function Partida() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [m])
 
+  // Veio de "?round=<n>&tick=<t>[&frame=<f>]" (Granadas: "Ver no Replay 2D") — abre o
+  // Replay 2D no round e no frame da granada (o viewer recua uns segundos pra mostrar o
+  // arremesso). Sem frame (Demo antiga), cai no começo do round.
+  useEffect(() => {
+    const round = Number.parseInt(searchParams.get('round') ?? '', 10)
+    if (!m || !Number.isFinite(round) || autoJumpFeito.current || searchParams.get('highlight')) return
+    autoJumpFeito.current = true
+    const frame = Number.parseInt(searchParams.get('frame') ?? '', 10)
+    irParaMomento(round, Number.isFinite(frame) && frame >= 0 ? frame : 0)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [m])
+
   // O scroll pro Replay 2D só pode rodar depois que a aba 'replay' estiver montada —
   // irParaMomento troca a aba e o seek na mesma função, mas o scrollIntoView ali
   // ainda veria o DOM antigo (a troca de aba só aplica no próximo paint). Por isso
