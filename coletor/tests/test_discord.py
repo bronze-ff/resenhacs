@@ -40,6 +40,16 @@ class _Conn:
         return _Cursor(self._respostas)
 
 
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _reserva_sempre_livre(monkeypatch):
+    # Os testes de montagem/postagem não exercitam a reserva no banco (testada à parte).
+    monkeypatch.setattr(discord, "_reservar", lambda conn, mid: True)
+    monkeypatch.setattr(discord, "_liberar", lambda conn, mid: None)
+
+
 def _conn_partida(grupo=None, score=(13, 7)):
     partida = [("de_nuke", score[0], score[1], datetime.datetime(2026, 10, 15, 22, 0, tzinfo=datetime.timezone.utc))]
     grupo = grupo if grupo is not None else [
@@ -129,3 +139,61 @@ def test_le_variaveis_de_ambiente(monkeypatch):
     monkeypatch.setenv("APP_URL", "https://x.app")
     assert discord.notificar_partida(_conn_partida(), "m9") is True
     assert chamadas[0]["body"]["embeds"][0]["url"] == "https://x.app/partida/m9"
+
+
+def test_partida_ja_notificada_nao_posta_de_novo(monkeypatch):
+    chamadas = _capturar_urlopen(monkeypatch)
+    monkeypatch.setattr(discord, "_reservar", lambda conn, mid: False)
+    assert discord.notificar_partida(_conn_partida(), "m1", webhook_url=WEBHOOK, app_url="") is False
+    assert chamadas == []
+
+
+def test_falha_no_post_libera_a_reserva(monkeypatch):
+    liberadas = []
+    monkeypatch.setattr(discord, "_liberar", lambda conn, mid: liberadas.append(mid))
+
+    def falha(req, timeout=None):
+        raise OSError("rede")
+
+    monkeypatch.setattr(discord.urllib.request, "urlopen", falha)
+    assert discord.notificar_partida(_conn_partida(), "m1", webhook_url=WEBHOOK, app_url="") is False
+    assert liberadas == ["m1"]
+
+
+class _CursorReserva:
+    def __init__(self, linha):
+        self.linha = linha
+        self.sql = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def execute(self, sql, params=None):
+        self.sql = sql
+
+    def fetchone(self):
+        return self.linha
+
+
+class _ConnReserva:
+    def __init__(self, linha):
+        self.cur = _CursorReserva(linha)
+        self.commits = 0
+
+    def cursor(self):
+        return self.cur
+
+    def commit(self):
+        self.commits += 1
+
+
+def test_reservar_usa_update_condicional(monkeypatch):
+    monkeypatch.undo()
+    conn = _ConnReserva(("m1",))
+    assert discord._reservar(conn, "m1") is True
+    assert "discord_notificado_em is null" in conn.cur.sql
+    assert conn.commits == 1
+    assert discord._reservar(_ConnReserva(None), "m1") is False

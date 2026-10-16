@@ -113,6 +113,29 @@ def _postar(webhook_url, payload):
         return resp.status
 
 
+def _reservar(conn, match_id):
+    """Marca a Partida como notificada ANTES de postar; devolve False se já estava.
+    Sem isso, uma Partida reingerida (reprocessamento, demo enviada depois) era postada
+    de novo no canal. O update condicional é atômico: duas rodadas simultâneas não
+    postam as duas."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "update matches set discord_notificado_em = now() "
+            "where id = %s and discord_notificado_em is null returning id",
+            (match_id,),
+        )
+        reservou = cur.fetchone() is not None
+    conn.commit()
+    return reservou
+
+
+def _liberar(conn, match_id):
+    """Desfaz a reserva quando o post falha, pra próxima ingestão tentar de novo."""
+    with conn.cursor() as cur:
+        cur.execute("update matches set discord_notificado_em = null where id = %s", (match_id,))
+    conn.commit()
+
+
 def notificar_partida(conn, match_id, webhook_url=None, app_url=None):
     """Posta o embed da Partida no webhook. Devolve True se postou."""
     webhook_url = webhook_url if webhook_url is not None else os.environ.get("DISCORD_WEBHOOK_URL", "")
@@ -124,7 +147,13 @@ def notificar_partida(conn, match_id, webhook_url=None, app_url=None):
         payload = montar_embed(dados, match_id, app_url) if dados else None
         if payload is None:
             return False
-        _postar(webhook_url, payload)
+        if not _reservar(conn, match_id):
+            return False
+        try:
+            _postar(webhook_url, payload)
+        except Exception:
+            _liberar(conn, match_id)
+            raise
         return True
     except Exception as e:  # noqa: BLE001
         # Só o tipo/código: a mensagem de erro de rede pode carregar a URL (com token).
