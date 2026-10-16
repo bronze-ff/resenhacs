@@ -63,6 +63,40 @@ Lista completa de exemplo: `site/server/.env.example`, `site/client/.env.example
 
 Erro de Sentry não é lugar de guardar dado pessoal. O evento final só conserva a allowlist do topo (`event_id`, `timestamp`, `start_timestamp`, `level`, `platform`, `release`, `environment`, `exception`, `message`, `logentry`, `breadcrumbs`, `tags`, `contexts` só com `trace`, `sdk`, `request`, `user`, `transaction`, `type`, `fingerprint`). Cada valor passa pelo scrub. `logger`, `profile`, `debug_meta` e qualquer outra chave são descartados. A palavra sensível redige a string inteira, na chave ou no valor, sem diferenciar maiúsculas e aceitando `_`, `-` ou espaço: `password`, `passwd`, `pwd`, `secret`, `api_key`/`apikey`, `authorization`, `bearer`, `cookie`, `session`, `credential`, `private_key`, `access_token`, `refresh_token`, `senha`, `token`, `chave`, `segredo`. A lista mora em `palavras.js` (a mesma cópia em `site/client` e `site/server`, porque cada projeto da Vercel só publica o próprio Root Directory; o teste exige que os dois arquivos sejam iguais) e em `coletor/src/coletor/palavras.py`. A marca `resenha` não conta como `senha`. Também redige CPF, CNPJ, telefone (qualquer sequência de 8 a 13 dígitos, com espaço, ponto, hífen, parênteses ou `+`, inclusive 0800/0300/0500/0900; SteamID de 17 dígitos, data ISO e placar curto ficam de fora), e-mail e placa. URL (absoluta ou caminho relativo) fica só com origem e caminho, e essa limpeza acontece antes da regra da palavra. A regex de placa antiga também casa com códigos no formato `ADR-0006`.
 
+## FACEIT
+
+O passo `Sincronizar partidas FACEIT` do workflow `Coletor` roda `python -m coletor.main sincronizar-faceit` a cada execução. A lógica está em `coletor/src/coletor/faceit_sync.py`.
+
+1. **Descoberta.** Para cada Jogador com FACEIT vinculada, pede `/players/{id}/history?game=cs2` com `from` e `to`. Sem `from`, a FACEIT só devolve o último mês; foi por isso que o log ficou meses em "0 partida(s) processada(s)". Na primeira varredura, `from` é o lançamento do CS2 (histórico inteiro). Depois, é a Partida FACEIT mais recente que já conhecemos desse Jogador menos 3 dias. Pagina até o fim. Log por Jogador, sem SteamID nem id FACEIT: `descoberta #abcd1234 (desde 2026-10-01): 12 na API / 11 já conhecida(s) / 1 nova(s)`. A hora da última descoberta sem erro fica em `players.faceit_sincronizado_em` e aparece em Minha conta.
+2. **Fila.** Até 10 Partidas por rodada, as mais recentes primeiro. Se a Demo baixa, a Partida passa pelo pipeline completo. Se não baixa, entra na hora com as estatísticas da API: placar, K/D/A, HS, dano (ADR × rounds quando só vem ADR), MVPs, Triple/Quadro/Penta, aberturas, clutch 1v1/1v2, flashes e dano de utilitária. KAST, rating, economia e Replay 2D só vêm da Demo.
+3. **Re-tentativa da Demo.** A Partida que entrou sem Demo fica em `faceit_pendentes.proxima_tentativa_demo`. O Coletor tenta de novo depois de 1 h, 6 h e, daí em diante, 1 vez por dia, por até 4 semanas da data da Partida (a FACEIT apaga a Demo depois disso). Até 3 por rodada. Quando o download passa, a Demo é gravada na mesma Partida, com a mesma validação do envio manual (mapa, os 10 Jogadores e placar).
+
+Quando a chave não tem acesso à Downloads API, o log mostra uma vez por rodada:
+
+```
+sincronizar-faceit: Downloads API sem acesso (403) — a FACEIT_API_KEY não tem a aprovação pra baixar Demos. ...
+```
+
+Outro erro de Demo aparece por Partida, com o id trocado por `#hash`.
+
+### Pedir acesso à Downloads API
+
+A Data API (histórico, partida, stats, ELO) vem com qualquer chave. O download de Demo é uma aprovação separada da FACEIT.
+
+1. Entre em https://developers.faceit.com com a conta dona do app.
+2. Abra o **App Studio** e escolha o app de onde saiu a `FACEIT_API_KEY` (a chave server-side, não a do vínculo OAuth).
+3. Na página do app, procure a área da **Downloads API** e use o pedido de acesso. Se não houver botão, siga a página "Downloads API" da documentação em https://docs.faceit.com, que leva ao formulário.
+4. No pedido, descreva o uso: app de estatísticas de um grupo fechado de cerca de 10 amigos, baixa a Demo só das Partidas 5v5 de CS2 dos membros vinculados, poucas por dia, para estatística e Replay 2D. Sem redistribuir o arquivo.
+5. Aguarde o e-mail de aprovação. A chave não muda; o secret `FACEIT_API_KEY` do GitHub continua o mesmo.
+
+### Conferir se o acesso saiu
+
+- No GitHub, rode o workflow `Coletor` manualmente (Run workflow, sem marcar nada) e abra o passo `Sincronizar partidas FACEIT`. Com acesso: a linha "Downloads API sem acesso (403)" some, aparecem linhas `#hash: ok com Demo` ou `#hash: Demo recuperada na tentativa N`, e o resumo final conta "N Demo(s) recuperada(s)".
+- No banco: `select count(*) from faceit_pendentes where proxima_tentativa_demo is not null;` cai à medida que as Demos chegam, e `select erro_demo from faceit_pendentes where erro_demo is not null order by sem_demo_desde desc limit 5;` deixa de mostrar 403.
+- No site: a Partida perde o aviso "Partida da FACEIT sem demo — estatísticas básicas" e ganha Replay 2D.
+
+Partidas com mais de 4 semanas não têm mais Demo na FACEIT. Para elas, só o envio manual na própria Partida ("Enviar demo desta partida").
+
 ## Rollback
 
 Vercel: no projeto afetado, Promote do deployment anterior. O client e a API são independentes; voltar um não volta o outro.

@@ -10,7 +10,9 @@ import {
 import ReplayViewer from '../components/ReplayViewer.jsx'
 import MapaCalor from '../components/MapaCalor.jsx'
 import SeletorClipesCompeticao from '../components/SeletorClipesCompeticao.jsx'
-import EnviarDemoDaPartida from '../components/EnviarDemoDaPartida.jsx'
+import SecaoClipe2D from '../components/clipes/SecaoClipe2D.jsx'
+import DuelosPartida from '../components/DuelosPartida.jsx'
+import AvisoPartidaSemDemo from '../components/AvisoPartidaSemDemo.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { useTransicaoModal } from '../lib/useTransicaoModal.js'
 
@@ -22,7 +24,7 @@ function roundVazio(meta) {
   return { ...meta, frames: [], kills: [], hits: [] }
 }
 
-export function SecaoReplay({ replayUrl, seek, onSelecionarPonto }) {
+export function SecaoReplay({ replayUrl, seek, onSelecionarPonto, matchId = null }) {
   const [replay, setReplay] = useState(null)
   const [erro, setErro] = useState(false)
   const [aba, setAba] = useState('replay') // replay | calor
@@ -101,7 +103,7 @@ export function SecaoReplay({ replayUrl, seek, onSelecionarPonto }) {
         onChange={setAba}
       />
       {aba === 'replay' ? (
-        <ReplayViewer replay={replay} seek={seek} />
+        <ReplayViewer replay={replay} seek={seek} matchId={matchId} />
       ) : (
         <MapaCalor replay={replay} onSelecionarPonto={onSelecionarPonto} />
       )}
@@ -113,6 +115,21 @@ export function SecaoReplay({ replayUrl, seek, onSelecionarPonto }) {
 // Nome do Jogador: sempre um link pro perfil dele no Resenha (mesmo se for adversário/fora
 // do grupo — o perfil já sabe lidar com quem nunca fez onboarding), + link direto pro
 // perfil Steam (ícone separado, pra não competir com o clique do nome).
+// 3K/4K/5K da FACEIT (só aparece quando o dado existe e é > 0).
+function MultiKills({ p }) {
+  const itens = [['5K', p.pentaKills], ['4K', p.quadroKills], ['3K', p.tripleKills]].filter(([, n]) => n > 0)
+  if (itens.length === 0) return null
+  return (
+    <span className="hidden shrink-0 gap-1 sm:flex">
+      {itens.map(([rotulo, n]) => (
+        <span key={rotulo} title={`${n}× ${rotulo} na partida`} className="rounded-full bg-superficie-topo px-1.5 text-[11px] text-texto">
+          {rotulo}{n > 1 ? `×${n}` : ''}
+        </span>
+      ))}
+    </span>
+  )
+}
+
 function NomeJogador({ p, mostrarTagGrupo = true, className = '' }) {
   return (
     <span className={`flex min-w-0 items-center gap-2 font-mono ${className}`.trim()}>
@@ -488,6 +505,7 @@ export function Scoreboard({ time, jogadores, matchId, podePromover, onPromover,
   // Coluna de pontos por partida: Premier (valve_mm) OU ELO FACEIT (faceit) — o dado
   // certo pro tipo da partida; nunca os dois ao mesmo tempo.
   const temPontos = jogadores.some((p) => p.premierBefore != null || p.faceitEloBefore != null)
+  const temMvps = jogadores.some((p) => p.mvps != null)
   const corTime = time === 'A' ? 'text-time-a' : 'text-time-b'
   const fundoTime = time === 'A' ? 'bg-time-a' : 'bg-time-b'
   return (
@@ -520,6 +538,7 @@ export function Scoreboard({ time, jogadores, matchId, podePromover, onPromover,
             <Th titulo="Average Damage per Round — dano médio causado por round (contando também rounds sem kill)" escondeMobile>ADR</Th>
             <Th titulo="% dos abates que foram headshot" escondeMobile>HS%</Th>
             <Th titulo="KAST — % dos rounds em que ele teve kill, assist, sobreviveu ou foi vingado (trade)" escondeMobile>KAST</Th>
+            {temMvps && <Th titulo="MVPs — rounds em que foi o melhor do time (dado da FACEIT)" escondeMobile>MVP</Th>}
             {temPontos && (
               <Th titulo="Pontuação (Premier ou ELO FACEIT) antes dessa partida, e quanto ganhou/perdeu" escondeMobile>Pontos</Th>
             )}
@@ -550,6 +569,7 @@ export function Scoreboard({ time, jogadores, matchId, podePromover, onPromover,
                         <SetaExpandir aberto={aberto} />
                       </button>
                       <NomeJogador p={p} />
+                      <MultiKills p={p} />
                       {!p.isTracked && podePromover && (
                         <Button
                           variante="fantasma"
@@ -583,6 +603,9 @@ export function Scoreboard({ time, jogadores, matchId, podePromover, onPromover,
                       <ComEstrela valor={p.kastPct} melhor={melhores?.kastPct ?? 0}>{p.kastPct}%</ComEstrela>
                     ) : '–'}
                   </td>
+                  {temMvps && (
+                    <td className="hidden px-2 py-2 text-right tabular-nums text-texto-fraco sm:table-cell">{p.mvps ?? '–'}</td>
+                  )}
                   {temPontos && (
                     <td className="hidden px-2 py-2 text-right sm:table-cell">
                       {(() => {
@@ -1216,6 +1239,7 @@ function FormClipe({ matchId, jogadores, onAdicionado }) {
 const ABAS = [
   { id: 'geral', label: 'Visão Geral' },
   { id: 'h2h', label: 'Head to Head' },
+  { id: 'duelos', label: 'Duelos' },
   { id: 'replay', label: 'Replay 2D' },
   { id: 'economia', label: 'Economia' },
   { id: 'utilitaria', label: 'Utilitária' },
@@ -1456,6 +1480,18 @@ export default function Partida() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [m])
 
+  // Veio de "?round=<n>&tick=<t>[&frame=<f>]" (Granadas: "Ver no Replay 2D") — abre o
+  // Replay 2D no round e no frame da granada (o viewer recua uns segundos pra mostrar o
+  // arremesso). Sem frame (Demo antiga), cai no começo do round.
+  useEffect(() => {
+    const round = Number.parseInt(searchParams.get('round') ?? '', 10)
+    if (!m || !Number.isFinite(round) || autoJumpFeito.current || searchParams.get('highlight')) return
+    autoJumpFeito.current = true
+    const frame = Number.parseInt(searchParams.get('frame') ?? '', 10)
+    irParaMomento(round, Number.isFinite(frame) && frame >= 0 ? frame : 0)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [m])
+
   // O scroll pro Replay 2D só pode rodar depois que a aba 'replay' estiver montada —
   // irParaMomento troca a aba e o seek na mesma função, mas o scrollIntoView ali
   // ainda veria o DOM antigo (a troca de aba só aplica no próximo paint). Por isso
@@ -1541,7 +1577,7 @@ export default function Partida() {
         />
       )}
 
-      <EnviarDemoDaPartida partida={m} euSteamId={jogador?.steamId} onEnviado={carregar} />
+      <AvisoPartidaSemDemo partida={m} euSteamId={jogador?.steamId} onEnviado={carregar} />
 
       <Abas variante="sublinhado" rotulo="Seções da partida" itens={ITENS_ABAS} valor={abaAtiva} onChange={setAbaAtiva} larguraTotal />
 
@@ -1570,12 +1606,15 @@ export default function Partida() {
         </section>
       )}
 
+      {abaAtiva === 'duelos' && <DuelosPartida matchId={m.id} />}
+
       {abaAtiva === 'replay' && (
         <>
           <section ref={replayRef}>
             <SecaoReplay
               replayUrl={m.replayUrl}
               seek={seek}
+              matchId={m.id}
               onSelecionarPonto={({ round, frame }) => irParaMomento(round, frame)}
             />
           </section>
@@ -1646,7 +1685,7 @@ export default function Partida() {
       {abaAtiva === 'clipes' && (
         <section className="space-y-6">
           <div>
-            <SectionHeader titulo="Melhor clipe do jogador (Allstar)" margem="pequena" />
+            <SectionHeader titulo="Clipe do jogo (Allstar, escolhe a melhor jogada)" margem="pequena" />
             <p className="mb-3 text-sm text-texto-fraco">
               A Allstar escolhe sozinha o melhor momento do jogador na partida inteira — não dá
               pra escolher um round específico. Selecione um jogador:
@@ -1702,6 +1741,14 @@ export default function Partida() {
               )
             })()}
           </div>
+
+          <SecaoClipe2D
+            matchId={m.id}
+            replayUrl={m.replayUrl}
+            mapa={m.map}
+            jogadores={m.players}
+            viewerSteamId={jogador?.steamId}
+          />
 
           <div>
             <div className="mb-3 space-y-2">

@@ -26,11 +26,14 @@ import urllib.parse
 import urllib.request
 
 from . import db as dbmod
+from . import discord
 from . import parse as parsemod
 from . import replay as replaymod
+from . import lineups as lineupsmod
 from . import sharecode
 from . import steam_api
 from . import faceit
+from . import faceit_sync
 from . import storage_r2
 from . import transform
 from .config import Config
@@ -189,7 +192,7 @@ def _baixar_com_teto(url, max_bytes, timeout=120):
 # Erro transitório na CDN da Valve (502/503, timeout de rede — aconteceu de verdade em
 # 2026-07-22, share_code CSGO-t7Wnv-cjwub-UOS5t-iEfz2-ZLhnL) não pode marcar a Partida
 # como 'failed' de cara: dbmod.falhar_fetch_pendente dá algumas tentativas (mesma
-# semântica de _MAX_TENTATIVAS_DEMO_FACEIT) antes de desistir de vez.
+# semântica de falhar_faceit_pendente) antes de desistir de vez.
 _MAX_TENTATIVAS_FETCH = 3
 
 
@@ -627,8 +630,9 @@ def _montar_lineups(rdata, replay_json, mapa, source):
         return replaymod.world_to_radar(x, y, cal) if cal else (x, y)
 
     lineups = []
+    frames = lineupsmod.frames_por_granada(rdata, replay_json)
     for chave, tipo in TIPO_POR_CHAVE.items():
-        for g in rdata.get(chave, []):
+        for i, g in enumerate(rdata.get(chave, [])):
             if g.get("throwerX") is None or g.get("throwerY") is None:
                 continue
             tx, ty = norm(g["throwerX"], g["throwerY"])
@@ -643,6 +647,9 @@ def _montar_lineups(rdata, replay_json, mapa, source):
                 "tick": g.get("tickStart", g.get("tick")),
                 "origem": "pro" if source == "pro" else "grupo",
                 "lado": g.get("throwerLado"),
+                # 0055: mundo (setpos de treino) + frame do Replay 2D — nullable.
+                **lineupsmod.campos_mundo(g),
+                "replay_frame": frames.get((chave, i)),
             })
     return lineups
 
@@ -911,6 +918,11 @@ def ingest_demo(config, conn, path, share_code=None, source="upload", upload=Tru
             raise DemoNaoConfereError("esta demo já foi processada em outra partida") from e
         raise
     _atualizar_avatares(config, conn, [p["steam_id64"] for p in parsed.get("players", [])])
+    if source != "pro":
+        try:
+            discord.notificar_partida(conn, match_id)
+        except Exception as e:  # noqa: BLE001 — Discord nunca derruba o ingest
+            print(f"aviso: Discord não notificado ({type(e).__name__})")
     return match_id
 
 
@@ -983,123 +995,13 @@ def cmd_avatares(config, conn):
     return len(mapa)
 
 
-_MAX_TENTATIVAS_DEMO_FACEIT = 3
-
-
 def cmd_sincronizar_faceit(config, conn, limite=10):
-    """FACEIT Fase B: descobre partidas 5v5 novas de cada membro vinculado (Fase A) e
-    processa até `limite` da fila por rodada — demo no pipeline completo quando existe,
-    stats-only da API quando não (partida nunca some). No fim, snapshot de ELO por
-    membro + carimbo before/after na partida nova mais recente (ver spec 2026-07-16)."""
-    import tempfile
-    from datetime import datetime, timezone
-    from pathlib import Path
-
-    if not config.faceit_api_key:
-        print("sincronizar-faceit: FACEIT_API_KEY ausente — pulando")
-        return 0
-    vinculados = dbmod.listar_vinculados_faceit(conn)
-    if not vinculados:
-        print("sincronizar-faceit: nenhum membro com FACEIT vinculada")
-        return 0
-
-    # 1. Descoberta — enfileira o que ainda não foi visto (histórico inteiro na 1ª vez)
-    conhecidas = dbmod.faceit_match_ids_conhecidos(conn)
-    for steam_id64, faceit_id in vinculados:
-        try:
-            primeira = not dbmod.membro_ja_sincronizou_faceit(conn, steam_id64)
-            novas = faceit.listar_historico_5v5(
-                config.faceit_api_key, faceit_id, conhecidas, andar_tudo=primeira,
-            )
-            for item in novas:
-                dbmod.enfileirar_faceit(conn, item["faceit_match_id"], steam_id64)
-                conhecidas.add(item["faceit_match_id"])
-            if novas:
-                print(f"  descoberta {_ref(steam_id64)}: {len(novas)} partida(s) nova(s)")
-        except Exception as e:  # noqa: BLE001
-            conn.rollback()
-            print(f"  descoberta {_ref(steam_id64)}: FALHOU ({e})")
-
-    # 2. Processamento — lote limitado; falha de um item não derruba os outros
-    vinculados_por_steam = {s: f for s, f in vinculados}
-    ingeridas_por_membro = {}
-    total = 0
-    for faceit_match_id, steam_id64, tentativas in dbmod.listar_faceit_pendentes(conn, limite):
-        try:
-            detalhes = faceit.detalhes_partida(config.faceit_api_key, faceit_match_id)
-            stats = faceit.stats_partida(config.faceit_api_key, faceit_match_id)
-            played_at = None
-            if detalhes.get("finished_at"):
-                played_at = datetime.fromtimestamp(
-                    int(detalhes["finished_at"]), tz=timezone.utc,
-                ).isoformat()
-
-            match_id = None
-            demo_urls = detalhes.get("demo_url") or []
-            if demo_urls:
-                try:
-                    dem_bytes = faceit.baixar_demo(config.faceit_api_key, demo_urls[0])
-                    with tempfile.TemporaryDirectory() as tmp:
-                        dem_path = Path(tmp) / "faceit.dem"
-                        dem_path.write_bytes(dem_bytes)
-                        match_id = ingest_demo(
-                            config, conn, dem_path,
-                            share_code=None, source="faceit", upload=True,
-                            played_at=played_at,
-                        )
-                except Exception as e:  # noqa: BLE001
-                    conn.rollback()
-                    if tentativas + 1 < _MAX_TENTATIVAS_DEMO_FACEIT:
-                        dbmod.falhar_faceit_pendente(
-                            conn, faceit_match_id, e, max_tentativas=_MAX_TENTATIVAS_DEMO_FACEIT,
-                        )
-                        print(
-                            f"  {faceit_match_id}: demo falhou ({e}) — tentativa "
-                            f"{tentativas + 1}/{_MAX_TENTATIVAS_DEMO_FACEIT}, retry na proxima rodada"
-                        )
-                        continue
-                    print(
-                        f"  {faceit_match_id}: demo falhou apos {_MAX_TENTATIVAS_DEMO_FACEIT} "
-                        f"tentativas ({e}) — caindo pro stats-only definitivo"
-                    )
-
-            if match_id is None:
-                parsed = faceit.montar_parsed_stats_only(detalhes, stats)
-                match_id = dbmod.store_parsed(
-                    conn, parsed, source="faceit",
-                    prefer_new_played_at=bool(parsed.get("played_at")),
-                )
-
-            dbmod.marcar_faceit_match(conn, match_id, faceit_match_id)
-            dbmod.concluir_faceit_pendente(conn, faceit_match_id)
-            dt = datetime.fromisoformat(played_at) if played_at else None
-            ingeridas_por_membro.setdefault(steam_id64, []).append((match_id, dt))
-            print(f"  {faceit_match_id}: ok ({match_id})")
-            total += 1
-        except Exception as e:  # noqa: BLE001
-            conn.rollback()
-            dbmod.falhar_faceit_pendente(conn, faceit_match_id, e)
-            print(f"  {faceit_match_id}: FALHOU ({e})")
-
-    # 3. ELO — snapshot por membro + carimbo na partida nova mais recente
-    for steam_id64, faceit_id in vinculados:
-        try:
-            elo, level = faceit.elo_atual(config.faceit_api_key, faceit_id)
-            if elo is None:
-                continue
-            antes, snapshot_em = dbmod.elo_snapshot(conn, steam_id64)
-            alvo = faceit.escolher_partida_para_elo(
-                ingeridas_por_membro.get(steam_id64, []), snapshot_em,
-            )
-            if alvo and antes is not None:
-                dbmod.gravar_elo_partida(conn, alvo, steam_id64, antes, elo)
-            dbmod.atualizar_elo(conn, steam_id64, elo, level)
-        except Exception as e:  # noqa: BLE001
-            conn.rollback()
-            print(f"  elo {_ref(steam_id64)}: FALHOU ({e})")
-
-    print(f"sincronizar-faceit: {total} partida(s) processada(s)")
-    return total
+    """FACEIT: descoberta (com `from`), fila (Demo ou só estatísticas), re-tentativa
+    espaçada da Demo e ELO. A lógica mora em faceit_sync.py."""
+    return faceit_sync.sincronizar(
+        config, conn, ingest_demo=ingest_demo, ref=_ref, limite=limite,
+        erros_definitivos=(DemoNaoConfereError,),
+    )
 
 
 def _imprimir_relatorio(texto, relatorio):

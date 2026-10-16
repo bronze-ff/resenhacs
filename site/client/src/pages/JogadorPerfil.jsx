@@ -6,6 +6,8 @@ import LinhaEvolucao from '../components/LinhaEvolucao.jsx'
 import DesempenhoRecente from '../components/perfil/DesempenhoRecente.jsx'
 import MapaAtividade from '../components/perfil/MapaAtividade.jsx'
 import PontosFortes from '../components/perfil/PontosFortes.jsx'
+import Rivalidades from '../components/perfil/Rivalidades.jsx'
+import DuelosAbertura from '../components/perfil/DuelosAbertura.jsx'
 import FiltroPeriodo from '../components/FiltroPeriodo.jsx'
 import TagEstilo from '../components/TagEstilo.jsx'
 import PosicionamentoAgregado from '../components/PosicionamentoAgregado.jsx'
@@ -370,6 +372,8 @@ export default function JogadorPerfil() {
         <MapaAtividade atividade={data.atividade ?? []} />
       </div>
       <PontosFortes pontos={data.pontosFortes ?? []} proprio={viewer?.steamId === jogador.steamId} />
+      <Rivalidades steamId={jogador.steamId} proprio={viewer?.steamId === jogador.steamId} />
+      <DuelosAbertura steamId={jogador.steamId} />
 
       {badges.length > 0 && (
         <section>
@@ -420,7 +424,7 @@ export default function JogadorPerfil() {
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                         <span
-                          className={`panel-cut-sm px-1.5 py-0.5 font-display text-[10px] font-bold uppercase ${
+                          className={`panel-cut-sm px-1.5 py-0.5 text-[11px] font-semibold ${
                             r.won === true ? 'bg-sucesso/15 text-sucesso' : r.won === false ? 'bg-perigo/15 text-perigo' : 'bg-superficie-alta text-texto-fraco'
                           }`}
                         >
@@ -476,7 +480,7 @@ export default function JogadorPerfil() {
                       <td className="px-2 py-2">
                         <span className="flex items-center gap-2">
                           <span
-                            className={`panel-cut-sm px-1.5 py-0.5 font-display text-[10px] font-bold uppercase ${
+                            className={`panel-cut-sm px-1.5 py-0.5 text-[11px] font-semibold ${
                               r.won === true ? 'bg-sucesso/15 text-sucesso' : r.won === false ? 'bg-perigo/15 text-perigo' : 'bg-superficie-alta text-texto-fraco'
                             }`}
                           >

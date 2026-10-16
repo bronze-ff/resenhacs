@@ -11,7 +11,7 @@ import { Abas, Button, CabecalhoPagina, MapIcon, Select, Skeleton } from '../ui'
 const TIPOS = [['smoke', 'Smoke'], ['flash', 'Flash'], ['molotov', 'Molotov'], ['he', 'HE']]
 const NIVEIS_CALLOUT = [['sem', 'Sem'], ['noob', 'Noob'], ['pro', 'Pro']]
 
-export default function PaginaMapa({ mapa, onTrocarMapa }) {
+export default function PaginaMapa({ mapa, onTrocarMapa, seletorModo = null }) {
   const { jogador } = useAuth()
   const isAdmin = !!jogador?.isSuperAdmin
   const [lado, setLado] = useState('T')
@@ -82,6 +82,7 @@ export default function PaginaMapa({ mapa, onTrocarMapa }) {
           {/* Mobile: grupos de filtro em linha (ribbon) pra não empurrar o radar
               pra baixo da dobra. Desktop: volta a ser a coluna vertical de sempre. */}
           <div className="flex flex-wrap items-end gap-3 lg:flex-col lg:flex-nowrap lg:items-stretch lg:gap-5">
+            {seletorModo}
             <div className="flex w-40 flex-col gap-1.5 lg:w-auto">
               <p className="rotulo">Trocar mapa</p>
               <Select value={mapa} onChange={(e) => onTrocarMapa(e.target.value)} className="w-full" selectClassName="min-h-10">

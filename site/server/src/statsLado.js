@@ -108,7 +108,7 @@ function roundsDoTime(rounds, time, filtro) {
  * @param rounds [{roundNumber, sideA}] — sideA pode ser null (partida não reprocessada
  *   depois do FIL-51b) — nesse caso o filtro T/CT não acha nenhum round (roundsPlayed=0).
  * @param kills [{roundNumber, tick, killer, victim, assister, headshot}] — kills reais
- *   (kill_positions já exclui team-kill no coletor).
+ *   (a query filtra is_team_kill = false; teamKill: true que chegar aqui é ignorado).
  * @param roundDamage [{roundNumber, steamId, damage}]
  * @param filtro 'all' | 'CT' | 'T'
  * @returns {Object<string, {kills,deaths,assists,headshotKills,damage,roundsPlayed,adr,hsPct,kastPct,rating}>}
@@ -125,7 +125,7 @@ export function calcularStatsPorLado({ players, rounds, kills, roundDamage, filt
   for (const [time, steamIds] of porTime) {
     const roundNumbers = roundsDoTime(rounds, time, filtro)
     const roundSet = new Set(roundNumbers)
-    const killsDoTime = kills.filter((k) => roundSet.has(k.roundNumber))
+    const killsDoTime = kills.filter((k) => !k.teamKill && roundSet.has(k.roundNumber))
     const trades = tradeKills(killsDoTime, teams)
     const kast = kastPct(killsDoTime, trades, steamIds, roundNumbers)
 

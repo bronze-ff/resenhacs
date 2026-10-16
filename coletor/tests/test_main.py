@@ -166,7 +166,7 @@ def _rdata_com_lineups():
             {
                 "round": 1, "x": 100.0, "y": 200.0, "tickStart": 1000, "tickEnd": 1500,
                 "thrower": "A", "throwerX": -3230, "throwerY": 1713, "throwerYaw": 90.0, "throwerPitch": 0.0,
-                "throwerLado": "T",
+                "throwerZ": -167.96875, "z": -100.0, "throwerLado": "T",
             },
             # detonação sem fire correspondente (thrower setado, posição não) — deve
             # ser descartada, não gerar um dict com thrower_x/y = None.
@@ -218,6 +218,43 @@ def test_montar_lineups_e_o_mesmo_independente_de_quem_chama():
     de_reprocess = main._montar_lineups(rdata, {"names": {"A": "bronze"}}, "de_mirage", "upload")
     assert de_ingest == de_reprocess
     assert len(de_reprocess) == 1
+
+
+def test_montar_lineups_grava_coordenadas_de_mundo_pro_setpos():
+    lineups = main._montar_lineups(_rdata_com_lineups(), None, "de_mirage", "upload")
+    l = lineups[0]
+    assert (l["thrower_world_x"], l["thrower_world_y"], l["thrower_world_z"]) == (-3230.0, 1713.0, -167.97)
+    assert (l["target_world_x"], l["target_world_y"], l["target_world_z"]) == (100.0, 200.0, -100.0)
+
+
+def test_montar_lineups_sem_z_deixa_none():
+    rdata = _rdata_com_lineups()
+    del rdata["smokes"][0]["throwerZ"]
+    del rdata["smokes"][0]["z"]
+    l = main._montar_lineups(rdata, None, "de_mirage", "upload")[0]
+    assert l["thrower_world_z"] is None and l["target_world_z"] is None
+
+
+def test_montar_lineups_pega_frame_do_replay_pela_ordem_no_round():
+    rdata = _rdata_com_lineups()
+    replay_json = {"names": {}, "rounds": [
+        {"round": 1, "smokes": [{"x": 0.1, "y": 0.2, "tStart": 37, "tEnd": 90}]},
+        {"round": 2, "smokes": [{"x": 0.1, "y": 0.2, "tStart": 5, "tEnd": 9}]},
+    ]}
+    l = main._montar_lineups(rdata, replay_json, "de_mirage", "upload")[0]
+    assert l["replay_frame"] == 37
+
+
+def test_montar_lineups_round_com_contagem_diferente_no_replay_nao_chuta_frame():
+    rdata = _rdata_com_lineups()
+    replay_json = {"names": {}, "rounds": [{"round": 1, "smokes": []}]}
+    l = main._montar_lineups(rdata, replay_json, "de_mirage", "upload")[0]
+    assert l["replay_frame"] is None
+
+
+def test_montar_lineups_sem_replay_frame_fica_none():
+    l = main._montar_lineups(_rdata_com_lineups(), None, "de_mirage", "upload")[0]
+    assert l["replay_frame"] is None
 
 
 # ---- upload do .dem arquivado no R2 (dívida técnica: subia sem comprimir) ----
@@ -1169,213 +1206,7 @@ def test_processar_uploads_pendentes_demo_que_nao_confere_falha_e_apaga_do_r2(mo
     assert "mapa" in update[1][2]
 
 
-# ---- cmd_sincronizar_faceit ----
-
-
-def test_sincronizar_faceit_sem_api_key_pula_sem_tocar_no_banco(monkeypatch, capsys):
-    config = Config(env={})  # sem FACEIT_API_KEY
-    conn = None  # todo acesso a banco é via dbmod.* monkeypatchado — conn nunca é lido
-    total = main.cmd_sincronizar_faceit(config, conn)
-    assert total == 0
-    assert "FACEIT_API_KEY" in capsys.readouterr().out
-
-
-def test_sincronizar_faceit_descobre_processa_demo_e_carimba_elo(monkeypatch):
-    config = Config(env={"FACEIT_API_KEY": "k"})
-    conn = None  # todo acesso a banco é via dbmod.* monkeypatchado — conn nunca é lido
-    from datetime import datetime, timezone
-    antes_dt = datetime(2026, 7, 16, 9, 0, tzinfo=timezone.utc)
-    # 1784196000 = 2026-07-16T10:00:00Z, 1h DEPOIS de antes_dt — precisa ser posterior
-    # ao snapshot anterior pra escolher_partida_para_elo() considerar essa partida
-    # elegível pro carimbo before/after (ver faceit.escolher_partida_para_elo). O
-    # epoch original do brief (1752660000) resolvia pra 2025-07-16, um ano ANTES de
-    # antes_dt — o que fazia escolher_partida_para_elo devolver None (comportamento
-    # correto da função) e a asserção de elo_gravado nunca passar.
-    finished_at_epoch = 1784196000
-
-    monkeypatch.setattr(main.dbmod, "listar_vinculados_faceit", lambda c: [("111", "f-111")])
-    monkeypatch.setattr(main.dbmod, "faceit_match_ids_conhecidos", lambda c: set())
-    monkeypatch.setattr(main.dbmod, "membro_ja_sincronizou_faceit", lambda c, s: True)
-    enfileiradas = []
-    monkeypatch.setattr(main.dbmod, "enfileirar_faceit", lambda c, m, s: enfileiradas.append(m))
-    monkeypatch.setattr(main.faceit, "listar_historico_5v5",
-                        lambda key, fid, ja_vistas, andar_tudo=False, **kw: [
-                            {"faceit_match_id": "fm1", "finished_at": finished_at_epoch}])
-    monkeypatch.setattr(main.dbmod, "listar_faceit_pendentes", lambda c, limite=10: [("fm1", "111", 0)])
-    monkeypatch.setattr(main.faceit, "detalhes_partida",
-                        lambda key, mid, **kw: {"demo_url": ["https://d/x.dem.gz"],
-                                                "finished_at": finished_at_epoch, "teams": {}, "results": {}})
-    monkeypatch.setattr(main.faceit, "stats_partida", lambda key, mid, **kw: {"rounds": []})
-    monkeypatch.setattr(main.faceit, "baixar_demo", lambda key, url, **kw: b"dem bytes")
-    monkeypatch.setattr(main, "ingest_demo",
-                        lambda config, conn, path, **kw: "uuid-m1")
-    marcadas, concluidas, elo_gravado = [], [], []
-    monkeypatch.setattr(main.dbmod, "marcar_faceit_match", lambda c, mid, fmid: marcadas.append((mid, fmid)))
-    monkeypatch.setattr(main.dbmod, "concluir_faceit_pendente", lambda c, fmid: concluidas.append(fmid))
-    monkeypatch.setattr(main.faceit, "elo_atual", lambda key, fid, **kw: (1425, 7))
-    monkeypatch.setattr(main.dbmod, "elo_snapshot", lambda c, s: (1400, antes_dt))
-    monkeypatch.setattr(main.dbmod, "atualizar_elo", lambda c, s, e, l: None)
-    monkeypatch.setattr(main.dbmod, "gravar_elo_partida",
-                        lambda c, mid, s, b, a: elo_gravado.append((mid, s, b, a)))
-
-    total = main.cmd_sincronizar_faceit(config, conn)
-
-    assert total == 1
-    assert enfileiradas == ["fm1"]
-    assert marcadas == [("uuid-m1", "fm1")]
-    assert concluidas == ["fm1"]
-    assert elo_gravado == [("uuid-m1", "111", 1400, 1425)]
-
-
-def test_sincronizar_faceit_cai_no_stats_only_quando_demo_falha(monkeypatch):
-    config = Config(env={"FACEIT_API_KEY": "k"})
-    conn = None  # todo acesso a banco é via dbmod.* monkeypatchado — conn nunca é lido
-    monkeypatch.setattr(main.dbmod, "listar_vinculados_faceit", lambda c: [("111", "f-111")])
-    monkeypatch.setattr(main.dbmod, "faceit_match_ids_conhecidos", lambda c: {"fm1"})
-    monkeypatch.setattr(main.dbmod, "membro_ja_sincronizou_faceit", lambda c, s: True)
-    monkeypatch.setattr(main.faceit, "listar_historico_5v5", lambda *a, **kw: [])
-    monkeypatch.setattr(main.dbmod, "listar_faceit_pendentes", lambda c, limite=10: [("fm1", "111", 0)])
-    monkeypatch.setattr(main.faceit, "detalhes_partida",
-                        lambda key, mid, **kw: {"demo_url": [], "finished_at": 1752660000,
-                                                "teams": {}, "results": {}})
-    monkeypatch.setattr(main.faceit, "stats_partida", lambda key, mid, **kw: {"rounds": []})
-    monkeypatch.setattr(main.faceit, "montar_parsed_stats_only",
-                        lambda d, s: {"players": [], "map": "de_mirage", "played_at": None})
-    gravados = []
-    monkeypatch.setattr(main.dbmod, "store_parsed",
-                        lambda conn, parsed, **kw: gravados.append(kw) or "uuid-m2")
-    monkeypatch.setattr(main.dbmod, "marcar_faceit_match", lambda c, mid, fmid: None)
-    monkeypatch.setattr(main.dbmod, "concluir_faceit_pendente", lambda c, fmid: None)
-    monkeypatch.setattr(main.faceit, "elo_atual", lambda key, fid, **kw: (None, None))
-    monkeypatch.setattr(main.dbmod, "elo_snapshot", lambda c, s: (None, None))
-    monkeypatch.setattr(main.dbmod, "atualizar_elo", lambda c, s, e, l: None)
-
-    total = main.cmd_sincronizar_faceit(config, conn)
-    assert total == 1
-    assert gravados[0]["source"] == "faceit"
-
-
-def test_sincronizar_faceit_demo_falha_com_tentativas_restantes_faz_retry_sem_stats_only(monkeypatch):
-    config = Config(env={"FACEIT_API_KEY": "k"})
-    # conn NÃO pode ser None aqui: baixar_demo_falha dispara uma exceção real dentro do
-    # try/except de download de demo, e a implementação chama conn.rollback() diretamente
-    # (mesmo motivo documentado em test_sincronizar_faceit_falha_de_item_nao_derruba_o_lote) —
-    # com conn=None isso levantaria AttributeError antes mesmo de chegar na lógica de retry.
-    conn = types.SimpleNamespace(rollback=lambda: None)
-    monkeypatch.setattr(main.dbmod, "listar_vinculados_faceit", lambda c: [("111", "f-111")])
-    monkeypatch.setattr(main.dbmod, "faceit_match_ids_conhecidos", lambda c: {"fm1"})
-    monkeypatch.setattr(main.dbmod, "membro_ja_sincronizou_faceit", lambda c, s: True)
-    monkeypatch.setattr(main.faceit, "listar_historico_5v5", lambda *a, **kw: [])
-    # tentativas=0 -> 0+1 < 3, ainda tem tentativa sobrando
-    monkeypatch.setattr(main.dbmod, "listar_faceit_pendentes", lambda c, limite=10: [("fm1", "111", 0)])
-    monkeypatch.setattr(main.faceit, "detalhes_partida",
-                        lambda key, mid, **kw: {"demo_url": ["https://d/x.dem.gz"],
-                                                "finished_at": 1752660000, "teams": {}, "results": {}})
-    monkeypatch.setattr(main.faceit, "stats_partida", lambda key, mid, **kw: {"rounds": []})
-
-    def baixar_demo_falha(key, url, **kw):
-        raise RuntimeError("demo not ready")
-
-    monkeypatch.setattr(main.faceit, "baixar_demo", baixar_demo_falha)
-    monkeypatch.setattr(main.faceit, "montar_parsed_stats_only", lambda d, s: (_ for _ in ()).throw(
-        AssertionError("nao deveria cair pro stats-only com tentativas restantes")))
-    gravados = []
-    monkeypatch.setattr(main.dbmod, "store_parsed", lambda conn, parsed, **kw: gravados.append(kw) or "uuid-x")
-    concluidas = []
-    monkeypatch.setattr(main.dbmod, "concluir_faceit_pendente", lambda c, fmid: concluidas.append(fmid))
-    retries = []
-    monkeypatch.setattr(main.dbmod, "falhar_faceit_pendente",
-                        lambda c, fmid, erro, **kw: retries.append((fmid, kw.get("max_tentativas"))))
-    monkeypatch.setattr(main.faceit, "elo_atual", lambda key, fid, **kw: (None, None))
-    monkeypatch.setattr(main.dbmod, "elo_snapshot", lambda c, s: (None, None))
-    monkeypatch.setattr(main.dbmod, "atualizar_elo", lambda c, s, e, l: None)
-
-    total = main.cmd_sincronizar_faceit(config, conn)
-
-    assert total == 0
-    assert retries == [("fm1", 3)]
-    assert concluidas == []
-    assert gravados == []
-
-
-def test_sincronizar_faceit_demo_falha_apos_esgotar_tentativas_cai_pro_stats_only(monkeypatch):
-    config = Config(env={"FACEIT_API_KEY": "k"})
-    # conn NÃO pode ser None aqui pelo mesmo motivo do teste anterior: baixar_demo_falha
-    # dispara uma exceção real que passa por conn.rollback() direto na implementação.
-    conn = types.SimpleNamespace(rollback=lambda: None)
-    monkeypatch.setattr(main.dbmod, "listar_vinculados_faceit", lambda c: [("111", "f-111")])
-    monkeypatch.setattr(main.dbmod, "faceit_match_ids_conhecidos", lambda c: {"fm1"})
-    monkeypatch.setattr(main.dbmod, "membro_ja_sincronizou_faceit", lambda c, s: True)
-    monkeypatch.setattr(main.faceit, "listar_historico_5v5", lambda *a, **kw: [])
-    # tentativas=2 -> 2+1 >= 3, já esgotou (essa é a 3a tentativa)
-    monkeypatch.setattr(main.dbmod, "listar_faceit_pendentes", lambda c, limite=10: [("fm1", "111", 2)])
-    monkeypatch.setattr(main.faceit, "detalhes_partida",
-                        lambda key, mid, **kw: {"demo_url": ["https://d/x.dem.gz"],
-                                                "finished_at": 1752660000, "teams": {}, "results": {}})
-    monkeypatch.setattr(main.faceit, "stats_partida", lambda key, mid, **kw: {"rounds": []})
-
-    def baixar_demo_falha(key, url, **kw):
-        raise RuntimeError("demo not ready")
-
-    monkeypatch.setattr(main.faceit, "baixar_demo", baixar_demo_falha)
-    monkeypatch.setattr(main.faceit, "montar_parsed_stats_only",
-                        lambda d, s: {"players": [], "map": "de_mirage", "played_at": None})
-    gravados = []
-    monkeypatch.setattr(main.dbmod, "store_parsed", lambda conn, parsed, **kw: gravados.append(kw) or "uuid-y")
-    monkeypatch.setattr(main.dbmod, "marcar_faceit_match", lambda c, mid, fmid: None)
-    concluidas = []
-    monkeypatch.setattr(main.dbmod, "concluir_faceit_pendente", lambda c, fmid: concluidas.append(fmid))
-    retries = []
-    monkeypatch.setattr(main.dbmod, "falhar_faceit_pendente", lambda c, fmid, erro, **kw: retries.append(fmid))
-    monkeypatch.setattr(main.faceit, "elo_atual", lambda key, fid, **kw: (None, None))
-    monkeypatch.setattr(main.dbmod, "elo_snapshot", lambda c, s: (None, None))
-    monkeypatch.setattr(main.dbmod, "atualizar_elo", lambda c, s, e, l: None)
-
-    total = main.cmd_sincronizar_faceit(config, conn)
-
-    assert total == 1
-    assert concluidas == ["fm1"]
-    assert retries == []  # nao chama falhar_faceit_pendente no ramo esgotado
-    assert gravados[0]["source"] == "faceit"
-
-
-def test_sincronizar_faceit_falha_de_item_nao_derruba_o_lote(monkeypatch):
-    config = Config(env={"FACEIT_API_KEY": "k"})
-    # Diferente dos outros testes desta suíte, conn NÃO pode ser None aqui: fm-ruim
-    # dispara uma exceção real dentro do try/except por item, e a implementação chama
-    # conn.rollback() diretamente (não via dbmod, mesmo padrão de cmd_fetch/
-    # cmd_processar_fila_pro) antes de registrar a falha via dbmod.falhar_faceit_pendente.
-    # Com conn=None isso levantaria AttributeError e mascararia o próprio isolamento de
-    # falha que este teste existe pra verificar — por isso um stub mínimo com rollback()
-    # no-op, sem virar uma FakeConn de verdade (nenhum acesso a banco é de fato lido).
-    conn = types.SimpleNamespace(rollback=lambda: None)
-    monkeypatch.setattr(main.dbmod, "listar_vinculados_faceit", lambda c: [("111", "f-111")])
-    monkeypatch.setattr(main.dbmod, "faceit_match_ids_conhecidos", lambda c: set())
-    monkeypatch.setattr(main.dbmod, "membro_ja_sincronizou_faceit", lambda c, s: True)
-    monkeypatch.setattr(main.faceit, "listar_historico_5v5", lambda *a, **kw: [])
-    monkeypatch.setattr(main.dbmod, "listar_faceit_pendentes",
-                        lambda c, limite=10: [("fm-ruim", "111", 0), ("fm-bom", "111", 0)])
-
-    def detalhes(key, mid, **kw):
-        if mid == "fm-ruim":
-            raise RuntimeError("api 500")
-        return {"demo_url": [], "finished_at": 1752660000, "teams": {}, "results": {}}
-
-    monkeypatch.setattr(main.faceit, "detalhes_partida", detalhes)
-    monkeypatch.setattr(main.faceit, "stats_partida", lambda key, mid, **kw: {"rounds": []})
-    monkeypatch.setattr(main.faceit, "montar_parsed_stats_only", lambda d, s: {"players": [], "played_at": None})
-    monkeypatch.setattr(main.dbmod, "store_parsed", lambda conn, parsed, **kw: "uuid-ok")
-    monkeypatch.setattr(main.dbmod, "marcar_faceit_match", lambda c, mid, fmid: None)
-    monkeypatch.setattr(main.dbmod, "concluir_faceit_pendente", lambda c, fmid: None)
-    falhas = []
-    monkeypatch.setattr(main.dbmod, "falhar_faceit_pendente", lambda c, fmid, erro, **kw: falhas.append(fmid))
-    monkeypatch.setattr(main.faceit, "elo_atual", lambda key, fid, **kw: (None, None))
-    monkeypatch.setattr(main.dbmod, "elo_snapshot", lambda c, s: (None, None))
-    monkeypatch.setattr(main.dbmod, "atualizar_elo", lambda c, s, e, l: None)
-
-    total = main.cmd_sincronizar_faceit(config, conn)
-    assert total == 1
-    assert falhas == ["fm-ruim"]
+# ---- cmd_sincronizar_faceit: ver tests/test_faceit_sync.py ----
 
 
 # ---- _baixar_e_descomprimir (dívida técnica: download truncado passava em silêncio) ----

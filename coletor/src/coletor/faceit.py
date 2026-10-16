@@ -73,32 +73,64 @@ def _descomprimir_gzip_com_teto(dados, max_bytes=MAX_DEMO_BYTES):
     return bytes(saida)
 
 
-def listar_historico_5v5(api_key, faceit_player_id, ja_vistas, andar_tudo=False,
+# Piso da descoberta: a FACEIT usa "1 mês atrás" quando `from` não vem (foi o bug de
+# ~3 meses com 0 partidas). Na primeira varredura de um membro o histórico inteiro de
+# CS2 é pedido a partir do lançamento do CS2 (27/09/2023) — mesmo efeito de from=0,
+# sem depender de como a API trata o zero.
+INICIO_CS2_EPOCH = 1_695_772_800
+# Teto de páginas por membro/rodada (100 itens cada) — só uma trava contra laço infinito.
+MAX_PAGINAS = 50
+
+
+def listar_historico_5v5(api_key, faceit_player_id, ja_vistas, desde=None, ate=None,
                          http_get_json=_http_get_json):
-    """Anda /players/{id}/history?game=cs2 paginando. Devolve as partidas 5v5 ainda não
-    vistas, MAIS ANTIGA PRIMEIRO (o histórico entra em ordem). Para na primeira página
-    onde todos os itens já são conhecidos — exceto com andar_tudo=True (primeira
-    sincronização do membro), quando anda até a página vazia (histórico inteiro)."""
-    novas = []
+    """Anda /players/{id}/history?game=cs2&from=...&to=... paginando até o fim.
+
+    `desde`/`ate`: epoch em segundos. `desde` None (primeira varredura) vira
+    INICIO_CS2_EPOCH. Devolve {"novas", "na_api", "ja_conhecidas", "ignoradas"}:
+    `novas` são as partidas 5v5 terminadas ainda não vistas, MAIS ANTIGA PRIMEIRO;
+    os contadores alimentam o log da descoberta."""
+    desde_efetivo = max(int(desde or 0), INICIO_CS2_EPOCH)
+    novas, vistas_agora = [], set()
+    na_api = ja_conhecidas = ignoradas = 0
     offset = 0
-    while True:
-        qs = urllib.parse.urlencode({"game": "cs2", "offset": offset, "limit": PAGINA})
+    for _ in range(MAX_PAGINAS):
+        params = {"game": "cs2", "from": desde_efetivo, "offset": offset, "limit": PAGINA}
+        if ate:
+            params["to"] = int(ate)
+        qs = urllib.parse.urlencode(params)
         payload = http_get_json(f"{BASE_DATA}/players/{faceit_player_id}/history?{qs}", api_key)
         items = payload.get("items") or []
         if not items:
             break
-        ineditas = [i for i in items
-                    if i.get("teams_size") == 5 and i.get("match_id")
-                    and i["match_id"] not in ja_vistas]
-        novas.extend({"faceit_match_id": i["match_id"], "finished_at": i.get("finished_at")}
-                     for i in ineditas)
-        # página inteira conhecida = já alcançamos o que tínhamos (5v5 ou não, o critério
-        # é match_id conhecido) — só continua se for a primeira sincronização
-        if not andar_tudo and all(i.get("match_id") in ja_vistas for i in items):
+        for i in items:
+            mid = i.get("match_id")
+            if not mid or mid in vistas_agora:
+                continue
+            vistas_agora.add(mid)
+            na_api += 1
+            status = str(i.get("status") or "FINISHED").upper()
+            if i.get("teams_size") != 5 or status != "FINISHED":
+                ignoradas += 1
+                continue
+            if mid in ja_vistas:
+                ja_conhecidas += 1
+                continue
+            novas.append({"faceit_match_id": mid, "finished_at": i.get("finished_at")})
+        if len(items) < PAGINA:
             break
         offset += PAGINA
     novas.sort(key=lambda n: n.get("finished_at") or 0)
-    return novas
+    return {"novas": novas, "na_api": na_api, "ja_conhecidas": ja_conhecidas,
+            "ignoradas": ignoradas}
+
+
+def sem_acesso_downloads(exc):
+    """True quando o erro é a Downloads API recusando a chave (403; 401 por garantia).
+    É o caso de chave sem a aprovação separada da FACEIT — ver docs/operacao.md."""
+    import urllib.error
+
+    return isinstance(exc, urllib.error.HTTPError) and exc.code in (401, 403)
 
 
 def detalhes_partida(api_key, faceit_match_id, http_get_json=_http_get_json):
@@ -135,11 +167,110 @@ def _epoch_para_iso(epoch):
     return datetime.fromtimestamp(int(epoch), tz=timezone.utc).isoformat()
 
 
+def _num(v):
+    """'84.3' / '12' / 7 -> float; ausente ou lixo -> None (não confunde com zero)."""
+    if v is None or v == "":
+        return None
+    try:
+        return float(str(v).replace(",", "."))
+    except (TypeError, ValueError):
+        return None
+
+
+def _int(v, padrao=0):
+    n = _num(v)
+    return int(n) if n is not None else padrao
+
+
+def _int_ou_none(v):
+    n = _num(v)
+    return int(n) if n is not None else None
+
+
+def _rounds_do_placar(round_stats, placar):
+    """Rounds jogados: 'Rounds' do /stats; senão o 'Score' do /stats ('13 / 7');
+    senão a soma do placar de /matches/{id}."""
+    total = _int(round_stats.get("Rounds"))
+    if total:
+        return total
+    score = str(round_stats.get("Score") or "")
+    partes = [p for p in score.replace(":", "/").split("/") if p.strip()]
+    if len(partes) == 2:
+        soma = _int(partes[0].strip()) + _int(partes[1].strip())
+        if soma:
+            return soma
+    return _int(placar.get("faction1")) + _int(placar.get("faction2"))
+
+
+def _mapa(round_stats, detalhes):
+    mapa = round_stats.get("Map")
+    if mapa:
+        return mapa
+    pick = (((detalhes.get("voting") or {}).get("map") or {}).get("pick")) or []
+    return pick[0] if pick else ""
+
+
+def _stats_do_jogador(ps, rounds_total):
+    """Converte o player_stats do /matches/{id}/stats (CS2) nas colunas de
+    match_players. Só preenche o que a FACEIT manda; o resto fica no padrão (0/None)."""
+    kills = _int(ps.get("Kills"))
+
+    headshots = _int_ou_none(ps.get("Headshots"))
+    if headshots is None:
+        hs_pct = _num(ps.get("Headshots %"))
+        headshots = round(kills * hs_pct / 100) if hs_pct is not None else 0
+
+    damage = _int_ou_none(ps.get("Damage"))
+    if damage is None:
+        adr = _num(ps.get("ADR"))
+        damage = round(adr * rounds_total) if adr is not None and rounds_total else 0
+
+    out = {
+        "kills": kills,
+        "deaths": _int(ps.get("Deaths")),
+        "assists": _int(ps.get("Assists")),
+        "headshot_kills": headshots,
+        "damage": damage,
+        "mvps": _int_ou_none(ps.get("MVPs")),
+        "triple_kills": _int_ou_none(ps.get("Triple Kills")),
+        "quadro_kills": _int_ou_none(ps.get("Quadro Kills")),
+        "penta_kills": _int_ou_none(ps.get("Penta Kills")),
+    }
+
+    # Duelo de abertura: "Entry Wins" = aberturas vencidas, "Entry Count" = aberturas
+    # disputadas. entry_wins (abertura + round ganho) não existe na API: fica 0.
+    entry_vencidas = _int_ou_none(ps.get("Entry Wins"))
+    if entry_vencidas is None:
+        entry_vencidas = _int_ou_none(ps.get("First Kills"))
+    entry_total = _int_ou_none(ps.get("Entry Count"))
+    if entry_vencidas is not None:
+        out["entry_kills"] = entry_vencidas
+        if entry_total is not None:
+            out["entry_deaths"] = max(entry_total - entry_vencidas, 0)
+
+    # Clutch: a API só detalha 1v1 e 1v2.
+    tentativas = [_int_ou_none(ps.get(k)) for k in ("1v1Count", "1v2Count")]
+    vitorias = [_int_ou_none(ps.get(k)) for k in ("1v1Wins", "1v2Wins")]
+    if any(v is not None for v in tentativas):
+        out["clutch_attempts"] = sum(v or 0 for v in tentativas)
+        out["clutch_wins"] = sum(v or 0 for v in vitorias)
+
+    for chave_api, coluna in (("Flash Count", "flashes_thrown"),
+                              ("Enemies Flashed", "enemies_flashed"),
+                              ("Utility Damage", "utility_damage")):
+        v = _int_ou_none(ps.get(chave_api))
+        if v is not None:
+            out[coluna] = v
+    return out
+
+
 def montar_parsed_stats_only(detalhes, stats):
-    """Monta o dict `parsed` mínimo aceito por db.store_parsed a partir só da API
-    (fallback quando a demo não está mais disponível): placar, mapa, data e stats
-    básicas por jogador. Campos que só o parser produz (KAST, rating, economia,
-    replay, granadas) ficam nulos/vazios — a UI já esconde o que é nulo."""
+    """Monta o dict `parsed` aceito por db.store_parsed a partir só da API (Partida sem
+    Demo): placar, mapa, data e o que o /matches/{id}/stats do CS2 entrega por jogador —
+    K/D/A, HS, dano (Damage, ou ADR × rounds), aberturas, clutch 1v1/1v2, flashes e dano
+    de utilitária. MVPs e Triple/Quadro/Penta vão em chaves próprias (gravadas à parte
+    por db.gravar_extras_faceit). KAST, rating, economia, Replay 2D e granadas só a Demo
+    produz: ficam nulos/vazios e a UI esconde o que é nulo."""
     times = detalhes.get("teams") or {}
     resultados = detalhes.get("results") or {}
     placar = resultados.get("score") or {}
@@ -152,13 +283,7 @@ def montar_parsed_stats_only(detalhes, stats):
         for p in time_stats.get("players") or []:
             stats_por_faceit_id[p.get("player_id")] = p.get("player_stats") or {}
 
-    def _int(v):
-        try:
-            return int(float(v))
-        except (TypeError, ValueError):
-            return 0
-
-    rounds_total = _int(round_stats.get("Rounds")) or (_int(placar.get("faction1")) + _int(placar.get("faction2")))
+    rounds_total = _rounds_do_placar(round_stats, placar)
     players = []
     for faccao, letra in (("faction1", "A"), ("faction2", "B")):
         for r in (times.get(faccao) or {}).get("roster") or []:
@@ -167,18 +292,14 @@ def montar_parsed_stats_only(detalhes, stats):
                 "steam_id64": r.get("game_player_id"),
                 "nick": r.get("nickname") or "",
                 "team": letra,
-                "kills": _int(ps.get("Kills")),
-                "deaths": _int(ps.get("Deaths")),
-                "assists": _int(ps.get("Assists")),
-                "headshot_kills": _int(ps.get("Headshots")),
-                "damage": 0,
+                **_stats_do_jogador(ps, rounds_total),
                 "rounds_played": rounds_total,
                 "won": (vencedor == faccao) if vencedor in ("faction1", "faction2") else None,
                 "weapons": {},
             })
 
     return {
-        "map": round_stats.get("Map") or "",
+        "map": _mapa(round_stats, detalhes),
         "score_a": _int(placar.get("faction1")),
         "score_b": _int(placar.get("faction2")),
         "team_a_name": (times.get("faction1") or {}).get("name"),

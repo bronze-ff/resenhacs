@@ -1,6 +1,6 @@
 import Chip from './Chip.jsx'
 
-// Chip pequeno reutilizável (Vitória/Derrota/AUTO/PRO): mono uppercase, tom controla a cor.
+// Chip pequeno reutilizável (Vitória/Derrota/Auto/PRO): tom controla a cor.
 // 'destaque' marca categoria/tag (ex. PRO, MELHOR MOMENTO), sem julgar bom/ruim — por
 // isso StatTile.jsx (que só julga valor numérico) tem um TONS menor, sem 'destaque'.
 const TONS = {

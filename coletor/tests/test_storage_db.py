@@ -491,8 +491,23 @@ def test_store_parsed_grava_posicoes_de_kill():
     insert = next(c for c in conn.calls if c[0].startswith("insert into kill_positions"))
     assert insert[1] == (
         "00000000-0000-0000-0000-000000000001", 1, 500, "A", "B", "ak47", "usp_silencer", True,
-        100.0, 200.0, 150.0, 250.0, "C",
+        100.0, 200.0, 150.0, 250.0, "C", False, False, False, False, False,
     )
+
+
+def test_store_parsed_grava_team_kill_e_flags_da_kill():
+    conn = FakeConn()
+    parsed = _parsed()
+    parsed["kill_positions"] = [{
+        "round_number": 3, "tick": 900, "killer": "A", "victim": "C", "weapon": "hegrenade",
+        "victim_weapon": None, "assister": None, "headshot": False,
+        "is_team_kill": True, "wallbang": True, "thrusmoke": True, "attackerblind": True, "noscope": True,
+        "killer_x": None, "killer_y": None, "victim_x": 1.0, "victim_y": 2.0,
+    }]
+    db.store_parsed(conn, parsed, share_code="CSGO-x", source="upload")
+    insert = next(c for c in conn.calls if c[0].startswith("insert into kill_positions"))
+    assert "is_team_kill, wallbang, thrusmoke, attackerblind, noscope" in insert[0]
+    assert insert[1][-5:] == (True, True, True, True, True)
 
 
 def test_store_parsed_grava_dano_por_round():
@@ -643,7 +658,27 @@ def test_store_parsed_grava_lineups():
     assert insert[1] == (
         "00000000-0000-0000-0000-000000000001", 5, "de_mirage", "smoke",
         "A", "bronze", 100.0, 200.0, 45.0, -10.0, 300.0, 400.0, 5000, "grupo", "T",
+        None, None, None, None, None, None, None,
     )
+
+
+def test_store_parsed_grava_coordenadas_de_mundo_e_frame_da_lineup():
+    # 0055: setpos de treino (mundo) + frame do Replay 2D; colunas nullable.
+    conn = FakeConn()
+    parsed = _parsed()
+    parsed["lineups"] = [{
+        "round_number": 5, "map": "de_mirage", "tipo": "smoke",
+        "thrower_steam_id": "A", "thrower_nick": "bronze",
+        "thrower_x": 0.1, "thrower_y": 0.2, "thrower_yaw": 45.0, "thrower_pitch": -10.0,
+        "target_x": 0.3, "target_y": 0.4, "tick": 5000, "origem": "grupo", "lado": "T",
+        "thrower_world_x": 1136.0, "thrower_world_y": -255.5, "thrower_world_z": -167.97,
+        "target_world_x": 300.0, "target_world_y": 400.0, "target_world_z": -100.0,
+        "replay_frame": 42,
+    }]
+    db.store_parsed(conn, parsed, share_code="CSGO-x", source="upload")
+    insert = next(c for c in conn.calls if c[0].startswith("insert into lineups"))
+    assert "thrower_world_z" in insert[0] and "replay_frame" in insert[0]
+    assert insert[1][-7:] == (1136.0, -255.5, -167.97, 300.0, 400.0, -100.0, 42)
 
 
 def test_store_parsed_grava_nome_de_time():
@@ -744,10 +779,46 @@ def test_match_fingerprint_estavel_e_sensivel_ao_conteudo():
 
 def test_enfileirar_faceit_e_idempotente_e_alinha_placeholders():
     conn = FakeConn()
-    db.enfileirar_faceit(conn, "fm1", "111")
+    db.enfileirar_faceit(conn, "fm1", "111", 1784196000)
     sql, params = conn.calls[-1]
     assert "on conflict (faceit_match_id) do nothing" in sql
-    assert sql.count("%s") == len(params) == 2
+    assert "to_timestamp(%s)" in sql
+    assert sql.count("%s") == len(params) == 3
+    assert params == ("fm1", "111", 1784196000)
+
+
+def test_funcoes_novas_da_fila_faceit_alinham_placeholders():
+    import datetime as _dt
+    agora = _dt.datetime(2026, 10, 16, tzinfo=_dt.timezone.utc)
+    chamadas = [
+        lambda c: db.ultimo_finished_at_faceit(c, "111"),
+        lambda c: db.marcar_membro_sincronizado_faceit(c, "111"),
+        lambda c: db.agendar_retry_demo(c, "fm1", agora, 2, RuntimeError("x")),
+        lambda c: db.encerrar_retry_demo(c, "fm1"),
+        lambda c: db.listar_retries_demo(c, agora, 3),
+    ]
+    for chamar in chamadas:
+        conn = FakeConn()
+        chamar(conn)
+        sql, params = conn.calls[-1]
+        assert sql.count("%s") == len(params), sql
+
+
+def test_gravar_extras_faceit_atualiza_so_as_colunas_da_api():
+    conn = FakeConn()
+    db.gravar_extras_faceit(conn, "m1", [
+        {"steam_id64": "111", "mvps": 3, "triple_kills": 2, "quadro_kills": 0, "penta_kills": None},
+    ])
+    sql, params = conn.calls[-1]
+    assert sql.startswith("update match_players set mvps = %s")
+    assert params == (3, 2, 0, None, "m1", "111")
+
+
+def test_listar_faceit_pendentes_mais_recentes_primeiro():
+    conn = FakeConn()
+    db.listar_faceit_pendentes(conn, 10)
+    sql, _ = conn.calls[-1]
+    assert "order by finished_at desc nulls last" in sql
 
 
 def test_falhar_faceit_pendente_incrementa_e_marca_failed_no_limite():

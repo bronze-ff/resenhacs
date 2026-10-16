@@ -5,8 +5,11 @@ import { createAuthRouter } from './routes/auth.js'
 import { createFriendshipsRouter } from './routes/friendships.js'
 import { createPlayersRouter } from './routes/players.js'
 import { createMinhaContaRouter } from './routes/minhaConta.js'
+import { createPrimeirosPassosRouter } from './routes/primeirosPassos.js'
 import { createFaceitRouter } from './routes/faceit.js'
+import { createFaceitSincronizacaoRouter } from './routes/faceitSincronizacao.js'
 import { createMatchesRouter } from './routes/matches.js'
+import { createKillsRouter } from './routes/kills.js'
 import { createProfileRouter } from './routes/profile.js'
 import { createClipsRouter } from './routes/clips.js'
 import { createClipesRouter } from './routes/clipes.js'
@@ -15,6 +18,8 @@ import { createRankingRouter } from './routes/ranking.js'
 import { createSessionsRouter } from './routes/sessions.js'
 import { createRecordesRouter } from './routes/recordes.js'
 import { createLadoPorMapaRouter } from './routes/ladoPorMapa.js'
+import { createMapasRouter } from './routes/mapas.js'
+import { createDuelosPerfilRouter, createDuelosPartidaRouter } from './routes/duelos.js'
 import { createAllstarRouter } from './routes/allstar.js'
 import { createUploadRouter } from './routes/upload.js'
 import { createLineupsRouter } from './routes/lineups.js'
@@ -23,6 +28,9 @@ import { createTaticasCuradasRouter } from './routes/taticasCuradas.js'
 import { createPartidasProRouter } from './routes/partidasPro.js'
 import { createGranadasRouter } from './routes/granadas.js'
 import { createCursoRouter } from './routes/curso.js'
+import { createRivalidadesRouter } from './routes/rivalidades.js'
+import { createPremiosRouter } from './routes/premios.js'
+import { createQuadrosRouter } from './routes/quadros.js'
 import { createRequireAuth } from './auth/middleware.js'
 import { capturarErro } from './observabilidade/sentry.js'
 import { limiteGeral } from './rateLimit.js'
@@ -96,7 +104,10 @@ export function createApp({
   app.use('/api/amigos', createFriendshipsRouter({ db, requireAuth }))
   app.use('/api/players', createPlayersRouter({ db, requireAuth, fetchBans }))
   app.use('/api/minha-conta', createMinhaContaRouter({ db, requireAuth, config }))
+  app.use('/api/primeiros-passos', createPrimeirosPassosRouter({ db, requireAuth }))
+  app.use('/api/faceit-sincronizacao', createFaceitSincronizacaoRouter({ db, requireAuth }))
   app.use('/api/faceit', requireAuth, createFaceitRouter({ config, db, ...(faceitFetchImpl ? { fetchImpl: faceitFetchImpl } : {}) }))
+  app.use('/api/matches', createKillsRouter({ db, requireAuth }))
   app.use('/api/matches', createMatchesRouter({ db, requireAuth, r2Client, r2Bucket: config.r2Bucket, config }))
   app.use('/api/profile', createProfileRouter({ db, requireAuth }))
   app.use('/api/clips', createClipsRouter({ db, requireAuth }))
@@ -106,6 +117,9 @@ export function createApp({
   app.use('/api/sessions', createSessionsRouter({ db, requireAuth }))
   app.use('/api/recordes', createRecordesRouter({ db, requireAuth }))
   app.use('/api/lado-mapa', createLadoPorMapaRouter({ db, requireAuth }))
+  app.use('/api/mapas', createMapasRouter({ db, requireAuth }))
+  app.use('/api/profile', createDuelosPerfilRouter({ db, requireAuth }))
+  app.use('/api/matches', createDuelosPartidaRouter({ db, requireAuth }))
   app.use('/api/allstar', createAllstarRouter({ db, config }))
   app.use('/api/lineups', createLineupsRouter({ db, requireAuth }))
   app.use('/api/taticas', createTaticasRouter({ db, requireAuth }))
@@ -113,6 +127,9 @@ export function createApp({
   app.use('/api/partidas-pro-fila', createPartidasProRouter({ db, requireAuth, r2Client, r2Bucket: config.r2Bucket }))
   app.use('/api/granadas', createGranadasRouter({ db, requireAuth }))
   app.use('/api/curso', createCursoRouter({ db, requireAuth, r2Client, r2Bucket: config.r2Bucket }))
+  app.use('/api/rivalidades', createRivalidadesRouter({ db, requireAuth }))
+  app.use('/api/premios', createPremiosRouter({ db, requireAuth }))
+  app.use('/api/quadros', createQuadrosRouter({ db, requireAuth }))
 
   app.use('/api/upload', createUploadRouter({ db, requireAuth, r2Client, r2Bucket: config.r2Bucket }))
 

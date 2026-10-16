@@ -10,7 +10,7 @@ const MARGENS = {
   grande: 'mb-4',
 }
 
-// Título de seção padronizado (display uppercase) com slot opcional de ação à direita e
+// Título de seção padronizado com slot opcional de ação à direita e
 // subtítulo opcional embaixo (mesmo componente que antes era duplicado como <p> cru em
 // cada página — ver ExplorarMapas/Comparar/EnviarDemo antes desse fix).
 export default function SectionHeader({ titulo, subtitulo, acao, margem = 'padrao', className = '' }) {

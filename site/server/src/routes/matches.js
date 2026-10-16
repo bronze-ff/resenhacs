@@ -237,6 +237,7 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
       db.query(
         `select mp.steam_id64, mp.nick, mp.team, mp.kills, mp.deaths, mp.assists, mp.headshot_kills,
                 mp.damage, mp.rounds_played, mp.rating, mp.kast_pct, mp.won, mp.is_tracked, mp.team_kills,
+                mp.mvps, mp.triple_kills, mp.quadro_kills, mp.penta_kills,
                 mp.he_damage, mp.molotov_damage, mp.smokes_thrown, mp.flashes_thrown,
                 mp.he_thrown, mp.molotovs_thrown, mp.enemies_flashed, mp.teammates_flashed,
                 mp.enemy_flash_duration, mp.teammate_flash_duration,
@@ -370,6 +371,11 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
         roundsPlayed: p.rounds_played,
         rating: p.rating === null ? null : Number(p.rating),
         kastPct: p.kast_pct != null ? Number(p.kast_pct) : null,
+        // MVPs e multi-kills só vêm da FACEIT (partida stats-only ou com extras); null no resto.
+        mvps: p.mvps == null ? null : Number(p.mvps),
+        tripleKills: p.triple_kills == null ? null : Number(p.triple_kills),
+        quadroKills: p.quadro_kills == null ? null : Number(p.quadro_kills),
+        pentaKills: p.penta_kills == null ? null : Number(p.penta_kills),
         premierBefore: p.premier_rating_before == null ? null : Number(p.premier_rating_before),
         premierAfter: p.premier_rating_after == null ? null : Number(p.premier_rating_after),
         faceitEloBefore: p.faceit_elo_before == null ? null : Number(p.faceit_elo_before),
@@ -454,7 +460,7 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
       db.query(
         `select round_number, tick, killer, victim, weapon, victim_weapon, headshot
          from kill_positions
-         where match_id = $1 and (killer = $2 or victim = $2)
+         where match_id = $1 and (killer = $2 or victim = $2) and is_team_kill = false
          order by round_number, tick`,
         [id, steamId],
       ),
@@ -532,7 +538,8 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
     const [kills, damage, flashes] = await Promise.all([
       db.query(
         `select killer, victim, weapon from kill_positions
-         where match_id = $1 and ((killer = $2 and victim = any($3)) or (victim = $2 and killer = any($3)))`,
+         where match_id = $1 and is_team_kill = false
+           and ((killer = $2 and victim = any($3)) or (victim = $2 and killer = any($3)))`,
         [id, steamId, steamIdsOponentes],
       ),
       db.query(
@@ -620,7 +627,7 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
       ),
       db.query('select round_number, side_a from rounds where match_id = $1', [id]),
       db.query(
-        'select round_number, tick, killer, victim, assister, headshot from kill_positions where match_id = $1',
+        'select round_number, tick, killer, victim, assister, headshot from kill_positions where match_id = $1 and is_team_kill = false',
         [id],
       ),
       db.query(

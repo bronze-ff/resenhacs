@@ -730,3 +730,22 @@ def test_fundir_partes_mesmo_mapa_funde_rdata_com_mesmo_offset_e_letra():
     assert jogador1_parte2["team"] == "A"  # letra corrigida (era "B" cru na parte2)
 
     assert [k["round"] for k in rdata_fundido["kills"]] == [1, 2]
+
+
+def test_snapshot_arremessos_inclui_z_e_angulos_de_mundo():
+    # Base do comando de treino `setpos X Y Z; setang PITCH YAW 0` da biblioteca
+    # automática de granadas (0055): Z vem do parse_ticks junto com X/Y.
+    regs = [
+        {"tick": 100, "steamid": "76561198000000001", "X": 1136.0, "Y": -255.5, "Z": -167.96875,
+         "yaw": 91.5, "pitch": -12.25, "team_num": 2},
+        {"tick": 100, "steamid": None, "X": 1.0, "Y": 2.0, "Z": 3.0, "yaw": 0, "pitch": 0, "team_num": 3},
+        {"tick": 200, "steamid": "76561198000000002", "X": 10.0, "Y": 20.0, "Z": float("nan"),
+         "yaw": 0.0, "pitch": 0.0, "team_num": 3},
+    ]
+    snap = parse._snapshot_arremessos(regs)
+    assert snap[(100, "76561198000000001")] == {
+        "x": 1136.0, "y": -255.5, "z": -167.96875, "yaw": 91.5, "pitch": -12.25, "lado": "T",
+    }
+    assert snap[(200, "76561198000000002")]["z"] is None  # NaN do pandas vira None
+    assert snap[(200, "76561198000000002")]["lado"] == "CT"
+    assert len(snap) == 2

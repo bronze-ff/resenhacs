@@ -5,6 +5,7 @@ import FiltroPeriodo from '../components/FiltroPeriodo.jsx'
 import CardPartidaFeed from '../components/feed/CardPartidaFeed.jsx'
 import SessaoDeHoje, { sessaoDeHoje } from '../components/feed/SessaoDeHoje.jsx'
 import AvisoRecorde from '../components/feed/AvisoRecorde.jsx'
+import PrimeirosPassos from '../components/inicio/PrimeirosPassos.jsx'
 import {
   Abas, Avatar, Button, CabecalhoPagina, Card, EstadoVazio, Select, SkeletonLista,
 } from '../components/ui'
@@ -258,11 +259,12 @@ export default function Feed() {
   return (
     <div className="space-y-6">
       <CabecalhoPagina
-        eyebrow="Feed"
+        eyebrow="Início"
         titulo="Partidas"
-        descricao="Toda Partida do grupo, da mais recente pra trás. Clique numa pra abrir o debrief."
+        descricao="Toda Partida sua e dos seus amigos, da mais recente pra trás. Clique numa pra ver o placar, o Replay 2D e os clipes."
         className="!mb-0"
       />
+      <PrimeirosPassos />
       <SincStatus />
       <AvisoRecorde />
       <Resenhas sessoes={sessoes} sessaoAtiva={sessaoAtiva} onEscolher={setSessaoAtiva} />

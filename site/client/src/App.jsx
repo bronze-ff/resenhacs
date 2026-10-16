@@ -14,7 +14,9 @@ import Clipes from './pages/Clipes.jsx'
 import Competicoes from './pages/Competicoes.jsx'
 import Granadas from './pages/Granadas.jsx'
 import Taticas from './pages/Taticas.jsx'
+import Quadro from './pages/Quadro.jsx'
 import Ranking from './pages/Ranking.jsx'
+import Mapas from './pages/Mapas.jsx'
 import EnviarDemo from './pages/EnviarDemo.jsx'
 import Perfil from './pages/Perfil.jsx'
 import Admin from './pages/Admin.jsx'
@@ -24,6 +26,7 @@ import Tour from './pages/Tour.jsx'
 import Apoie from './pages/Apoie.jsx'
 import Curso from './pages/Curso.jsx'
 import Privacidade from './pages/Privacidade.jsx'
+import Resenha from './pages/Resenha.jsx'
 
 // Tela de espera enquanto /api/auth/me responde: marca pulsando no centro, em vez de
 // um "Carregando…" solto no canto.
@@ -77,14 +80,17 @@ export default function App() {
           <Route path="/" element={<RotaRaiz />} />
           <Route path="/partida/:id" element={<RotaProtegida><Partida /></RotaProtegida>} />
           <Route path="/ranking" element={<RotaProtegida><Ranking /></RotaProtegida>} />
+          <Route path="/mapas" element={<RotaProtegida><Mapas /></RotaProtegida>} />
           <Route path="/enviar-demo" element={<RotaProtegida><EnviarDemo /></RotaProtegida>} />
           <Route path="/clipes" element={<RotaProtegida><Clipes /></RotaProtegida>} />
           <Route path="/jogadores" element={<RotaProtegida><Amigos /></RotaProtegida>} />
           <Route path="/jogador/:steamId" element={<RotaProtegida><JogadorPerfil /></RotaProtegida>} />
           <Route path="/comparar" element={<RotaProtegida><Comparar /></RotaProtegida>} />
           <Route path="/competicoes" element={<RotaProtegida><Competicoes /></RotaProtegida>} />
+          <Route path="/resenha" element={<RotaProtegida><Resenha /></RotaProtegida>} />
           <Route path="/granadas" element={<RotaProtegida><Granadas /></RotaProtegida>} />
           <Route path="/taticas" element={<RotaProtegida><Taticas /></RotaProtegida>} />
+          <Route path="/quadro" element={<RotaProtegida><Quadro /></RotaProtegida>} />
           <Route path="/conta" element={<RotaProtegida><Perfil /></RotaProtegida>} />
           <Route path="/apoie" element={<RotaProtegida><Apoie /></RotaProtegida>} />
           <Route path="/curso" element={<RotaProtegida><Curso /></RotaProtegida>} />

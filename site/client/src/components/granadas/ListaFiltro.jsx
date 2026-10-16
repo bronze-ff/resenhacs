@@ -19,7 +19,7 @@ export default function ListaFiltro({ itens, valor, onChange, rotulo }) {
             aria-pressed={ativo}
             disabled={item.desabilitado}
             onClick={() => onChange(item.valor)}
-            className={`flex min-h-10 cursor-pointer items-center justify-between gap-2 px-3 font-mono text-xs uppercase tracking-wide transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-40 lg:min-h-8 lg:w-full ${
+            className={`flex min-h-10 cursor-pointer items-center justify-between gap-2 rounded-[var(--radius-pequeno)] px-3 text-[13px] font-medium transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-40 lg:min-h-8 lg:w-full ${
               ativo
                 ? 'bg-superficie-topo text-texto shadow-[inset_0_-2px_0_0_var(--color-destaque)]'
                 : 'text-texto-fraco hover:text-texto'

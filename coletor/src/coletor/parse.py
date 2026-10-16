@@ -191,6 +191,68 @@ def _txt(v):
     return str(v)
 
 
+def _flag(v):
+    """bool de um campo do player_death que pode faltar/vir NaN numa versão do
+    demoparser2 (ou numa demo antiga). Ausente → False. `penetrated` é um contador
+    de superfícies atravessadas (int), não bool: > 0 vira True."""
+    import pandas as pd
+
+    if v is None or (isinstance(v, float) and pd.isna(v)):
+        return False
+    if isinstance(v, bool):
+        return v
+    try:
+        return float(v) > 0
+    except (TypeError, ValueError):
+        return False
+
+
+def _flags_do_kill(r):
+    """Flags do evento player_death (nomes crus do game event, que o demoparser2 não
+    renomeia — só userid/attacker/assister viram user_*/attacker_*/assister_*)."""
+    return {
+        "wallbang": _flag(r.get("penetrated")),
+        "thrusmoke": _flag(r.get("thrusmoke")),
+        "attackerblind": _flag(r.get("attackerblind")),
+        "noscope": _flag(r.get("noscope")),
+    }
+
+
+def _montar_kill_positions(kills, pos_by_sid_tick):
+    """Linhas de kill_positions a partir das kills + snapshot de posição por
+    (steamid, tick). Team kill é MANTIDO (is_team_kill=True) — dá pra clipar o TK
+    proposital no amigo — e cada consumidor que conta kill "de verdade" filtra
+    is_team_kill = false."""
+    linhas = []
+    for k in kills:
+        vic_pos = pos_by_sid_tick.get((k["victim"], k["tick"]))
+        if not vic_pos:
+            continue  # sem posição da vítima (fora do range de ticks amostrados) — descarta
+        atk_pos = pos_by_sid_tick.get((k["attacker"], k["tick"])) if k["attacker"] else None
+        linhas.append(
+            {
+                "round_number": k["round_number"],
+                "tick": k["tick"],
+                "killer": k["attacker"],
+                "victim": k["victim"],
+                "assister": k["assister"],
+                "weapon": k["weapon"],
+                "victim_weapon": vic_pos[2],
+                "headshot": k["headshot"],
+                "is_team_kill": bool(k.get("team_kill")),
+                "wallbang": bool(k.get("wallbang")),
+                "thrusmoke": bool(k.get("thrusmoke")),
+                "attackerblind": bool(k.get("attackerblind")),
+                "noscope": bool(k.get("noscope")),
+                "killer_x": atk_pos[0] if atk_pos else None,
+                "killer_y": atk_pos[1] if atk_pos else None,
+                "victim_x": vic_pos[0],
+                "victim_y": vic_pos[1],
+            }
+        )
+    return linhas
+
+
 def _premier_ratings(rows, fixed, score):
     """A partir de um snapshot de tick (rank/rank_if_win/rank_if_loss/rank_if_tie por
     jogador, lido no mesmo end_tick do placar final) + o time fixo de cada um + o
@@ -654,6 +716,28 @@ def fundir_partes_mesmo_mapa(partes, rdatas=None):
     return parsed_fundido, rdata_fundido
 
 
+def _snapshot_arremessos(registros):
+    """{(tick, steamid): {x, y, z, yaw, pitch, lado}} a partir das linhas do parse_ticks
+    nos ticks de weapon_fire de granada. X/Y/Z são coordenadas de MUNDO (origem do pawn,
+    no pé do jogador — é o mesmo valor que `setpos` do console aceita); yaw/pitch são
+    os ângulos de visão no tick do arremesso (mesmo formato do `setang`). Lado é o
+    REAL (T/CT) naquele tick — team_num daqui é o lado atual, não o time fixo A/B."""
+    snap = {}
+    for r in registros:
+        sid = _sid(r.get("steamid"))
+        if not sid:
+            continue
+        snap[(int(r["tick"]), sid)] = {
+            "x": _flt(r.get("X")),
+            "y": _flt(r.get("Y")),
+            "z": _flt(r.get("Z")),
+            "yaw": _flt(r.get("yaw")),
+            "pitch": _flt(r.get("pitch")),
+            "lado": _lado_de_team_num(_num(r.get("team_num"))),
+        }
+    return snap
+
+
 def parse_demo(path):
     import pandas as pd
     from demoparser2 import DemoParser
@@ -797,6 +881,7 @@ def parse_demo(path):
                 "headshot": headshot,
                 "team_kill": team_kill,
                 "weapon": _arma_limpa(r.get("weapon")) or "",
+                **_flags_do_kill(r),
             }
         )
         if atk:
@@ -830,29 +915,7 @@ def parse_demo(path):
                 x, y = _flt(r.get("X")), _flt(r.get("Y"))
                 if sid and x is not None and y is not None:
                     pos_by_sid_tick[(sid, int(r["tick"]))] = (x, y, _txt(r.get("active_weapon_name")))
-            for k in kills:
-                if k["team_kill"]:
-                    continue
-                vic_pos = pos_by_sid_tick.get((k["victim"], k["tick"]))
-                if not vic_pos:
-                    continue  # sem posição da vítima (fora do range de ticks amostrados) — descarta
-                atk_pos = pos_by_sid_tick.get((k["attacker"], k["tick"])) if k["attacker"] else None
-                kill_positions.append(
-                    {
-                        "round_number": k["round_number"],
-                        "tick": k["tick"],
-                        "killer": k["attacker"],
-                        "victim": k["victim"],
-                        "assister": k["assister"],
-                        "weapon": k["weapon"],
-                        "victim_weapon": vic_pos[2],
-                        "headshot": k["headshot"],
-                        "killer_x": atk_pos[0] if atk_pos else None,
-                        "killer_y": atk_pos[1] if atk_pos else None,
-                        "victim_x": vic_pos[0],
-                        "victim_y": vic_pos[1],
-                    }
-                )
+            kill_positions = _montar_kill_positions(kills, pos_by_sid_tick)
     except Exception:  # noqa: BLE001
         pass
 
@@ -1338,21 +1401,8 @@ def extract_replay(path, target_hz=8, demo_tick_rate=64):
     # fire — mesmo padrão de performance já usado pro snapshot de team_num acima.
     snap_fire = {}
     if fire_ticks_unicos:
-        df_fire = parser.parse_ticks(["X", "Y", "yaw", "pitch", "team_num"], ticks=fire_ticks_unicos)
-        for r in df_fire.to_dict("records"):
-            sid = _sid(r.get("steamid"))
-            if not sid:
-                continue
-            # Lado REAL (T/CT) no momento do arremesso — team_num aqui é o lado atual
-            # daquele tick (não o time fixo A/B).
-            lado = _lado_de_team_num(_num(r.get("team_num")))
-            snap_fire[(int(r["tick"]), sid)] = {
-                "x": _flt(r.get("X")),
-                "y": _flt(r.get("Y")),
-                "yaw": _flt(r.get("yaw")),
-                "pitch": _flt(r.get("pitch")),
-                "lado": lado,
-            }
+        df_fire = parser.parse_ticks(["X", "Y", "Z", "yaw", "pitch", "team_num"], ticks=fire_ticks_unicos)
+        snap_fire = _snapshot_arremessos(df_fire.to_dict("records"))
 
     def _dados_arremesso(ev_detonate, detonates):
         """{(detonate_tick, thrower): {thrower, throwerX, throwerY, throwerYaw,
@@ -1370,6 +1420,7 @@ def extract_replay(path, target_hz=8, demo_tick_rate=64):
                 "throwerY": pos["y"] if pos else None,
                 "throwerYaw": pos["yaw"] if pos else None,
                 "throwerPitch": pos["pitch"] if pos else None,
+                "throwerZ": pos["z"] if pos else None,
                 "throwerLado": pos["lado"] if pos else None,
             }
         return saida
@@ -1380,6 +1431,7 @@ def extract_replay(path, target_hz=8, demo_tick_rate=64):
         "throwerY": None,
         "throwerYaw": None,
         "throwerPitch": None,
+        "throwerZ": None,
         "throwerLado": None,
     }
 
@@ -1410,7 +1462,7 @@ def extract_replay(path, target_hz=8, demo_tick_rate=64):
             x, y = _xy(r)
             t0 = int(r["tick"])
             sid = _sid(r.get("user_steamid"))
-            item = {"round": round_do_tick(t0), "x": x, "y": y, "tickStart": t0, "tickEnd": t1}
+            item = {"round": round_do_tick(t0), "x": x, "y": y, "z": _flt(r.get("z")), "tickStart": t0, "tickEnd": t1}
             item.update(arremessos.get((t0, sid), _SEM_ARREMESSO))
             saida.append(item)
         return saida
@@ -1432,7 +1484,7 @@ def extract_replay(path, target_hz=8, demo_tick_rate=64):
             x, y = _xy(r)
             t0 = int(r["tick"])
             sid = _sid(r.get("user_steamid"))
-            item = {"round": round_do_tick(t0), "x": x, "y": y, "tick": t0}
+            item = {"round": round_do_tick(t0), "x": x, "y": y, "z": _flt(r.get("z")), "tick": t0}
             item.update(arremessos.get((t0, sid), _SEM_ARREMESSO))
             saida.append(item)
         return saida
