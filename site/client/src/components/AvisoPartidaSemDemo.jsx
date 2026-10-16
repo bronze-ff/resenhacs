@@ -15,7 +15,7 @@ export default function AvisoPartidaSemDemo({ partida, euSteamId, onEnviado }) {
           Partida da FACEIT sem demo — estatísticas básicas
         </p>
         <p className="text-sm text-texto-fraco">
-          Placar, K/D, dano, HS e MVPs vieram da FACEIT. Sem a demo não há KAST, rating,
+          Placar, K/D, dano, HS, MVPs e multi-kills vieram da FACEIT. Sem a demo não há KAST, rating,
           economia, Replay 2D nem clipes. O Coletor tenta baixar a demo sozinho, uma vez por
           dia, por até 4 semanas depois da partida.
         </p>

@@ -20,6 +20,7 @@ import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from . import discord
 from . import db as dbmod
 from . import faceit
 
@@ -144,6 +145,13 @@ def processar_fila(config, conn, ingest_demo, rodada, agora, limite):
                     prefer_new_played_at=bool(parsed.get("played_at")),
                 )
                 dbmod.gravar_extras_faceit(conn, match_id, parsed.get("players", []))
+                # ingest_demo já avisa no caminho com demo; aqui é o único aviso desta
+                # Partida (e a trava discord_notificado_em evita repetir quando a demo
+                # chegar depois pelo retry).
+                try:
+                    discord.notificar_partida(conn, match_id)
+                except Exception:  # noqa: BLE001 — aviso nunca derruba a importação
+                    pass
 
             dbmod.marcar_faceit_match(conn, match_id, faceit_match_id)
             dbmod.concluir_faceit_pendente(conn, faceit_match_id)
@@ -154,9 +162,12 @@ def processar_fila(config, conn, ingest_demo, rodada, agora, limite):
             else:
                 rodada.stats_only += 1
                 dentro_da_janela = finished is None or agora - finished < JANELA_DEMO
-                if demo_urls and dentro_da_janela:
+                # Sem demo_url no primeiro detalhe também entra na fila: a FACEIT costuma
+                # publicar a URL da demo um tempo depois do fim da partida.
+                if dentro_da_janela:
                     dbmod.agendar_retry_demo(
-                        conn, faceit_match_id, agora + espera_retry(1), 1, erro_demo,
+                        conn, faceit_match_id, agora + espera_retry(1), 1,
+                        erro_demo or "Demo ainda não disponível na FACEIT",
                     )
                     rodada.agendadas += 1
                     print(f"  {r}: ok só com estatísticas — Demo agendada pra nova tentativa")
@@ -195,7 +206,11 @@ def retentar_demos(config, conn, ingest_demo, rodada, agora, erros_definitivos=(
             detalhes = faceit.detalhes_partida(config.faceit_api_key, faceit_match_id)
             demo_urls = detalhes.get("demo_url") or []
             if not demo_urls:
-                dbmod.encerrar_retry_demo(conn, faceit_match_id, "FACEIT sem demo_url")
+                # Ainda sem URL: tenta de novo mais tarde (a janela de 4 semanas acima
+                # encerra quando a demo já não pode mais existir).
+                dbmod.agendar_retry_demo(
+                    conn, faceit_match_id, agora + espera_retry(n), n, "Demo ainda não disponível na FACEIT",
+                )
                 continue
             dados = dbmod.dados_da_partida_alvo(conn, match_id)
             if dados is None:

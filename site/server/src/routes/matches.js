@@ -237,6 +237,7 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
       db.query(
         `select mp.steam_id64, mp.nick, mp.team, mp.kills, mp.deaths, mp.assists, mp.headshot_kills,
                 mp.damage, mp.rounds_played, mp.rating, mp.kast_pct, mp.won, mp.is_tracked, mp.team_kills,
+                mp.mvps, mp.triple_kills, mp.quadro_kills, mp.penta_kills,
                 mp.he_damage, mp.molotov_damage, mp.smokes_thrown, mp.flashes_thrown,
                 mp.he_thrown, mp.molotovs_thrown, mp.enemies_flashed, mp.teammates_flashed,
                 mp.enemy_flash_duration, mp.teammate_flash_duration,
@@ -370,6 +371,11 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
         roundsPlayed: p.rounds_played,
         rating: p.rating === null ? null : Number(p.rating),
         kastPct: p.kast_pct != null ? Number(p.kast_pct) : null,
+        // MVPs e multi-kills só vêm da FACEIT (partida stats-only ou com extras); null no resto.
+        mvps: p.mvps == null ? null : Number(p.mvps),
+        tripleKills: p.triple_kills == null ? null : Number(p.triple_kills),
+        quadroKills: p.quadro_kills == null ? null : Number(p.quadro_kills),
+        pentaKills: p.penta_kills == null ? null : Number(p.penta_kills),
         premierBefore: p.premier_rating_before == null ? null : Number(p.premier_rating_before),
         premierAfter: p.premier_rating_after == null ? null : Number(p.premier_rating_after),
         faceitEloBefore: p.faceit_elo_before == null ? null : Number(p.faceit_elo_before),

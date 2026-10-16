@@ -115,6 +115,21 @@ export function SecaoReplay({ replayUrl, seek, onSelecionarPonto, matchId = null
 // Nome do Jogador: sempre um link pro perfil dele no Resenha (mesmo se for adversário/fora
 // do grupo — o perfil já sabe lidar com quem nunca fez onboarding), + link direto pro
 // perfil Steam (ícone separado, pra não competir com o clique do nome).
+// 3K/4K/5K da FACEIT (só aparece quando o dado existe e é > 0).
+function MultiKills({ p }) {
+  const itens = [['5K', p.pentaKills], ['4K', p.quadroKills], ['3K', p.tripleKills]].filter(([, n]) => n > 0)
+  if (itens.length === 0) return null
+  return (
+    <span className="hidden shrink-0 gap-1 sm:flex">
+      {itens.map(([rotulo, n]) => (
+        <span key={rotulo} title={`${n}× ${rotulo} na partida`} className="rounded-full bg-superficie-topo px-1.5 text-[11px] text-texto">
+          {rotulo}{n > 1 ? `×${n}` : ''}
+        </span>
+      ))}
+    </span>
+  )
+}
+
 function NomeJogador({ p, mostrarTagGrupo = true, className = '' }) {
   return (
     <span className={`flex min-w-0 items-center gap-2 font-mono ${className}`.trim()}>
@@ -490,6 +505,7 @@ export function Scoreboard({ time, jogadores, matchId, podePromover, onPromover,
   // Coluna de pontos por partida: Premier (valve_mm) OU ELO FACEIT (faceit) — o dado
   // certo pro tipo da partida; nunca os dois ao mesmo tempo.
   const temPontos = jogadores.some((p) => p.premierBefore != null || p.faceitEloBefore != null)
+  const temMvps = jogadores.some((p) => p.mvps != null)
   const corTime = time === 'A' ? 'text-time-a' : 'text-time-b'
   const fundoTime = time === 'A' ? 'bg-time-a' : 'bg-time-b'
   return (
@@ -522,6 +538,7 @@ export function Scoreboard({ time, jogadores, matchId, podePromover, onPromover,
             <Th titulo="Average Damage per Round — dano médio causado por round (contando também rounds sem kill)" escondeMobile>ADR</Th>
             <Th titulo="% dos abates que foram headshot" escondeMobile>HS%</Th>
             <Th titulo="KAST — % dos rounds em que ele teve kill, assist, sobreviveu ou foi vingado (trade)" escondeMobile>KAST</Th>
+            {temMvps && <Th titulo="MVPs — rounds em que foi o melhor do time (dado da FACEIT)" escondeMobile>MVP</Th>}
             {temPontos && (
               <Th titulo="Pontuação (Premier ou ELO FACEIT) antes dessa partida, e quanto ganhou/perdeu" escondeMobile>Pontos</Th>
             )}
@@ -552,6 +569,7 @@ export function Scoreboard({ time, jogadores, matchId, podePromover, onPromover,
                         <SetaExpandir aberto={aberto} />
                       </button>
                       <NomeJogador p={p} />
+                      <MultiKills p={p} />
                       {!p.isTracked && podePromover && (
                         <Button
                           variante="fantasma"
@@ -585,6 +603,9 @@ export function Scoreboard({ time, jogadores, matchId, podePromover, onPromover,
                       <ComEstrela valor={p.kastPct} melhor={melhores?.kastPct ?? 0}>{p.kastPct}%</ComEstrela>
                     ) : '–'}
                   </td>
+                  {temMvps && (
+                    <td className="hidden px-2 py-2 text-right tabular-nums text-texto-fraco sm:table-cell">{p.mvps ?? '–'}</td>
+                  )}
                   {temPontos && (
                     <td className="hidden px-2 py-2 text-right sm:table-cell">
                       {(() => {

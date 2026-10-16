@@ -183,12 +183,36 @@ def test_fila_partida_velha_sem_demo_nao_agenda(base, monkeypatch):
     assert base["agendadas"] == [] and len(base["store"]) == 1
 
 
-def test_fila_sem_demo_url_nao_agenda(base, monkeypatch):
+def test_fila_sem_demo_url_agenda_nova_tentativa(base, monkeypatch):
+    # A FACEIT costuma publicar a demo_url um tempo depois do fim da partida.
     monkeypatch.setattr(dbmod, "listar_faceit_pendentes", lambda c, limite=10: [("fm1", "111", 0)])
     monkeypatch.setattr(faceit, "detalhes_partida", lambda key, mid, **kw: _detalhes(demo=False))
     assert _rodar() == 1
-    assert base["agendadas"] == []
+    assert base["agendadas"] == [("fm1", AGORA + timedelta(hours=1), 1, "Demo ainda não disponível na FACEIT")]
     assert base["store"][0][1]["source"] == "faceit"
+
+
+def test_fila_stats_only_avisa_no_discord(base, monkeypatch):
+    from coletor import discord
+    avisadas = []
+    monkeypatch.setattr(discord, "notificar_partida", lambda conn, mid, **kw: avisadas.append(mid))
+    monkeypatch.setattr(dbmod, "listar_faceit_pendentes", lambda c, limite=10: [("fm1", "111", 0)])
+    monkeypatch.setattr(faceit, "detalhes_partida", lambda key, mid, **kw: _detalhes(demo=False))
+    _rodar()
+    assert avisadas == ["uuid-stats"]
+
+
+def test_fila_falha_no_discord_nao_derruba_a_importacao(base, monkeypatch):
+    from coletor import discord
+
+    def falha(conn, mid, **kw):
+        raise RuntimeError("discord fora")
+
+    monkeypatch.setattr(discord, "notificar_partida", falha)
+    monkeypatch.setattr(dbmod, "listar_faceit_pendentes", lambda c, limite=10: [("fm1", "111", 0)])
+    monkeypatch.setattr(faceit, "detalhes_partida", lambda key, mid, **kw: _detalhes(demo=False))
+    assert _rodar() == 1
+    assert base["falhas"] == []
 
 
 def test_fila_falha_de_item_nao_derruba_o_lote(base, monkeypatch):
@@ -259,6 +283,16 @@ def test_retry_fora_da_janela_encerra_sem_chamar_api(base, monkeypatch):
                         lambda *a, **k: (_ for _ in ()).throw(AssertionError("não devia chamar")))
     _rodar()
     assert base["encerradas"][0][0] == "fm1" and "4 semanas" in base["encerradas"][0][1]
+
+
+def test_retry_sem_demo_url_reagenda_em_vez_de_encerrar(base, monkeypatch):
+    monkeypatch.setattr(dbmod, "listar_retries_demo", lambda c, agora, limite=3: [_retry()])
+    monkeypatch.setattr(faceit, "detalhes_partida", lambda key, mid, **kw: _detalhes(demo=False))
+    _rodar()
+    assert base["encerradas"] == []
+    assert len(base["agendadas"]) == 1
+    assert base["agendadas"][0][0] == "fm1"
+    assert base["agendadas"][0][3] == "Demo ainda não disponível na FACEIT"
 
 
 def test_retry_partida_que_ja_tem_demo_encerra(base, monkeypatch):
