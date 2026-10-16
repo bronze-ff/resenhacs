@@ -191,6 +191,68 @@ def _txt(v):
     return str(v)
 
 
+def _flag(v):
+    """bool de um campo do player_death que pode faltar/vir NaN numa versão do
+    demoparser2 (ou numa demo antiga). Ausente → False. `penetrated` é um contador
+    de superfícies atravessadas (int), não bool: > 0 vira True."""
+    import pandas as pd
+
+    if v is None or (isinstance(v, float) and pd.isna(v)):
+        return False
+    if isinstance(v, bool):
+        return v
+    try:
+        return float(v) > 0
+    except (TypeError, ValueError):
+        return False
+
+
+def _flags_do_kill(r):
+    """Flags do evento player_death (nomes crus do game event, que o demoparser2 não
+    renomeia — só userid/attacker/assister viram user_*/attacker_*/assister_*)."""
+    return {
+        "wallbang": _flag(r.get("penetrated")),
+        "thrusmoke": _flag(r.get("thrusmoke")),
+        "attackerblind": _flag(r.get("attackerblind")),
+        "noscope": _flag(r.get("noscope")),
+    }
+
+
+def _montar_kill_positions(kills, pos_by_sid_tick):
+    """Linhas de kill_positions a partir das kills + snapshot de posição por
+    (steamid, tick). Team kill é MANTIDO (is_team_kill=True) — dá pra clipar o TK
+    proposital no amigo — e cada consumidor que conta kill "de verdade" filtra
+    is_team_kill = false."""
+    linhas = []
+    for k in kills:
+        vic_pos = pos_by_sid_tick.get((k["victim"], k["tick"]))
+        if not vic_pos:
+            continue  # sem posição da vítima (fora do range de ticks amostrados) — descarta
+        atk_pos = pos_by_sid_tick.get((k["attacker"], k["tick"])) if k["attacker"] else None
+        linhas.append(
+            {
+                "round_number": k["round_number"],
+                "tick": k["tick"],
+                "killer": k["attacker"],
+                "victim": k["victim"],
+                "assister": k["assister"],
+                "weapon": k["weapon"],
+                "victim_weapon": vic_pos[2],
+                "headshot": k["headshot"],
+                "is_team_kill": bool(k.get("team_kill")),
+                "wallbang": bool(k.get("wallbang")),
+                "thrusmoke": bool(k.get("thrusmoke")),
+                "attackerblind": bool(k.get("attackerblind")),
+                "noscope": bool(k.get("noscope")),
+                "killer_x": atk_pos[0] if atk_pos else None,
+                "killer_y": atk_pos[1] if atk_pos else None,
+                "victim_x": vic_pos[0],
+                "victim_y": vic_pos[1],
+            }
+        )
+    return linhas
+
+
 def _premier_ratings(rows, fixed, score):
     """A partir de um snapshot de tick (rank/rank_if_win/rank_if_loss/rank_if_tie por
     jogador, lido no mesmo end_tick do placar final) + o time fixo de cada um + o
@@ -797,6 +859,7 @@ def parse_demo(path):
                 "headshot": headshot,
                 "team_kill": team_kill,
                 "weapon": _arma_limpa(r.get("weapon")) or "",
+                **_flags_do_kill(r),
             }
         )
         if atk:
@@ -830,29 +893,7 @@ def parse_demo(path):
                 x, y = _flt(r.get("X")), _flt(r.get("Y"))
                 if sid and x is not None and y is not None:
                     pos_by_sid_tick[(sid, int(r["tick"]))] = (x, y, _txt(r.get("active_weapon_name")))
-            for k in kills:
-                if k["team_kill"]:
-                    continue
-                vic_pos = pos_by_sid_tick.get((k["victim"], k["tick"]))
-                if not vic_pos:
-                    continue  # sem posição da vítima (fora do range de ticks amostrados) — descarta
-                atk_pos = pos_by_sid_tick.get((k["attacker"], k["tick"])) if k["attacker"] else None
-                kill_positions.append(
-                    {
-                        "round_number": k["round_number"],
-                        "tick": k["tick"],
-                        "killer": k["attacker"],
-                        "victim": k["victim"],
-                        "assister": k["assister"],
-                        "weapon": k["weapon"],
-                        "victim_weapon": vic_pos[2],
-                        "headshot": k["headshot"],
-                        "killer_x": atk_pos[0] if atk_pos else None,
-                        "killer_y": atk_pos[1] if atk_pos else None,
-                        "victim_x": vic_pos[0],
-                        "victim_y": vic_pos[1],
-                    }
-                )
+            kill_positions = _montar_kill_positions(kills, pos_by_sid_tick)
     except Exception:  # noqa: BLE001
         pass
 
