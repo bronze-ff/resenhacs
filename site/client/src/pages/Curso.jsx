@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from 'react'
-import { CabecalhoPagina, Card, EstadoErro, EstadoVazio, SkeletonLista } from '../components/ui'
+import { Button, CabecalhoPagina, Card, EstadoErro, EstadoVazio, SkeletonLista } from '../components/ui'
 
 function formatarTempo(segundos) {
   const m = Math.floor(segundos / 60)
@@ -12,39 +12,69 @@ export default function Curso() {
   const [slugAtivo, setSlugAtivo] = useState(null)
   const [urlAtivo, setUrlAtivo] = useState(null)
   const [erro, setErro] = useState(null)
+  const [erroLista, setErroLista] = useState(false)
   const ultimoEnvio = useRef(0)
+  const aberturaAtual = useRef(0)
+  const revisoes = useRef({})
+  const [progressoLocal, setProgressoLocal] = useState({})
 
   useEffect(() => {
+    let vivo = true
     fetch('/api/curso')
-      .then((r) => r.json())
-      .then(setVideos)
-      .catch(() => setVideos([]))
+      .then((r) => { if (!r.ok) throw new Error(); return r.json() })
+      .then((lista) => {
+        if (!Array.isArray(lista)) throw new Error()
+        if (vivo) setVideos(lista)
+      })
+      .catch(() => {
+        if (!vivo) return
+        setVideos((atual) => atual ?? [])
+        setErroLista(true)
+      })
+    return () => { vivo = false; aberturaAtual.current += 1 }
   }, [])
 
   async function abrir(video) {
+    const abertura = ++aberturaAtual.current
     setErro(null)
     setUrlAtivo(null)
     setSlugAtivo(video.slug)
     ultimoEnvio.current = 0
-    const res = await fetch(`/api/curso/${video.slug}/url`)
-    if (!res.ok) {
-      setErro('Vídeo indisponível, recarregue a página')
-      return
+    try {
+      const res = await fetch(`/api/curso/${video.slug}/url`)
+      if (!res.ok) throw new Error()
+      const body = await res.json()
+      if (abertura === aberturaAtual.current) setUrlAtivo(body.url)
+    } catch {
+      if (abertura === aberturaAtual.current) setErro('Vídeo indisponível, recarregue a página')
     }
-    const body = await res.json()
-    setUrlAtivo(body.url)
   }
 
-  function salvarProgresso(slug, posicaoSegundos, concluido) {
-    fetch(`/api/curso/${slug}/progresso`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ posicaoSegundos, concluido }),
-    }).then(() => {
+  async function salvarProgresso(slug, posicaoSegundos, concluido) {
+    const revisao = (revisoes.current[slug] ?? 0) + 1
+    revisoes.current[slug] = revisao
+    const progresso = { posicaoSegundos, concluido }
+    setProgressoLocal((atual) => ({ ...atual, [slug]: { ...progresso, erro: false } }))
+    try {
+      const res = await fetch(`/api/curso/${slug}/progresso`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(progresso),
+      })
+      if (!res.ok) throw new Error()
+      if (revisoes.current[slug] !== revisao) return
       setVideos((atual) =>
         atual?.map((v) => (v.slug === slug ? { ...v, posicaoSegundos, concluido } : v)),
       )
-    })
+      setProgressoLocal((atual) => {
+        const proximo = { ...atual }
+        delete proximo[slug]
+        return proximo
+      })
+    } catch {
+      if (revisoes.current[slug] !== revisao) return
+      setProgressoLocal((atual) => ({ ...atual, [slug]: { ...progresso, erro: true } }))
+    }
   }
 
   function onTimeUpdate(e) {
@@ -64,7 +94,7 @@ export default function Curso() {
   }
 
   function onLoadedMetadata(e) {
-    const video = videos?.find((v) => v.slug === slugAtivo)
+    const video = progressoLocal[slugAtivo] ?? videos?.find((v) => v.slug === slugAtivo)
     if (video?.posicaoSegundos) e.target.currentTime = video.posicaoSegundos
   }
 
@@ -91,8 +121,17 @@ export default function Curso() {
         </Card>
       )}
       {erro && <EstadoErro mensagem={erro} />}
+      {erroLista && <EstadoErro mensagem="Não foi possível carregar os vídeos." />}
+      {Object.entries(progressoLocal).filter(([, p]) => p.erro).map(([slug, p]) => (
+        <EstadoErro
+          key={slug}
+          className="flex-wrap"
+          mensagem={`Não foi possível salvar o progresso de ${videos?.find((v) => v.slug === slug)?.titulo ?? 'esta aula'}. A posição está guardada nesta página.`}
+          acao={<Button tamanho="sm" onClick={() => salvarProgresso(slug, p.posicaoSegundos, p.concluido)}>Tentar de novo</Button>}
+        />
+      ))}
       {videos === null && <SkeletonLista linhas={5} altura="h-14" rotulo="Carregando vídeos" />}
-      {videos?.length === 0 && <EstadoVazio titulo="Nenhum vídeo disponível ainda." />}
+      {!erroLista && videos?.length === 0 && <EstadoVazio titulo="Nenhum vídeo disponível ainda." />}
       <div className="space-y-2">
         {videos?.map((v) => (
           <Card
