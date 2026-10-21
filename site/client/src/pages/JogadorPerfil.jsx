@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { nomeMapa, dataHora, corRating, nomeArma, TIPO_COMPRA } from '../lib/format.js'
+import { nomeMapa, dataHora, corRating, nomeArma, TIPO_COMPRA, rotuloHighlight } from '../lib/format.js'
 import { Abas, Avatar, Button, classesBotao, EstadoErro, EstadoVazio, Skeleton, SkeletonLista, Card, SectionHeader, StatTile, RatingBadge, DataTable, MapIcon, Badge, Select, PlataformaBadge, SteamIcon, FaceitIcon, faixaPremier, nivelDoElo, corChipDoNivel, TEXTO_POR_NIVEL } from '../components/ui'
 import LinhaEvolucao from '../components/LinhaEvolucao.jsx'
 import DesempenhoRecente from '../components/perfil/DesempenhoRecente.jsx'
@@ -68,14 +68,17 @@ function CardRatingComunidade({ rotulo, icone, corValor, valor, chipExtra, evolu
 }
 
 // Kinds de highlight que contam como "clutch" no resumo agrupado (CLUTCH_1V1, CLUTCH_1V2, CLUTCH_1V3...).
+// O Coletor grava o kind em minúsculas (ace, clutch_1v2); comparar em maiúsculas deixava
+// todo Badge neutro e cada clutch_1vN num grupo próprio.
 const CLUTCH_PREFIX = 'CLUTCH_'
 const TOM_KIND = { ACE: 'destaque', QUAD: 'destaque', TRIPLE: 'sucesso' }
 function tomDoKind(kind) {
-  if (kind?.startsWith(CLUTCH_PREFIX)) return 'sucesso'
-  return TOM_KIND[kind] ?? 'neutro'
+  const k = String(kind ?? '').toUpperCase()
+  if (k.startsWith(CLUTCH_PREFIX)) return 'sucesso'
+  return TOM_KIND[k] ?? 'neutro'
 }
 function grupoDoKind(kind) {
-  return kind?.startsWith(CLUTCH_PREFIX) ? 'Clutch' : kind
+  return String(kind ?? '').toUpperCase().startsWith(CLUTCH_PREFIX) ? 'Clutch' : rotuloHighlight(kind)
 }
 const LIMITE_INICIAL_DESTAQUES = 12
 
@@ -167,7 +170,7 @@ function SecaoHighlights({ destaques }) {
                 className="panel-cut-sm flex min-h-10 flex-wrap items-center gap-x-2 gap-y-1 border border-borda bg-superficie px-3 py-2 font-mono text-xs transition-colors duration-200 hover:border-destaque/60 hover:bg-superficie-alta"
                 title={`${nomeMapa(d.map)} · ${dataHora(d.playedAt)}`}
               >
-                <Badge tom={tomDoKind(d.kind)}>{d.kind}</Badge>
+                <Badge tom={tomDoKind(d.kind)}>{rotuloHighlight(d.kind)}</Badge>
                 <span className="text-texto-fraco">round {d.roundNumber}</span>
                 <span className="ml-auto flex items-center gap-1 text-texto">
                   <MapIcon map={d.map} size={16} />
