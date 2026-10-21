@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { nomeMapa, dataHora, corRating } from '../lib/format.js'
+import { METRICAS } from '../lib/metricas.js'
 import FiltroPeriodo from '../components/FiltroPeriodo.jsx'
 import CardPartidaFeed from '../components/feed/CardPartidaFeed.jsx'
 import SessaoDeHoje, { sessaoDeHoje } from '../components/feed/SessaoDeHoje.jsx'
 import AvisoRecorde from '../components/feed/AvisoRecorde.jsx'
 import PrimeirosPassos from '../components/inicio/PrimeirosPassos.jsx'
 import {
-  Abas, Avatar, Button, CabecalhoPagina, Card, EstadoVazio, Select, SkeletonLista,
+  Abas, Avatar, Button, CabecalhoPagina, Card, EstadoVazio, Explicacao, Select, SkeletonLista,
 } from '../components/ui'
 
 const MAPAS = ['de_anubis', 'de_ancient', 'de_cache', 'de_dust2', 'de_inferno', 'de_mirage', 'de_nuke', 'de_overpass', 'de_train', 'de_vertigo']
@@ -119,7 +120,8 @@ function Resenhas({ sessoes, sessaoAtiva, onEscolher }) {
   return (
     <section>
       <div className="mb-3 flex items-baseline justify-between gap-3">
-        <h3 className="rotulo">Resenhas recentes</h3>
+        {/* Explicação no título, não em cada card: o card é um <button> e não pode ter outro botão dentro. */}
+        <h3 className="rotulo"><Explicacao metrica={METRICAS.resultadoSessao}>Resenhas recentes</Explicacao></h3>
         <span className="hidden font-mono text-[11px] text-texto-fraco sm:inline">clique pra filtrar as Partidas</span>
       </div>
       <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-1">
@@ -359,7 +361,7 @@ export default function Feed() {
       )}
       <div className={hoje ? 'grid gap-6 xl:grid-cols-[minmax(0,1fr)_300px] xl:items-start' : ''}>
         <div className="min-w-0 space-y-3">
-          {visiveis?.map((m) => <CardPartidaFeed key={m.id} m={m} resultado={resultadoDoGrupo(m)} avatares={avatares} />)}
+          {visiveis?.map((m, i) => <CardPartidaFeed key={m.id} m={m} resultado={resultadoDoGrupo(m)} avatares={avatares} explicar={i === 0} />)}
           {temMais && (
             <div className="flex justify-center pt-1">
               <Button variante="secundario" onClick={carregarMais} carregando={carregandoMais}>

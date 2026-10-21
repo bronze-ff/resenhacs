@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { nomeMapa, dataHora, origemPartida, corRating } from '../../lib/format.js'
 import { orientarPlacar } from '../../lib/resultado.js'
-import { Avatar, Badge, Card, MapIcon, PlataformaBadge } from '../ui'
+import { METRICAS } from '../../lib/metricas.js'
+import { Avatar, Badge, Card, Explicacao, MapIcon, PlataformaBadge } from '../ui'
 
 // Card de Partida do Feed (referência: Leetify). Metade esquerda é a "capa" — o radar
 // do mapa esmaecido atrás do nome; metade direita são linhas de stat. Com o viewer em
@@ -52,16 +53,20 @@ function Rostos({ m, avatares }) {
   )
 }
 
-function LinhaStat({ rotulo, children }) {
+// No card o K/D/A é sempre o do viewer: o nome do painel acompanha o rótulo.
+const KDA_SEU = { ...METRICAS.kda, nome: 'Seu K / D / A' }
+
+function LinhaStat({ rotulo, metrica, children }) {
   return (
     <div className="flex h-11 items-center justify-between gap-3 border-t border-borda px-4 first:border-t-0">
-      <span className="text-xs text-texto-fraco">{rotulo}</span>
+      <span className="text-xs text-texto-fraco"><Explicacao metrica={metrica}>{rotulo}</Explicacao></span>
       <span className="font-mono text-sm tabular-nums">{children}</span>
     </div>
   )
 }
 
-export default function CardPartidaFeed({ m, resultado, avatares }) {
+// `explicar`: só o 1º card da lista mostra os "?" (repetir em todo card vira ruído).
+export default function CardPartidaFeed({ m, resultado, avatares, explicar = true }) {
   const origem = origemPartida(m.source, m.temDemo)
   const { a, b } = orientarPlacar(m.scoreA, m.scoreB, resultado)
   const r = ROTULO_RESULTADO[resultado]
@@ -107,15 +112,15 @@ export default function CardPartidaFeed({ m, resultado, avatares }) {
           </div>
         </div>
         <div className="border-t border-borda sm:border-l sm:border-t-0">
-          <LinhaStat rotulo="Placar">
+          <LinhaStat rotulo="Placar" metrica={explicar && METRICAS.placar}>
             <span className={corPlacar}>{a ?? '–'}</span>
             <span className="text-texto-fraco"> : </span>
             <span>{b ?? '–'}</span>
           </LinhaStat>
           {eu ? (
             <>
-              <LinhaStat rotulo="Seu K / D / A">{eu.kills} / {eu.deaths} / {eu.assists}</LinhaStat>
-              <LinhaStat rotulo="Seu rating">
+              <LinhaStat rotulo="Seu K / D / A" metrica={explicar && KDA_SEU}>{eu.kills} / {eu.deaths} / {eu.assists}</LinhaStat>
+              <LinhaStat rotulo="Seu rating" metrica={explicar && METRICAS.seuRating}>
                 {eu.rating == null ? (
                   <span className="text-texto-fraco">–</span>
                 ) : (
@@ -130,8 +135,8 @@ export default function CardPartidaFeed({ m, resultado, avatares }) {
             </>
           ) : (
             <>
-              <LinhaStat rotulo="Do grupo">{(m.tracked ?? []).length || '–'}</LinhaStat>
-              <LinhaStat rotulo="Rating do MVP">
+              <LinhaStat rotulo="Do grupo" metrica={explicar && METRICAS.doGrupo}>{(m.tracked ?? []).length || '–'}</LinhaStat>
+              <LinhaStat rotulo="Rating do MVP" metrica={explicar && METRICAS.ratingMvp}>
                 {m.mvp?.rating != null ? <span className={corRating(m.mvp.rating)}>{m.mvp.rating.toFixed(2)}</span> : <span className="text-texto-fraco">–</span>}
               </LinhaStat>
             </>

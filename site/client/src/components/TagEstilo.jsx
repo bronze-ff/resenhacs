@@ -1,3 +1,6 @@
+import { METRICAS_ESTILO } from '../lib/metricas.js'
+import { Explicacao } from './ui'
+
 const CORES = {
   entry: 'border-perigo/40 text-perigo',
   suporte: 'border-time-b/40 text-time-b',
@@ -10,11 +13,11 @@ const CORES = {
 export default function TagEstilo({ estilo }) {
   if (!estilo) return null
   return (
-    <span
+    <Explicacao
+      metrica={METRICAS_ESTILO[estilo.tag] ?? METRICAS_ESTILO.rifler}
       className={`panel-cut-sm border px-1.5 py-0.5 font-mono text-[11px] ${CORES[estilo.tag] ?? CORES.rifler}`}
-      title="Estilo de jogo, calculado em relação à média do grupo"
     >
       {estilo.label}
-    </span>
+    </Explicacao>
   )
 }

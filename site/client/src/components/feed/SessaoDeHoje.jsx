@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { corRating } from '../../lib/format.js'
-import { Avatar, Button, Card } from '../ui'
+import { METRICAS } from '../../lib/metricas.js'
+import { Avatar, Button, Card, Explicacao } from '../ui'
 
 // Uma Resenha (sessão) conta como "de hoje" se terminou há menos de 12h — cobre a noite
 // que vira madrugada sem depender do fuso de quem abre.
@@ -27,7 +28,7 @@ export default function SessaoDeHoje({ sessao, resultados, onVerSessao }) {
   ].filter(Boolean)
   return (
     <Card className="p-4">
-      <div className="rotulo">Sessão de hoje</div>
+      <div className="rotulo"><Explicacao metrica={METRICAS.resultadoSessao}>Sessão de hoje</Explicacao></div>
       <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <span className="flex gap-3 font-mono text-3xl font-medium tabular-nums">{placar.length ? placar : '–'}</span>
         <span className="text-[13px] text-texto-fraco">
@@ -41,7 +42,7 @@ export default function SessaoDeHoje({ sessao, resultados, onVerSessao }) {
       </div>
       {sessao.destaque && (
         <div className="mt-4 flex items-center gap-2 border-t border-borda pt-3 text-[13px]">
-          <span className="text-texto-fraco">Carregou a sessão</span>
+          <Explicacao metrica={METRICAS.carregouSessao} className="text-texto-fraco">Carregou a sessão</Explicacao>
           <Link to={`/jogador/${sessao.destaque.steamId}`} className="ml-auto flex min-w-0 items-center gap-2 text-texto hover:text-destaque">
             <Avatar p={sessao.destaque} size={20} />
             <span className="truncate">{sessao.destaque.nick}</span>

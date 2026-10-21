@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Avatar, Card, DataTable, SectionHeader, SkeletonLista } from '../ui'
+import { Avatar, Card, DataTable, Explicacao, SectionHeader, SkeletonLista } from '../ui'
+import { METRICAS } from '../../lib/metricas.js'
 
 // Rivalidades do Jogador contra o resto do grupo (referência: duelos do FACEIT, "Best/
 // Worst Friend" do Leetify). Dados de GET /api/rivalidades/:steamId — só Partidas
@@ -10,11 +11,11 @@ function valido(d) {
   return d && Array.isArray(d.duelos) && Array.isArray(d.duplas)
 }
 
-function CardRival({ titulo, legenda, jogador, valor, detalhe, bom }) {
+function CardRival({ titulo, legenda, jogador, valor, detalhe, bom, metrica }) {
   return (
     <Card className="flex flex-col gap-3 p-4">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-semibold text-texto">{titulo}</span>
+        <span className="text-sm font-semibold text-texto"><Explicacao metrica={metrica}>{titulo}</Explicacao></span>
         <span className="text-xs text-texto-fraco">{legenda}</span>
       </div>
       {jogador ? (
@@ -77,20 +78,20 @@ export default function Rivalidades({ steamId, proprio = false }) {
       <SectionHeader titulo="Rivalidades" subtitulo="Duelos e duplas com o grupo nas partidas que você vê" />
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <CardRival
-          titulo="Carrasco" legenda={`quem mais mata ${quem}`} jogador={carrasco} bom={false}
+          titulo="Carrasco" metrica={METRICAS.carrasco} legenda={`quem mais mata ${quem}`} jogador={carrasco} bom={false}
           valor={carrasco?.morri} detalhe={carrasco && `${carrasco.matei} x ${carrasco.morri} nos duelos`}
         />
         <CardRival
-          titulo="Freguês" legenda={`quem ${quem} mais mata`} jogador={fregues} bom
+          titulo="Freguês" metrica={METRICAS.fregues} legenda={`quem ${quem} mais mata`} jogador={fregues} bom
           valor={fregues && `${Math.round(fregues.dominio)}%`} detalhe={fregues && `${fregues.matei} x ${fregues.morri} nos duelos`}
         />
         <CardRival
-          titulo="Melhor dupla" legenda="winrate no mesmo time" jogador={melhorDupla} bom
+          titulo="Melhor dupla" metrica={METRICAS.melhorDupla} legenda="winrate no mesmo time" jogador={melhorDupla} bom
           valor={melhorDupla && `${Math.round(melhorDupla.winrateJuntos)}%`}
           detalhe={melhorDupla && `${melhorDupla.vitoriasJuntos}/${melhorDupla.partidasJuntos} partidas`}
         />
         <CardRival
-          titulo="Pé-frio" legenda="pior dupla" jogador={piorDupla} bom={false}
+          titulo="Pé-frio" metrica={METRICAS.peFrio} legenda="pior dupla" jogador={piorDupla} bom={false}
           valor={piorDupla && `${Math.round(piorDupla.winrateJuntos)}%`}
           detalhe={piorDupla && `${piorDupla.vitoriasJuntos}/${piorDupla.partidasJuntos} partidas`}
         />
@@ -102,11 +103,11 @@ export default function Rivalidades({ steamId, proprio = false }) {
             head={
               <tr>
                 <th className="px-3 py-2">Jogador</th>
-                <th className="px-3 py-2 text-right">Matou</th>
-                <th className="px-3 py-2 text-right">Morreu</th>
-                <th className="px-3 py-2 text-right">Saldo</th>
-                <th className="hidden px-3 py-2 text-right sm:table-cell">Partidas contra</th>
-                <th className="hidden px-3 py-2 text-right sm:table-cell">Juntos</th>
+                <th className="px-3 py-2 text-right"><Explicacao metrica={METRICAS.matouRival}>Matou</Explicacao></th>
+                <th className="px-3 py-2 text-right"><Explicacao metrica={METRICAS.morreuRival}>Morreu</Explicacao></th>
+                <th className="px-3 py-2 text-right"><Explicacao metrica={METRICAS.saldoRival}>Saldo</Explicacao></th>
+                <th className="hidden px-3 py-2 text-right sm:table-cell"><Explicacao metrica={METRICAS.partidasContra}>Partidas contra</Explicacao></th>
+                <th className="hidden px-3 py-2 text-right sm:table-cell"><Explicacao metrica={METRICAS.juntos}>Juntos</Explicacao></th>
               </tr>
             }
           >

@@ -4,7 +4,8 @@ import { useAuth } from '../auth/AuthContext.jsx'
 import FiltroPeriodo from '../components/FiltroPeriodo.jsx'
 import TagEstilo from '../components/TagEstilo.jsx'
 import { nomeMapa, dataHora } from '../lib/format.js'
-import { CabecalhoPagina, Card, DataTable, EstadoVazio, RatingBadge, SectionHeader, Skeleton, SkeletonLista } from '../components/ui'
+import { METRICAS } from '../lib/metricas.js'
+import { CabecalhoPagina, Card, DataTable, EstadoVazio, Explicacao, RatingBadge, SectionHeader, Skeleton, SkeletonLista } from '../components/ui'
 
 // Tokens de medalha (--color-ouro/prata/bronze em index.css) em vez de cores hardcoded
 // da paleta padrão do Tailwind — mesmo esquema de token usado pro resto da paleta do app.
@@ -12,6 +13,13 @@ const MEDALHAS = {
   0: { texto: 'text-ouro', borda: 'border-ouro/50', fundo: 'bg-ouro/[0.06]', nome: 'Ouro' },
   1: { texto: 'text-prata', borda: 'border-prata/40', fundo: 'bg-prata/[0.04]', nome: 'Prata' },
   2: { texto: 'text-bronze', borda: 'border-bronze/45', fundo: 'bg-bronze/[0.05]', nome: 'Bronze' },
+}
+
+// Coluna mostra vencidos/tentativas e o %; o texto do dicionário (clutch) fala em Save, que não aparece aqui.
+const METRICA_CLUTCHES = {
+  ...METRICAS.clutch,
+  nome: 'Clutches',
+  texto: 'Clutches vencidos / tentativas no período; ao lado, o %. Clutch = ficar por último vivo contra 1 ou mais inimigos.',
 }
 
 function Medalha({ posicao }) {
@@ -60,10 +68,10 @@ function SetaForma({ forma }) {
   )
 }
 
-function Stat({ rotulo, valor, cor }) {
+function Stat({ rotulo, valor, cor, metrica }) {
   return (
     <div className="min-w-0">
-      <div className="rotulo">{rotulo}</div>
+      <div className="rotulo"><Explicacao metrica={metrica}>{rotulo}</Explicacao></div>
       <div className={`mt-0.5 truncate font-display text-lg font-semibold leading-tight tabular-nums ${cor ?? 'text-texto'}`}>{valor}</div>
     </div>
   )
@@ -120,7 +128,8 @@ function DegrauPodio({ r, posicao, souEu }) {
 
 // Card mobile (estilo app FACEIT): avatar + posição/nick + grade de 4 stats.
 // Destaca o próprio usuário logado com borda no destaque.
-function CardJogador({ r, posicao, souEu }) {
+// `explicar`: só o 1º card exibido mostra os "?" (repetir em todo card vira ruído).
+function CardJogador({ r, posicao, souEu, explicar = false }) {
   return (
     <Card
       as={Link}
@@ -137,15 +146,15 @@ function CardJogador({ r, posicao, souEu }) {
         </div>
         <div className="mt-2 grid grid-cols-4 gap-2">
           <div className="min-w-0">
-            <div className="rotulo">Rating</div>
+            <div className="rotulo"><Explicacao metrica={explicar && METRICAS.ratingPeriodo}>Rating</Explicacao></div>
             <span className="mt-0.5 inline-flex items-center">
               <RatingBadge valor={r.rating} className="text-sm" />
               <SetaForma forma={r.forma} />
             </span>
           </div>
-          <Stat rotulo="K/D" valor={r.kd} />
-          <Stat rotulo="Partidas" valor={r.partidas} />
-          <Stat rotulo="HS%" valor={`${r.hsPct}%`} />
+          <Stat rotulo="K/D" valor={r.kd} metrica={explicar && METRICAS.kd} />
+          <Stat rotulo="Partidas" valor={r.partidas} metrica={explicar && METRICAS.partidas} />
+          <Stat rotulo="HS%" valor={`${r.hsPct}%`} metrica={explicar && METRICAS.hsPeriodo} />
         </div>
       </div>
     </Card>
@@ -155,10 +164,10 @@ function CardJogador({ r, posicao, souEu }) {
 // `to` opcional: quando presente o card vira um Link (pra Partida ou Jogador de
 // referência), com hover/cursor de affordance clicável. Sem `to` (ex.: recorde sem
 // Partida única associável) permanece um card estático.
-function CardDestaque({ rotulo, nick, valor, to }) {
+function CardDestaque({ rotulo, nick, valor, to, metrica }) {
   const conteudo = (
     <>
-      <div className="rotulo">{rotulo}</div>
+      <div className="rotulo"><Explicacao metrica={metrica}>{rotulo}</Explicacao></div>
       <div className="mt-2 truncate font-display text-xl font-semibold leading-none text-texto">{nick}</div>
       <div className="mt-1.5 font-mono text-xs text-texto-fraco">{valor}</div>
     </>
@@ -197,6 +206,7 @@ function Recordes() {
         {maisKills && (
           <CardDestaque
             rotulo="Mais kills numa partida"
+            metrica={METRICAS.recKills}
             nick={maisKills.nick}
             valor={`${maisKills.kills} kills · ${nomeMapa(maisKills.map)} · ${dataHora(maisKills.playedAt)}`}
             to={maisKills.matchId ? `/partida/${maisKills.matchId}` : undefined}
@@ -205,6 +215,7 @@ function Recordes() {
         {melhorAdr && (
           <CardDestaque
             rotulo="Melhor ADR numa partida"
+            metrica={METRICAS.recAdr}
             nick={melhorAdr.nick}
             valor={`${melhorAdr.adr} ADR · ${nomeMapa(melhorAdr.map)} · ${dataHora(melhorAdr.playedAt)}`}
             to={melhorAdr.matchId ? `/partida/${melhorAdr.matchId}` : undefined}
@@ -213,6 +224,7 @@ function Recordes() {
         {maiorSequencia && (
           <CardDestaque
             rotulo="Maior sequência de vitórias"
+            metrica={METRICAS.recSequencia}
             nick={`${maiorSequencia.vitorias} seguida${maiorSequencia.vitorias === 1 ? '' : 's'}`}
             valor={`${dataHora(maiorSequencia.inicio)} até ${dataHora(maiorSequencia.fim)}`}
             to={maiorSequencia.fimMatchId ? `/partida/${maiorSequencia.fimMatchId}` : undefined}
@@ -221,6 +233,7 @@ function Recordes() {
         {maisClutchesNaNoite && (
           <CardDestaque
             rotulo="Mais clutches numa Resenha"
+            metrica={METRICAS.recClutchesResenha}
             nick={maisClutchesNaNoite.nick}
             valor={`${maisClutchesNaNoite.clutches} clutch${maisClutchesNaNoite.clutches === 1 ? '' : 'es'} · ${dataHora(maisClutchesNaNoite.sessaoInicio)}`}
             to={maisClutchesNaNoite.matchId ? `/partida/${maisClutchesNaNoite.matchId}` : undefined}
@@ -271,8 +284,8 @@ function LadoPorMapa() {
           head={
             <tr>
               <th className="px-4 py-2.5">Mapa</th>
-              <th className="px-3 py-2.5 text-right">CT</th>
-              <th className="px-4 py-2.5 text-right">T</th>
+              <th className="px-3 py-2.5 text-right"><Explicacao metrica={METRICAS.ladoCt}>CT</Explicacao></th>
+              <th className="px-4 py-2.5 text-right"><Explicacao metrica={METRICAS.ladoT}>T</Explicacao></th>
             </tr>
           }
         >
@@ -368,9 +381,10 @@ export default function Ranking() {
           <SectionHeader titulo="Classificação" />
           {restoMobile.length > 0 && (
             <div className="space-y-2 lg:hidden">
-              {restoMobile.map((r) => {
+              {restoMobile.map((r, j) => {
                 const i = comPartida.indexOf(r)
-                return <CardJogador key={r.steamId} r={r} posicao={i} souEu={r.steamId === jogador?.steamId} />
+                // `posicao` é absoluta (o pódio come as 3 primeiras); o "?" vai no 1º card da lista.
+                return <CardJogador key={r.steamId} r={r} posicao={i} souEu={r.steamId === jogador?.steamId} explicar={j === 0} />
               })}
             </div>
           )}
@@ -381,13 +395,13 @@ export default function Ranking() {
                 <tr>
                   <th className="w-14 px-4 py-2.5">#</th>
                   <th className="px-3 py-2.5">Jogador</th>
-                  <th className="px-3 py-2.5 text-right">Partidas</th>
-                  <th className="px-3 py-2.5 text-right">Winrate</th>
-                  <th className="px-3 py-2.5 text-right">K/D</th>
-                  <th className="px-3 py-2.5 text-right">HS%</th>
-                  <th className="px-3 py-2.5 text-right">ACEs</th>
-                  <th className="px-3 py-2.5 text-right">Clutches</th>
-                  <th className="px-4 py-2.5 text-right">Rating</th>
+                  <th className="px-3 py-2.5 text-right"><Explicacao metrica={METRICAS.partidas}>Partidas</Explicacao></th>
+                  <th className="px-3 py-2.5 text-right"><Explicacao metrica={METRICAS.winrate}>Winrate</Explicacao></th>
+                  <th className="px-3 py-2.5 text-right"><Explicacao metrica={METRICAS.kd}>K/D</Explicacao></th>
+                  <th className="px-3 py-2.5 text-right"><Explicacao metrica={METRICAS.hsPeriodo}>HS%</Explicacao></th>
+                  <th className="px-3 py-2.5 text-right"><Explicacao metrica={METRICAS.aces}>ACEs</Explicacao></th>
+                  <th className="px-3 py-2.5 text-right"><Explicacao metrica={METRICA_CLUTCHES}>Clutches</Explicacao></th>
+                  <th className="px-4 py-2.5 text-right"><Explicacao metrica={METRICAS.ratingPeriodo}>Rating</Explicacao></th>
                 </tr>
               }
             >
@@ -442,6 +456,7 @@ export default function Ranking() {
             {maisAces?.aces > 0 && (
               <CardDestaque
                 rotulo="Mais ACEs"
+                metrica={METRICAS.maisAces}
                 nick={maisAces.nick}
                 valor={`${maisAces.aces} ace${maisAces.aces > 1 ? 's' : ''}`}
                 to={`/jogador/${maisAces.steamId}`}
@@ -450,6 +465,7 @@ export default function Ranking() {
             {maisClutches?.clutchWins > 0 && (
               <CardDestaque
                 rotulo="Mais clutches"
+                metrica={METRICAS.maisClutches}
                 nick={maisClutches.nick}
                 valor={`${maisClutches.clutchWins}/${maisClutches.clutchAttempts} tentativas · ${maisClutches.clutchPct}%`}
                 to={`/jogador/${maisClutches.steamId}`}
@@ -458,6 +474,7 @@ export default function Ranking() {
             {melhorWinrate && (
               <CardDestaque
                 rotulo="Melhor winrate (3+ partidas)"
+                metrica={METRICAS.melhorWinrate}
                 nick={melhorWinrate.nick}
                 valor={`${melhorWinrate.winrate}%`}
                 to={`/jogador/${melhorWinrate.steamId}`}
@@ -466,6 +483,7 @@ export default function Ranking() {
             {melhorClutchPct && (
               <CardDestaque
                 rotulo="Melhor clutch% (5+ tentativas)"
+                metrica={METRICAS.melhorClutchPct}
                 nick={melhorClutchPct.nick}
                 valor={`${melhorClutchPct.clutchPct}% (${melhorClutchPct.clutchWins}/${melhorClutchPct.clutchAttempts})`}
                 to={`/jogador/${melhorClutchPct.steamId}`}
@@ -474,6 +492,7 @@ export default function Ranking() {
             {melhorEntryRate && (
               <CardDestaque
                 rotulo="Melhor entry rate (10+ duelos)"
+                metrica={METRICAS.melhorEntry}
                 nick={melhorEntryRate.nick}
                 valor={`${melhorEntryRate.entryWinPct}% (${melhorEntryRate.entryKills}/${melhorEntryRate.entryKills + melhorEntryRate.entryDeaths})`}
                 to={`/jogador/${melhorEntryRate.steamId}`}

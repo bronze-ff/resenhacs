@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { nomeMapa, dataHora, corRating, nomeArma, TIPO_COMPRA, rotuloHighlight } from '../lib/format.js'
-import { Abas, Avatar, Button, classesBotao, EstadoErro, EstadoVazio, Skeleton, SkeletonLista, Card, SectionHeader, StatTile, RatingBadge, DataTable, MapIcon, Badge, Select, PlataformaBadge, PremiumBadge, SteamIcon, FaceitIcon, faixaPremier, nivelDoElo, corChipDoNivel, TEXTO_POR_NIVEL } from '../components/ui'
+import { Abas, Avatar, Button, classesBotao, EstadoErro, EstadoVazio, Skeleton, SkeletonLista, Card, SectionHeader, StatTile, RatingBadge, DataTable, MapIcon, Badge, Select, PlataformaBadge, PremiumBadge, SteamIcon, FaceitIcon, faixaPremier, nivelDoElo, corChipDoNivel, TEXTO_POR_NIVEL, Explicacao } from '../components/ui'
+import { METRICAS } from '../lib/metricas.js'
 import LinhaEvolucao from '../components/LinhaEvolucao.jsx'
 import DesempenhoRecente from '../components/perfil/DesempenhoRecente.jsx'
 import MapaAtividade from '../components/perfil/MapaAtividade.jsx'
@@ -16,10 +17,10 @@ import { useAuth } from '../auth/AuthContext.jsx'
 
 // Stat compacto pro card mobile de partida (padrão do CardJogador em Ranking.jsx).
 // `rating` (se passado) desenha um badge verde/vermelho estilo FACEIT (>= 1.0 / < 1.0).
-function Stat({ rotulo, valor, cor, rating }) {
+function Stat({ rotulo, valor, cor, rating, metrica }) {
   return (
     <div className="min-w-0">
-      <div className="rotulo">{rotulo}</div>
+      <div className="rotulo"><Explicacao metrica={metrica}>{rotulo}</Explicacao></div>
       {rating !== undefined ? (
         <RatingBadge valor={rating} className="text-sm" />
       ) : (
@@ -33,7 +34,7 @@ function Stat({ rotulo, valor, cor, rating }) {
 // de verdade, não só um chip no header: número grande na cor da faixa, saldo das
 // últimas partidas e a linha de evolução. Some inteiro quando não há valor (mesma
 // regra dos badges: quem nunca jogou Premier/FACEIT não vê "sem dado" ocupando espaço).
-function CardRatingComunidade({ rotulo, icone, corValor, valor, chipExtra, evolucao }) {
+function CardRatingComunidade({ rotulo, icone, corValor, valor, chipExtra, evolucao, metrica }) {
   if (valor == null) return null
   // Saldo do período coberto pela evolução (último − primeiro), não da última partida só.
   const delta = evolucao.length >= 2 ? Math.round(evolucao[evolucao.length - 1].valor - evolucao[0].valor) : null
@@ -41,7 +42,7 @@ function CardRatingComunidade({ rotulo, icone, corValor, valor, chipExtra, evolu
     <Card className="relative p-5">
       <div className="rotulo flex items-center gap-2">
         {icone}
-        {rotulo}
+        <Explicacao metrica={metrica}>{rotulo}</Explicacao>
       </div>
       <div className="mt-1.5 flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <span className={`font-display text-5xl font-semibold leading-none tabular-nums display-tight ${corValor}`}>
@@ -339,6 +340,7 @@ export default function JogadorPerfil() {
             corValor={premierAtual != null ? faixaPremier(premierAtual).cor : ''}
             valor={premierAtual}
             evolucao={evolucaoPremier}
+            metrica={METRICAS.premier}
           />
           <CardRatingComunidade
             rotulo="FACEIT — ELO"
@@ -351,6 +353,7 @@ export default function JogadorPerfil() {
               </span>
             )}
             evolucao={evolucaoFaceit}
+            metrica={METRICAS.faceitElo}
           />
         </div>
       )}
@@ -361,12 +364,18 @@ export default function JogadorPerfil() {
           rotulo="Rating"
           valor={stats.rating?.toFixed(2) ?? '–'}
           tom={stats.rating == null ? 'neutro' : stats.rating >= 1.15 ? 'sucesso' : stats.rating <= 0.85 ? 'perigo' : 'neutro'}
+          metrica={METRICAS.ratingPeriodo}
         />
-        <StatTile rotulo="K/D" valor={stats.kd} />
-        <StatTile rotulo="ADR" valor={stats.adr} />
-        <StatTile rotulo="HS%" valor={`${stats.hsPct}%`} />
-        <StatTile rotulo="Vitórias" valor={`${stats.vitorias}/${stats.partidas}`} sub={`${stats.winrate}%`} />
-        <StatTile rotulo="Kills" valor={stats.kills} sub={`${stats.deaths} deaths`} />
+        <StatTile rotulo="K/D" valor={stats.kd} metrica={METRICAS.kd} />
+        <StatTile rotulo="ADR" valor={stats.adr} metrica={METRICAS.adrPeriodo} />
+        <StatTile rotulo="HS%" valor={`${stats.hsPct}%`} metrica={METRICAS.hsPeriodo} />
+        <StatTile
+          rotulo="Vitórias"
+          valor={`${stats.vitorias}/${stats.partidas}`}
+          sub={`${stats.winrate}%`}
+          metrica={{ ...METRICAS.winrate, nome: 'Vitórias', texto: 'Em cima: vitórias / partidas jogadas. Embaixo: winrate, vitórias ÷ (vitórias + derrotas). Empate não entra no %.' }}
+        />
+        <StatTile rotulo="Kills" valor={stats.kills} sub={`${stats.deaths} deaths`} metrica={METRICAS.killsTotal} />
       </div>
 
       {/* 2b. Desempenho recente (gráfico das últimas 30) + mapa de atividade, e os
@@ -399,22 +408,17 @@ export default function JogadorPerfil() {
 
       {/* 3. Histórico de partidas — o que mais se consulta, logo depois dos tiles. */}
       <section>
-        <SectionHeader titulo={<>
-          Partidas recentes
-          {stats.rating != null && (
-            <span className="ml-2 font-mono text-xs font-normal normal-case text-texto-fraco">
-              (± vs média de {stats.rating.toFixed(2)} — consistência: acima ou abaixo do normal dele)
-            </span>
-          )}
-        </>} />
+        <SectionHeader titulo="Partidas recentes" />
         {recentes.length === 0 && <EstadoVazio titulo="Nenhuma partida ainda." />}
 
         {recentes.length > 0 && (
           <>
             {/* Mobile: cards no padrão do Ranking (badge V/D + grade de stats) */}
             <div className="space-y-2 lg:hidden">
-              {recentes.map((r) => {
+              {recentes.map((r, i) => {
                 const kd = r.deaths > 0 ? (r.kills / r.deaths).toFixed(2) : r.kills.toFixed(2)
+                // "?" só no 1º card: repetir em cada partida vira ruído.
+                const explica = i === 0
                 return (
                   <Link
                     key={r.id}
@@ -440,10 +444,10 @@ export default function JogadorPerfil() {
                         <PlataformaBadge source={r.source} className="shrink-0" />
                       </div>
                       <div className="mt-2 grid grid-cols-4 gap-2">
-                        <Stat rotulo="Rating" valor={r.rating != null ? r.rating.toFixed(2) : '–'} rating={r.rating} />
-                        <Stat rotulo="K/D/A" valor={`${r.kills}/${r.deaths}/${r.assists}`} />
-                        <Stat rotulo="K/D" valor={kd} cor={Number(kd) >= 1 ? 'text-sucesso' : 'text-perigo'} />
-                        <Stat rotulo="ADR" valor={r.adr} />
+                        <Stat rotulo="Rating" valor={r.rating != null ? r.rating.toFixed(2) : '–'} rating={r.rating} metrica={explica ? METRICAS.rating : null} />
+                        <Stat rotulo="K/D/A" valor={`${r.kills}/${r.deaths}/${r.assists}`} metrica={explica ? METRICAS.kda : null} />
+                        <Stat rotulo="K/D" valor={kd} cor={Number(kd) >= 1 ? 'text-sucesso' : 'text-perigo'} metrica={explica ? METRICAS.kd : null} />
+                        <Stat rotulo="ADR" valor={r.adr} metrica={explica ? METRICAS.adr : null} />
                       </div>
                     </div>
                   </Link>
@@ -458,11 +462,11 @@ export default function JogadorPerfil() {
                   <tr>
                     <th className="px-3 py-2">Data</th>
                     <th className="px-2 py-2">Placar</th>
-                    <th className="px-2 py-2 text-right">Rating</th>
-                    <th className="px-2 py-2 text-right">K/D/A</th>
-                    <th className="px-2 py-2 text-right">K/D</th>
-                    <th className="hidden px-2 py-2 text-right xl:table-cell">ADR</th>
-                    <th className="hidden px-2 py-2 text-right xl:table-cell">HS%</th>
+                    <th className="px-2 py-2 text-right"><Explicacao metrica={METRICAS.rating}>Rating</Explicacao></th>
+                    <th className="px-2 py-2 text-right"><Explicacao metrica={METRICAS.kda}>K/D/A</Explicacao></th>
+                    <th className="px-2 py-2 text-right"><Explicacao metrica={METRICAS.kd}>K/D</Explicacao></th>
+                    <th className="hidden px-2 py-2 text-right xl:table-cell"><Explicacao metrica={METRICAS.adr}>ADR</Explicacao></th>
+                    <th className="hidden px-2 py-2 text-right xl:table-cell"><Explicacao metrica={METRICAS.hs}>HS%</Explicacao></th>
                     <th className="px-3 py-2">Mapa</th>
                   </tr>
                 }
@@ -609,31 +613,31 @@ export default function JogadorPerfil() {
                 rotulo="Precisão"
                 valor={`${stats.accuracy}%`}
                 sub={`${stats.shotsHit} de ${stats.shotsFired} tiros`}
-                title="Tiros que acertaram alguém ÷ tiros disparados (só armas de fogo; granada e faca ficam de fora)."
+                metrica={METRICAS.precisao}
               />
               <StatTile
                 rotulo="Dano utilitária"
                 valor={stats.utilityDamagePerRound}
                 sub="dano de granada / round"
-                title="Dano de HE, molotov e incendiária por round jogado."
+                metrica={METRICAS.danoUtilRound}
               />
               <StatTile
                 rotulo="Entry (1º duelo)"
                 valor={`${stats.entryKills}/${duelosEntry}`}
                 sub={`${entryPct}% vencidos`}
-                title={`O primeiro duelo de cada round: venceu ${stats.entryKills} (matou primeiro) e perdeu ${stats.entryDeaths} (morreu primeiro). Quando ele abre matando, o time ganha o round em ${stats.entryWinPct}% das vezes.`}
+                metrica={METRICAS.entryDuelo}
               />
               <StatTile
                 rotulo="Trades"
                 valor={stats.tradeKills}
                 sub={`${stats.tradedDeaths} mortes suas vingadas`}
-                title="Kills que vingaram um colega morto nos 5s anteriores. O número de baixo é o contrário: quantas vezes um colega vingou a morte dele."
+                metrica={METRICAS.tradesPeriodo}
               />
               <StatTile
                 rotulo="Clutch (1vX)"
                 valor={`${stats.clutchWins}/${stats.clutchAttempts}`}
                 sub={`${stats.clutchPct}% vencidos${stats.clutchSaves ? ` · ${stats.clutchSaves} save` : ''}`}
-                title="Rounds em que ele ficou por último vivo contra 1+ inimigos: vencidos / total de situações. Save = sobreviveu mas o round foi perdido (salvou a arma)."
+                metrica={METRICAS.clutch}
               />
             </div>
           )
@@ -643,7 +647,7 @@ export default function JogadorPerfil() {
           <span className="text-texto">Entry</span>: o 1º duelo de cada round, vencidos/disputados.{' '}
           <span className="text-texto">Trades</span>: kill em até 5s vingando um colega que acabou de morrer.{' '}
           <span className="text-texto">Clutch</span>: por último vivo contra 1+, vencidos/total.{' '}
-          Em todo o site, <span className="text-texto">X/Y = sucessos/total</span>. Passe o mouse em cada card pra mais detalhe.
+          Em todo o site, <span className="text-texto">X/Y = sucessos/total</span>. Toque no ? de cada card pra mais detalhe.
         </p>
       </section>
 
@@ -653,50 +657,50 @@ export default function JogadorPerfil() {
           <StatTile
             rotulo="Smokes"
             valor={stats.smokesThrown}
-            title="Smokes jogadas no período."
+            metrica={METRICAS.smokesPeriodo}
           />
           <StatTile
             rotulo="Flashes"
             valor={stats.flashesThrown}
             sub={`${stats.enemiesFlashedPerFlash} inimigo/flash`}
-            title="Flashes jogadas e a média de quantos inimigos cada uma cegou (não é %, uma flash pode cegar vários de uma vez)."
+            metrica={METRICAS.flashesPeriodo}
           />
           <StatTile
             rotulo="Flash assist"
             valor={stats.flashAssists}
             sub={`${stats.flashAssistPct}% das flashes`}
-            title="Flash que cegou um inimigo morto por um colega (ou por você mesmo) logo em seguida, ainda cego. Mesmo conceito do 'Flash Assist' do Leetify/HLTV."
+            metrica={METRICAS.flashAssistPeriodo}
           />
           <StatTile
             rotulo="HEs"
             valor={stats.heThrown}
             sub={`${stats.avgHeDamage} dano/HE`}
-            title={`Dano total em inimigo: ${stats.heDamage}${stats.heTeamDamage ? ` (+ ${stats.heTeamDamage} de fogo amigo, não conta aqui)` : ''}. A média é por HE jogada, não por partida.`}
+            metrica={METRICAS.hesPeriodo}
           />
           <StatTile
             rotulo="Molotov/Incend."
             valor={stats.molotovsThrown}
             sub={`${stats.avgMolotovDamage} dano/molotov`}
-            title={`Dano total em inimigo: ${stats.molotovDamage}${stats.molotovTeamDamage ? ` (+ ${stats.molotovTeamDamage} de fogo amigo, não conta aqui)` : ''}. A média é por molotov jogado, não por partida.`}
+            metrica={METRICAS.molotovsPeriodo}
           />
           <StatTile
             rotulo="Cegou inimigo"
             valor={stats.enemiesFlashed}
             sub={`${stats.avgBlindDuration}s em média`}
-            title="Quantas vezes flashou um inimigo por mais de 1.1s (cegueira rápida/de raspão não conta — mesmo critério do Leetify), e a duração média de cegueira por vez."
+            metrica={METRICAS.cegouInimigoPeriodo}
           />
           <StatTile
             rotulo="Cegou aliado"
             valor={stats.teammatesFlashed}
             sub={`${stats.teammateFlashDuration}s no total`}
             tom={stats.teammatesFlashed > 0 ? 'perigo' : 'neutro'}
-            title="Flash de time (mais de 1.1s de cegueira) — auto-flash (cegar a si mesmo) CONTA aqui, é fogo amigo também."
+            metrica={METRICAS.cegouAliadoPeriodo}
           />
           <StatTile
             rotulo="Fogo amigo (HE+fogo)"
             valor={stats.heTeamDamage + stats.molotovTeamDamage}
             tom={(stats.heTeamDamage + stats.molotovTeamDamage) > 0 ? 'perigo' : 'neutro'}
-            title="Dano de HE + molotov no PRÓPRIO time — não entra no 'Dano HE'/'Dano fogo' de cima, que é só inimigo."
+            metrica={METRICAS.fogoAmigoUtil}
           />
         </div>
       </section>
@@ -707,7 +711,9 @@ export default function JogadorPerfil() {
           {Object.entries(economia ?? {}).map(([tipo, e]) => (
             <Card key={tipo} className="p-3">
               <div className={`font-mono text-xs ${TIPO_COMPRA[tipo]?.cor ?? 'text-texto-fraco'}`}>
-                {TIPO_COMPRA[tipo]?.label ?? tipo}
+                <Explicacao metrica={{ ...METRICAS.economia, nome: TIPO_COMPRA[tipo]?.label ?? tipo }}>
+                  {TIPO_COMPRA[tipo]?.label ?? tipo}
+                </Explicacao>
               </div>
               <div className="mt-1 font-display text-xl font-semibold text-texto">
                 {e.rounds > 0 ? `${e.winPct}%` : '–'}

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Card, SectionHeader, Skeleton } from '../ui'
+import { Card, Explicacao, SectionHeader, Skeleton } from '../ui'
+import { METRICAS } from '../../lib/metricas.js'
 
 // "Duelos de abertura e trocas" no perfil (referência: Leetify Opening Duels /
 // Trade Kill Success / Traded Death). Agregado das últimas 30 Partidas visíveis —
@@ -9,10 +10,10 @@ export function fmtPct(v) {
   return v == null ? '–' : `${Math.round(v)}%`
 }
 
-function Tile({ rotulo, valor, sub, ajuda }) {
+function Tile({ rotulo, valor, sub, metrica }) {
   return (
-    <Card className="flex flex-col gap-1 p-4" title={ajuda}>
-      <span className="rotulo">{rotulo}</span>
+    <Card className="flex flex-col gap-1 p-4">
+      <span className="rotulo"><Explicacao metrica={metrica}>{rotulo}</Explicacao></span>
       <span className="font-mono text-2xl tabular-nums text-texto">{valor}</span>
       {sub && <span className="font-mono text-xs tabular-nums text-texto-fraco">{sub}</span>}
     </Card>
@@ -23,8 +24,10 @@ function BarraLado({ lado, dados }) {
   const cor = lado === 'CT' ? 'bg-time-b' : 'bg-time-a'
   const texto = lado === 'CT' ? 'text-time-b' : 'text-time-a'
   return (
-    <div className="grid grid-cols-[28px_minmax(0,1fr)_auto] items-center gap-2">
-      <span className={`font-mono text-xs font-semibold ${texto}`}>{lado}</span>
+    <div className="grid grid-cols-[44px_minmax(0,1fr)_auto] items-center gap-2">
+      <span className={`font-mono text-xs font-semibold ${texto}`}>
+        <Explicacao metrica={lado === 'CT' ? METRICAS.abCt : METRICAS.abT}>{lado}</Explicacao>
+      </span>
       <div className="h-2 rounded-sm bg-superficie-alta" aria-hidden="true">
         <div className={`h-2 rounded-sm ${cor}`} style={{ width: `${dados.pct ?? 0}%` }} />
       </div>
@@ -77,7 +80,7 @@ export default function DuelosAbertura({ steamId }) {
         <Card className="flex flex-col gap-3 p-4">
           <div className="flex items-end justify-between gap-3">
             <div>
-              <div className="rotulo">Vitória no 1º duelo do round</div>
+              <div className="rotulo"><Explicacao metrica={METRICAS.aberturasPct}>Vitória no 1º duelo do round</Explicacao></div>
               <div className="font-mono text-3xl tabular-nums text-texto">{fmtPct(dados.aberturasPct)}</div>
             </div>
             <div className="text-right font-mono text-xs tabular-nums text-texto-fraco">
@@ -93,11 +96,11 @@ export default function DuelosAbertura({ steamId }) {
             rotulo="Mortes trocadas"
             valor={fmtPct(dados.mortesTrocadasPct)}
             sub={`${dados.mortesTrocadas} de ${dados.mortes} mortes`}
-            ajuda="Um colega matou quem te matou em até 5 segundos"
+            metrica={METRICAS.trocadas}
           />
-          <Tile rotulo="Mortes sem troca" valor={dados.mortesSemTroca} sub="ninguém vingou" />
-          <Tile rotulo="Trocas feitas" valor={dados.trocasFeitas} sub="vingou um colega em até 5 s" />
-          <Tile rotulo="Duelos de abertura" valor={dados.aberturas} sub={`em ${dados.partidas} partidas`} />
+          <Tile rotulo="Mortes sem troca" valor={dados.mortesSemTroca} sub="ninguém vingou" metrica={METRICAS.semTroca} />
+          <Tile rotulo="Trocas feitas" valor={dados.trocasFeitas} sub="vingou um colega em até 5 s" metrica={METRICAS.trocas} />
+          <Tile rotulo="Duelos de abertura" valor={dados.aberturas} sub={`em ${dados.partidas} partidas`} metrica={METRICAS.aberturas} />
         </div>
       </div>
     </section>

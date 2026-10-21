@@ -37,6 +37,13 @@ describe('CardPartidaFeed', () => {
     expect(screen.queryByText('Seu K / D / A')).not.toBeInTheDocument()
     expect(screen.getByText('Do grupo')).toBeInTheDocument()
   })
+
+  it('o "?" do rótulo abre a explicação sem seguir o link do card', () => {
+    comRouter(<CardPartidaFeed m={{ ...partida, eu: null }} resultado="derrota" avatares={new Map()} />)
+    // fireEvent devolve false quando o clique teve preventDefault: o <Link> não navega.
+    expect(fireEvent.click(screen.getByRole('button', { name: 'Placar' }))).toBe(false)
+    expect(screen.getByRole('dialog', { name: 'Placar' })).toHaveTextContent('Rounds do seu time')
+  })
 })
 
 describe('SessaoDeHoje', () => {
@@ -143,7 +150,8 @@ describe('PontosFortes', () => {
     render(<PontosFortes pontos={pontos} proprio />)
     expect(screen.getByText('Seus pontos fortes')).toBeInTheDocument()
     expect(screen.getByText('186')).toBeInTheDocument()
-    expect(screen.getByText('grupo: 97')).toBeInTheDocument()
+    // "grupo" virou botão de explicação; o "?" dele fica no textContent.
+    expect(screen.getByRole('button', { name: 'grupo' }).parentElement).toHaveTextContent(/^grupo\?: 97$/)
     expect(screen.getByText('100%')).toBeInTheDocument()
   })
 
