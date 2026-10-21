@@ -2,6 +2,7 @@
 // Clipes (CardClipe.jsx) e o seletor de clipes da Competição — as duas telas
 // mostram o mesmo iframe com o mesmo poster, e a terceira cópia ia nascer aqui.
 // (Partida.jsx tem um painel próprio, fora do escopo desta unificação.)
+import { DOMINIOS_IFRAME_CLIPE, hostPermitido, hrefSeguro } from '../../lib/urlSegura.js'
 
 const NOME_KIND = {
   ace: 'ACE', quad: 'QUAD KILL', triple: 'TRIPLE KILL',
@@ -30,11 +31,22 @@ export function SnapshotPlaceholder() {
 
 // `location` é telemetria da Allstar e difere por tela — a página Clipes manda
 // 'melhoresClipes', o seletor da Competição manda 'selecaoCompeticao'.
+// Iframe só para host da Allstar; outra URL (linha antiga com provider 'other') vira link.
 export function PlayerClipe({ clipUrl, viewerSteamId, titulo, location = 'melhoresClipes' }) {
+  if (!hostPermitido(clipUrl, DOMINIOS_IFRAME_CLIPE)) {
+    const href = hrefSeguro(clipUrl)
+    if (!href) return null
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer" className="mt-3 inline-block text-sm text-destaque underline underline-offset-2">
+        Abrir clipe em outra aba
+      </a>
+    )
+  }
   return (
     <div className="mt-3 aspect-video w-full">
       <iframe
-        src={`${clipUrl}&UID=${viewerSteamId ?? ''}&location=${location}`}
+        src={`${clipUrl}&UID=${encodeURIComponent(viewerSteamId ?? '')}&location=${location}`}
+        sandbox="allow-scripts allow-same-origin allow-presentation allow-popups"
         allow="autoplay; encrypted-media; picture-in-picture; clipboard-write; fullscreen"
         allowFullScreen
         className="h-full w-full border border-borda"

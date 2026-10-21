@@ -96,13 +96,16 @@ export default function Comparar() {
     const qs = new URLSearchParams({ a, b })
     if (de) qs.set('from', de)
     if (ate) qs.set('to', ate)
+    // Trocar a seleção com uma comparação em voo: a resposta antiga é descartada.
+    let vivo = true
     fetch(`/api/profile/compare?${qs}`)
       .then((res) => {
         if (!res.ok) throw new Error()
         return res.json()
       })
-      .then(setDados)
-      .catch(() => setErro('Não foi possível comparar esses Jogadores.'))
+      .then((d) => { if (vivo) setDados(d) })
+      .catch(() => { if (vivo) setErro('Não foi possível comparar esses Jogadores.') })
+    return () => { vivo = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [a, b, de, ate])
 

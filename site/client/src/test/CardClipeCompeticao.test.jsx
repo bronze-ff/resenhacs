@@ -4,7 +4,7 @@ import CardClipeCompeticao, { partesDaPontuacao, rotuloDaJogada } from '../compo
 
 const CLIPE = {
   id: 'c1', map: 'de_inferno', playedAt: '2026-07-25T03:37:00Z', roundNumber: 18,
-  kind: 'clutch_1v3', clipUrl: 'https://allstar/c1', clipSnapshotUrl: 'https://allstar/c1.jpg',
+  kind: 'clutch_1v3', clipUrl: 'https://allstar.gg/c1', clipSnapshotUrl: 'https://allstar/c1.jpg',
   pontuacao: { kills: 3, pontosKills: 50, headshots: 2, pontosHeadshots: 16, armas: 2, pontosArmas: 10, clutch: '1v3', pontosClutch: 35, total: 111 },
   nick: 'bronze', avatarUrl: 'https://avatar/bronze.jpg',
 }

@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useSearchParams, Link } from 'react-router-dom'
-import { hrefSeguro } from '../lib/urlSegura.js'
+import { DOMINIOS_IFRAME_CLIPE, hostPermitido, hrefSeguro } from '../lib/urlSegura.js'
 import { nomeMapa, dataHora, origemPartida, nomeArma, corRating, rotuloHighlight } from '../lib/format.js'
 import { orientarPlacar } from '../lib/resultado.js'
 import {
   Avatar, MapIcon, SectionHeader, Select, PlataformaBadge, Badge, Button, Modal, Abas,
-  Skeleton, SkeletonLista, EstadoVazio, EstadoErro, Input, Textarea, classesBotao,
+  Skeleton, SkeletonLista, EstadoVazio, EstadoErro, Input, Textarea, classesBotao, PlayerClipe,
 } from '../components/ui'
-import ReplayViewer from '../components/ReplayViewer.jsx'
+import ReplayViewer, { useReplayPorRound } from '../components/ReplayViewer.jsx'
 import MapaCalor from '../components/MapaCalor.jsx'
 import SeletorClipesCompeticao from '../components/SeletorClipesCompeticao.jsx'
 import SecaoClipeReal from '../components/clipes/SecaoClipeReal.jsx'
@@ -17,59 +17,11 @@ import FaixaRounds from '../components/partida/FaixaRounds.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { useTransicaoModal } from '../lib/useTransicaoModal.js'
 
-// Placeholder de um round ainda não baixado (streaming por round — FIL-54b): mesmo
-// shape de um round completo, só que sem frames/eventos. O ReplayViewer já trata os
-// campos ausentes com fallback (`round.fires || []` etc.), então isso renderiza como
-// "round vazio" até o fetch chegar, sem precisar de um estado de loading dedicado ali.
-function roundVazio(meta) {
-  return { ...meta, frames: [], kills: [], hits: [] }
-}
-
+// Carregamento (índice + /round/:n, streaming por round — FIL-54b) mora no
+// useReplayPorRound, compartilhado com o CardTaticaReplay. Erro de um round fica só nele.
 export function SecaoReplay({ replayUrl, seek, onSelecionarPonto, matchId = null, onRoundChange = null, painelExtra = null }) {
-  const [replay, setReplay] = useState(null)
-  const [erro, setErro] = useState(false)
+  const { replay, erro, roundsComErro, tentarRound, tentarDeNovo } = useReplayPorRound(replayUrl)
   const [aba, setAba] = useState('replay') // replay | calor
-
-  useEffect(() => {
-    if (!replayUrl) return
-    let vivo = true
-    setReplay(null)
-    setErro(false)
-
-    fetch(replayUrl)
-      .then((res) => (res.ok ? res.json() : Promise.reject()))
-      .then((indice) => {
-        if (!vivo) return
-        // Formato antigo (replay arquivado antes do streaming por round): cada round já
-        // vem com `frames` — nada a buscar, mostra direto (comportamento inalterado).
-        const streaming = indice.rounds.length > 0 && indice.rounds[0].frames === undefined
-        if (!streaming) { setReplay(indice); return }
-
-        // Formato novo: `indice` só tem metadados por round. Monta o replay com
-        // placeholders e preenche assim que cada round chega — round 1 primeiro (é o
-        // que a tela abre tocando), o resto em paralelo logo em seguida.
-        setReplay({ ...indice, rounds: indice.rounds.map(roundVazio) })
-        const buscarRound = (numero) =>
-          fetch(`${replayUrl}/round/${numero}`)
-            .then((res) => (res.ok ? res.json() : null))
-            .then((dadosDoRound) => {
-              if (!vivo || !dadosDoRound) return
-              setReplay((atual) => atual && ({
-                ...atual,
-                rounds: atual.rounds.map((r) => (r.round === numero ? dadosDoRound : r)),
-              }))
-            })
-            .catch(() => {})
-        const numeros = indice.rounds.map((r) => r.round)
-        buscarRound(numeros[0]).then(() => {
-          if (!vivo) return
-          numeros.slice(1).forEach(buscarRound)
-        })
-      })
-      .catch(() => { if (vivo) setErro(true) })
-
-    return () => { vivo = false }
-  }, [replayUrl])
 
   // Deep link de um Highlight sempre volta pra aba do replay animado.
   useEffect(() => {
@@ -84,7 +36,14 @@ export function SecaoReplay({ replayUrl, seek, onSelecionarPonto, matchId = null
       />
     )
   }
-  if (erro) return <EstadoErro mensagem="Não foi possível carregar o replay." />
+  if (erro) {
+    return (
+      <EstadoErro
+        mensagem="Não foi possível carregar o replay."
+        acao={<Button variante="secundario" tamanho="sm" onClick={tentarDeNovo}>Tentar de novo</Button>}
+      />
+    )
+  }
   if (!replay) {
     return (
       <div role="status" aria-label="Carregando replay" className="space-y-3">
@@ -104,7 +63,10 @@ export function SecaoReplay({ replayUrl, seek, onSelecionarPonto, matchId = null
         onChange={setAba}
       />
       {aba === 'replay' ? (
-        <ReplayViewer replay={replay} seek={seek} matchId={matchId} palco onRoundChange={onRoundChange} painelExtra={painelExtra} />
+        <ReplayViewer
+          replay={replay} seek={seek} matchId={matchId} palco onRoundChange={onRoundChange} painelExtra={painelExtra}
+          roundsComErro={roundsComErro} onTentarRound={tentarRound}
+        />
       ) : (
         <MapaCalor replay={replay} onSelecionarPonto={onSelecionarPonto} />
       )}
@@ -472,14 +434,9 @@ function PainelClipeJogador({ jogador, clip, pedindo, erro, aberto, onAbrir, onG
       </div>
       {aberto && (
         <div className="mt-4 flex flex-col gap-4 lg:flex-row">
-          <div className="aspect-video w-full lg:max-w-xl">
-            <iframe
-              src={`${clip.clipUrl}&UID=${viewerSteamId ?? ''}&location=matchResults`}
-              allow="autoplay; encrypted-media; picture-in-picture; clipboard-write; fullscreen"
-              allowFullScreen
-              className="h-full w-full border border-borda"
-              title={`Melhor clipe de ${nome}`}
-            />
+          {/* PlayerClipe só abre iframe para host da Allstar; o resto vira link (I2). */}
+          <div className="w-full lg:max-w-xl [&>*:first-child]:mt-0">
+            <PlayerClipe clipUrl={clip.clipUrl} viewerSteamId={viewerSteamId} titulo={`Melhor clipe de ${nome}`} location="matchResults" />
           </div>
           <div className="flex-1 space-y-3 border-t border-borda pt-4 lg:max-w-xs lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0">
             <div>
@@ -492,14 +449,16 @@ function PainelClipeJogador({ jogador, clip, pedindo, erro, aberto, onAbrir, onG
               <p>{nomeMapa(m.map)} · {placar.a}-{placar.b}</p>
               <p>{dataHora(m.playedAt)}</p>
             </div>
-            <a
-              href={clip.clipUrl}
-              target="_blank"
-              rel="noreferrer"
-              className={classesBotao({ variante: 'fantasma', tamanho: 'sm', className: '-ml-3' })}
-            >
-              Abrir no Allstar.gg ↗
-            </a>
+            {hrefSeguro(clip.clipUrl) && (
+              <a
+                href={hrefSeguro(clip.clipUrl)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={classesBotao({ variante: 'fantasma', tamanho: 'sm', className: '-ml-3' })}
+              >
+                {hostPermitido(clip.clipUrl, DOMINIOS_IFRAME_CLIPE) ? 'Abrir no Allstar.gg ↗' : 'Abrir clipe ↗'}
+              </a>
+            )}
           </div>
         </div>
       )}
@@ -646,6 +605,7 @@ export default function Partida() {
   const { jogador } = useAuth()
   const [m, setM] = useState(null)
   const [erro, setErro] = useState(false)
+  const requisicaoAtual = useRef(0)
   const [promovendo, setPromovendo] = useState(null)
   const [seek, setSeek] = useState(null)
   const [roundAtual, setRoundAtual] = useState(null) // round na tela do Replay 2D
@@ -711,14 +671,18 @@ export default function Partida() {
     // Reseta o erro a cada tentativa: um refetch falho (ex.: rede oscilou ao anexar
     // clipe) não pode transformar uma partida já carregada em "não encontrada".
     // 404 é "não existe"; 5xx e rede caída são "tente de novo" (antes tudo virava 404).
+    // Só a requisição mais nova vale: trocar de :id (ou recarregar) com outra em voo não
+    // deixa a resposta antiga sobrescrever a Partida da tela.
+    const minha = ++requisicaoAtual.current
+    const valer = (fn) => (...args) => { if (requisicaoAtual.current === minha) fn(...args) }
     setErro(false)
     fetch(`/api/matches/${id}`)
       .then((res) => {
-        if (res.status === 404) return setErro('nao-encontrada')
+        if (res.status === 404) return valer(setErro)('nao-encontrada')
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        return res.json().then(setM)
+        return res.json().then(valer(setM))
       })
-      .catch(() => setErro('falha'))
+      .catch(valer(() => setErro('falha')))
   }
 
   async function promover(steamId) {

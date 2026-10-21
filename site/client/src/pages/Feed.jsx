@@ -203,6 +203,8 @@ export default function Feed() {
     setTemMais(false)
     setErroCarga(false)
     setErroMais(false)
+    // Um "Carregar mais" em voo fica obsoleto (o finally dele não limpa mais): destrava aqui.
+    setCarregandoMais(false)
     const qs = sessaoAtiva ? new URLSearchParams({ ids: sessaoAtiva.matchIds.join(',') }) : montarQs(0)
     fetch(`/api/matches?${qs}`)
       .then((res) => {
