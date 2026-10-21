@@ -771,7 +771,7 @@ def test_processar_uploads_pendentes_baixa_do_r2_e_apaga_em_sucesso(monkeypatch)
     ingests = []
 
     def _ingest_fake(cfg, cn, dem_path, share_code=None, source=None, upload=None, played_at=None,
-                     plataforma_manual=None, alvo=None):
+                     plataforma_manual=None, alvo=None, enviado_por=None):
         ingests.append((dem_path.name, source, upload, plataforma_manual))
         return "m1"
 
@@ -2160,3 +2160,150 @@ def test_discover_com_falha_parcial_segue_normal(monkeypatch):
 def test_discover_sem_jogadores_nao_levanta(monkeypatch):
     monkeypatch.setattr(main.dbmod, "list_tracked_players", lambda c: [])
     assert main.cmd_discover(Config(env={"STEAM_API_KEY": "k"}), conn=object()) == 0
+
+
+# ---- R114 (P0): upload com Share Code de outra Partida não sobrescreve nada ----
+
+def _ingest_envio(monkeypatch, tmp_path, jogadores, status_share_code=None, amigos=(), descoberta_por=None):
+    """ingest_demo de upload sem alvo, com R2 e banco falsos. Devolve o que foi gravado."""
+    dem_path = tmp_path / "demo.dem"
+    dem_path.write_bytes(b"fake-demo-bytes")
+    monkeypatch.setattr(main.parsemod, "parse_demo", lambda path: _fake_parsed("de_mirage", jogadores))
+    monkeypatch.setattr(main.transform, "fill_kd_from_kills", lambda players, kills: players)
+    monkeypatch.setattr(main.transform, "enrich", lambda parsed: parsed)
+    monkeypatch.setattr(main.parsemod, "extract_replay", lambda path: {"ticks": [], "kills": [], "rounds": []})
+    monkeypatch.setattr(main.replaymod, "build_replay", lambda *a, **kw: {"rounds": []})
+    monkeypatch.setattr(main.transform, "attach_replay_frames", lambda highlights, rounds: highlights)
+    monkeypatch.setattr(main, "_montar_lineups", lambda *a, **kw: [])
+    monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
+    monkeypatch.setattr(main.sharecode, "decode", lambda code: {"match_id": 555})
+    monkeypatch.setattr(main, "_atualizar_avatares", lambda *a, **kw: None)
+    monkeypatch.setattr(main.discord, "notificar_partida", lambda *a, **kw: None)
+    gravado = {"r2": [], "store": []}
+    monkeypatch.setattr(main.storage_r2, "upload_bytes", lambda client, bucket, key, data, **kw: gravado["r2"].append(key))
+    monkeypatch.setattr(main.dbmod, "store_parsed", lambda conn, parsed, **kw: gravado["store"].append(kw) or "m-nova")
+    monkeypatch.setattr(
+        main.dbmod, "partida_por_share_code",
+        lambda conn, code: None if status_share_code is None else (status_share_code, descoberta_por),
+    )
+    monkeypatch.setattr(main.dbmod, "amigos_aceitos", lambda conn, steam_id64: set(amigos))
+    return dem_path, gravado
+
+
+def test_upload_com_share_code_de_partida_parsed_nao_altera_nada(monkeypatch, tmp_path):
+    dem_path, gravado = _ingest_envio(monkeypatch, tmp_path, ["765EU", "765X"], status_share_code="parsed")
+
+    with pytest.raises(main.DemoNaoConfereError, match="Essa Partida já está registrada."):
+        main.ingest_demo(_config_com_r2(), conn=None, path=dem_path, share_code="CSGO-alheio",
+                         source="upload", enviado_por="765EU")
+
+    assert gravado["r2"] == []  # nem demos/555 nem replays/555 da Partida existente
+    assert gravado["store"] == []
+
+
+def test_upload_sem_o_jogador_nem_amigo_na_demo_e_recusado(monkeypatch, tmp_path):
+    dem_path, gravado = _ingest_envio(monkeypatch, tmp_path, ["765A", "765B"], amigos={"765C"})
+
+    with pytest.raises(main.DemoNaoConfereError, match="Você nem seus amigos aparecem nesta Demo."):
+        main.ingest_demo(_config_com_r2(), conn=None, path=dem_path, share_code=None,
+                         source="upload", enviado_por="765EU")
+
+    assert gravado["r2"] == [] and gravado["store"] == []
+
+
+def test_upload_com_amigo_aceito_na_demo_e_gravado(monkeypatch, tmp_path):
+    dem_path, gravado = _ingest_envio(monkeypatch, tmp_path, ["765A", "765AMIGO"], amigos={"765AMIGO"})
+
+    assert main.ingest_demo(_config_com_r2(), conn=None, path=dem_path, source="upload",
+                            enviado_por="765EU") == "m-nova"
+    assert len(gravado["store"]) == 1
+
+
+@pytest.mark.parametrize("status", [None, "pending", "failed", "skipped", "expired"])
+def test_upload_com_share_code_que_nao_esta_parsed_preenche_a_partida(monkeypatch, tmp_path, status):
+    dem_path, gravado = _ingest_envio(monkeypatch, tmp_path, ["765EU", "765X"], status_share_code=status)
+
+    main.ingest_demo(_config_com_r2(), conn=None, path=dem_path, share_code="CSGO-meu",
+                     source="upload", enviado_por="765EU")
+
+    assert gravado["store"][0]["share_code"] == "CSGO-meu"
+    assert "demos/555.dem.bz2" in gravado["r2"]
+
+
+def test_upload_com_alvo_nao_passa_pela_prova_de_participacao(monkeypatch, tmp_path):
+    # Com alvo, a checagem é a de _validar_demo_contra_alvo (mapa + roster + placar).
+    dem_path, gravado = _ingest_envio(monkeypatch, tmp_path, ["A", "B"])
+
+    def _nao_chamar(*a, **kw):
+        raise AssertionError("prova de participação não se aplica a upload com alvo")
+
+    monkeypatch.setattr(main.dbmod, "amigos_aceitos", _nao_chamar)
+    monkeypatch.setattr(main.dbmod, "partida_por_share_code", _nao_chamar)
+    alvo = {"match_id": "m-alvo", "map": "de_mirage", "steam_ids": {"A", "B"}}
+    main.ingest_demo(_config_com_r2(), conn=None, path=dem_path, alvo=alvo, enviado_por="765EU")
+    assert gravado["store"][0]["match_id_alvo"] == "m-alvo"
+
+
+def test_ingest_sem_enviado_por_nao_checa_participacao(monkeypatch, tmp_path):
+    # fetch, FACEIT e fila pro chamam ingest_demo sem enviado_por.
+    dem_path, gravado = _ingest_envio(monkeypatch, tmp_path, ["765A"], status_share_code="parsed")
+    main.ingest_demo(_config_com_r2(), conn=None, path=dem_path, share_code="CSGO-x", source="valve_mm")
+    assert len(gravado["store"]) == 1
+
+
+def test_processar_uploads_passa_quem_enviou_pro_ingest(monkeypatch):
+    conn = _UploadsConn([("u1", "765EU", "uploads-pendentes/abc.dem", "CSGO-x", None, None, None, None)])
+    monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
+    monkeypatch.setattr(main.storage_r2, "download_bytes", lambda client, bucket, key, **kw: b"dem")
+    monkeypatch.setattr(main.storage_r2, "delete_object", lambda *a: None)
+    recebidos = []
+    monkeypatch.setattr(main, "ingest_demo", lambda *a, **kw: recebidos.append(kw) or "m1")
+    main.cmd_processar_uploads_pendentes(_config_com_r2(), conn)
+    assert recebidos[0]["enviado_por"] == "765EU"
+
+
+def test_processar_uploads_partida_ja_registrada_falha_e_apaga_staging(monkeypatch):
+    conn = _UploadsConn([("u1", "765EU", "uploads-pendentes/abc.dem", "CSGO-x", None, None, None, None)])
+    monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
+    monkeypatch.setattr(main.storage_r2, "download_bytes", lambda client, bucket, key, **kw: b"dem")
+    deletes = []
+    monkeypatch.setattr(main.storage_r2, "delete_object", lambda client, bucket, key: deletes.append(key))
+
+    def _ingest(*a, **kw):
+        raise main.DemoNaoConfereError(main.MSG_PARTIDA_JA_REGISTRADA)
+
+    monkeypatch.setattr(main, "ingest_demo", _ingest)
+    main.cmd_processar_uploads_pendentes(_config_com_r2(), conn)
+    falhou = next(c for c in conn.calls if c[0].startswith("update uploads_pendentes set status = %s") and c[1][0] == "falhou")
+    assert falhou[1][2] == "Essa Partida já está registrada."
+    assert deletes == ["uploads-pendentes/abc.dem"]
+
+
+# ---- R114 (c): Share Code de Partida não parsed só aceita Demo de quem a descobriu ----
+
+def test_upload_em_pending_alheia_com_demo_sem_quem_descobriu_e_recusado(monkeypatch, tmp_path):
+    dem_path, gravado = _ingest_envio(
+        monkeypatch, tmp_path, ["765EU", "765X"], status_share_code="pending", descoberta_por="765DONO",
+    )
+    with pytest.raises(main.DemoNaoConfereError, match="Essa Demo não é da Partida desse Share Code."):
+        main.ingest_demo(_config_com_r2(), conn=None, path=dem_path, share_code="CSGO-alheio",
+                         source="upload", enviado_por="765EU")
+    assert gravado["r2"] == [] and gravado["store"] == []
+
+
+def test_upload_em_pending_com_quem_descobriu_na_demo_e_gravado(monkeypatch, tmp_path):
+    dem_path, gravado = _ingest_envio(
+        monkeypatch, tmp_path, ["765EU", "765DONO"], status_share_code="pending", descoberta_por="765DONO",
+    )
+    main.ingest_demo(_config_com_r2(), conn=None, path=dem_path, share_code="CSGO-x",
+                     source="upload", enviado_por="765EU")
+    assert gravado["store"][0]["share_code"] == "CSGO-x"
+
+
+def test_upload_em_pending_sem_discovered_by_segue_como_antes(monkeypatch, tmp_path):
+    dem_path, gravado = _ingest_envio(
+        monkeypatch, tmp_path, ["765EU", "765X"], status_share_code="failed", descoberta_por=None,
+    )
+    main.ingest_demo(_config_com_r2(), conn=None, path=dem_path, share_code="CSGO-antigo",
+                     source="upload", enviado_por="765EU")
+    assert len(gravado["store"]) == 1

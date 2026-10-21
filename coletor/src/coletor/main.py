@@ -615,7 +615,7 @@ def cmd_processar_uploads_pendentes(config, conn):
                     config, conn, dem_path,
                     share_code=share_code, source=source_do_upload, upload=True,
                     played_at=played_at, plataforma_manual=plataforma_manual,
-                    alvo=alvo,
+                    alvo=alvo, enviado_por=adicionado_por,
                 )
                 dbmod.atualizar_upload_pendente(conn, upload_id, "concluido", match_id=match_id)
                 print(f"  {upload_id}: concluido ({match_id})")
@@ -1032,8 +1032,32 @@ def _atualizar_avatares(config, conn, steam_ids):
         print(f"aviso: avatares Steam não atualizados ({type(e).__name__})")
 
 
+MSG_SEM_PARTICIPACAO = "Você nem seus amigos aparecem nesta Demo."
+MSG_PARTIDA_JA_REGISTRADA = "Essa Partida já está registrada."
+MSG_DEMO_DE_OUTRA_PARTIDA = "Essa Demo não é da Partida desse Share Code."
+
+
+def _validar_envio(conn, parsed, enviado_por, share_code):
+    """Upload do Jogador sem alvo (R114). Roda antes de qualquer gravação no R2 ou no
+    banco: sem isso, um Share Code alheio regravava demos/<id>, replays/<id> e o
+    mapa/placar/roster da Partida dele (on conflict (share_code) do update)."""
+    participantes = {p["steam_id64"] for p in parsed.get("players", [])}
+    if enviado_por not in participantes and not (participantes & dbmod.amigos_aceitos(conn, enviado_por)):
+        raise DemoNaoConfereError(MSG_SEM_PARTICIPACAO)
+    partida = dbmod.partida_por_share_code(conn, share_code) if share_code else None
+    if partida is None:
+        return
+    status, descoberta_por = partida
+    if status == "parsed":
+        raise DemoNaoConfereError(MSG_PARTIDA_JA_REGISTRADA)
+    # Quem descobriu o Share Code joga a Partida real: sem ele na Demo, é outra Partida
+    # tentando ocupar a linha pendente de alguém. Linha antiga sem discovered_by passa.
+    if descoberta_por and descoberta_por not in participantes:
+        raise DemoNaoConfereError(MSG_DEMO_DE_OUTRA_PARTIDA)
+
+
 def ingest_demo(config, conn, path, share_code=None, source="upload", upload=True,
-                played_at=None, plataforma_manual=None, alvo=None):
+                played_at=None, plataforma_manual=None, alvo=None, enviado_por=None):
     """Parseia um .dem, arquiva no R2 (se configurado) e grava no banco. Devolve match_id.
 
     `played_at` (ISO 8601, opcional): quando o operador sabe a hora real da Partida,
@@ -1055,6 +1079,8 @@ def ingest_demo(config, conn, path, share_code=None, source="upload", upload=Tru
     parsed = transform.enrich(parsed)
     if alvo is not None:
         _validar_demo_contra_alvo(parsed, alvo)
+    elif enviado_por is not None:
+        _validar_envio(conn, parsed, enviado_por, share_code)
     if played_at:
         parsed["played_at"] = played_at
     parsed["plataforma_manual"] = plataforma_manual

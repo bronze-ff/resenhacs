@@ -907,3 +907,21 @@ def test_steam_ids_da_partida_devolve_conjunto():
     assert db.steam_ids_da_partida(conn, "m1") == {"A", "B"}
     select = next(c for c in conn.calls if c[0].startswith("select steam_id64 from match_players where match_id"))
     assert select[1] == ("m1",)
+
+
+# ---- R114: consultas da validação do upload ----
+
+def test_partida_por_share_code_consulta_parametrizada(monkeypatch):
+    conn = FakeConn()
+    monkeypatch.setattr(FakeCursor, "fetchone", lambda self: ("pending", "765DONO"))
+    assert db.partida_por_share_code(conn, "CSGO-x") == ("pending", "765DONO")
+    select = next(c for c in conn.calls if c[0].startswith("select status, discovered_by from matches"))
+    assert select[1] == ("CSGO-x",)
+
+
+def test_amigos_aceitos_olha_os_dois_lados_do_par():
+    conn = FakeConn()
+    assert db.amigos_aceitos(conn, "765EU") == set()
+    sql, params = next(c for c in conn.calls if "from friendships" in c[0])
+    assert "status = 'accepted'" in sql
+    assert params == ("765EU", "765EU", "765EU")

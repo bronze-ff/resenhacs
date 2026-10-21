@@ -901,6 +901,26 @@ def marcar_faceit_match(conn, match_id, faceit_match_id):
     conn.commit()
 
 
+def partida_por_share_code(conn, share_code):
+    """(status, discovered_by) da Partida com esse Share Code, ou None se não existe."""
+    with conn.cursor() as cur:
+        cur.execute("select status, discovered_by from matches where share_code = %s", (share_code,))
+        row = cur.fetchone()
+    return (row[0], row[1]) if row else None
+
+
+def amigos_aceitos(conn, steam_id64):
+    """SteamIDs dos amigos com amizade 'accepted' (par canônico: o Jogador pode estar
+    em player_a ou em player_b)."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "select case when player_a = %s then player_b else player_a end from friendships "
+            "where status = 'accepted' and (player_a = %s or player_b = %s)",
+            (steam_id64, steam_id64, steam_id64),
+        )
+        return {r[0] for r in cur.fetchall()}
+
+
 def steam_ids_da_partida(conn, match_id):
     """SteamIDs dos Participantes gravados na Partida (roster inteiro)."""
     with conn.cursor() as cur:
