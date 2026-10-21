@@ -255,3 +255,38 @@ describe('PUT /api/players/me/tour-concluido', () => {
     expect(chamada[1]).toEqual(['76561198000000002'])
   })
 })
+
+describe('Jogador Premium (admin)', () => {
+  const ALVO = '76561198000000009'
+
+  it('membro comum: 403 pra listar e pra marcar', async () => {
+    const { app } = appWith()
+    expect((await request(app).get('/api/players/premium').set('Cookie', memberCookie)).status).toBe(403)
+    const put = await request(app).put(`/api/players/${ALVO}/premium`).set('Cookie', memberCookie).send({ premium: true })
+    expect(put.status).toBe(403)
+  })
+
+  it('admin: lista todos com o flag', async () => {
+    const { app } = appWith([{ steam_id64: ALVO, nick: 'troya', avatar_url: null, premium: true }])
+    const res = await request(app).get('/api/players/premium').set('Cookie', adminCookie)
+    expect(res.body).toEqual([{ steamId: ALVO, nick: 'troya', avatarUrl: null, premium: true }])
+  })
+
+  it('admin: marca e desmarca, com SQL parametrizado', async () => {
+    const { app, db } = appWith()
+    db.query.mockImplementation((sql) => Promise.resolve(
+      sql.includes('is_super_admin from players') ? { rows: [{ is_super_admin: true }] } : { rows: [], rowCount: 1 },
+    ))
+    const res = await request(app).put(`/api/players/${ALVO}/premium`).set('Cookie', adminCookie).send({ premium: true })
+    expect(res.body).toEqual({ steamId: ALVO, premium: true })
+    const [sql, params] = db.query.mock.calls.find(([s]) => s.includes('update players set premium'))
+    expect(sql).toContain('$2')
+    expect(params).toEqual([ALVO, true])
+  })
+
+  it('admin: valida steamId e corpo', async () => {
+    const { app } = appWith()
+    expect((await request(app).put('/api/players/x/premium').set('Cookie', adminCookie).send({ premium: true })).status).toBe(400)
+    expect((await request(app).put(`/api/players/${ALVO}/premium`).set('Cookie', adminCookie).send({ premium: 'sim' })).status).toBe(400)
+  })
+})

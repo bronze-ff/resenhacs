@@ -8,6 +8,8 @@ class Config:
         self.steam_api_key = env.get("STEAM_API_KEY")
         self.faceit_api_key = env.get("FACEIT_API_KEY")
         self.app_url = env.get("APP_URL")
+        # DEMO-SLAP: só pra juntar os trechos de uma montagem (juntar-clipes). Vazio = no-op.
+        self.demoslap_api_key = env.get("DEMOSLAP_API_KEY")
         # Cloudflare R2 (compatível com S3)
         self.r2_account_id = env.get("R2_ACCOUNT_ID")
         self.r2_access_key_id = env.get("R2_ACCESS_KEY_ID")

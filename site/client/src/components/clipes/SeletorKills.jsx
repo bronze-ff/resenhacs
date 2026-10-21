@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Select, Button, Badge, SkeletonLista, EstadoVazio, EstadoErro } from '../ui'
 import { nomeArma } from '../../lib/format.js'
 import {
-  chaveKill, ehGranada, filtrarKills, killsDoJogador, marcasKill, umaPorRound,
+  chaveKill, ehGranada, filtrarKills, killsDoJogador, marcasKill, mortesDoJogador, umaPorRound,
 } from '../../lib/selecaoKills.js'
 
 function jogadorPadrao(jogadores, viewerSteamId) {
@@ -21,9 +21,11 @@ function CelulaArma({ weapon }) {
   )
 }
 
-// Seletor de kills do clipe: escolhe o Jogador, lista as kills dele na Partida e
-// devolve as marcadas por `onMudarSelecao(kills)` (ordem round/tick).
-export default function SeletorKills({ matchId, jogadores, viewerSteamId, onMudarSelecao }) {
+// Seletor de kills do clipe: escolhe o Jogador, lista as kills dele na Partida
+// (papel 'killer') ou as mortes dele (papel 'victim') e devolve as marcadas por
+// `onMudarSelecao(kills)` (ordem round/tick).
+export default function SeletorKills({ matchId, jogadores, viewerSteamId, papel = 'killer', onMudarSelecao }) {
+  const mortes = papel === 'victim'
   const [jogadorId, setJogadorId] = useState(() => jogadorPadrao(jogadores, viewerSteamId))
   const [kills, setKills] = useState(null)
   const [erro, setErro] = useState(false)
@@ -36,12 +38,15 @@ export default function SeletorKills({ matchId, jogadores, viewerSteamId, onMuda
     setKills(null)
     setErro(false)
     setSelecionadas(new Set())
-    fetch(`/api/matches/${encodeURIComponent(matchId)}/kills?jogador=${encodeURIComponent(jogadorId)}`)
+    fetch(`/api/matches/${encodeURIComponent(matchId)}/kills?${mortes ? 'vitima' : 'jogador'}=${encodeURIComponent(jogadorId)}`)
       .then((r) => (r.ok ? r.json() : Promise.reject()))
-      .then((lista) => { if (vivo) setKills(killsDoJogador(Array.isArray(lista) ? lista : [], jogadorId)) })
+      .then((lista) => {
+        const doJogador = mortes ? mortesDoJogador : killsDoJogador
+        if (vivo) setKills(doJogador(Array.isArray(lista) ? lista : [], jogadorId))
+      })
       .catch(() => { if (vivo) setErro(true) })
     return () => { vivo = false }
-  }, [matchId, jogadorId])
+  }, [matchId, jogadorId, mortes])
 
   const visiveis = useMemo(() => filtrarKills(kills ?? [], { soTkGranada }), [kills, soTkGranada])
 
@@ -59,6 +64,7 @@ export default function SeletorKills({ matchId, jogadores, viewerSteamId, onMuda
   }
 
   const todasMarcadas = visiveis.length > 0 && visiveis.every((k) => selecionadas.has(chaveKill(k)))
+  const oQue = mortes ? 'mortes' : 'kills'
 
   return (
     <div className="space-y-3">
@@ -91,12 +97,12 @@ export default function SeletorKills({ matchId, jogadores, viewerSteamId, onMuda
         </label>
       </div>
 
-      {erro && <EstadoErro mensagem="Não foi possível carregar as kills dessa Partida." />}
-      {!erro && kills === null && <SkeletonLista linhas={4} altura="h-10" rotulo="Carregando kills" />}
+      {erro && <EstadoErro mensagem={`Não foi possível carregar as ${oQue} dessa Partida.`} />}
+      {!erro && kills === null && <SkeletonLista linhas={4} altura="h-10" rotulo={`Carregando ${oQue}`} />}
       {!erro && kills !== null && visiveis.length === 0 && (
         <EstadoVazio
-          titulo={soTkGranada ? 'Nenhuma kill de TK ou granada.' : 'Nenhuma kill nessa Partida.'}
-          descricao={soTkGranada ? 'Desligue o filtro pra ver todas as kills do Jogador.' : 'Escolha outro Jogador acima.'}
+          titulo={soTkGranada ? `Nenhuma ${mortes ? 'morte' : 'kill'} de TK ou granada.` : `Nenhuma ${mortes ? 'morte' : 'kill'} nessa Partida.`}
+          descricao={soTkGranada ? `Desligue o filtro pra ver todas as ${oQue} do Jogador.` : 'Escolha outro Jogador acima.'}
         />
       )}
       {!erro && visiveis.length > 0 && (
@@ -107,7 +113,7 @@ export default function SeletorKills({ matchId, jogadores, viewerSteamId, onMuda
                 <th className="w-10 px-3 py-2">
                   <input
                     type="checkbox"
-                    aria-label="Marcar todas as kills visíveis"
+                    aria-label={`Marcar todas as ${oQue} visíveis`}
                     checked={todasMarcadas}
                     onChange={() => setSelecionadas(todasMarcadas ? new Set() : new Set(visiveis.map(chaveKill)))}
                     className="h-4 w-4 accent-[color:var(--color-destaque)]"
@@ -115,7 +121,7 @@ export default function SeletorKills({ matchId, jogadores, viewerSteamId, onMuda
                 </th>
                 <th className="px-3 py-2 text-right font-medium">Round</th>
                 <th className="px-3 py-2 font-medium">Arma</th>
-                <th className="px-3 py-2 font-medium">Vítima</th>
+                <th className="px-3 py-2 font-medium">{mortes ? 'Quem matou' : 'Vítima'}</th>
                 <th className="px-3 py-2 font-medium">Marcas</th>
               </tr>
             </thead>
@@ -123,7 +129,8 @@ export default function SeletorKills({ matchId, jogadores, viewerSteamId, onMuda
               {visiveis.map((k) => {
                 const chave = chaveKill(k)
                 const marcada = selecionadas.has(chave)
-                const vitima = k.victim?.nick || k.victim?.steamId
+                const outro = mortes ? k.killer : k.victim
+                const vitima = outro?.nick || outro?.steamId || 'Mundo'
                 return (
                   <tr key={chave} className={`border-t border-borda transition-colors hover:bg-superficie-alta ${marcada ? 'bg-superficie-alta' : ''}`}>
                     <td className="px-3 py-2">
@@ -157,7 +164,7 @@ export default function SeletorKills({ matchId, jogadores, viewerSteamId, onMuda
       )}
       {kills !== null && kills.length > 0 && (
         <p className="text-xs text-texto-fraco">
-          <span className="tabular-nums">{selecionadas.size}</span> de <span className="tabular-nums">{kills.length}</span> kills marcadas
+          <span className="tabular-nums">{selecionadas.size}</span> de <span className="tabular-nums">{kills.length}</span> {oQue} marcadas
         </p>
       )}
     </div>

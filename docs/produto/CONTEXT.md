@@ -8,6 +8,10 @@ Plataforma fechada (interface em PT-BR) para um grupo de amigos acompanhar estat
 Um membro do grupo fechado (whitelist de Steam IDs) com perfil, histórico e presença nos rankings.
 _Avoid_: usuário, player, member
 
+**Jogador Premium**:
+Um Jogador que apoia o site, marcado pelo admin. Ganha a badge ao lado do nick e pode pedir Clipe de vídeo real.
+_Avoid_: VIP, assinante, doador
+
 **Participante**:
 Qualquer um dos dez presentes numa Partida; aparece no placar daquela Partida, mas só ganha perfil se for Jogador.
 _Avoid_: random, oponente

@@ -88,7 +88,7 @@ describe('GET /api/profile/:steamId', () => {
     ])
     const res = await request(app).get('/api/profile/765').set('Cookie', cookie)
     expect(res.status).toBe(200)
-    expect(res.body.jogador).toEqual({ steamId: '765', nick: 'adversario', avatarUrl: 'https://cache/x.jpg', faceitNick: null, faceitElo: null, faceitSkillLevel: null })
+    expect(res.body.jogador).toEqual({ steamId: '765', nick: 'adversario', avatarUrl: 'https://cache/x.jpg', premium: false, faceitNick: null, faceitElo: null, faceitSkillLevel: null })
   })
 
   it('amigo accepted com ZERO partidas registradas ainda vê o perfil (gate não é só participação)', async () => {

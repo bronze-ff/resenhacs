@@ -748,6 +748,27 @@ def listar_steam_ids_de_match_players_sem_avatar_fresco(conn, dias=30):
         return [r[0] for r in cur.fetchall()]
 
 
+def listar_montagens_sem_video(conn, limite=10):
+    """Montagens prontas (2+ trechos gravados) ainda sem o vídeo único no R2. Depois de
+    1 dia sem conseguir juntar, desiste: a aba continua tocando os trechos em sequência."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "select c.id, a.job_id, c.video_job_ids from clipes_reais c "
+            "join demoslap_analises a on a.match_id = c.match_id "
+            "where c.status = 'pronto' and c.video_r2_key is null "
+            "and cardinality(c.video_job_ids) > 1 and c.updated_at > now() - interval '1 day' "
+            "order by c.updated_at limit %s",
+            (limite,),
+        )
+        return cur.fetchall()
+
+
+def gravar_video_montagem(conn, clipe_id, key):
+    with conn.cursor() as cur:
+        cur.execute("update clipes_reais set video_r2_key = %s where id = %s", (key, clipe_id))
+    conn.commit()
+
+
 def connect(database_url):
     import psycopg
 

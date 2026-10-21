@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { nomeMapa, dataHora, corRating, nomeArma, TIPO_COMPRA, rotuloHighlight } from '../lib/format.js'
-import { Abas, Avatar, Button, classesBotao, EstadoErro, EstadoVazio, Skeleton, SkeletonLista, Card, SectionHeader, StatTile, RatingBadge, DataTable, MapIcon, Badge, Select, PlataformaBadge, SteamIcon, FaceitIcon, faixaPremier, nivelDoElo, corChipDoNivel, TEXTO_POR_NIVEL, Explicacao } from '../components/ui'
+import { Abas, Avatar, Button, classesBotao, EstadoErro, EstadoVazio, Skeleton, SkeletonLista, Card, SectionHeader, StatTile, RatingBadge, DataTable, MapIcon, Badge, Select, PlataformaBadge, PremiumBadge, SteamIcon, FaceitIcon, faixaPremier, nivelDoElo, corChipDoNivel, TEXTO_POR_NIVEL, Explicacao } from '../components/ui'
 import { METRICAS } from '../lib/metricas.js'
 import LinhaEvolucao from '../components/LinhaEvolucao.jsx'
 import DesempenhoRecente from '../components/perfil/DesempenhoRecente.jsx'
@@ -285,6 +285,7 @@ export default function JogadorPerfil() {
                 {jogador.nick || jogador.steamId}
               </h2>
               <TagEstilo estilo={estilo} />
+              {jogador.premium && <PremiumBadge />}
               {/* Premier/FACEIT saíram daqui de propósito: viraram o hero logo abaixo
                   (CardRatingComunidade) — o mesmo número duas vezes na mesma dobra é ruído. */}
             </div>

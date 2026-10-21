@@ -171,6 +171,24 @@ jobs:
           APP_URL: ${{ secrets.APP_URL }}
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: python -m coletor.main processar-uploads-pendentes
+      # Vídeo único das montagens da aba Clipes. Sem o secret DEMOSLAP_API_KEY o comando
+      # é no-op. O ffmpeg só é instalado se o runner não trouxer (o apt-get update já
+      # rodou no passo do unar).
+      - name: Juntar trechos das montagens (DEMO-SLAP)
+        working-directory: coletor
+        env:
+          PYTHONPATH: src
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          DEMOSLAP_API_KEY: ${{ secrets.DEMOSLAP_API_KEY }}
+        run: |
+          if [ -n "$DEMOSLAP_API_KEY" ] && ! command -v ffmpeg >/dev/null; then
+            sudo apt-get install -y --no-install-recommends ffmpeg
+          fi
+          python -m coletor.main juntar-clipes
       - name: Sincronizar partidas FACEIT (membros vinculados)
         working-directory: coletor
         env:

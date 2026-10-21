@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { hrefSeguro } from '../lib/urlSegura.js'
 import { Button, CabecalhoPagina, Card, EstadoVazio, Input, SectionHeader, SkeletonLista, classesBotao } from '../components/ui'
 import FormCompeticao from '../components/FormCompeticao.jsx'
+import JogadoresPremium from '../components/JogadoresPremium.jsx'
 
 // Pedaços de 100 MiB: um PUT único do arquivo inteiro estoura a memória da aba (um vídeo de
 // 2 GB matava o processo do Chrome com STATUS_BREAKPOINT).
@@ -156,6 +157,8 @@ export default function Admin() {
           {mensagem && <p role="status" className="mt-3 text-sm text-texto-fraco">{mensagem}</p>}
         </Card>
       </section>
+
+      <JogadoresPremium />
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(18rem,0.9fr)]">
       <section className="space-y-3">

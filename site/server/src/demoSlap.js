@@ -4,7 +4,8 @@
 // jogada" sozinha, sem round/kill — ver allstarClip.js).
 //
 // Fluxo: analyze/url (1x por Partida) → render-custom com [{tick, duration, povSteamId}]
-// → render/{analyze}/status até `done` → (montagem) render-fragmovie → URLs assinadas.
+// → render/{analyze}/status até `done` → URLs assinadas. Montagem = os trechos tocados em
+// sequência no client: o render-fragmovie recusa trechos do render-custom.
 // Os ids são de espaços diferentes; ver o glossário no topo da doc deles.
 const BASE = 'https://api.demo-slap.net/public-api'
 
@@ -43,10 +44,9 @@ export function criarClienteDemoSlap(apiKey) {
       (await chamar(apiKey, 'POST', `/render-custom/${enc(jobId)}`, { ...opcoes, customClips })).jobIds ?? [],
     statusRender: (jobId) => chamar(apiKey, 'GET', `/render/${enc(jobId)}/status`),
     dadosRender: (jobId) => chamar(apiKey, 'GET', `/render/${enc(jobId)}/data`),
-    juntar: async (jobId, videoJobIds, introTitle) =>
-      (await chamar(apiKey, 'POST', `/render-fragmovie/${enc(jobId)}`, { videoJobIds, introTitle, name: introTitle })).jobId,
-    statusMontagem: (id) => chamar(apiKey, 'GET', `/render-fragmovie/${enc(id)}/status`),
-    dadosMontagem: (id) => chamar(apiKey, 'GET', `/render-fragmovie/${enc(id)}/data`),
+    // Mesmo corpo do render-custom; devolve os créditos sem gastar nada.
+    calcular: async (customClips, opcoes = {}) =>
+      (await chamar(apiKey, 'POST', '/custom-credits-calc', { ...opcoes, customClips })).credits,
   }
 }
 

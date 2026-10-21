@@ -94,6 +94,27 @@ export function createPlayersRouter({ db, requireAuth, fetchBans }) {
     res.status(201).json({ ok: true, nick })
   })
 
+  // Premium (migration 0061): o admin marca quem apoia o site. Dá a badge no nick e
+  // libera o clipe real (DEMO-SLAP), que gasta crédito pago.
+  router.get('/premium', requireAuth, requireSuperAdmin, async (req, res) => {
+    const { rows } = await db.query(
+      `select p.steam_id64, p.nick, coalesce(p.avatar_url, sa.avatar_url) as avatar_url, p.premium
+       from players p
+       left join steam_avatares sa on sa.steam_id64 = p.steam_id64
+       order by p.premium desc, lower(p.nick)`,
+    )
+    res.json(rows.map((p) => ({ steamId: p.steam_id64, nick: p.nick, avatarUrl: p.avatar_url, premium: p.premium })))
+  })
+
+  router.put('/:steamId/premium', requireAuth, requireSuperAdmin, async (req, res) => {
+    const { steamId } = req.params
+    if (!/^\d{17}$/.test(steamId)) return res.status(400).json({ erro: 'steamId deve ser o SteamID64 (17 dígitos)' })
+    if (typeof req.body?.premium !== 'boolean') return res.status(400).json({ erro: 'premium deve ser true ou false' })
+    const { rowCount } = await db.query('update players set premium = $2 where steam_id64 = $1', [steamId, req.body.premium])
+    if (!rowCount) return res.status(404).json({ erro: 'Jogador não encontrado' })
+    res.json({ steamId, premium: req.body.premium })
+  })
+
   // Onboarding: o próprio Jogador informa seu código de autenticação de histórico e
   // o último share code, sementes de que o Coletor (Fase 2) precisa para achar Partidas.
   router.put('/me', requireAuth, async (req, res) => {

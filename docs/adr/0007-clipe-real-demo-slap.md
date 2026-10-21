@@ -14,7 +14,7 @@ A Allstar não atende. A API de parceiro (ADR-0004, `site/server/src/allstarClip
 Usar a API pública da DEMO-SLAP (https://api-doc.demo-slap.net, v2.5.0):
 
 - `render-custom` grava, num CS2 de verdade, um trecho a partir de `tick`, com `duration` e na visão de `povSteamId`.
-- `render-fragmovie` junta os trechos gravados num vídeo só.
+- Montagem é um trecho por kill. O `render-fragmovie` recusa trechos do `render-custom` ("No rendered clips found for the supplied videoJobIds", testado em 2026-10-21). Por isso o Coletor junta os trechos com ffmpeg (`juntar-clipes`, no cron do GitHub Actions, de graça porque o repositório é público) e grava o vídeo único no R2. Até ele ficar pronto, a aba toca os trechos em sequência.
 
 Nós já temos o tick de cada kill em `kill_positions`, inclusive TK (migration 0054). O Clipe 2D sai da aba Clipes.
 
@@ -29,5 +29,6 @@ Nós já temos o tick de cada kill em `kill_positions`, inclusive TK (migration 
 
 - Custo por crédito: análise de 1 crédito por Partida, mais cerca de 0,1 crédito por segundo de vídeo. Há tetos por pedido e por dia (ver `docs/operacao.md`).
 - Sem worker: o pedido avança quando alguém consulta a aba Clipes.
+- Modos Fails, Coaching e Cheater analysis (2026-10-21) são o mesmo `render-custom`, com outra câmera ou com `showXRay`. Só Jogador Premium pede, porque cada pedido gasta crédito pago.
 - Depende da Demo ainda estar no R2 (14 dias, ADR-0006).
-- Ainda falta confirmar com a DEMO-SLAP se ela aceita a URL assinada do R2 e quais são os limites de uso. O código mostra a recusa deles no próprio clipe.
+- A DEMO-SLAP aceita a URL assinada do R2: ela baixa a Demo assim que recebe o pedido (confirmado pela equipe no Discord, 2026-10-21). A chave da API sai pelo Discord deles e usa os mesmos créditos do site, inclusive os grátis do dia. Os limites de uso ainda não estão confirmados. O código mostra a recusa deles no próprio clipe.

@@ -182,6 +182,7 @@ describe('GET /api/auth/me', () => {
       nick: 'fih',
       avatarUrl: JOGADOR.avatar_url,
       isSuperAdmin: true,
+      premium: false,
       faceitNick: null,
       tourConcluido: false,
     })
