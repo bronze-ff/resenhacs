@@ -3,6 +3,7 @@ import request from 'supertest'
 import { createApp } from '../src/app.js'
 import { signToken } from '../src/auth/jwt.js'
 import { ErroDemoSlap } from '../src/demoSlap.js'
+import { presignDownload } from '../src/r2.js'
 
 const config = {
   jwtSecret: 's', appUrl: 'http://localhost:5173', isProduction: false, r2Bucket: 'resenha-demos',
@@ -73,7 +74,6 @@ function bancoFalso({ partida = { id: MATCH, map: 'de_dust2', demo_url: DEMO }, 
       Object.assign(clipe(p[0]), { status: 'erro', erro: p[1] })
       return { rows: [] }
     }
-    if (sql.includes('set fragmovie_job_id')) { clipe(p[0]).fragmovie_job_id = p[1]; return { rows: [] } }
     return { rows: [] }
   })
   return { db: { query }, estado }
@@ -86,10 +86,9 @@ function demoSlapFalso(sobrescrever = {}) {
     dadosAnalise: vi.fn().mockResolvedValue({ tickRate: 64 }),
     renderizar: vi.fn().mockImplementation(async (_job, clipes) => clipes.map((_, i) => `v${i + 1}`)),
     statusRender: vi.fn().mockResolvedValue({ v1: { status: 'done' }, v2: { status: 'done' } }),
-    dadosRender: vi.fn().mockResolvedValue({ highlightClips: { v1: { clipUrl: 'https://cdn.demo-slap.net/v1.mp4' } } }),
-    juntar: vi.fn().mockResolvedValue('f1'),
-    statusMontagem: vi.fn().mockResolvedValue({ status: 'done' }),
-    dadosMontagem: vi.fn().mockResolvedValue({ highlightClips: { f1: { clipUrl: 'https://cdn.demo-slap.net/f1.mp4' } } }),
+    dadosRender: vi.fn().mockResolvedValue({
+      highlightClips: { v1: { clipUrl: 'https://cdn.demo-slap.net/v1.mp4' }, v2: { clipUrl: 'https://cdn.demo-slap.net/v2.mp4' } },
+    }),
     ...sobrescrever,
   }
 }
@@ -157,7 +156,7 @@ describe('clipes reais (DEMO-SLAP)', () => {
     expect(demoSlap.analisar).toHaveBeenCalledWith('https://r2-assinada/x.dem')
     expect(demoSlap.renderizar).toHaveBeenCalledWith('an1', [{ tick: 10000 - 256, duration: 7, povSteamId: AMIGO }])
     expect(banco.estado.clipes[0]).toMatchObject({ status: 'renderizando', video_job_ids: ['v1'] })
-    expect(res.body.clipes[0]).toMatchObject({ status: 'renderizando', montagem: false, videoUrl: null })
+    expect(res.body.clipes[0]).toMatchObject({ status: 'renderizando', montagem: false, videos: [] })
   })
 
   it('análise já feita não é refeita', async () => {
@@ -176,24 +175,42 @@ describe('clipes reais (DEMO-SLAP)', () => {
     const { app: a } = app({ banco })
     const res = await request(a).get(`/api/matches/${MATCH}/clipes-reais`).set('Cookie', cookie)
     expect(res.body.disponivel).toBe(true)
-    expect(res.body.clipes[0]).toMatchObject({ id: 'c1', status: 'pronto', videoUrl: 'https://cdn.demo-slap.net/v1.mp4' })
+    expect(res.body.clipes[0]).toMatchObject({ id: 'c1', status: 'pronto', videos: ['https://cdn.demo-slap.net/v1.mp4'] })
   })
 
-  it('montagem: junta os trechos depois de gravados e entrega o vídeo único', async () => {
+  it('montagem: com os trechos gravados fica pronta e entrega um vídeo por kill, na ordem', async () => {
     const kills = [TK, { tick: 20000, round: 5, pov: EU }]
     const banco = bancoFalso({
       analise: { job_id: 'an1', status: 'done', tick_rate: 64, erro: null },
-      clipes: [{ id: 'c1', match_id: MATCH, pedido_por: EU, kills, status: 'renderizando', video_job_ids: ['v1', 'v2'], fragmovie_job_id: null, updated_at: new Date() }],
+      clipes: [{ id: 'c1', match_id: MATCH, pedido_por: EU, kills, status: 'renderizando', video_job_ids: ['v2', 'v1'], fragmovie_job_id: null, updated_at: new Date() }],
     })
-    const statusMontagem = vi.fn().mockResolvedValue({ status: 'working' })
-    const { app: a, demoSlap } = app({ banco, demoSlap: demoSlapFalso({ statusMontagem }) })
-    const r1 = await request(a).get(`/api/matches/${MATCH}/clipes-reais`).set('Cookie', cookie)
-    expect(demoSlap.juntar).toHaveBeenCalledWith('an1', ['v1', 'v2'], 'bronze · de_dust2')
-    expect(r1.body.clipes[0]).toMatchObject({ status: 'juntando', montagem: true })
-    statusMontagem.mockResolvedValue({ status: 'done' })
-    const r2 = await request(a).get(`/api/matches/${MATCH}/clipes-reais`).set('Cookie', cookie)
-    expect(r2.body.clipes[0]).toMatchObject({ status: 'pronto', videoUrl: 'https://cdn.demo-slap.net/f1.mp4' })
-    expect(demoSlap.juntar).toHaveBeenCalledTimes(1)
+    const { app: a } = app({ banco })
+    const res = await request(a).get(`/api/matches/${MATCH}/clipes-reais`).set('Cookie', cookie)
+    expect(res.body.clipes[0]).toMatchObject({
+      status: 'pronto', montagem: true, videos: ['https://cdn.demo-slap.net/v2.mp4', 'https://cdn.demo-slap.net/v1.mp4'],
+    })
+  })
+
+  it('montagem já juntada pelo Coletor: entrega só o vídeo único do R2', async () => {
+    const banco = bancoFalso({
+      analise: { job_id: 'an1', status: 'done', tick_rate: 64, erro: null },
+      clipes: [{ id: 'c1', match_id: MATCH, pedido_por: EU, kills: [TK, TK], status: 'pronto', video_job_ids: ['v1', 'v2'], video_r2_key: 'clipes/c1.mp4', updated_at: new Date() }],
+    })
+    const { app: a, demoSlap } = app({ banco })
+    const res = await request(a).get(`/api/matches/${MATCH}/clipes-reais`).set('Cookie', cookie)
+    expect(res.body.clipes[0].videos).toEqual(['https://r2-assinada/x.dem'])
+    expect(presignDownload).toHaveBeenLastCalledWith(r2Client, 'resenha-demos', 'clipes/c1.mp4', 3600)
+    expect(demoSlap.dadosRender).not.toHaveBeenCalled()
+  })
+
+  it('pedido antigo parado em juntando vira pronto com os trechos', async () => {
+    const banco = bancoFalso({
+      analise: { job_id: 'an1', status: 'done', tick_rate: 64, erro: null },
+      clipes: [{ id: 'c1', match_id: MATCH, pedido_por: EU, kills: [TK, TK], status: 'juntando', video_job_ids: ['v1', 'v2'], fragmovie_job_id: 'f1', updated_at: new Date() }],
+    })
+    const { app: a } = app({ banco })
+    const res = await request(a).get(`/api/matches/${MATCH}/clipes-reais`).set('Cookie', cookie)
+    expect(res.body.clipes[0]).toMatchObject({ status: 'pronto', videos: ['https://cdn.demo-slap.net/v1.mp4', 'https://cdn.demo-slap.net/v2.mp4'] })
   })
 
   it('DEMO-SLAP recusa o render (ex.: sem crédito): clipe vira erro com a mensagem deles', async () => {

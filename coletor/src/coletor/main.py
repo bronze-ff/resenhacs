@@ -609,6 +609,98 @@ def cmd_limpar_uploads_orfaos(config, conn, dias=30):
     return total
 
 
+DEMOSLAP_API = "https://api.demo-slap.net/public-api"
+# Trecho de montagem tem ~5 s (poucos MB). O teto só barra resposta absurda.
+_MAX_TRECHO_BYTES = 200 * 1024 * 1024
+
+
+def _demoslap_trechos(api_key, job_id):
+    """{video jobId: URL assinada do .mp4} dos trechos gravados numa análise da DEMO-SLAP."""
+    req = urllib.request.Request(
+        f"{DEMOSLAP_API}/render/{urllib.parse.quote(job_id, safe='')}/data",
+        headers={"x-api-key": api_key},
+    )
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        dados = json.loads(resp.read())
+    return {vid: (info or {}).get("clipUrl") for vid, info in (dados.get("highlightClips") or {}).items()}
+
+
+def _baixar_trecho(url, destino):
+    # Só https: urllib também abriria file:// e ftp://.
+    if urllib.parse.urlsplit(url).scheme != "https":
+        raise RuntimeError("URL de trecho com esquema não permitido")
+    with urllib.request.urlopen(url, timeout=120) as resp, open(destino, "wb") as out:
+        recebido = 0
+        while chunk := resp.read(1 << 20):
+            recebido += len(chunk)
+            if recebido > _MAX_TRECHO_BYTES:
+                raise RuntimeError(f"trecho excedeu o teto de {_MAX_TRECHO_BYTES} bytes")
+            out.write(chunk)
+
+
+def _ffmpeg_concat(trechos, saida):
+    import subprocess
+
+    lista = saida.with_suffix(".txt")
+    lista.write_text("".join(f"file '{p.as_posix()}'\n" for p in trechos), encoding="utf-8")
+    base = ["ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", str(lista)]
+    fim = ["-movflags", "+faststart", str(saida)]
+    # Os trechos saem do mesmo render (mesmo codec e resolução): copiar o stream basta.
+    # Se o ffmpeg recusar, recodifica.
+    try:
+        subprocess.run(base + ["-c", "copy"] + fim, check=True, capture_output=True, timeout=300)
+    except subprocess.CalledProcessError:
+        subprocess.run(
+            base + ["-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-c:a", "aac"] + fim,
+            check=True, capture_output=True, timeout=600,
+        )
+
+
+def cmd_juntar_clipes(config, conn):
+    """Junta os trechos de cada montagem da aba Clipes num vídeo único no R2.
+
+    O render-fragmovie da DEMO-SLAP recusa trechos do render-custom, então a junção é
+    nossa: baixa os trechos (URL assinada da DEMO-SLAP), junta com ffmpeg e grava em
+    `clipes/<id>.mp4`. Sem DEMOSLAP_API_KEY é no-op. Erro numa montagem não derruba as
+    outras; ela é tentada de novo na próxima run (por até 1 dia, ver db).
+    """
+    if not config.demoslap_api_key:
+        print("juntar-clipes: DEMOSLAP_API_KEY vazio, nada a fazer")
+        return 0
+    montagens = dbmod.listar_montagens_sem_video(conn)
+    if not montagens:
+        print("juntar-clipes: nenhuma montagem esperando o vídeo único")
+        return 0
+
+    import tempfile
+    from pathlib import Path
+
+    client = storage_r2.make_client(config)
+    total = 0
+    for clipe_id, job_id, video_job_ids in montagens:
+        try:
+            urls = _demoslap_trechos(config.demoslap_api_key, job_id)
+            with tempfile.TemporaryDirectory() as tmp:
+                pasta = Path(tmp)
+                trechos = []
+                for i, vid in enumerate(video_job_ids):
+                    if not urls.get(vid):
+                        raise RuntimeError(f"trecho {vid} sem vídeo na DEMO-SLAP")
+                    trechos.append(pasta / f"trecho_{i}.mp4")
+                    _baixar_trecho(urls[vid], trechos[-1])
+                saida = pasta / "montagem.mp4"
+                _ffmpeg_concat(trechos, saida)
+                key = storage_r2.clipe_key(clipe_id)
+                storage_r2.upload_bytes(client, config.r2_bucket, key, saida.read_bytes(), content_type="video/mp4")
+            dbmod.gravar_video_montagem(conn, clipe_id, key)
+            total += 1
+            print(f"  {clipe_id}: {len(trechos)} trechos juntados ({key})")
+        except Exception as e:  # noqa: BLE001
+            print(f"  {clipe_id}: falha ao juntar ({e})")
+    print(f"juntar-clipes: {total} montagem(ns) com vídeo único")
+    return total
+
+
 TIPO_POR_CHAVE = {"smokes": "smoke", "fires": "molotov", "flashes": "flash", "hes": "he"}
 
 
@@ -1075,6 +1167,10 @@ def main(argv=None):
     )
     p_limpar.add_argument("--days", type=int, default=30, help="Idade mínima em dias do status 'falhou' (default: 30).")
     sub.add_parser(
+        "juntar-clipes",
+        help="Junta os trechos das montagens da aba Clipes (DEMO-SLAP) num vídeo único no R2, com ffmpeg.",
+    )
+    sub.add_parser(
         "configurar-cors",
         help="Configura CORS no bucket R2 (uma vez) pra aceitar upload direto do navegador.",
     )
@@ -1153,6 +1249,8 @@ def main(argv=None):
             cmd_processar_uploads_pendentes(config, conn)
         elif args.cmd == "limpar-uploads-orfaos":
             cmd_limpar_uploads_orfaos(config, conn, dias=args.days)
+        elif args.cmd == "juntar-clipes":
+            cmd_juntar_clipes(config, conn)
         elif args.cmd == "configurar-cors":
             client = storage_r2.make_client(config)
             storage_r2.configurar_cors(

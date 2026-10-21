@@ -18,6 +18,11 @@ def replay_key(match_id):
     return f"replays/{match_id}.json"
 
 
+def clipe_key(clipe_id):
+    """Chave do vídeo único de uma montagem (clipes_reais), juntado por juntar-clipes."""
+    return f"clipes/{clipe_id}.mp4"
+
+
 def gzip_bytes(data):
     """Comprime o corpo que será gravado com ContentEncoding=gzip.
 

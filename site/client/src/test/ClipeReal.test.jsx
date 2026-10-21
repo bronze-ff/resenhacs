@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import SecaoClipeReal, { descreverClipe } from '../components/clipes/SecaoClipeReal.jsx'
 
@@ -98,7 +98,7 @@ describe('SecaoClipeReal', () => {
       lista: {
         disponivel: true,
         clipes: [
-          { id: 'c1', status: 'pronto', kills: [{ round: 4 }], videoUrl: 'https://cdn.demo-slap.net/v1.mp4', pedidoPor: { nick: 'fih' } },
+          { id: 'c1', status: 'pronto', kills: [{ round: 4 }], videos: ['https://cdn.demo-slap.net/v1.mp4'], pedidoPor: { nick: 'fih' } },
           { id: 'c2', status: 'erro', erro: 'Not enough credits', kills: [{ round: 6 }], pedidoPor: { nick: 'fih' } },
         ],
       },
@@ -107,6 +107,22 @@ describe('SecaoClipeReal', () => {
     expect(await screen.findByRole('link', { name: 'Baixar vídeo' })).toHaveAttribute('href', 'https://cdn.demo-slap.net/v1.mp4')
     expect(container.querySelector('video')).toHaveAttribute('src', 'https://cdn.demo-slap.net/v1.mp4')
     expect(screen.getByText('Not enough credits')).toBeInTheDocument()
+  })
+
+  it('montagem toca os trechos em sequência e deixa escolher o trecho', async () => {
+    const videos = ['https://cdn.demo-slap.net/v1.mp4', 'https://cdn.demo-slap.net/v2.mp4']
+    mockApi({ lista: { disponivel: true, clipes: [{ id: 'c1', status: 'pronto', kills: [{ round: 4 }, { round: 6 }], videos, pedidoPor: { nick: 'fih' } }] } })
+    const user = userEvent.setup()
+    const { container } = render(<SecaoClipeReal matchId="m1" jogadores={JOGADORES} viewerSteamId="eu" />)
+    expect(await screen.findByRole('link', { name: 'Baixar trecho 1' })).toHaveAttribute('href', videos[0])
+    const video = container.querySelector('video')
+    fireEvent.ended(video)
+    expect(video).toHaveAttribute('src', videos[1])
+    expect(screen.getByRole('button', { name: 'Trecho 2' })).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.ended(video)
+    expect(video).toHaveAttribute('src', videos[1])
+    await user.click(screen.getByRole('button', { name: 'Trecho 1' }))
+    expect(video).toHaveAttribute('src', videos[0])
   })
 
   it('consulta de novo enquanto houver clipe em andamento', async () => {

@@ -103,14 +103,17 @@ Na aba Clipes da Partida, o Jogador marca uma kill (vira um clipe) ou várias (v
 
 Ligar:
 
-1. Criar conta em https://demo-slap.net e pedir a chave da API pelo Discord deles (link no topo de https://api-doc.demo-slap.net).
+1. Criar conta em https://demo-slap.net e pedir a chave da API pelo Discord deles (link no topo de https://api-doc.demo-slap.net). No fórum `help`, a equipe pede o SteamID64 da conta por DM e manda a chave de volta.
 2. Pôr a chave em `DEMOSLAP_API_KEY` no projeto Vercel `resenhacs` (Production). Sem ela, a aba Clipes mostra "Clipe de vídeo ainda não configurado".
-3. Aplicar a migration `0059_clipes_reais.sql`.
+3. Aplicar as migrations `0059_clipes_reais.sql` e `0060_clipes_reais_video_unico.sql`.
+4. Pôr a mesma chave no secret `DEMOSLAP_API_KEY` do GitHub (repositório `bronze-ff/resenhacs`). Sem ele, o `juntar-clipes` é no-op e a montagem fica em trechos.
+5. No R2, criar uma regra de ciclo de vida que apaga o prefixo `clipes/` depois de 90 dias (o mesmo prazo da DEMO-SLAP).
 
 Como funciona:
 
 - A primeira vez que alguém pede clipe de uma Partida, a API manda a Demo para análise (1 crédito). As próximas reaproveitam a mesma análise.
-- Cada trecho custa por segundo (cerca de 0,1 crédito/s). Kill sozinha: 4 s antes e 3 s depois. Montagem: 3 s antes e 2 s depois de cada kill, e depois a junção.
+- Cada trecho custa por segundo (cerca de 0,1 crédito/s). Kill sozinha: 4 s antes e 3 s depois. Montagem: 3 s antes e 2 s depois de cada kill.
+- Vídeo único da montagem: o `render-fragmovie` recusa trechos do `render-custom`, então quem junta é o Coletor. O comando `juntar-clipes` roda no cron (10 em 10 min), baixa os trechos, junta com ffmpeg e grava `clipes/<id>.mp4` no R2. Até lá, a aba toca os trechos em sequência. Depois de 1 dia sem conseguir juntar, o Coletor desiste e ficam os trechos.
 - Não há worker. O pedido avança quando alguém está com a aba Clipes aberta (ela consulta a cada 10 s). Se ninguém olhar, o clipe fica parado e continua de onde parou na próxima visita.
 - Tetos: 10 kills por pedido e 10 pedidos por Jogador por dia.
 - Só dá para pedir enquanto a Demo está no R2 (14 dias, ADR-0006). A DEMO-SLAP apaga os vídeos dela em 90 dias.

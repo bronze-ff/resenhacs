@@ -12,7 +12,7 @@ import { criarClienteDemoSlap, montarClipes, resumirStatusRender, ErroDemoSlap }
 const STEAM_ID64 = /^\d{17}$/
 const MAX_KILLS = 10
 const MAX_POR_DIA = 10
-// Passo reservado ('enviando'/'juntando') que não terminou nesse tempo foi interrompido
+// Passo reservado ('enviando') que não terminou nesse tempo foi interrompido
 // (função da Vercel encerrada no meio). Vira erro pra o Jogador poder pedir de novo.
 const RESERVA_EXPIRADA_MS = 5 * 60 * 1000
 
@@ -90,8 +90,14 @@ export function createClipesReaisRouter({ db, requireAuth, r2Client, r2Bucket, c
   async function avancar(c, contexto) {
     if (FINAIS.has(c.status)) return
     const parado = Date.now() - new Date(c.updated_at).getTime() > RESERVA_EXPIRADA_MS
-    if (c.status === 'enviando' || (c.status === 'juntando' && !c.fragmovie_job_id)) {
+    if (c.status === 'enviando') {
       if (parado) await marcarErro(c.id, 'O pedido foi interrompido. Peça o clipe de novo.')
+      return
+    }
+    // Pedido antigo, de quando a montagem passava pelo render-fragmovie: os trechos já
+    // estão gravados, então só falta exibir.
+    if (c.status === 'juntando') {
+      await db.query("update clipes_reais set status = 'pronto', updated_at = now() where id = $1", [c.id])
       return
     }
     try {
@@ -124,35 +130,9 @@ export function createClipesReaisRouter({ db, requireAuth, r2Client, r2Bucket, c
         const r = resumirStatusRender(mapa, c.video_job_ids ?? [])
         if (r.status === 'error') return marcarErro(c.id, r.erro)
         if (r.status !== 'done') return
-        if ((c.video_job_ids ?? []).length <= 1) {
-          await db.query("update clipes_reais set status = 'pronto', updated_at = now() where id = $1", [c.id])
-          return
-        }
-        const reserva = await db.query(
-          "update clipes_reais set status = 'juntando', updated_at = now() where id = $1 and status = 'renderizando' returning id",
-          [c.id],
-        )
-        if (reserva.rows.length === 0) return
-        try {
-          const titulo = `${c.nick || 'Resenha'} · ${contexto.mapa || 'CS2'}`.slice(0, 60)
-          const fid = await cliente.juntar(c.job_id, c.video_job_ids, titulo)
-          await db.query(
-            'update clipes_reais set fragmovie_job_id = $2, updated_at = now() where id = $1',
-            [c.id, fid],
-          )
-        } catch (e) {
-          console.error(`demoslap: montagem recusada no clipe ${c.id}: ${e.message}`)
-          await marcarErro(c.id, mensagemErro(e))
-        }
-        return
-      }
-
-      if (c.status === 'juntando') {
-        const st = await cliente.statusMontagem(c.fragmovie_job_id)
-        if (st?.status === 'error') return marcarErro(c.id, st.errorMessage || 'Falha ao juntar a montagem')
-        if (st?.status === 'done') {
-          await db.query("update clipes_reais set status = 'pronto', updated_at = now() where id = $1", [c.id])
-        }
+        // Montagem não passa pelo render-fragmovie: ele recusa trechos do render-custom
+        // ("No rendered clips found", testado em 2026-10-21). O client toca os trechos em sequência.
+        await db.query("update clipes_reais set status = 'pronto', updated_at = now() where id = $1", [c.id])
       }
     } catch (e) {
       console.error(`demoslap: falha ao consultar o clipe ${c.id}: ${e.message}`)
@@ -162,7 +142,7 @@ export function createClipesReaisRouter({ db, requireAuth, r2Client, r2Bucket, c
   async function carregar(matchId) {
     const { rows } = await db.query(
       `select c.id, c.match_id, c.pedido_por, c.kills, c.status, c.video_job_ids,
-              c.fragmovie_job_id, c.erro, c.created_at, c.updated_at,
+              c.fragmovie_job_id, c.video_r2_key, c.erro, c.created_at, c.updated_at,
               a.job_id, p.nick
        from clipes_reais c
        left join demoslap_analises a on a.match_id = c.match_id
@@ -175,24 +155,22 @@ export function createClipesReaisRouter({ db, requireAuth, r2Client, r2Bucket, c
     return rows
   }
 
-  // URL assinada do vídeo pronto. Pedida na hora (expira); falha vira null.
-  async function urlDoVideo(c, contexto) {
+  // URLs assinadas do vídeo pronto. Pedidas na hora (expiram); falha vira lista vazia.
+  // Montagem já juntada pelo Coletor (juntar-clipes) = um vídeo no R2; antes disso, os
+  // trechos da DEMO-SLAP na ordem das kills.
+  async function urlsDosVideos(c, contexto) {
     try {
-      if (c.fragmovie_job_id) {
-        const dados = await cliente.dadosMontagem(c.fragmovie_job_id)
-        const clipes = dados?.highlightClips ?? {}
-        return (clipes[c.fragmovie_job_id] ?? Object.values(clipes)[0])?.clipUrl ?? null
-      }
+      if (c.video_r2_key && r2Client) return [await presignDownload(r2Client, r2Bucket, c.video_r2_key, 3600)]
       const dados = contexto.dadosRender ?? (contexto.dadosRender = await cliente.dadosRender(c.job_id))
-      return dados?.highlightClips?.[c.video_job_ids?.[0]]?.clipUrl ?? null
+      return (c.video_job_ids ?? []).map((id) => dados?.highlightClips?.[id]?.clipUrl)
     } catch (e) {
       console.error(`demoslap: falha ao buscar o vídeo do clipe ${c.id}: ${e.message}`)
-      return null
+      return []
     }
   }
 
-  function serializar(c, videoUrl) {
-    const url = typeof videoUrl === 'string' && videoUrl.startsWith('https://') ? videoUrl : null
+  function serializar(c, urls) {
+    const videos = (urls ?? []).filter((u) => typeof u === 'string' && u.startsWith('https://'))
     return {
       id: c.id,
       status: c.status,
@@ -201,12 +179,12 @@ export function createClipesReaisRouter({ db, requireAuth, r2Client, r2Bucket, c
       montagem: Array.isArray(c.kills) && c.kills.length > 1,
       pedidoPor: { steamId: c.pedido_por, nick: c.nick ?? null },
       criadoEm: c.created_at,
-      videoUrl: c.status === 'pronto' ? url : null,
+      videos: c.status === 'pronto' ? videos : [],
     }
   }
 
   async function listar(partida) {
-    const contexto = { mapa: partida.map }
+    const contexto = {}
     let linhas = await carregar(partida.id)
     if (cliente && linhas.some((c) => !FINAIS.has(c.status))) {
       for (const c of linhas) await avancar(c, contexto)
@@ -214,7 +192,7 @@ export function createClipesReaisRouter({ db, requireAuth, r2Client, r2Bucket, c
     }
     const saida = []
     for (const c of linhas) {
-      saida.push(serializar(c, c.status === 'pronto' && cliente ? await urlDoVideo(c, contexto) : null))
+      saida.push(serializar(c, c.status === 'pronto' && cliente ? await urlsDosVideos(c, contexto) : null))
     }
     return saida
   }
