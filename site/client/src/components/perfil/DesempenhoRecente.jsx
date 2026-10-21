@@ -1,6 +1,7 @@
 import { useId } from 'react'
 import { dataHora } from '../../lib/format.js'
-import { Card } from '../ui'
+import { Card, Explicacao } from '../ui'
+import { METRICAS } from '../../lib/metricas.js'
 
 // "Desempenho recente" do Perfil (referência: FACEIT): rating partida a partida das
 // últimas 30, com a linha de 1.00 como referência e área preenchida embaixo. SVG à mão
@@ -89,18 +90,18 @@ export default function DesempenhoRecente({ evolucao }) {
       </div>
       <div className="mt-4 grid grid-cols-2 gap-3 border-t border-borda pt-4 sm:grid-cols-3">
         <div>
-          <div className="rotulo">Média</div>
+          <div className="rotulo"><Explicacao metrica={METRICAS.mediaRecente}>Média</Explicacao></div>
           <div className="mt-1 font-mono text-xl tabular-nums text-texto">{media(evolucao).toFixed(2)}</div>
         </div>
         <div>
-          <div className="rotulo">Variação</div>
+          <div className="rotulo"><Explicacao metrica={METRICAS.variacao}>Variação</Explicacao></div>
           <div className={`mt-1 font-mono text-xl tabular-nums ${variacao >= 0 ? 'text-sucesso' : 'text-perigo'}`}>
             {variacao >= 0 ? '+' : ''}{variacao.toFixed(1)}% <span className="text-xs">{variacao >= 0 ? '↑' : '↓'}</span>
           </div>
           <div className="text-[11px] text-texto-fraco">2ª metade vs 1ª</div>
         </div>
         <div>
-          <div className="rotulo">Acima de 1.00</div>
+          <div className="rotulo"><Explicacao metrica={METRICAS.acimaDe1}>Acima de 1.00</Explicacao></div>
           <div className="mt-1 font-mono text-xl tabular-nums text-texto">
             {Math.round((evolucao.filter((e) => e.rating >= 1).length / evolucao.length) * 100)}%
           </div>

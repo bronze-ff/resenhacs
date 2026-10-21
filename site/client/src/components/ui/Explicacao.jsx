@@ -60,12 +60,20 @@ export default function Explicacao({ metrica, children, className = '' }) {
       <button
         ref={botaoRef}
         type="button"
-        onClick={(e) => { e.stopPropagation(); setAberto((v) => !v) }}
+        // preventDefault: o rótulo pode estar dentro de um <Link> (card do Feed, linha do Ranking).
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); setAberto((v) => !v) }}
         aria-expanded={aberto}
         aria-controls={aberto ? id : undefined}
-        className={`cursor-help underline decoration-dotted decoration-texto-fraco/50 underline-offset-4 transition-colors hover:text-texto hover:decoration-texto-fraco ${className}`}
+        className={`group/explica inline-flex cursor-help items-center gap-1 text-left transition-colors hover:text-texto ${className}`}
       >
         {children}
+        {/* O "?" diz que o rótulo abre explicação; o sublinhado pontilhado sozinho passava despercebido. */}
+        <span
+          aria-hidden="true"
+          className="inline-flex size-3.5 shrink-0 items-center justify-center rounded-full border border-current text-[9px] font-semibold leading-none opacity-50 transition-opacity group-hover/explica:opacity-100"
+        >
+          ?
+        </span>
       </button>
       {aberto && posicao && createPortal(
         <div
@@ -73,6 +81,8 @@ export default function Explicacao({ metrica, children, className = '' }) {
           id={id}
           role="dialog"
           aria-label={metrica.nome}
+          // Evento de portal sobe pela árvore do React: sem isso, um onClick do card pai dispara.
+          onClick={(e) => e.stopPropagation()}
           style={{ position: 'fixed', top: posicao.top, left: posicao.left, width: LARGURA, zIndex: 60 }}
           className="origin-top animate-surgir-painel rounded-[var(--radius-medio)] border border-borda-forte bg-superficie-alta p-3 text-left text-sm font-normal normal-case tracking-normal text-texto shadow-flutuante"
         >

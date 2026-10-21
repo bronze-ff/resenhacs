@@ -1,21 +1,22 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { dataHora } from '../lib/format.js'
+import { METRICAS } from '../lib/metricas.js'
 import LinhaEvolucao from '../components/LinhaEvolucao.jsx'
 import FiltroPeriodo from '../components/FiltroPeriodo.jsx'
-import { CabecalhoPagina, Card, EstadoErro, EstadoVazio, SectionHeader, SkeletonLista, StatTile, RatingBadge, Select } from '../components/ui'
+import { CabecalhoPagina, Card, EstadoErro, Explicacao, EstadoVazio, SectionHeader, SkeletonLista, StatTile, RatingBadge, Select } from '../components/ui'
 
 const LINHAS_STAT = [
-  { rotulo: 'Rating', chave: 'rating', formato: (v) => v?.toFixed(2) ?? '–', rating: true },
-  { rotulo: 'K/D', chave: 'kd', formato: (v) => v },
-  { rotulo: 'Vitórias', chave: 'winrate', formato: (v) => `${v}%` },
-  { rotulo: 'ADR', chave: 'adr', formato: (v) => v },
-  { rotulo: 'HS%', chave: 'hsPct', formato: (v) => `${v}%` },
-  { rotulo: 'Kills/partida', chave: 'kills', formato: (v, s) => (s.partidas ? Math.round((v / s.partidas) * 10) / 10 : v) },
-  { rotulo: 'Precisão', chave: 'accuracy', formato: (v) => `${v}%` },
-  { rotulo: 'Clutch %', chave: 'clutchPct', formato: (v) => `${v}%` },
-  { rotulo: 'Entry win %', chave: 'entryWinPct', formato: (v) => `${v}%` },
-  { rotulo: 'Partidas', chave: 'partidas', formato: (v) => v },
+  { rotulo: 'Rating', chave: 'rating', metrica: METRICAS.ratingPeriodo, formato: (v) => v?.toFixed(2) ?? '–', rating: true },
+  { rotulo: 'K/D', chave: 'kd', metrica: METRICAS.kd, formato: (v) => v },
+  { rotulo: 'Winrate', chave: 'winrate', metrica: METRICAS.winrate, formato: (v) => `${v}%` },
+  { rotulo: 'ADR', chave: 'adr', metrica: METRICAS.adrPeriodo, formato: (v) => v },
+  { rotulo: 'HS%', chave: 'hsPct', metrica: METRICAS.hsPeriodo, formato: (v) => `${v}%` },
+  { rotulo: 'Kills/partida', chave: 'kills', metrica: METRICAS.killsPartida, formato: (v, s) => (s.partidas ? Math.round((v / s.partidas) * 10) / 10 : v) },
+  { rotulo: 'Precisão', chave: 'accuracy', metrica: METRICAS.precisao, formato: (v) => `${v}%` },
+  { rotulo: 'Clutch %', chave: 'clutchPct', metrica: METRICAS.clutchPct, formato: (v) => `${v}%` },
+  { rotulo: 'Entry win %', chave: 'entryWinPct', metrica: METRICAS.entryWinPct, formato: (v) => `${v}%` },
+  { rotulo: 'Partidas', chave: 'partidas', metrica: METRICAS.partidas, formato: (v) => v },
 ]
 
 function AvatarFallback({ nick }) {
@@ -163,7 +164,7 @@ export default function Comparar() {
                       {aGanha && <span aria-hidden="true" className="mr-1.5 text-xs">◀</span>}
                       {linha.formato(va, dados.a.stats)}
                     </span>
-                    <span className="rotulo text-center">{linha.rotulo}</span>
+                    <span className="rotulo text-center"><Explicacao metrica={linha.metrica}>{linha.rotulo}</Explicacao></span>
                     <span className={`text-left font-display text-xl font-semibold tabular-nums ${bGanha ? 'text-time-b' : 'text-texto'}`}>
                       {linha.formato(vb, dados.b.stats)}
                       {bGanha && <span aria-hidden="true" className="ml-1.5 text-xs">▶</span>}
@@ -183,12 +184,18 @@ export default function Comparar() {
               <EstadoVazio titulo="Nunca se cruzaram" descricao="Esses dois nunca jogaram a mesma Partida ainda." />
             ) : (
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <StatTile rotulo="Partidas juntos" valor={dados.confronto.partidasJuntos} />
-                <StatTile rotulo="Mesmo time" valor={`${dados.confronto.mesmoTimeVitorias}/${dados.confronto.mesmoTime}`} sub="vitórias" />
-                <StatTile rotulo={`${dados.a.nick || 'A'} venceu`} valor={dados.confronto.aVenceu} sub="times opostos" />
+                <StatTile rotulo="Partidas juntos" valor={dados.confronto.partidasJuntos} metrica={METRICAS.partidasJuntos} />
+                <StatTile rotulo="Mesmo time" valor={`${dados.confronto.mesmoTimeVitorias}/${dados.confronto.mesmoTime}`} sub="vitórias" metrica={METRICAS.mesmoTime} />
+                <StatTile
+                  rotulo={`${dados.a.nick || 'A'} venceu`}
+                  valor={dados.confronto.aVenceu}
+                  sub="times opostos"
+                  metrica={{ ...METRICAS.venceuContra, nome: `${dados.a.nick || 'A'} venceu` }}
+                />
                 <StatTile
                   rotulo={`${dados.b.nick || 'B'} venceu`}
                   valor={dados.confronto.bVenceu}
+                  metrica={{ ...METRICAS.venceuContra, nome: `${dados.b.nick || 'B'} venceu` }}
                   sub={dados.confronto.empates ? `times opostos · ${dados.confronto.empates} empate${dados.confronto.empates > 1 ? 's' : ''}` : 'times opostos'}
                 />
               </div>

@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { nomeMapa } from '../lib/format.js'
-import { CabecalhoPagina, Card, EstadoErro, EstadoVazio, MapIcon, Select, Skeleton, classeEntrada, classesBotao } from '../components/ui'
+import { METRICAS } from '../lib/metricas.js'
+import { CabecalhoPagina, Card, EstadoErro, EstadoVazio, Explicacao, MapIcon, Select, Skeleton, classeEntrada, classesBotao } from '../components/ui'
 
 // Página Mapas (artboard "Mapas" do canvas de design): um card por mapa com o radar ao
 // fundo, winrate, partidas, variação vs período anterior e barras CT/T comparando
@@ -87,12 +88,12 @@ function CardMapa({ m }) {
       <div className="p-4">
         <div className="grid grid-cols-2">
           <div>
-            <div className="rotulo">Winrate</div>
+            <div className="rotulo"><Explicacao metrica={METRICAS.winrateMapa}>Winrate</Explicacao></div>
             <div className={`mt-0.5 font-mono text-3xl font-medium tabular-nums ${corWr}`}>{fmtPct(m.winrate)}</div>
             <Variacao valor={m.variacao} />
           </div>
           <div>
-            <div className="rotulo">Partidas</div>
+            <div className="rotulo"><Explicacao metrica={METRICAS.partidasMapa}>Partidas</Explicacao></div>
             <div className="mt-0.5 font-mono text-3xl font-medium tabular-nums text-texto">{m.partidas}</div>
             <div className="font-mono text-xs tabular-nums text-texto-fraco">{saldo}</div>
           </div>
@@ -116,7 +117,7 @@ function Legenda() {
       <span className="inline-flex items-center gap-1.5"><span className="h-2 w-3.5 rounded-sm bg-texto" />Período atual</span>
       <span className="inline-flex items-center gap-1.5"><span className="h-2 w-3.5 rounded-sm bg-[#55555c]" />Período anterior</span>
       <span className="inline-flex items-center gap-1.5"><span className="h-3 w-0.5 bg-time-b" />Média do grupo</span>
-      <span>Barras: % de rounds ganhos em cada lado</span>
+      <Explicacao metrica={METRICAS.ladoMapa}>Barras: % de rounds ganhos em cada lado</Explicacao>
     </div>
   )
 }
