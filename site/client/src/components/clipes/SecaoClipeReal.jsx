@@ -42,6 +42,18 @@ export function descreverClipe(c) {
   return n > 1 ? `Montagem de ${n} kills · ${quais}` : `Kill · ${quais}`
 }
 
+// Cada consulta devolve URLs assinadas novas pro mesmo vídeo. Trocar o src do <video>
+// recarrega o player e volta pro começo; então o clipe que já tinha vídeo fica com as
+// URLs antigas, desde que sejam os mesmos vídeos (o vídeo único pode chegar depois).
+// shortcut: a URL antiga expira em 1 h; com a aba aberta mais que isso, recarregar a página.
+export function manterVideos(anteriores, novos) {
+  const porId = new Map((anteriores ?? []).map((c) => [c.id, c]))
+  return novos.map((c) => {
+    const antes = porId.get(c.id)
+    return antes?.videos?.length && antes.videos.length === c.videos?.length ? { ...c, videos: antes.videos } : c
+  })
+}
+
 const REAIS = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 
 function TextoEstimativa({ estimativa }) {
@@ -166,7 +178,11 @@ export default function SecaoClipeReal({ matchId, jogadores, viewerSteamId }) {
     return fetch(url)
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((d) => {
-        setDados({ disponivel: Boolean(d?.disponivel), permitido: Boolean(d?.permitido), clipes: Array.isArray(d?.clipes) ? d.clipes : [] })
+        setDados((atual) => ({
+          disponivel: Boolean(d?.disponivel),
+          permitido: Boolean(d?.permitido),
+          clipes: manterVideos(atual?.clipes, Array.isArray(d?.clipes) ? d.clipes : []),
+        }))
         setErroLista(false)
       })
       .catch(() => setErroLista(true))
@@ -215,7 +231,10 @@ export default function SecaoClipeReal({ matchId, jogadores, viewerSteamId }) {
       const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: corpo })
       const d = await r.json().catch(() => ({}))
       if (!r.ok) throw new Error(d?.erro || 'Não foi possível pedir o clipe.')
-      setDados((atual) => ({ disponivel: true, permitido: true, ...atual, clipes: Array.isArray(d?.clipes) ? d.clipes : atual?.clipes ?? [] }))
+      setDados((atual) => ({
+        disponivel: true, permitido: true, ...atual,
+        clipes: Array.isArray(d?.clipes) ? manterVideos(atual?.clipes, d.clipes) : atual?.clipes ?? [],
+      }))
     } catch (e) {
       setErroPedido(e.message)
     } finally {
