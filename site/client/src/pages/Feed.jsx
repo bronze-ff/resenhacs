@@ -101,7 +101,7 @@ function CardResenha({ s, ativo, onClick }) {
             <Link to={`/jogador/${s.destaque.steamId}`} className="truncate text-texto hover:text-destaque">
               {s.destaque.nick}
             </Link>{' '}
-            <span className={corRating(s.destaque.ratingMedio)}>{s.destaque.ratingMedio.toFixed(2)}</span>
+            <span className={corRating(s.destaque.ratingMedio)}>{s.destaque.ratingMedio?.toFixed(2) ?? '–'}</span>
             {s.destaque.aces > 0 && <span className="ml-1 text-texto-fraco">· {s.destaque.aces} ace{s.destaque.aces > 1 ? 's' : ''}</span>}
           </div>
         </div>
@@ -223,7 +223,12 @@ export default function Feed() {
       .then((data) => {
         if (requisicaoAtual.current !== minhaRequisicao) return
         const lista = Array.isArray(data) ? data : []
-        setPartidas((atual) => [...(atual ?? []), ...lista])
+        // Paginação por offset: uma Partida nova entrando no topo empurra a lista e a
+        // última da página anterior volta repetida. Descarta o que já está na tela.
+        setPartidas((atual) => {
+          const vistas = new Set((atual ?? []).map((m) => m.id))
+          return [...(atual ?? []), ...lista.filter((m) => !vistas.has(m.id))]
+        })
         setTemMais(lista.length === TAMANHO_PAGINA)
       })
       .catch(() => {

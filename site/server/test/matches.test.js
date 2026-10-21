@@ -328,11 +328,15 @@ describe('GET /api/matches/:id', () => {
     await request(app).get('/api/matches').set('Cookie', cookie)
     const lateral = (sql) => sql
       .slice(sql.indexOf('left join lateral'), sql.indexOf(') mvp on true'))
-      // única diferença legítima: o alias da partida (mt no detalhe, m no feed)
+      // únicas diferenças legítimas: o alias da partida (mt no detalhe, m no feed) e o
+      // placeholder do viewer ($2 no detalhe, $1 no feed)
       .replace(/mp3\.match_id = mt?\.id/, 'mp3.match_id = <partida>.id')
+      .replace(/\$[12]\b/g, '<viewer>')
     const sqlDetalhe = db.query.mock.calls.find(([s]) => s.includes('from matches mt'))[0]
     const sqlFeed = db.query.mock.calls.find(([s]) => s.includes('from matches m\n'))[0]
-    expect(lateral(sqlDetalhe)).toContain('mp3.is_tracked')
+    // MVP só entre o círculo do viewer (ele + amigos accepted), não qualquer conta do site.
+    expect(lateral(sqlDetalhe)).toContain('from friendships fc')
+    expect(lateral(sqlDetalhe)).not.toContain('mp3.is_tracked')
     expect(lateral(sqlDetalhe)).toBe(lateral(sqlFeed))
   })
 

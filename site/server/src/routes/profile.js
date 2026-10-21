@@ -3,6 +3,9 @@ import { calcularEstilos, calcularBadges, melhorSequenciaDeVitorias } from '../a
 import { worldToRadar, isMapaCalibrado } from '../mapCalibration.js'
 import { partidaVisivelExpr } from '../friendships.js'
 import { pontosFortes } from '../pontosFortes.js'
+import { UTIL_INIMIGO_SQL } from '../danoUtilitaria.js'
+import { inicioDoDiaSql, fimDoDiaSql } from '../fuso.js'
+import { DECIDIDAS_SQL, RATING_PONDERADO_SQL } from '../agregados.js'
 
 function pct(parte, total) {
   if (!total) return 0
@@ -15,11 +18,11 @@ function periodoWhere(from, to, params) {
   let sql = ''
   if (from && /^\d{4}-\d{2}-\d{2}$/.test(from)) {
     params.push(from)
-    sql += ` and m.played_at >= $${params.length}`
+    sql += ` and m.played_at >= ${inicioDoDiaSql(`$${params.length}`)}`
   }
   if (to && /^\d{4}-\d{2}-\d{2}$/.test(to)) {
     params.push(to)
-    sql += ` and m.played_at < ($${params.length}::date + interval '1 day')`
+    sql += ` and m.played_at < ${fimDoDiaSql(`$${params.length}`)}`
   }
   return sql
 }
@@ -42,14 +45,19 @@ async function statsAgregados(db, steamId, from, to, viewerSteamId) {
   const { rows } = await db.query(
     `select count(*)::int as partidas,
             coalesce(sum(case when mp.won then 1 else 0 end), 0)::int as vitorias,
+            (${DECIDIDAS_SQL})::int as decididas,
             coalesce(sum(mp.kills), 0)::int as kills,
             coalesce(sum(mp.deaths), 0)::int as deaths,
             coalesce(sum(mp.assists), 0)::int as assists,
             coalesce(sum(mp.headshot_kills), 0)::int as hs,
             coalesce(sum(mp.damage), 0)::int as damage,
             coalesce(sum(mp.rounds_played), 0)::int as rounds,
-            avg(mp.rating) as rating,
-            coalesce(sum(mp.utility_damage), 0)::int as utility_damage,
+            ${RATING_PONDERADO_SQL} as rating,
+            -- Partida FACEIT só com stats traz entry_kills e flashes da API, mas entry_wins
+            -- e flash_assists ficam 0 (default): os % só contam Partidas com Demo.
+            coalesce(sum(mp.entry_kills) filter (where m.tem_demo), 0)::int as entry_kills_demo,
+            coalesce(sum(mp.flashes_thrown) filter (where m.tem_demo), 0)::int as flashes_thrown_demo,
+            coalesce(sum(${UTIL_INIMIGO_SQL}), 0)::int as utility_damage,
             coalesce(sum(mp.shots_fired), 0)::int as shots_fired,
             coalesce(sum(mp.shots_hit), 0)::int as shots_hit,
             coalesce(sum(mp.entry_kills), 0)::int as entry_kills,
@@ -85,7 +93,8 @@ async function statsAgregados(db, steamId, from, to, viewerSteamId) {
   return {
     partidas: a.partidas,
     vitorias: a.vitorias,
-    winrate: pct(a.vitorias, a.partidas),
+    winrate: pct(a.vitorias, a.decididas ?? a.partidas),
+    empates: a.decididas == null ? 0 : a.partidas - a.decididas,
     kills: a.kills,
     deaths: a.deaths,
     assists: a.assists,
@@ -101,7 +110,7 @@ async function statsAgregados(db, steamId, from, to, viewerSteamId) {
     utilityDamagePerRound: a.rounds ? Math.round((a.utility_damage / a.rounds) * 10) / 10 : 0,
     entryKills: a.entry_kills,
     entryDeaths: a.entry_deaths,
-    entryWinPct: pct(a.entry_wins, a.entry_kills),
+    entryWinPct: pct(a.entry_wins, a.entry_kills_demo ?? a.entry_kills),
     tradeKills: a.trade_kills,
     tradedDeaths: a.traded_deaths,
     clutchWins: a.clutch_wins,
@@ -129,7 +138,7 @@ async function statsAgregados(db, steamId, from, to, viewerSteamId) {
     heTeamDamage: a.he_team_damage,
     molotovTeamDamage: a.molotov_team_damage,
     flashAssists: a.flash_assists,
-    flashAssistPct: pct(a.flash_assists, a.flashes_thrown),
+    flashAssistPct: pct(a.flash_assists, a.flashes_thrown_demo ?? a.flashes_thrown),
     // Médias por arremesso — mesmo recorte do "Avg HE damage" / "Avg blind time" do Leetify.
     avgHeDamage: a.he_thrown ? Math.round((a.he_damage / a.he_thrown) * 10) / 10 : 0,
     avgMolotovDamage: a.molotovs_thrown ? Math.round((a.molotov_damage / a.molotovs_thrown) * 10) / 10 : 0,
@@ -165,7 +174,7 @@ async function estiloDoJogador(db, steamId, from, to, viewerSteamId) {
             count(*)::int as partidas,
             coalesce(sum(mp.entry_kills), 0)::int as entry_kills,
             coalesce(sum(mp.entry_deaths), 0)::int as entry_deaths,
-            coalesce(sum(mp.utility_damage), 0)::int as utility_damage,
+            coalesce(sum(${UTIL_INIMIGO_SQL}), 0)::int as utility_damage,
             coalesce(sum(mp.rounds_played), 0)::int as rounds,
             coalesce(sum(mp.clutch_wins), 0)::int as clutch_wins,
             coalesce(sum(mp.clutch_attempts), 0)::int as clutch_attempts,
@@ -339,7 +348,9 @@ export function createProfileRouter({ db, requireAuth }) {
     const confronto = confrontoQ.rows
     const mesmoTime = confronto.filter((r) => r.team_a === r.team_b)
     const timesOpostos = confronto.filter((r) => r.team_a !== r.team_b)
-    const aVenceuOpostos = timesOpostos.filter((r) => r.a_venceu).length
+    const aVenceuOpostos = timesOpostos.filter((r) => r.a_venceu === true).length
+    // Empate (won null) não é vitória de ninguém: antes caía em "B venceu".
+    const bVenceuOpostos = timesOpostos.filter((r) => r.a_venceu === false).length
 
     res.json({
       a: { steamId: jogadorA.steam_id64, nick: jogadorA.nick, avatarUrl: jogadorA.avatar_url, stats: statsA, evolucao: evolA },
@@ -350,7 +361,8 @@ export function createProfileRouter({ db, requireAuth }) {
         mesmoTimeVitorias: mesmoTime.filter((r) => r.a_venceu).length,
         timesOpostos: timesOpostos.length,
         aVenceu: aVenceuOpostos,
-        bVenceu: timesOpostos.length - aVenceuOpostos,
+        bVenceu: bVenceuOpostos,
+        empates: timesOpostos.length - aVenceuOpostos - bVenceuOpostos,
       },
     })
   })
@@ -452,7 +464,8 @@ export function createProfileRouter({ db, requireAuth }) {
       db.query(
         `select m.map, count(*)::int as partidas,
                 coalesce(sum(case when mp.won then 1 else 0 end), 0)::int as vitorias,
-                avg(mp.rating) as rating
+                (${DECIDIDAS_SQL})::int as decididas,
+                ${RATING_PONDERADO_SQL} as rating
          from match_players mp join matches m on m.id = mp.match_id
          where mp.steam_id64 = $1${mapaPeriodo}${mapaVisivel} group by m.map order by partidas desc`,
         mapaParams,
@@ -473,7 +486,8 @@ export function createProfileRouter({ db, requireAuth }) {
       db.query(
         `select p.steam_id64, p.nick, coalesce(p.avatar_url, sa.avatar_url) as avatar_url,
                 count(*)::int as partidas,
-                count(*) filter (where mp1.won)::int as vitorias
+                count(*) filter (where mp1.won)::int as vitorias,
+                count(*) filter (where mp1.won is not null)::int as decididas
          from match_players mp1
          join matches m on m.id = mp1.match_id and ${partidaVisivelExpr('m', '$2')}
          join match_players mp2 on mp2.match_id = mp1.match_id and mp2.team = mp1.team
@@ -564,7 +578,7 @@ export function createProfileRouter({ db, requireAuth }) {
                 sum(mp.damage) as dano, sum(mp.rounds_played) as rounds,
                 sum(mp.kills) as kills, sum(mp.headshot_kills) as hs,
                 sum(mp.shots_fired) as tiros, sum(mp.shots_hit) as tiros_acertados,
-                avg(mp.kast_pct) as kast, sum(mp.utility_damage) as util,
+                avg(mp.kast_pct) as kast, sum(${UTIL_INIMIGO_SQL}) as util,
                 sum(mp.entry_kills) as entry_kills, sum(mp.entry_deaths) as entry_deaths,
                 sum(mp.clutch_wins) as clutch, sum(mp.flash_assists) as flash_assists
          from match_players mp join matches m on m.id = mp.match_id
@@ -621,7 +635,7 @@ export function createProfileRouter({ db, requireAuth }) {
         map: r.map,
         partidas: r.partidas,
         vitorias: r.vitorias,
-        winrate: pct(r.vitorias, r.partidas),
+        winrate: pct(r.vitorias, r.decididas ?? r.partidas),
         rating: r.rating === null ? null : Math.round(Number(r.rating) * 100) / 100,
       })),
       recentes: recentes.rows.map((r) => ({
@@ -647,7 +661,7 @@ export function createProfileRouter({ db, requireAuth }) {
         avatarUrl: s.avatar_url,
         partidas: s.partidas,
         vitorias: s.vitorias,
-        winrate: pct(s.vitorias, s.partidas),
+        winrate: pct(s.vitorias, s.decididas ?? s.partidas),
       })),
     })
   })

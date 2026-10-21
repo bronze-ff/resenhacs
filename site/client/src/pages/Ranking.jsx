@@ -192,7 +192,7 @@ function Recordes() {
 
   return (
     <section>
-      <SectionHeader titulo="Recordes do grupo" subtitulo="Marcas de todas as Partidas — não seguem o período." />
+      <SectionHeader titulo="Recordes do grupo" subtitulo="Marcas das últimas 750 Partidas do seu círculo — não seguem o período." />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {maisKills && (
           <CardDestaque

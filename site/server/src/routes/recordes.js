@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { partidaVisivelExpr } from '../friendships.js'
-import { recordesPessoais } from '../recordesPessoais.js'
+import { recordesPessoais, MIN_ROUNDS_RECORDE } from '../recordesPessoais.js'
+import { UTIL_INIMIGO_SQL } from '../danoUtilitaria.js'
 
 // Mesmo gap de "Resenha" que sessions.js usa pra agrupar Partidas da mesma noite —
 // duplicado aqui (não importado) porque é só uma linha de lógica e criar um módulo
@@ -47,7 +48,16 @@ export function createRecordesRouter({ db, requireAuth }) {
        left join steam_avatares sa on sa.steam_id64 = mp.steam_id64
        where mp.match_id in (
          select id from matches m where status = 'parsed' and ${partidaVisivelExpr('m', '$1')} ${recentes}
-       )`,
+       )
+         -- Só o círculo (eu + amigos accepted): adversário cadastrado não pode levar
+         -- recorde do grupo nem entrar no resultado da sequência como "derrota".
+         and mp.steam_id64 in (
+           select $1::text
+           union
+           select case when f.player_a = $1 then f.player_b else f.player_a end
+           from friendships f
+           where (f.player_a = $1 or f.player_b = $1) and f.status = 'accepted'
+         )`,
       [eu],
     )
 
@@ -66,11 +76,12 @@ export function createRecordesRouter({ db, requireAuth }) {
 
     // Mais kills numa Partida.
     let maisKills = null
-    // Melhor ADR numa Partida (dano/rounds — só quem jogou pelo menos 1 round).
+    // Melhor ADR numa Partida (dano/rounds). Mínimo de rounds: Partida encerrada com 3
+    // rounds dava ADR 200+ e virava recorde.
     let melhorAdr = null
     for (const r of playersQ.rows) {
       if (!maisKills || r.kills > maisKills.kills) maisKills = { ...linha(r), kills: r.kills }
-      if (r.rounds_played > 0) {
+      if (r.rounds_played >= MIN_ROUNDS_RECORDE) {
         const adr = Math.round((r.damage / r.rounds_played) * 10) / 10
         if (!melhorAdr || adr > melhorAdr.adr) melhorAdr = { ...linha(r), adr }
       }
@@ -151,7 +162,7 @@ export function createRecordesRouter({ db, requireAuth }) {
     const [recentesQ, baseQ] = await Promise.all([
       db.query(
         `select mp.match_id, m.map, m.played_at, mp.kills, mp.damage, mp.rounds_played,
-                mp.rating, mp.utility_damage
+                mp.rating, ${UTIL_INIMIGO_SQL} as utility_damage
          from match_players mp join matches m on m.id = mp.match_id
          where mp.steam_id64 = $1 and m.id in (${janela})
          order by m.played_at asc nulls last, m.id asc`,
@@ -159,10 +170,11 @@ export function createRecordesRouter({ db, requireAuth }) {
       ),
       db.query(
         `select max(mp.kills) as kills_max, count(*)::int as kills_n,
-                max(round(mp.damage::numeric / mp.rounds_played, 1)) filter (where mp.rounds_played > 0) as adr_max,
-                count(*) filter (where mp.rounds_played > 0)::int as adr_n,
-                max(mp.rating) as rating_max, count(mp.rating)::int as rating_n,
-                max(mp.utility_damage) as utilitaria_max, count(mp.utility_damage)::int as utilitaria_n
+                max(round(mp.damage::numeric / mp.rounds_played, 1)) filter (where mp.rounds_played >= ${MIN_ROUNDS_RECORDE}) as adr_max,
+                count(*) filter (where mp.rounds_played >= ${MIN_ROUNDS_RECORDE})::int as adr_n,
+                max(mp.rating) filter (where mp.rounds_played >= ${MIN_ROUNDS_RECORDE}) as rating_max,
+                count(mp.rating) filter (where mp.rounds_played >= ${MIN_ROUNDS_RECORDE})::int as rating_n,
+                max(${UTIL_INIMIGO_SQL}) as utilitaria_max, count(mp.utility_damage)::int as utilitaria_n
          from match_players mp join matches m on m.id = mp.match_id
          where mp.steam_id64 = $1 and m.status = 'parsed' and m.id not in (${janela})`,
         [req.player.steamId],

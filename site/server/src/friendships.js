@@ -26,6 +26,17 @@ export function partidaVisivelExpr(alias, viewerParam) {
     where mv.match_id = ${alias}.id and f.status = 'accepted'))`
 }
 
+// "O grupo" do viewer numa Partida: ele mesmo ou um amigo `accepted` (decidido com o
+// usuário em 2026-10-21). Antes o card usava match_players.is_tracked, que é global
+// (qualquer conta do site): um adversário com conta virava "Grupo dividido" e podia ser MVP.
+export function noCirculoExpr(colSteamId, viewerParam) {
+  return `(${colSteamId} = ${viewerParam} or exists (
+    select 1 from friendships fc
+    where fc.status = 'accepted'
+      and ((fc.player_a = ${viewerParam} and fc.player_b = ${colSteamId})
+        or (fc.player_b = ${viewerParam} and fc.player_a = ${colSteamId}))))`
+}
+
 // partidaVisivelWhere/partidaVisivelPredicado (helpers que dariam push do viewer em `params`)
 // existiram aqui mas nunca foram importados por nenhuma rota — todo call site usa
 // partidaVisivelExpr diretamente. Removidos: a versão *Where tratava viewer ausente como

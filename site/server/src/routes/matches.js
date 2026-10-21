@@ -1,8 +1,9 @@
 import { Router } from 'express'
 import { limiteEstrito } from '../rateLimit.js'
 import { keyFromR2Url, streamObject, presignDownload } from '../r2.js'
-import { partidaVisivelExpr } from '../friendships.js'
+import { partidaVisivelExpr, noCirculoExpr } from '../friendships.js'
 import { calcularStatsPorLado } from '../statsLado.js'
+import { inicioDoDiaSql, fimDoDiaSql } from '../fuso.js'
 import { pedirMelhorClipeDoJogador } from '../allstarClip.js'
 
 // Categoria de arma pro Head to Head (estilo Leetify: agrupa kills por família de
@@ -31,7 +32,8 @@ function categoriaArma(weapon) {
 //   partida (mesmo motivo documentado em competicoes.js).
 // - jsonb (não json): o `group by m.id, mvp.mvp` do Feed exige operador de igualdade, que
 //   o tipo json não tem — com json o Postgres rejeita a query inteira.
-function lateralMvp(aliasPartida) {
+// "Grupo" = o viewer e os amigos accepted dele (noCirculoExpr), não is_tracked global.
+function lateralMvp(aliasPartida, viewerParam) {
   return `left join lateral (
          select jsonb_build_object(
            'steamId', mp3.steam_id64, 'nick', mp3.nick, 'rating', mp3.rating,
@@ -40,7 +42,7 @@ function lateralMvp(aliasPartida) {
          from match_players mp3
          left join players p3 on p3.steam_id64 = mp3.steam_id64
          left join steam_avatares sa3 on sa3.steam_id64 = mp3.steam_id64
-         where mp3.match_id = ${aliasPartida}.id and mp3.is_tracked
+         where mp3.match_id = ${aliasPartida}.id and ${noCirculoExpr('mp3.steam_id64', viewerParam)}
          order by mp3.rating desc nulls last, mp3.kills desc
          limit 1
        ) mvp on true`
@@ -120,12 +122,12 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
     if (!Number.isInteger(offset) || offset < 0) offset = 0
     if (!ids && from && /^\d{4}-\d{2}-\d{2}$/.test(from)) {
       params.push(from)
-      cond.push(`m.played_at >= $${params.length}`)
+      cond.push(`m.played_at >= ${inicioDoDiaSql(`$${params.length}`)}`)
     }
     if (!ids && to && /^\d{4}-\d{2}-\d{2}$/.test(to)) {
       params.push(to)
-      // inclusivo: até o fim do dia informado
-      cond.push(`m.played_at < ($${params.length}::date + interval '1 day')`)
+      // inclusivo: até o fim do dia informado (dia de Brasília)
+      cond.push(`m.played_at < ${fimDoDiaSql(`$${params.length}`)}`)
     }
     if (!ids && map && /^[a-z0-9_]+$/.test(map)) {
       params.push(map)
@@ -155,16 +157,16 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
       `select m.id, m.map, m.played_at, m.score_a, m.score_b, m.status, m.source,
          m.team_a_name, m.team_b_name, m.plataforma_manual, m.tem_demo,
          coalesce(json_agg(json_build_object('steamId', mp.steam_id64, 'nick', mp.nick, 'won', mp.won))
-           filter (where mp.is_tracked), '[]') as tracked,
+           filter (where ${noCirculoExpr('mp.steam_id64', '$1')}), '[]') as tracked,
          mvp.mvp, eu.eu,
          (select count(*)::int from highlights h where h.match_id = m.id) as n_highlights
        from matches m
        left join match_players mp on mp.match_id = m.id
-       ${lateralMvp('m')}
+       ${lateralMvp('m', '$1')}
        ${lateralEu('m', '$1')}
        where ${cond.join(' and ')}
        group by m.id, mvp.mvp, eu.eu
-       order by m.played_at desc nulls last, m.created_at desc
+       order by m.played_at desc nulls last, m.created_at desc, m.id desc
        limit $${params.length + 1} offset $${params.length + 2}`,
       [...params, limit, offset],
     )
@@ -226,7 +228,7 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
        from matches mt
        left join players ap on ap.steam_id64 = mt.abandoned_by_steam_id64
        left join match_players amp on amp.match_id = mt.id and amp.steam_id64 = mt.abandoned_by_steam_id64
-       ${lateralMvp('mt')}
+       ${lateralMvp('mt', '$2')}
        where mt.id = $1 and ${partidaVisivelExpr('mt', '$2')}`,
       [id, req.player.steamId],
     )
@@ -237,6 +239,7 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
       db.query(
         `select mp.steam_id64, mp.nick, mp.team, mp.kills, mp.deaths, mp.assists, mp.headshot_kills,
                 mp.damage, mp.rounds_played, mp.rating, mp.kast_pct, mp.won, mp.is_tracked, mp.team_kills,
+                ${noCirculoExpr('mp.steam_id64', '$2')} as no_circulo,
                 mp.mvps, mp.triple_kills, mp.quadro_kills, mp.penta_kills,
                 mp.he_damage, mp.molotov_damage, mp.smokes_thrown, mp.flashes_thrown,
                 mp.he_thrown, mp.molotovs_thrown, mp.enemies_flashed, mp.teammates_flashed,
@@ -250,7 +253,7 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
          left join steam_avatares sa on sa.steam_id64 = mp.steam_id64
          where mp.match_id = $1
          order by mp.team, mp.rating desc nulls last, mp.kills desc`,
-        [id],
+        [id, req.player.steamId],
       ),
       db.query(
         'select round_number, winner_team, win_reason from rounds where match_id = $1 order by round_number',
@@ -381,7 +384,10 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
         faceitEloBefore: p.faceit_elo_before == null ? null : Number(p.faceit_elo_before),
         faceitEloAfter: p.faceit_elo_after == null ? null : Number(p.faceit_elo_after),
         won: p.won,
-        isTracked: p.is_tracked,
+        // isTracked = está no círculo de quem vê (é o "grupo" da tela); temConta = tem conta
+        // no site (is_tracked global), usado só pelo "Adicionar ao grupo" do admin.
+        isTracked: p.no_circulo ?? p.is_tracked,
+        temConta: p.is_tracked,
         weapons: armasPorJogador.get(p.steam_id64) ?? [],
         // Clipe real do Allstar (ADR-0004) — ver allstarClip.js. null = nunca pedido.
         allstarClip: allstarClipPorJogador.get(p.steam_id64) ?? null,

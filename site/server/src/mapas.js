@@ -1,6 +1,7 @@
 // Página Mapas (/mapas): desempenho de um Jogador por mapa, período atual vs período de
 // comparação, com winrate de rounds por lado (CT/T) e a média do grupo como referência.
 // Funções puras — a rota (routes/mapas.js) só busca as linhas e chama estas.
+import { inicioDoDiaMs } from './fuso.js'
 
 export const PARTIDAS_POR_PERIODO = 30
 const DIA_MS = 86400000
@@ -9,14 +10,15 @@ export function dataValida(s) {
   return typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(`${s}T00:00:00Z`))
 }
 
+// Dias de Brasília (fuso.js), não UTC: Partida das 22h30 caía no dia seguinte.
 function inicioDoDia(s) {
-  return Date.parse(`${s}T00:00:00Z`)
+  return inicioDoDiaMs(s)
 }
 function fimDoDia(s) {
   return inicioDoDia(s) + DIA_MS - 1
 }
 function isoDia(ms) {
-  return new Date(ms).toISOString().slice(0, 10)
+  return new Date(ms - 3 * 60 * 60 * 1000).toISOString().slice(0, 10)
 }
 
 function noIntervalo(partida, de, ate) {
@@ -86,7 +88,8 @@ function resumoPorMapa(partidas, roundsPorPartida) {
     }
     const m = mapas.get(p.map)
     m.partidas += 1
-    if (p.scoreA != null && p.scoreA === p.scoreB) m.empates += 1
+    // Empate (placar igual, ou sem vencedor gravado) fica fora da winrate (agregados.js).
+    if ((p.scoreA != null && p.scoreA === p.scoreB) || p.won == null) m.empates += 1
     else if (p.won) m.vitorias += 1
     else m.derrotas += 1
     for (const r of roundsPorPartida.get(p.id) ?? []) {
@@ -122,8 +125,8 @@ export function montarMapas({ partidas, rounds, grupo, filtros }) {
   const mapas = [...atual.entries()]
     .map(([map, a]) => {
       const p = anterior.get(map)
-      const winrate = pct(a.vitorias, a.partidas)
-      const winrateAnterior = p ? pct(p.vitorias, p.partidas) : null
+      const winrate = pct(a.vitorias, a.vitorias + a.derrotas)
+      const winrateAnterior = p ? pct(p.vitorias, p.vitorias + p.derrotas) : null
       const lado = (l) => ({
         atual: pct(a.lados[l][0], a.lados[l][1]),
         rounds: a.lados[l][1],

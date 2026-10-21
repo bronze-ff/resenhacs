@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { partidaVisivelExpr } from '../friendships.js'
 import { calcularPremios, janelaDoPeriodo } from '../premios.js'
+import { UTIL_INIMIGO_SQL } from '../danoUtilitaria.js'
 
 // O grupo é brasileiro: "semana" e "mês" seguem o calendário de São Paulo.
 const FUSO = 'America/Sao_Paulo'
@@ -18,10 +19,10 @@ export function createPremiosRouter({ db, requireAuth, hoje = hojeEmSaoPaulo }) 
     const tipo = req.query.periodo === 'mes' ? 'mes' : 'semana'
     const periodo = janelaDoPeriodo(tipo, req.query.ref, hoje())
     const { rows } = await db.query(
-      `select m.id as match_id, m.map, m.duration_seconds,
+      `select m.id as match_id, m.map, m.duration_seconds, m.tem_demo,
               mp.steam_id64, p.nick, coalesce(p.avatar_url, sa.avatar_url) as avatar_url,
               mp.team, mp.won, mp.kills, mp.deaths, mp.headshot_kills, mp.rating,
-              mp.clutch_wins, mp.utility_damage, mp.team_kills, mp.he_team_damage,
+              mp.clutch_wins, ${UTIL_INIMIGO_SQL} as utility_damage, mp.team_kills, mp.he_team_damage,
               mp.molotov_team_damage, mp.teammates_flashed, mp.teammate_flash_duration,
               mp.traded_deaths
        from matches m

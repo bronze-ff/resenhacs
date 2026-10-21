@@ -597,6 +597,10 @@ describe('leaderboard isolado por competicao', () => {
     // cada competição tem sua própria query/filtro, nunca uma soma cruzada.
     const chamadasLeaderboard = db.query.mock.calls.filter(([sql]) => sql.includes('from competicao_submissoes cs join'))
     expect(chamadasLeaderboard.length).toBeGreaterThanOrEqual(2)
+    // Nick in-game de cada Partida fora do group by: quem trocou de nick não vira 2 linhas.
+    for (const [sql] of chamadasLeaderboard) {
+      expect(sql).toMatch(/group by cs\.steam_id64, p\.nick, p\.avatar_url, sa\.avatar_url/)
+    }
   })
 
   it('quem nao bate o minimo aparece separado, nao no ranking principal', async () => {

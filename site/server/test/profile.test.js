@@ -464,6 +464,7 @@ describe('GET /api/profile/compare', () => {
         { team_a: 'A', team_b: 'A', a_venceu: true },  // mesmo time, vitória
         { team_a: 'A', team_b: 'B', a_venceu: true },  // times opostos, a venceu
         { team_a: 'B', team_b: 'A', a_venceu: false }, // times opostos, b venceu
+        { team_a: 'A', team_b: 'B', a_venceu: null },  // times opostos, empate 12x12: ninguém venceu
       ]],
     ])
     const res = await request(app).get(`/api/profile/compare?a=${a}&b=${b}`).set('Cookie', cookie)
@@ -471,7 +472,7 @@ describe('GET /api/profile/compare', () => {
     expect(res.body.a).toMatchObject({ nick: 'fih', stats: { partidas: 10 } })
     expect(res.body.b).toMatchObject({ nick: 'bronze', stats: { partidas: 10 } })
     expect(res.body.confronto).toEqual({
-      partidasJuntos: 3, mesmoTime: 1, mesmoTimeVitorias: 1, timesOpostos: 2, aVenceu: 1, bVenceu: 1,
+      partidasJuntos: 4, mesmoTime: 1, mesmoTimeVitorias: 1, timesOpostos: 3, aVenceu: 1, bVenceu: 1, empates: 1,
     })
     // Confronto escopado por amizade (visivelWhere -> friendships.js), não group_id.
     const confrontoSql = db.query.mock.calls.find((c) => c[0].includes('join match_players mp_b'))[0]
