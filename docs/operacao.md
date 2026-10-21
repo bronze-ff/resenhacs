@@ -105,7 +105,7 @@ Ligar:
 
 1. Criar conta em https://demo-slap.net e pedir a chave da API pelo Discord deles (link no topo de https://api-doc.demo-slap.net). No fórum `help`, a equipe pede o SteamID64 da conta por DM e manda a chave de volta.
 2. Pôr a chave em `DEMOSLAP_API_KEY` no projeto Vercel `resenhacs` (Production). Sem ela, a aba Clipes mostra "Clipe de vídeo ainda não configurado".
-3. Aplicar as migrations `0059_clipes_reais.sql`, `0060_clipes_reais_video_unico.sql` e `0061_clipes_reais_modos_e_liberacao.sql`.
+3. Aplicar as migrations `0059_clipes_reais.sql`, `0060_clipes_reais_video_unico.sql`, `0061_clipes_reais_modos_e_liberacao.sql` e `0062_clipes_reais_sem_marca.sql`.
 4. Pôr a mesma chave no secret `DEMOSLAP_API_KEY` do GitHub (repositório `bronze-ff/resenhacs`). Sem ele, o `juntar-clipes` é no-op e a montagem fica em trechos.
 5. No R2, criar uma regra de ciclo de vida que apaga o prefixo `clipes/` depois de 90 dias (o mesmo prazo da DEMO-SLAP).
 
@@ -125,8 +125,8 @@ Antes de pedir, a aba mostra o custo em créditos e em reais. O valor vem do `cu
 Como funciona:
 
 - A primeira vez que alguém pede clipe de uma Partida, a API manda a Demo para análise (1 crédito). As próximas reaproveitam a mesma análise.
-- Cada trecho custa por segundo (cerca de 0,1 crédito/s, com mínimo de 1 crédito por trecho). O pedido sai sem alta resolução e com a marca d'água da DEMO-SLAP, o jeito mais barato. Montagem de 7 trechos de 5 s: 11 créditos + 1 da análise (16 com alta resolução, e 16 também sem alta resolução e sem marca d'água). Kill sozinha: 4 s antes e 3 s depois. Montagem: 3 s antes e 2 s depois de cada kill.
-- Vídeo único da montagem: o `render-fragmovie` recusa trechos do `render-custom`, então quem junta é o Coletor. O comando `juntar-clipes` roda no cron (10 em 10 min), baixa os trechos, junta com ffmpeg e grava `clipes/<id>.mp4` no R2. Até lá, a aba toca os trechos em sequência. Depois de 1 dia sem conseguir juntar, o Coletor desiste e ficam os trechos.
+- Cada trecho custa por segundo (cerca de 0,1 crédito/s, com mínimo de 1 crédito por trecho). O pedido sai em 1080p (`highResolution`) com a marca d'água da DEMO-SLAP. Sem alta resolução sai 720p. O Jogador pode marcar "Sem a marca d'água" (`hideWatermark`), que encarece; a aba mostra quanto a mais antes de pedir. Montagem de 7 trechos de 5 s: 16 créditos em 1080p com marca d'água (11 em 720p) + 1 da análise. Kill sozinha: 4 s antes e 3 s depois. Montagem: 3 s antes e 2 s depois de cada kill.
+- Vídeo único da montagem: o `render-fragmovie` recusa trechos do `render-custom`, então quem junta é o Coletor. Com os trechos gravados, a montagem fica em "Juntando os trechos…" (status `juntando`) e não mostra vídeo. O comando `juntar-clipes` roda no cron do Coletor, baixa os trechos, junta com ffmpeg, grava `clipes/<id>.mp4` no R2 e marca a montagem como pronta. Se ele não juntar em 1 hora, o site marca pronta assim mesmo e a aba toca os trechos em sequência; o Coletor ainda tenta por 1 dia.
 - Não há worker. O pedido avança quando alguém está com a aba Clipes aberta (ela consulta a cada 10 s). Se ninguém olhar, o clipe fica parado e continua de onde parou na próxima visita.
 - Tetos: 10 kills por pedido e 10 pedidos por Jogador por dia.
 - Só dá para pedir enquanto a Demo está no R2 (14 dias, ADR-0006). A DEMO-SLAP apaga os vídeos dela em 90 dias.

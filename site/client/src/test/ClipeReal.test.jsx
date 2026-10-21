@@ -20,7 +20,7 @@ const KILLS = [
   kill({ round: 6, tick: 15000 }),
   kill({ round: 8, tick: 20000, killer: INIMIGO, victim: EU }),
 ]
-const ESTIMATIVA = { trechos: 2, creditos: 4, analise: 1, total: 5, reais: 0.95 }
+const ESTIMATIVA = { trechos: 2, creditos: 4, analise: 1, total: 5, reais: 0.95, extraSemMarca: 2, reaisExtraSemMarca: 0.38 }
 
 function resposta(corpo, ok = true) {
   return Promise.resolve({ ok, json: async () => corpo })
@@ -83,7 +83,7 @@ describe('SecaoClipeReal', () => {
     await user.click(screen.getByRole('button', { name: 'Gerar clipe' }))
     await waitFor(() => expect(post).toHaveBeenCalled())
     const corpo = JSON.parse(fetchMock.mock.calls.find(([u, o]) => u.endsWith('/clipes-reais') && o?.method === 'POST')[1].body)
-    expect(corpo).toEqual({ modo: 'clipe', kills: [{ tick: 9000, round: 4, pov: 'amigo' }] })
+    expect(corpo).toEqual({ modo: 'clipe', semMarca: false, kills: [{ tick: 9000, round: 4, pov: 'amigo' }] })
     expect(await screen.findByText('Gravando no CS2…')).toBeInTheDocument()
   })
 
@@ -105,7 +105,27 @@ describe('SecaoClipeReal', () => {
     expect(fetchMock.mock.calls.some(([u]) => u.includes('/kills?vitima=eu'))).toBe(true)
     await user.click(screen.getByRole('button', { name: 'Gerar Fails (1 morte)' }))
     await waitFor(() => expect(post).toHaveBeenCalled())
-    expect(JSON.parse(post.mock.calls[0][0].body)).toEqual({ modo: 'fails', kills: [{ tick: 20000, round: 8, pov: 'eu' }] })
+    expect(JSON.parse(post.mock.calls[0][0].body)).toEqual({ modo: 'fails', semMarca: false, kills: [{ tick: 20000, round: 8, pov: 'eu' }] })
+  })
+
+  it('sem marca d\'água: mostra quanto a mais custa e manda a escolha no pedido', async () => {
+    const post = vi.fn().mockReturnValue(resposta({ clipes: [] }))
+    mockApi({ post })
+    const user = userEvent.setup()
+    render(<SecaoClipeReal matchId="m1" jogadores={JOGADORES} viewerSteamId="eu" />)
+    await user.click(await screen.findByRole('checkbox', { name: /Round 6/ }))
+    expect(await screen.findByText(/\+2 créditos \(\+R\$\s0,38\)/)).toBeInTheDocument()
+    await user.click(screen.getByRole('checkbox', { name: /Sem a marca d'água/ }))
+    await user.click(screen.getByRole('button', { name: 'Gerar clipe' }))
+    await waitFor(() => expect(post).toHaveBeenCalled())
+    expect(JSON.parse(post.mock.calls[0][0].body)).toMatchObject({ semMarca: true })
+  })
+
+  it('montagem esperando a junção mostra o status, sem player', async () => {
+    mockApi({ lista: { disponivel: true, permitido: true, clipes: [{ id: 'c1', status: 'juntando', kills: [{ round: 4 }, { round: 6 }], videos: [], pedidoPor: { nick: 'fih' } }] } })
+    const { container } = render(<SecaoClipeReal matchId="m1" jogadores={JOGADORES} viewerSteamId="eu" />)
+    expect(await screen.findByText('Juntando os trechos…')).toBeInTheDocument()
+    expect(container.querySelector('video')).toBeNull()
   })
 
   it('mostra o custo em créditos e reais enquanto marca as kills', async () => {

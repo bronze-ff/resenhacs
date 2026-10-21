@@ -13,6 +13,7 @@ const ROTULO_STATUS = {
   analisando: 'Lendo a Demo…',
   enviando: 'Enviando…',
   renderizando: 'Gravando no CS2…',
+  juntando: 'Juntando os trechos…',
   pronto: 'Pronto',
   erro: 'Falhou',
 }
@@ -57,8 +58,29 @@ function TextoEstimativa({ estimativa }) {
   )
 }
 
-// Montagem = um trecho por kill, tocados em sequência no mesmo player (a DEMO-SLAP não
-// junta trechos do render-custom num vídeo só). Largura igual à do player da Allstar na Partida.
+// Opção paga à parte: tirar a marca d'água da DEMO-SLAP. O custo extra vem da estimativa.
+function OpcaoSemMarca({ marcado, onMudar, estimativa }) {
+  const extra = typeof estimativa === 'object' && estimativa ? estimativa : null
+  return (
+    <label className="flex cursor-pointer flex-wrap items-center gap-2 text-sm text-texto">
+      <input
+        type="checkbox"
+        checked={marcado}
+        onChange={(e) => onMudar(e.target.checked)}
+        className="h-4 w-4 accent-[color:var(--color-destaque)]"
+      />
+      Sem a marca d&apos;água da DEMO-SLAP
+      <Badge tom="destaque">
+        {extra?.extraSemMarca > 0
+          ? `+${plural(extra.extraSemMarca, 'crédito', 'créditos')} (+${REAIS.format(extra.reaisExtraSemMarca)})`
+          : 'mais caro'}
+      </Badge>
+    </label>
+  )
+}
+
+// Montagem = um trecho por kill. O Coletor junta num vídeo só; se ele não conseguir, a
+// aba toca os trechos em sequência. Largura igual à do player da Allstar na Partida.
 function PlayerTrechos({ videos }) {
   const [atual, setAtual] = useState(0)
   const montagem = videos.length > 1
@@ -129,6 +151,7 @@ export default function SecaoClipeReal({ matchId, jogadores, viewerSteamId }) {
   const [modoId, setModoId] = useState('clipe')
   const [kills, setKills] = useState([])
   const [pov, setPov] = useState('killer')
+  const [semMarca, setSemMarca] = useState(false)
   const [dados, setDados] = useState(null)
   const [erroLista, setErroLista] = useState(false)
   const [enviando, setEnviando] = useState(false)
@@ -152,12 +175,13 @@ export default function SecaoClipeReal({ matchId, jogadores, viewerSteamId }) {
   // Corpo do pedido e da estimativa. Em string pra servir de dependência estável.
   const corpo = useMemo(() => JSON.stringify({
     modo: modoId,
+    semMarca,
     kills: kills.map((k) => ({
       tick: k.tick,
       round: k.round,
       pov: papelPov === 'victim' ? k.victim?.steamId : k.killer?.steamId,
     })),
-  }), [modoId, kills, papelPov])
+  }), [modoId, semMarca, kills, papelPov])
 
   // Custo antes de pedir: a DEMO-SLAP calcula sem gastar crédito. Espera a seleção
   // parar de mudar pra não chamar a cada clique.
@@ -209,7 +233,8 @@ export default function SecaoClipeReal({ matchId, jogadores, viewerSteamId }) {
       <p className="mb-3 text-sm text-texto-fraco">
         Vídeo do próprio CS2, gravado a partir da Demo. Marque uma kill pra um clipe ou várias
         pra uma montagem. Leva alguns minutos com esta aba aberta; se sair, ele continua na
-        próxima visita.
+        próxima visita. A montagem só aparece depois de juntada num vídeo só, uns minutos
+        depois de gravada.
       </p>
 
       {/* O seletor só aparece depois de saber que o recurso está ligado: antes disso
@@ -278,6 +303,7 @@ export default function SecaoClipeReal({ matchId, jogadores, viewerSteamId }) {
               </span>
             )}
           </div>
+          <OpcaoSemMarca marcado={semMarca} onMudar={setSemMarca} estimativa={estimativa} />
           <p aria-live="polite" className="min-h-5">
             <TextoEstimativa estimativa={estimativa} />
           </p>

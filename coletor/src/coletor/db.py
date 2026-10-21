@@ -749,13 +749,14 @@ def listar_steam_ids_de_match_players_sem_avatar_fresco(conn, dias=30):
 
 
 def listar_montagens_sem_video(conn, limite=10):
-    """Montagens prontas (2+ trechos gravados) ainda sem o vídeo único no R2. Depois de
-    1 dia sem conseguir juntar, desiste: a aba continua tocando os trechos em sequência."""
+    """Montagens com os 2+ trechos gravados e ainda sem o vídeo único no R2. O site deixa
+    a montagem em 'juntando' até aqui; se demorar, ele a marca 'pronto' com os trechos em
+    sequência, e a junção ainda vale. Depois de 1 dia sem conseguir juntar, desiste."""
     with conn.cursor() as cur:
         cur.execute(
             "select c.id, a.job_id, c.video_job_ids from clipes_reais c "
             "join demoslap_analises a on a.match_id = c.match_id "
-            "where c.status = 'pronto' and c.video_r2_key is null "
+            "where c.status in ('juntando', 'pronto') and c.video_r2_key is null "
             "and cardinality(c.video_job_ids) > 1 and c.updated_at > now() - interval '1 day' "
             "order by c.updated_at limit %s",
             (limite,),
@@ -765,7 +766,10 @@ def listar_montagens_sem_video(conn, limite=10):
 
 def gravar_video_montagem(conn, clipe_id, key):
     with conn.cursor() as cur:
-        cur.execute("update clipes_reais set video_r2_key = %s where id = %s", (key, clipe_id))
+        cur.execute(
+            "update clipes_reais set video_r2_key = %s, status = 'pronto', updated_at = now() where id = %s",
+            (key, clipe_id),
+        )
     conn.commit()
 
 

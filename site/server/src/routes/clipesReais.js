@@ -17,11 +17,14 @@ const MAX_POR_DIA = 10
 const RESERVA_EXPIRADA_MS = 5 * 60 * 1000
 
 const FINAIS = new Set(['pronto', 'erro'])
+// Montagem espera o Coletor (juntar-clipes, cron de 5 em 5 min) juntar os trechos. Se
+// passar disso, ela fica pronta assim mesmo e a aba toca os trechos em sequência.
+const ESPERA_JUNCAO_MS = 60 * 60 * 1000
 
-// Sem alta resolução, com a marca d'água da DEMO-SLAP. Alta resolução e tirar a marca
-// d'água encarecem o pedido. Montagem de 7 trechos de 5 s (custom-credits-calc,
-// 2026-10-21): padrão 16, sem alta resolução e sem marca d'água 16, assim 11.
-const OPCOES_RENDER = { highResolution: false }
+// 1080p (sem alta resolução sai 720p), com a marca d'água da DEMO-SLAP. Tirar a marca
+// é escolha do Jogador e encarece. Montagem de 7 trechos de 5 s (custom-credits-calc,
+// 2026-10-21): 1080p 16 créditos; 720p 11.
+const OPCOES_RENDER = { highResolution: true }
 
 // Modos do pedido (migration 0061). Em cada kill marcada, a câmera segue:
 //   clipe    → quem o Jogador escolheu (quem matou ou quem morreu)
@@ -30,8 +33,12 @@ const OPCOES_RENDER = { highResolution: false }
 //   cheater  → quem matou, com X-Ray
 const PAPEL_DO_POV = { clipe: null, fails: 'victim', coaching: 'victim', cheater: 'killer' }
 
-function opcoesDoModo(modo) {
-  return modo === 'cheater' ? { ...OPCOES_RENDER, showXRay: true } : OPCOES_RENDER
+function opcoesDoPedido(modo, semMarca) {
+  return {
+    ...OPCOES_RENDER,
+    ...(modo === 'cheater' ? { showXRay: true } : {}),
+    ...(semMarca ? { hideWatermark: true } : {}),
+  }
 }
 
 // Confere cada kill contra a Partida e devolve os trechos a gravar, ou null se alguma
@@ -87,10 +94,11 @@ export function createClipesReaisRouter({ db, requireAuth, r2Client, r2Bucket, c
     return Boolean(rows[0]?.is_super_admin || rows[0]?.premium)
   }
 
-  // Valida o corpo { modo, kills } e a Partida. Responde o erro e devolve null, ou
-  // devolve { modo, partida, trechos }. Usado pelo pedido e pela estimativa.
+  // Valida o corpo { modo, kills, semMarca } e a Partida. Responde o erro e devolve null,
+  // ou devolve { modo, semMarca, partida, trechos }. Usado pelo pedido e pela estimativa.
   async function prepararPedido(req, res) {
     const modo = req.body?.modo ?? 'clipe'
+    const semMarca = req.body?.semMarca === true
     if (!Object.hasOwn(PAPEL_DO_POV, modo)) return void res.status(400).json({ erro: 'Modo de clipe inválido' })
     const kills = killsValidas(req.body?.kills)
     if (!kills) return void res.status(400).json({ erro: `Escolha de 1 a ${MAX_KILLS} kills` })
@@ -105,7 +113,7 @@ export function createClipesReaisRouter({ db, requireAuth, r2Client, r2Bucket, c
     )
     const trechos = trechosDoPedido(modo, kills, existentes)
     if (!trechos) return void res.status(400).json({ erro: 'Kill não encontrada nessa Partida' })
-    return { modo, partida, trechos }
+    return { modo, semMarca, partida, trechos }
   }
 
   async function precisaAnalisar(matchId) {
@@ -159,10 +167,12 @@ export function createClipesReaisRouter({ db, requireAuth, r2Client, r2Bucket, c
       if (parado) await marcarErro(c.id, 'O pedido foi interrompido. Peça o clipe de novo.')
       return
     }
-    // Pedido antigo, de quando a montagem passava pelo render-fragmovie: os trechos já
-    // estão gravados, então só falta exibir.
+    // Montagem com os trechos gravados, esperando o Coletor juntar (juntar-clipes grava
+    // video_r2_key e marca pronto). Se ele demorar demais, fica pronta com os trechos.
     if (c.status === 'juntando') {
-      await db.query("update clipes_reais set status = 'pronto', updated_at = now() where id = $1", [c.id])
+      if (Date.now() - new Date(c.updated_at).getTime() > ESPERA_JUNCAO_MS) {
+        await db.query("update clipes_reais set status = 'pronto', updated_at = now() where id = $1", [c.id])
+      }
       return
     }
     try {
@@ -177,7 +187,7 @@ export function createClipesReaisRouter({ db, requireAuth, r2Client, r2Bucket, c
         )
         if (reserva.rows.length === 0) return
         try {
-          const ids = await cliente.renderizar(a.job_id, montarClipes(c.kills, a.tick_rate), opcoesDoModo(c.modo))
+          const ids = await cliente.renderizar(a.job_id, montarClipes(c.kills, a.tick_rate), opcoesDoPedido(c.modo, c.sem_marca))
           if (ids.length === 0) return marcarErro(c.id, 'A DEMO-SLAP não aceitou nenhum trecho')
           await db.query(
             "update clipes_reais set status = 'renderizando', video_job_ids = $2, updated_at = now() where id = $1",
@@ -196,8 +206,14 @@ export function createClipesReaisRouter({ db, requireAuth, r2Client, r2Bucket, c
         if (r.status === 'error') return marcarErro(c.id, r.erro)
         if (r.status !== 'done') return
         // Montagem não passa pelo render-fragmovie: ele recusa trechos do render-custom
-        // ("No rendered clips found", testado em 2026-10-21). O client toca os trechos em sequência.
-        await db.query("update clipes_reais set status = 'pronto', updated_at = now() where id = $1", [c.id])
+        // ("No rendered clips found", testado em 2026-10-21). Quem junta é o Coletor; até
+        // lá a montagem fica em 'juntando', pra não aparecer em pedaços.
+        await db.query(
+          (c.video_job_ids ?? []).length > 1
+            ? "update clipes_reais set status = 'juntando', updated_at = now() where id = $1"
+            : "update clipes_reais set status = 'pronto', updated_at = now() where id = $1",
+          [c.id],
+        )
       }
     } catch (e) {
       console.error(`demoslap: falha ao consultar o clipe ${c.id}: ${e.message}`)
@@ -206,7 +222,7 @@ export function createClipesReaisRouter({ db, requireAuth, r2Client, r2Bucket, c
 
   async function carregar(matchId) {
     const { rows } = await db.query(
-      `select c.id, c.match_id, c.pedido_por, c.modo, c.kills, c.status, c.video_job_ids,
+      `select c.id, c.match_id, c.pedido_por, c.modo, c.sem_marca, c.kills, c.status, c.video_job_ids,
               c.fragmovie_job_id, c.video_r2_key, c.erro, c.created_at, c.updated_at,
               a.job_id, p.nick
        from clipes_reais c
@@ -241,6 +257,7 @@ export function createClipesReaisRouter({ db, requireAuth, r2Client, r2Bucket, c
       status: c.status,
       erro: c.status === 'erro' ? c.erro : null,
       modo: c.modo ?? 'clipe',
+      semMarca: Boolean(c.sem_marca),
       kills: c.kills,
       montagem: Array.isArray(c.kills) && c.kills.length > 1,
       pedidoPor: { steamId: c.pedido_por, nick: c.nick ?? null },
@@ -278,13 +295,20 @@ export function createClipesReaisRouter({ db, requireAuth, r2Client, r2Bucket, c
     const p = await prepararPedido(req, res)
     if (!p) return
     try {
-      // O cálculo só usa a duração de cada trecho; o tick rate não muda o preço.
-      const creditos = await cliente.calcular(montarClipes(p.trechos, 64), opcoesDoModo(p.modo))
+      // O cálculo só usa a duração de cada trecho; o tick rate não muda o preço. Calcula
+      // com e sem a marca d'água pra a aba mostrar quanto a mais custa tirar.
+      const clipes = montarClipes(p.trechos, 64)
+      const [comMarca, semMarca] = await Promise.all([
+        cliente.calcular(clipes, opcoesDoPedido(p.modo, false)),
+        cliente.calcular(clipes, opcoesDoPedido(p.modo, true)),
+      ])
+      const creditos = p.semMarca ? semMarca : comMarca
       const analise = (await precisaAnalisar(p.partida.id)) ? 1 : 0
       const total = creditos + analise
+      const emReais = (n) => Math.round(n * config.demoSlapReaisPorCredito * 100) / 100
       res.json({
-        trechos: p.trechos.length, creditos, analise, total,
-        reais: Math.round(total * config.demoSlapReaisPorCredito * 100) / 100,
+        trechos: p.trechos.length, creditos, analise, total, reais: emReais(total),
+        extraSemMarca: semMarca - comMarca, reaisExtraSemMarca: emReais(semMarca - comMarca),
       })
     } catch (e) {
       console.error(`demoslap: falha ao estimar o custo na partida ${p.partida.id}: ${e.message}`)
@@ -330,8 +354,8 @@ export function createClipesReaisRouter({ db, requireAuth, r2Client, r2Bucket, c
     }
 
     await db.query(
-      'insert into clipes_reais (match_id, pedido_por, modo, kills) values ($1, $2, $3, $4::jsonb)',
-      [partida.id, req.player.steamId, p.modo, JSON.stringify(p.trechos)],
+      'insert into clipes_reais (match_id, pedido_por, modo, kills, sem_marca) values ($1, $2, $3, $4::jsonb, $5)',
+      [partida.id, req.player.steamId, p.modo, JSON.stringify(p.trechos), p.semMarca],
     )
     res.status(201).json({ clipes: await listar(partida) })
   })
