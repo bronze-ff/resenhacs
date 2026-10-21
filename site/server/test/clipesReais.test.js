@@ -154,7 +154,9 @@ describe('clipes reais (DEMO-SLAP)', () => {
       .send({ kills: [{ ...TK, pov: AMIGO }] })
     expect(res.status).toBe(201)
     expect(demoSlap.analisar).toHaveBeenCalledWith('https://r2-assinada/x.dem')
-    expect(demoSlap.renderizar).toHaveBeenCalledWith('an1', [{ tick: 10000 - 256, duration: 7, povSteamId: AMIGO }])
+    expect(demoSlap.renderizar).toHaveBeenCalledWith(
+      'an1', [{ tick: 10000 - 256, duration: 7, povSteamId: AMIGO }], { highResolution: false, hideWatermark: true },
+    )
     expect(banco.estado.clipes[0]).toMatchObject({ status: 'renderizando', video_job_ids: ['v1'] })
     expect(res.body.clipes[0]).toMatchObject({ status: 'renderizando', montagem: false, videos: [] })
   })

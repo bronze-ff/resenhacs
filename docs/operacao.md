@@ -112,7 +112,7 @@ Ligar:
 Como funciona:
 
 - A primeira vez que alguém pede clipe de uma Partida, a API manda a Demo para análise (1 crédito). As próximas reaproveitam a mesma análise.
-- Cada trecho custa por segundo (cerca de 0,1 crédito/s). Kill sozinha: 4 s antes e 3 s depois. Montagem: 3 s antes e 2 s depois de cada kill.
+- Cada trecho custa por segundo (cerca de 0,1 crédito/s, com mínimo de 1 crédito por trecho). O pedido sai sem alta resolução e sem marca d'água (×1,5 cada uma): 1,5 crédito por trecho de até 10 s, com arredondamento para cima por pedido. Montagem de 7 kills: ~11 créditos + 1 da análise. Kill sozinha: 4 s antes e 3 s depois. Montagem: 3 s antes e 2 s depois de cada kill.
 - Vídeo único da montagem: o `render-fragmovie` recusa trechos do `render-custom`, então quem junta é o Coletor. O comando `juntar-clipes` roda no cron (10 em 10 min), baixa os trechos, junta com ffmpeg e grava `clipes/<id>.mp4` no R2. Até lá, a aba toca os trechos em sequência. Depois de 1 dia sem conseguir juntar, o Coletor desiste e ficam os trechos.
 - Não há worker. O pedido avança quando alguém está com a aba Clipes aberta (ela consulta a cada 10 s). Se ninguém olhar, o clipe fica parado e continua de onde parou na próxima visita.
 - Tetos: 10 kills por pedido e 10 pedidos por Jogador por dia.
