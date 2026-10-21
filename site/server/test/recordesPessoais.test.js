@@ -66,6 +66,17 @@ describe('GET /api/recordes/pessoais', () => {
     expect(params).toEqual(['76561198000000009'])
   })
 
+  it('dano de utilitária é só em inimigo (HE + fogo), igual ao da Partida', async () => {
+    const db = { query: vi.fn().mockResolvedValue({ rows: [] }) }
+    await request(createApp({ config, db })).get('/api/recordes/pessoais').set('Cookie', cookie)
+    // utility_damage soma fogo amigo: aviso dizia 739 com a Partida mostrando ~600.
+    const recentes = db.query.mock.calls.find(([s]) => s.includes('as utility_damage'))[0]
+    const base = db.query.mock.calls.find(([s]) => s.includes('utilitaria_max'))[0]
+    for (const sql of [recentes, base]) {
+      expect(sql).toContain('then mp.he_damage + mp.molotov_damage else mp.utility_damage end')
+    }
+  })
+
   it('o máximo da carreira fora da janela de 750 bloqueia um falso recorde', async () => {
     const recentes = Array.from({ length: 11 }, (_, i) => ({
       match_id: `m${i}`, map: 'de_mirage', played_at: new Date(Date.now() - (11 - i) * 3600 * 1000).toISOString(),

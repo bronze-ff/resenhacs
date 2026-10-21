@@ -134,7 +134,7 @@ export default function Admin() {
   }
 
   return (
-    <div className="max-w-6xl space-y-6">
+    <div className="space-y-6">
       <CabecalhoPagina eyebrow="Super admin" titulo="Admin" descricao="Controle de acesso, conteúdo do curso e competições do grupo." className="mb-0" />
 
       <section className="space-y-3">

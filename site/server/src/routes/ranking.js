@@ -1,6 +1,9 @@
 import { Router } from 'express'
 import { calcularEstilos } from '../analise.js'
 import { partidaVisivelExpr } from '../friendships.js'
+import { UTIL_INIMIGO_SQL } from '../danoUtilitaria.js'
+import { inicioDoDiaSql, fimDoDiaSql } from '../fuso.js'
+import { RATING_PONDERADO_SQL } from '../agregados.js'
 
 function pct(parte, total) {
   if (!total) return 0
@@ -19,11 +22,11 @@ export function createRankingRouter({ db, requireAuth }) {
     const { from, to } = req.query
     if (from && /^\d{4}-\d{2}-\d{2}$/.test(from)) {
       params.push(from)
-      periodo += ` and m.played_at >= $${params.length}`
+      periodo += ` and m.played_at >= ${inicioDoDiaSql(`$${params.length}`)}`
     }
     if (to && /^\d{4}-\d{2}-\d{2}$/.test(to)) {
       params.push(to)
-      periodo += ` and m.played_at < ($${params.length}::date + interval '1 day')`
+      periodo += ` and m.played_at < ${fimDoDiaSql(`$${params.length}`)}`
     }
     // Forma recente: rating médio das últimas 5 Partidas de CARREIRA (não do período
     // filtrado acima — "recente" perde o sentido se o filtro já corta pra uma janela
@@ -61,10 +64,11 @@ export function createRankingRouter({ db, requireAuth }) {
       `select p.steam_id64, p.nick, coalesce(p.avatar_url, sa.avatar_url) as avatar_url,
               count(mp.match_id)::int as partidas,
               coalesce(sum(case when mp.won then 1 else 0 end), 0)::int as vitorias,
+              (count(mp.match_id) filter (where mp.won is not null))::int as decididas,
               coalesce(sum(mp.kills), 0)::int as kills,
               coalesce(sum(mp.deaths), 0)::int as deaths,
               coalesce(sum(mp.headshot_kills), 0)::int as hs,
-              avg(mp.rating) as rating,
+              ${RATING_PONDERADO_SQL} as rating,
               coalesce((select count(*) from highlights h
                         join matches m on m.id = h.match_id
                         where h.steam_id64 = p.steam_id64 and h.kind = 'ace' and ${partidaVisivelExpr('m', '$1')}${periodo}), 0)::int as aces,
@@ -72,7 +76,7 @@ export function createRankingRouter({ db, requireAuth }) {
               coalesce(sum(mp.clutch_attempts), 0)::int as clutch_attempts,
               coalesce(sum(mp.entry_kills), 0)::int as entry_kills,
               coalesce(sum(mp.entry_deaths), 0)::int as entry_deaths,
-              coalesce(sum(mp.utility_damage), 0)::int as utility_damage,
+              coalesce(sum(${UTIL_INIMIGO_SQL}), 0)::int as utility_damage,
               coalesce(sum(mp.rounds_played), 0)::int as rounds,
               coalesce(sum(mp.shots_fired), 0)::int as shots_fired,
               coalesce(sum(mp.shots_hit), 0)::int as shots_hit
@@ -113,7 +117,7 @@ export function createRankingRouter({ db, requireAuth }) {
         avatarUrl: r.avatar_url,
         partidas: r.partidas,
         vitorias: r.vitorias,
-        winrate: pct(r.vitorias, r.partidas),
+        winrate: pct(r.vitorias, r.decididas ?? r.partidas),
         kills: r.kills,
         kd: r.deaths ? Math.round((r.kills / r.deaths) * 100) / 100 : r.kills,
         hsPct: pct(r.hs, r.kills),

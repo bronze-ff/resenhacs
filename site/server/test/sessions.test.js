@@ -81,4 +81,22 @@ describe('GET /api/sessions', () => {
       expect(sql).toContain('order by played_at desc nulls last, id desc')
     }
   })
+
+  it('destaque: Partida sem rating (FACEIT só com stats) não puxa a média pra baixo', async () => {
+    const { app } = appWith([
+      ['select id, map, played_at', [
+        { id: 'm1', map: 'de_mirage', played_at: '2026-07-10T21:00:00Z', score_a: 13, score_b: 9 },
+        { id: 'm2', map: 'de_dust2', played_at: '2026-07-10T22:00:00Z', score_a: 13, score_b: 11 },
+      ]],
+      ['join players p on p.steam_id64 = mp.steam_id64', [
+        { match_id: 'm1', steam_id64: 's1', nick: 'fih', kills: 20, deaths: 10, assists: 3, rating: '1.30', won: true, clutch_wins: 0, entry_kills: 0 },
+        { match_id: 'm2', steam_id64: 's1', nick: 'fih', kills: 18, deaths: 10, assists: 3, rating: null, won: true, clutch_wins: 0, entry_kills: 0 },
+        { match_id: 'm1', steam_id64: 's2', nick: 'bronze', kills: 15, deaths: 12, assists: 2, rating: '1.00', won: true, clutch_wins: 0, entry_kills: 0 },
+        { match_id: 'm2', steam_id64: 's2', nick: 'bronze', kills: 15, deaths: 12, assists: 2, rating: '1.00', won: true, clutch_wins: 0, entry_kills: 0 },
+      ]],
+    ])
+    const res = await request(app).get('/api/sessions').set('Cookie', cookie)
+    // Antes: (1.30 + 0) / 2 = 0.65 e o destaque ia pro bronze.
+    expect(res.body[0].destaque).toMatchObject({ nick: 'fih', ratingMedio: 1.3 })
+  })
 })

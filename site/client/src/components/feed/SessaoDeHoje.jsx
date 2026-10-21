@@ -46,7 +46,7 @@ export default function SessaoDeHoje({ sessao, resultados, onVerSessao }) {
             <Avatar p={sessao.destaque} size={20} />
             <span className="truncate">{sessao.destaque.nick}</span>
           </Link>
-          <span className={`font-mono ${corRating(sessao.destaque.ratingMedio)}`}>{sessao.destaque.ratingMedio.toFixed(2)}</span>
+          <span className={`font-mono ${corRating(sessao.destaque.ratingMedio)}`}>{sessao.destaque.ratingMedio?.toFixed(2) ?? '–'}</span>
         </div>
       )}
       <Button variante="secundario" tamanho="sm" larguraTotal className="mt-4" onClick={() => onVerSessao(sessao)}>

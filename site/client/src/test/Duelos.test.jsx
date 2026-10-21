@@ -1,8 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
 import DuelosAbertura from '../components/perfil/DuelosAbertura.jsx'
-import DuelosPartida from '../components/DuelosPartida.jsx'
 
 function base(extra = {}) {
   return {
@@ -39,34 +37,4 @@ describe('DuelosAbertura (perfil)', () => {
   })
 })
 
-describe('DuelosPartida (aba da Partida)', () => {
-  it('tabela por time com aberturas e trocas', async () => {
-    mockFetch({
-      jogadores: [
-        { steamId: '1', nick: 'alfa', team: 'A', ...base() },
-        { steamId: '2', nick: 'beta', team: 'B', ...base({ trocasFeitas: 7 }) },
-      ],
-    })
-    render(
-      <MemoryRouter>
-        <DuelosPartida matchId="m1" />
-      </MemoryRouter>,
-    )
-    expect(await screen.findByText('alfa')).toBeInTheDocument()
-    expect(global.fetch).toHaveBeenCalledWith('/api/matches/m1/duelos')
-    expect(screen.getByText('Time A')).toBeInTheDocument()
-    expect(screen.getByText('Time B')).toBeInTheDocument()
-    expect(screen.getByText('7')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'beta' })).toHaveAttribute('href', '/jogador/2')
-  })
-
-  it('erro mostra estado de erro', async () => {
-    mockFetch(null, false)
-    render(
-      <MemoryRouter>
-        <DuelosPartida matchId="m1" />
-      </MemoryRouter>,
-    )
-    expect(await screen.findByText('Não deu pra carregar os duelos dessa partida.')).toBeInTheDocument()
-  })
-})
+// A aba Duelos da Partida virou a lente "Duelos" do Frente a frente (Espelho.test.jsx).

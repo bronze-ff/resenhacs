@@ -80,7 +80,7 @@ export function calcularPremios(linhas, tipo = 'semana') {
       porJogador.set(r.steam_id64, {
         ...jogadorDe(r), partidas: 0, comRating: 0, somaRating: 0, kills: 0, hs: 0,
         clutches: 0, utilidade: 0, teamKills: 0, danoTime: 0, aliadosCegados: 0, segCegados: 0,
-        mortesSemTrade: 0,
+        mortesSemTrade: 0, partidasComDemo: 0,
       })
     }
     const j = porJogador.get(r.steam_id64)
@@ -94,7 +94,12 @@ export function calcularPremios(linhas, tipo = 'semana') {
     j.danoTime += n(r.he_team_damage) + n(r.molotov_team_damage)
     j.aliadosCegados += n(r.teammates_flashed)
     j.segCegados += n(r.teammate_flash_duration)
-    j.mortesSemTrade += Math.max(0, n(r.deaths) - n(r.traded_deaths))
+    // Trade só existe com Demo: Partida FACEIT só com stats grava traded_deaths=0
+    // (default) e faria toda morte dela virar "sem trade".
+    if (r.tem_demo !== false) {
+      j.partidasComDemo += 1
+      j.mortesSemTrade += Math.max(0, n(r.deaths) - n(r.traded_deaths))
+    }
   }
   const jogadores = [...porJogador.values()]
   const comMinimo = (j) => j.partidas >= min.partidas
@@ -109,10 +114,11 @@ export function calcularPremios(linhas, tipo = 'semana') {
   let vitorias = 0
   let derrotas = 0
   let segundos = 0
+  let comDuracao = 0
   const porMapa = new Map()
   const duplas = new Map()
   for (const p of partidas.values()) {
-    segundos += n(p.duration)
+    if (p.duration != null) { segundos += n(p.duration); comDuracao += 1 }
     const res = resultado(p)
     if (res === 'V') vitorias += 1
     if (res === 'D') derrotas += 1
@@ -144,18 +150,22 @@ export function calcularPremios(linhas, tipo = 'semana') {
     premios.push({ id, titulo, descricao, jogadores: [jogadorDe({ steam_id64: achado.j.steamId, nick: achado.j.nick, avatar_url: achado.j.avatarUrl })], valor: achado.v, formato, tom })
   }
 
+  // O mínimo conta só Partidas com rating: FACEIT sem Demo não tem, e 1 Partida com rating
+  // entre 4 passava no filtro como se fosse uma média de 4.
   individual('carregou', 'Carregou', `Maior rating médio (mín. ${min.partidas} partidas)`,
-    melhor(jogadores, (j) => (j.comRating ? arred(j.somaRating / j.comRating) : null), { filtro: comMinimo }), 'decimal2', 'bom')
-  individual('clutch', 'Rei do clutch', 'Clutches vencidos',
-    melhor(jogadores, (j) => j.clutches, { filtro: (j) => j.clutches > 0 }), 'int', 'bom')
+    melhor(jogadores, (j) => (j.comRating ? arred(j.somaRating / j.comRating) : null), { filtro: (j) => j.comRating >= min.partidas }), 'decimal2', 'bom')
+  // Rei do clutch, Fogo amigo e Flashador são POR PARTIDA, com o mínimo de partidas do
+  // período: somar o período premiava quem jogou mais, não quem clutcha/erra mais.
+  individual('clutch', 'Rei do clutch', `Clutches vencidos por partida (mín. ${min.partidas} partidas)`,
+    melhor(jogadores, (j) => arred(j.clutches / j.partidas), { filtro: (j) => comMinimo(j) && j.clutches > 0 }), 'decimal2', 'bom')
   individual('granadeiro', 'Granadeiro', 'Dano de utilitária por partida',
     melhor(jogadores, (j) => Math.round(j.utilidade / j.partidas), { filtro: (j) => comMinimo(j) && j.utilidade > 0 }), 'int', 'bom')
-  individual('fogo-amigo', 'Fogo amigo', 'Dano no próprio time (TK vale 100)',
-    melhor(jogadores, (j) => j.danoTime + j.teamKills * 100, { filtro: (j) => j.danoTime + j.teamKills > 0 }), 'int', 'ruim')
-  individual('flashador', 'Flashador amigo', 'Segundos de cegueira no próprio time',
-    melhor(jogadores, (j) => arred(j.segCegados, 1), { filtro: (j) => j.aliadosCegados > 0 }), 'decimal1', 'ruim')
+  individual('fogo-amigo', 'Fogo amigo', `Dano no próprio time por partida, TK vale 100 (mín. ${min.partidas} partidas)`,
+    melhor(jogadores, (j) => Math.round((j.danoTime + j.teamKills * 100) / j.partidas), { filtro: (j) => comMinimo(j) && j.danoTime + j.teamKills > 0 }), 'int', 'ruim')
+  individual('flashador', 'Flashador amigo', `Cegueira no próprio time por partida (mín. ${min.partidas} partidas)`,
+    melhor(jogadores, (j) => arred(j.segCegados / j.partidas, 1), { filtro: (j) => comMinimo(j) && j.aliadosCegados > 0 }), 'segundos', 'ruim')
   individual('baiter', 'Baiter', 'Mortes sem trade por partida',
-    melhor(jogadores, (j) => arred(j.mortesSemTrade / j.partidas, 1), { filtro: comMinimo }), 'decimal1', 'ruim')
+    melhor(jogadores, (j) => (j.partidasComDemo ? arred(j.mortesSemTrade / j.partidasComDemo, 1) : null), { filtro: (j) => j.partidasComDemo >= min.partidas }), 'decimal1', 'ruim')
   individual('alface', 'Mão de alface', `Menor HS% (mín. ${min.killsHs} kills)`,
     melhor(jogadores, (j) => arred((j.hs / j.kills) * 100, 1), { menor: true, filtro: (j) => j.kills >= min.killsHs }), 'pct100', 'ruim')
 
@@ -184,7 +194,9 @@ export function calcularPremios(linhas, tipo = 'semana') {
   return {
     numeros: {
       partidas: partidas.size,
-      horas: Math.round(segundos / 360) / 10,
+      // null = nenhuma Partida do período tem duração gravada (o Coletor ainda não grava
+      // matches.duration_seconds); 0h seria mentira com 169 Partidas jogadas.
+      horas: comDuracao ? Math.round(segundos / 360) / 10 : null,
       vitorias,
       derrotas,
       winrate: vitorias + derrotas > 0 ? arred((vitorias / (vitorias + derrotas)) * 100, 1) : null,

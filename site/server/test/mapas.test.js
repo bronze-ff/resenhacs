@@ -9,8 +9,9 @@ const VIEWER = '76561198000000009'
 const cookie = `resenha_token=${signToken({ steamId: VIEWER, isSuperAdmin: false }, config.jwtSecret)}`
 
 function partida(i, extra = {}) {
-  // i=0 é a mais recente; uma por dia, a partir de 2026-10-01 pra trás.
-  const d = new Date(Date.UTC(2026, 9, 1) - i * 86400000)
+  // i=0 é a mais recente; uma por dia, a partir de 2026-10-01 pra trás, sempre às 22h30
+  // de Brasília (01h30 UTC do dia seguinte): o dia do filtro é o de Brasília, não o UTC.
+  const d = new Date(Date.UTC(2026, 9, 2, 1, 30) - i * 86400000)
   return { id: `p${i}`, map: 'de_mirage', playedAt: d.toISOString(), team: 'A', won: true, scoreA: 13, scoreB: 5, ...extra }
 }
 
@@ -72,9 +73,10 @@ describe('montarMapas', () => {
     const grupo = [{ map: 'de_mirage', lado: 'CT', rounds: 10, vitorias: 6 }]
     const r = montarMapas({ partidas, rounds, grupo, filtros: {} })
     const m = r.mapas[0]
-    expect(m).toMatchObject({ map: 'de_mirage', partidas: 30, vitorias: 15, empates: 1, derrotas: 14, winrate: 50 })
+    // Empate fica fora da winrate (agregados.js): 15 / (15 + 14).
+    expect(m).toMatchObject({ map: 'de_mirage', partidas: 30, vitorias: 15, empates: 1, derrotas: 14, winrate: 51.7 })
     expect(m.anterior).toEqual({ partidas: 30, winrate: 33.3 })
-    expect(m.variacao).toBe(16.7)
+    expect(m.variacao).toBe(18.4)
     expect(m.lados.CT).toEqual({ atual: 50, rounds: 2, anterior: null, grupo: 60 })
     expect(m.lados.T).toMatchObject({ atual: 100, anterior: 0, grupo: null })
     expect(r.periodo.atual.partidas).toBe(30)

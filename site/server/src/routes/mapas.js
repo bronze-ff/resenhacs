@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { partidaVisivelExpr } from '../friendships.js'
 import { montarMapas, separarPeriodos } from '../mapas.js'
+import { inicioDoDiaSql, fimDoDiaSql } from '../fuso.js'
 
 // GET /api/mapas?jogador=&de=&ate=&compararDe=&compararAte=
 // Desempenho por mapa de um Jogador (padrão: o viewer), período atual vs comparação,
@@ -54,11 +55,11 @@ export function createMapasRouter({ db, requireAuth }) {
     let grupoPeriodo = ''
     if (janela.de) {
       grupoParams.push(janela.de)
-      grupoPeriodo += ` and m.played_at >= $${grupoParams.length}::date`
+      grupoPeriodo += ` and m.played_at >= ${inicioDoDiaSql(`$${grupoParams.length}`)}`
     }
     if (janela.ate) {
       grupoParams.push(janela.ate)
-      grupoPeriodo += ` and m.played_at < ($${grupoParams.length}::date + interval '1 day')`
+      grupoPeriodo += ` and m.played_at < ${fimDoDiaSql(`$${grupoParams.length}`)}`
     }
 
     const [roundsQ, grupoQ] = await Promise.all([

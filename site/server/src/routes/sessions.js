@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { partidaVisivelExpr } from '../friendships.js'
+import { partidaVisivelExpr, noCirculoExpr } from '../friendships.js'
 
 // Duas Partidas entram na mesma "Resenha" (sessão) se a diferença entre elas é menor
 // que isso — várias partidas seguidas numa noite viram um resumo só, em vez de N cards
@@ -47,7 +47,9 @@ export function createSessionsRouter({ db, requireAuth }) {
        left join steam_avatares sa on sa.steam_id64 = mp.steam_id64
        where mp.match_id in (
          select id from matches m where status = 'parsed' and ${partidaVisivelExpr('m', '$1')} ${recentes}
-       )`,
+       )
+         -- "Grupo" = eu + amigos accepted, o mesmo critério do card da Partida no Feed.
+         and ${noCirculoExpr('mp.steam_id64', '$1')}`,
       [eu],
     )
     const acesQ = await db.query(
@@ -99,7 +101,7 @@ export function createSessionsRouter({ db, requireAuth }) {
           if (!porJogador.has(j.steam_id64)) {
             porJogador.set(j.steam_id64, {
               steamId: j.steam_id64, nick: j.nick, avatarUrl: j.avatar_url, partidas: 0, kills: 0, deaths: 0,
-              assists: 0, ratingSoma: 0, clutchWins: 0, entryKills: 0, aces: 0,
+              assists: 0, ratingSoma: 0, comRating: 0, clutchWins: 0, entryKills: 0, aces: 0,
             })
           }
           const acc = porJogador.get(j.steam_id64)
@@ -107,15 +109,17 @@ export function createSessionsRouter({ db, requireAuth }) {
           acc.kills += j.kills
           acc.deaths += j.deaths
           acc.assists += j.assists
-          acc.ratingSoma += j.rating == null ? 0 : Number(j.rating)
+          // Partida sem rating (FACEIT só com stats) fica fora da média: somar 0 e contar
+          // a Partida derrubava o destaque de quem jogou ela.
+          if (j.rating != null) { acc.ratingSoma += Number(j.rating); acc.comRating++ }
           acc.clutchWins += j.clutch_wins
           acc.entryKills += j.entry_kills
           acc.aces += acesPorPartidaJogador.get(`${m.id}:${j.steam_id64}`) ?? 0
         }
       }
       const jogadores = [...porJogador.values()]
-        .map((j) => ({ ...j, ratingMedio: j.partidas ? Math.round((j.ratingSoma / j.partidas) * 100) / 100 : 0 }))
-        .sort((a, b) => b.ratingMedio - a.ratingMedio)
+        .map(({ comRating, ...j }) => ({ ...j, ratingMedio: comRating ? Math.round((j.ratingSoma / comRating) * 100) / 100 : null }))
+        .sort((a, b) => (b.ratingMedio ?? -1) - (a.ratingMedio ?? -1))
 
       return {
         inicio: s.inicio,

@@ -108,7 +108,7 @@ export default function EnviarDemo() {
   ]
 
   return (
-    <div className="max-w-5xl">
+    <div>
       <CabecalhoPagina
         eyebrow="Upload manual"
         titulo="Enviar demo"

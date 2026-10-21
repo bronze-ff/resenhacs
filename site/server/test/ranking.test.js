@@ -33,6 +33,18 @@ describe('GET /api/ranking', () => {
     expect(res.body[1].nick).toBe('baixo')
   })
 
+  it('winrate ignora empate e rating é ponderado por rounds (regras de agregados.js)', async () => {
+    const { app, db } = appWith([
+      // 10 partidas, 2 empates: 6 vitórias de 8 decididas = 75%, não 60%
+      { steam_id64: '1', nick: 'x', avatar_url: null, partidas: 10, vitorias: 6, decididas: 8, kills: 1, deaths: 1, hs: 0, rating: '1.00', aces: 0, clutch_wins: 0, clutch_attempts: 0, entry_kills: 0, entry_deaths: 0, utility_damage: 0, rounds: 200, shots_fired: 0, shots_hit: 0 },
+    ])
+    const res = await request(app).get('/api/ranking').set('Cookie', cookie)
+    expect(res.body[0].winrate).toBe(75)
+    const [sql] = db.query.mock.calls.find(([s]) => s.includes('join players p on p.steam_id64 = gm.steam_id64'))
+    expect(sql).toContain('sum(mp.rating * mp.rounds_played)')
+    expect(sql).toContain('filter (where mp.won is not null)')
+  })
+
   it('escopo populacional: quem entra no ranking é eu + amigos accepted (friendships), não group_members', async () => {
     const { app, db } = appWith([])
     const res = await request(app).get('/api/ranking').set('Cookie', cookie)

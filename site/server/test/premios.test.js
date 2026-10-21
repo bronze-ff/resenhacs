@@ -54,10 +54,11 @@ describe('calcularPremios', () => {
     expect(numeros).toEqual({ partidas: 4, horas: 2, vitorias: 2, derrotas: 2, winrate: 50, clutches: 2 })
     const p = Object.fromEntries(premios.map((x) => [x.id, x]))
     expect(p.carregou).toMatchObject({ valor: 1.25, jogadores: [{ steamId: 'a', nick: 'toguro' }] })
-    expect(p.clutch).toMatchObject({ valor: 2, jogadores: [{ steamId: 'a' }] })
+    // Por partida (4 cada): 2 clutches / 4; (80 de dano + 1 TK × 100) / 4; 6,5 s / 4.
+    expect(p.clutch).toMatchObject({ valor: 0.5, jogadores: [{ steamId: 'a' }] })
     expect(p.granadeiro).toMatchObject({ valor: 175, jogadores: [{ steamId: 'a' }] })
-    expect(p['fogo-amigo']).toMatchObject({ valor: 180, jogadores: [{ steamId: 'b' }], tom: 'ruim' })
-    expect(p.flashador).toMatchObject({ valor: 6.5, jogadores: [{ steamId: 'b' }] })
+    expect(p['fogo-amigo']).toMatchObject({ valor: 45, jogadores: [{ steamId: 'b' }], tom: 'ruim' })
+    expect(p.flashador).toMatchObject({ valor: 1.6, jogadores: [{ steamId: 'b' }] })
     expect(p.baiter.jogadores[0].steamId).toBe('b')
     expect(p.alface).toMatchObject({ jogadores: [{ steamId: 'b' }] })
     expect(p.dupla).toMatchObject({ valor: 50, jogadores: [{ steamId: 'a' }, { steamId: 'b' }] })
@@ -66,9 +67,40 @@ describe('calcularPremios', () => {
 
   it('sem partidas: números zerados e nenhum prêmio', () => {
     expect(calcularPremios([], 'mes')).toEqual({
-      numeros: { partidas: 0, horas: 0, vitorias: 0, derrotas: 0, winrate: null, clutches: 0 },
+      numeros: { partidas: 0, horas: null, vitorias: 0, derrotas: 0, winrate: null, clutches: 0 },
       premios: [],
     })
+  })
+
+  it('sem duração gravada: horas é null, não 0h', () => {
+    const linhas = [r('m1', 'a', 'toguro', { duration_seconds: null }), r('m2', 'a', 'toguro', { duration_seconds: null })]
+    expect(calcularPremios(linhas, 'semana').numeros.horas).toBeNull()
+  })
+
+  it('Baiter ignora Partida sem Demo (traded_deaths vem 0 por default)', () => {
+    const linhas = [
+      // a: 2 Partidas com Demo, 10 mortes sem trade cada; 2 FACEIT só com stats (20 mortes, traded 0)
+      r('m1', 'a', 'toguro', { deaths: 15, traded_deaths: 5 }),
+      r('m2', 'a', 'toguro', { deaths: 15, traded_deaths: 5 }),
+      r('m3', 'a', 'toguro', { deaths: 20, traded_deaths: 0, tem_demo: false }),
+      r('m4', 'a', 'toguro', { deaths: 20, traded_deaths: 0, tem_demo: false }),
+    ]
+    const baiter = calcularPremios(linhas, 'semana').premios.find((p) => p.id === 'baiter')
+    expect(baiter.valor).toBe(10)
+  })
+
+  it('Carregou exige o mínimo de Partidas COM rating', () => {
+    const linhas = [
+      // b: 1 Partida com rating 2.0 e 3 sem rating (FACEIT só stats) — não pode carregar
+      r('m1', 'b', 'zezinho', { rating: 2 }),
+      r('m2', 'b', 'zezinho', { rating: null, tem_demo: false }),
+      r('m3', 'b', 'zezinho', { rating: null, tem_demo: false }),
+      r('m4', 'b', 'zezinho', { rating: null, tem_demo: false }),
+      r('m1', 'a', 'toguro', { rating: 1.1 }),
+      r('m2', 'a', 'toguro', { rating: 1.1 }),
+    ]
+    const carregou = calcularPremios(linhas, 'semana').premios.find((p) => p.id === 'carregou')
+    expect(carregou.jogadores[0].steamId).toBe('a')
   })
 })
 

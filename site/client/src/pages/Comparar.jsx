@@ -186,7 +186,11 @@ export default function Comparar() {
                 <StatTile rotulo="Partidas juntos" valor={dados.confronto.partidasJuntos} />
                 <StatTile rotulo="Mesmo time" valor={`${dados.confronto.mesmoTimeVitorias}/${dados.confronto.mesmoTime}`} sub="vitórias" />
                 <StatTile rotulo={`${dados.a.nick || 'A'} venceu`} valor={dados.confronto.aVenceu} sub="times opostos" />
-                <StatTile rotulo={`${dados.b.nick || 'B'} venceu`} valor={dados.confronto.bVenceu} sub="times opostos" />
+                <StatTile
+                  rotulo={`${dados.b.nick || 'B'} venceu`}
+                  valor={dados.confronto.bVenceu}
+                  sub={dados.confronto.empates ? `times opostos · ${dados.confronto.empates} empate${dados.confronto.empates > 1 ? 's' : ''}` : 'times opostos'}
+                />
               </div>
             )}
           </section>

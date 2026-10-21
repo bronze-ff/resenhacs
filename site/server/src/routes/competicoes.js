@@ -36,14 +36,16 @@ function mapCompeticao(c) {
 // desapareceria do leaderboard.
 async function buscarLeaderboard(db, competicaoId, minimoParaRankear) {
   const { rows } = await db.query(
-    `select cs.steam_id64, coalesce(p.nick, mp.nick) as nick, coalesce(p.avatar_url, sa.avatar_url) as avatar_url,
+    // mp.nick (nick in-game de CADA Partida) fica fora do group by: com ele, quem trocou de
+    // nick entre Partidas virava duas linhas e podia nem atingir o mínimo pra rankear.
+    `select cs.steam_id64, coalesce(p.nick, max(mp.nick)) as nick, coalesce(p.avatar_url, sa.avatar_url) as avatar_url,
             sum(ac.pontuacao_total) as total, count(*) as qtd, max(cs.enviado_em) as ultimo_envio
      from competicao_submissoes cs join allstar_clips ac on ac.id = cs.allstar_clip_id
      left join players p on p.steam_id64 = cs.steam_id64
      left join match_players mp on mp.match_id = ac.match_id and mp.steam_id64 = cs.steam_id64
      left join steam_avatares sa on sa.steam_id64 = cs.steam_id64
      where cs.competicao_id = $1
-     group by cs.steam_id64, p.nick, mp.nick, p.avatar_url, sa.avatar_url`,
+     group by cs.steam_id64, p.nick, p.avatar_url, sa.avatar_url`,
     [competicaoId],
   )
   const leaderboard = rows.map((r) => ({

@@ -446,7 +446,7 @@ export default function Shell({ children }) {
             </button>
           </div>
         </header>
-        <main className="mx-auto w-full max-w-[1320px] px-4 pb-24 pt-5 lg:px-10 lg:py-8">{children}</main>
+        <main className="mx-auto w-full max-w-[1600px] px-4 pb-24 pt-5 lg:px-10 lg:py-8">{children}</main>
       </div>
       <BarraInferior menuAberto={menuAberto} onAbrirMenu={() => setMenuAberto(true)} temCompeticaoAtiva={temCompeticaoAtiva} />
     </div>

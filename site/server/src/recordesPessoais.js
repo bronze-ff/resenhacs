@@ -6,10 +6,14 @@ function arred1(n) {
   return Math.round(n * 10) / 10
 }
 
+// ADR e rating são taxas por round: numa Partida encerrada com 3 rounds um ADR 200+ viraria
+// recorde. Abaixo desse mínimo a Partida não conta pra essas duas métricas.
+export const MIN_ROUNDS_RECORDE = 10
+
 export const METRICAS_RECORDE = [
   { chave: 'kills', nome: 'kills', valor: (r) => r.kills },
-  { chave: 'adr', nome: 'ADR', valor: (r) => (r.rounds_played > 0 ? arred1(r.damage / r.rounds_played) : null) },
-  { chave: 'rating', nome: 'rating', valor: (r) => (r.rating == null ? null : Number(r.rating)) },
+  { chave: 'adr', nome: 'ADR', valor: (r) => (r.rounds_played >= MIN_ROUNDS_RECORDE ? arred1(r.damage / r.rounds_played) : null) },
+  { chave: 'rating', nome: 'rating', valor: (r) => (r.rating == null || r.rounds_played < MIN_ROUNDS_RECORDE ? null : Number(r.rating)) },
   { chave: 'utilitaria', nome: 'dano de utilitária', valor: (r) => r.utility_damage ?? null },
 ]
 
