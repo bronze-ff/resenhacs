@@ -1477,6 +1477,90 @@ def test_cmd_limpar_uploads_orfaos_erro_num_item_nao_derruba_os_outros(monkeypat
     assert "R2 fora do ar" in capsys.readouterr().out
 
 
+# ---- juntar-clipes: vídeo único da montagem (DEMO-SLAP) ----
+
+def _config_juntar():
+    return Config({
+        "R2_ACCOUNT_ID": "acc", "R2_ACCESS_KEY_ID": "id",
+        "R2_SECRET_ACCESS_KEY": "secret", "R2_BUCKET": "resenha-demos", "DEMOSLAP_API_KEY": "k",
+    })
+
+
+def _fakes_juntar(monkeypatch, montagens, urls):
+    monkeypatch.setattr(main.dbmod, "listar_montagens_sem_video", lambda c: montagens)
+    monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
+    monkeypatch.setattr(main, "_demoslap_trechos", lambda api_key, job_id: urls)
+    monkeypatch.setattr(main, "_baixar_trecho", lambda url, destino: destino.write_text(url))
+    juntados = []
+
+    def _concat(trechos, saida):
+        juntados.append([p.read_text() for p in trechos])
+        saida.write_bytes(b"mp4")
+
+    monkeypatch.setattr(main, "_ffmpeg_concat", _concat)
+    uploads = []
+    monkeypatch.setattr(
+        main.storage_r2, "upload_bytes",
+        lambda client, bucket, key, data, content_type=None: uploads.append((bucket, key, data, content_type)),
+    )
+    gravados = []
+    monkeypatch.setattr(main.dbmod, "gravar_video_montagem", lambda c, clipe_id, key: gravados.append((clipe_id, key)))
+    return juntados, uploads, gravados
+
+
+def test_cmd_juntar_clipes_sem_chave_e_no_op(monkeypatch):
+    chamado = []
+    monkeypatch.setattr(main.dbmod, "listar_montagens_sem_video", lambda c: chamado.append(1))
+    assert main.cmd_juntar_clipes(_config_com_r2(), object()) == 0
+    assert chamado == []
+
+
+def test_cmd_juntar_clipes_junta_na_ordem_das_kills_e_grava_no_r2(monkeypatch):
+    urls = {"v1": "https://cdn/1.mp4", "v2": "https://cdn/2.mp4"}
+    juntados, uploads, gravados = _fakes_juntar(monkeypatch, [("c1", "an1", ["v2", "v1"])], urls)
+
+    assert main.cmd_juntar_clipes(_config_juntar(), object()) == 1
+    assert juntados == [["https://cdn/2.mp4", "https://cdn/1.mp4"]]
+    assert uploads == [("resenha-demos", "clipes/c1.mp4", b"mp4", "video/mp4")]
+    assert gravados == [("c1", "clipes/c1.mp4")]
+
+
+def test_cmd_juntar_clipes_trecho_sem_video_nao_grava_e_segue_pra_proxima(monkeypatch, capsys):
+    urls = {"v1": "https://cdn/1.mp4", "v2": "https://cdn/2.mp4"}
+    _, uploads, gravados = _fakes_juntar(
+        monkeypatch, [("ruim", "an1", ["v1", "v9"]), ("bom", "an1", ["v1", "v2"])], urls,
+    )
+
+    assert main.cmd_juntar_clipes(_config_juntar(), object()) == 1
+    assert [k for _, k, _, _ in uploads] == ["clipes/bom.mp4"]
+    assert gravados == [("bom", "clipes/bom.mp4")]
+    assert "v9 sem vídeo" in capsys.readouterr().out
+
+
+def test_baixar_trecho_recusa_esquema_que_nao_e_https(tmp_path):
+    with pytest.raises(RuntimeError, match="esquema"):
+        main._baixar_trecho("file:///etc/passwd", tmp_path / "x.mp4")
+
+
+def test_ffmpeg_concat_recodifica_quando_copiar_o_stream_falha(monkeypatch, tmp_path):
+    import subprocess
+
+    chamadas = []
+
+    def _run(cmd, **kw):
+        chamadas.append(cmd)
+        if "copy" in cmd:
+            raise subprocess.CalledProcessError(1, cmd)
+
+    monkeypatch.setattr(subprocess, "run", _run)
+    trechos = [tmp_path / "trecho_0.mp4", tmp_path / "trecho_1.mp4"]
+    main._ffmpeg_concat(trechos, tmp_path / "montagem.mp4")
+
+    assert len(chamadas) == 2
+    assert "libx264" in chamadas[1]
+    assert (tmp_path / "montagem.txt").read_text(encoding="utf-8").count("file '") == 2
+
+
 def test_baixar_e_descomprimir_recusa_esquema_que_nao_e_http(tmp_path):
     with pytest.raises(RuntimeError, match="esquema"):
         main._baixar_e_descomprimir("file:///etc/passwd", tmp_path / "match.dem")

@@ -13,7 +13,6 @@ const ROTULO_STATUS = {
   analisando: 'Lendo a Demo…',
   enviando: 'Enviando…',
   renderizando: 'Gravando no CS2…',
-  juntando: 'Juntando a montagem…',
   pronto: 'Pronto',
   erro: 'Falhou',
 }
@@ -23,6 +22,47 @@ export function descreverClipe(c) {
   const rounds = [...new Set((c.kills ?? []).map((k) => k.round))]
   const quais = rounds.length === 1 ? `round ${rounds[0]}` : `rounds ${rounds.join(', ')}`
   return n > 1 ? `Montagem de ${n} kills · ${quais}` : `Kill · ${quais}`
+}
+
+// Montagem = um trecho por kill, tocados em sequência no mesmo player (a DEMO-SLAP não
+// junta trechos do render-custom num vídeo só).
+function PlayerTrechos({ videos }) {
+  const [atual, setAtual] = useState(0)
+  const montagem = videos.length > 1
+  return (
+    <div className="mt-3 space-y-2">
+      <video
+        src={videos[atual]}
+        controls
+        playsInline
+        preload="metadata"
+        autoPlay={atual > 0}
+        onEnded={() => setAtual((i) => (i + 1 < videos.length ? i + 1 : i))}
+        className="aspect-video w-full rounded-[var(--radius-medio)] bg-black"
+      />
+      <div className="flex flex-wrap items-center gap-2 text-xs text-texto-fraco">
+        {montagem && (
+          <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Trechos da montagem">
+            {videos.map((_, i) => (
+              <button
+                key={i}
+                type="button"
+                aria-pressed={i === atual}
+                aria-label={`Trecho ${i + 1}`}
+                onClick={() => setAtual(i)}
+                className={`min-w-7 rounded-[var(--radius-pequeno)] border px-2 py-1 ${i === atual ? 'border-borda-forte bg-superficie-topo text-texto' : 'border-borda hover:text-texto'}`}
+              >
+                {i + 1}
+              </button>
+            ))}
+          </div>
+        )}
+        <a href={videos[atual]} download target="_blank" rel="noreferrer" className="underline-offset-2 hover:text-texto hover:underline">
+          {montagem ? `Baixar trecho ${atual + 1}` : 'Baixar vídeo'}
+        </a>
+      </div>
+    </div>
+  )
 }
 
 function ItemClipe({ clipe }) {
@@ -44,15 +84,8 @@ function ItemClipe({ clipe }) {
       {clipe.status === 'erro' && clipe.erro && (
         <p className="mt-2 text-xs text-perigo">{clipe.erro}</p>
       )}
-      {clipe.status === 'pronto' && clipe.videoUrl && (
-        <div className="mt-3 space-y-2">
-          <video src={clipe.videoUrl} controls playsInline preload="metadata" className="aspect-video w-full rounded-[var(--radius-medio)] bg-black" />
-          <a href={clipe.videoUrl} download target="_blank" rel="noreferrer" className="text-xs text-texto-fraco underline-offset-2 hover:text-texto hover:underline">
-            Baixar vídeo
-          </a>
-        </div>
-      )}
-      {clipe.status === 'pronto' && !clipe.videoUrl && (
+      {clipe.status === 'pronto' && clipe.videos?.length > 0 && <PlayerTrechos videos={clipe.videos} />}
+      {clipe.status === 'pronto' && !clipe.videos?.length && (
         <p className="mt-2 text-xs text-texto-fraco">O vídeo não carregou agora. Recarregue a página em instantes.</p>
       )}
     </li>
@@ -115,7 +148,8 @@ export default function SecaoClipeReal({ matchId, jogadores, viewerSteamId }) {
       <SectionHeader titulo="Clipe das kills que você escolher" margem="pequena" />
       <p className="mb-3 text-sm text-texto-fraco">
         Vídeo do próprio CS2, gravado a partir da Demo. Marque uma kill pra um clipe ou várias
-        pra uma montagem. Leva alguns minutos; pode sair da página que o clipe continua.
+        pra uma montagem. Leva alguns minutos com esta aba aberta; se sair, ele continua na
+        próxima visita.
       </p>
 
       {/* O seletor só aparece depois de saber que o recurso está ligado: antes disso
