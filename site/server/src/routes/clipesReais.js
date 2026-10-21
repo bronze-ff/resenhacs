@@ -222,7 +222,10 @@ export function createClipesReaisRouter({ db, requireAuth, r2Client, r2Bucket, c
   router.get('/:id/clipes-reais', requireAuth, async (req, res) => {
     const partida = await partidaVisivel(req.params.id, req.player.steamId)
     if (!partida) return res.status(404).json({ erro: 'Partida não encontrada' })
-    res.json({ disponivel: Boolean(cliente), clipes: await listar(partida) })
+    // Sem chave, o recurso está desligado: não toca nas tabelas da 0059 (que podem
+    // nem existir ainda) e a aba só mostra o aviso.
+    if (!cliente) return res.json({ disponivel: false, clipes: [] })
+    res.json({ disponivel: true, clipes: await listar(partida) })
   })
 
   // limiteEstrito: cada pedido gasta crédito na DEMO-SLAP.

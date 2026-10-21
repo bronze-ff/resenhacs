@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { SectionHeader, EstadoVazio, EstadoErro, Button, Badge } from '../ui'
+import { SectionHeader, EstadoVazio, EstadoErro, Button, Badge, SkeletonLista } from '../ui'
 import SeletorKills from './SeletorKills.jsx'
 import { dataHora } from '../../lib/format.js'
 
@@ -118,12 +118,17 @@ export default function SecaoClipeReal({ matchId, jogadores, viewerSteamId }) {
         pra uma montagem. Leva alguns minutos; pode sair da página que o clipe continua.
       </p>
 
-      {dados && !dados.disponivel ? (
+      {/* O seletor só aparece depois de saber que o recurso está ligado: antes disso
+          o Jogador podia marcar kills e só descobrir no clique que não ia funcionar. */}
+      {!dados && !erroLista && <SkeletonLista linhas={3} altura="h-10" rotulo="Carregando clipes" />}
+      {erroLista && <EstadoErro mensagem="Não foi possível carregar os clipes dessa Partida." />}
+      {dados && !dados.disponivel && (
         <EstadoVazio
           titulo="Clipe de vídeo ainda não configurado"
           descricao="Falta a chave da DEMO-SLAP no servidor. Enquanto isso, use o clipe do jogo da Allstar acima."
         />
-      ) : (
+      )}
+      {dados?.disponivel && (
         <div className="space-y-4">
           <SeletorKills
             matchId={matchId}
@@ -155,7 +160,6 @@ export default function SecaoClipeReal({ matchId, jogadores, viewerSteamId }) {
       )}
 
       <div className="mt-5">
-        {erroLista && <EstadoErro mensagem="Não foi possível carregar os clipes dessa Partida." />}
         {dados && dados.clipes.length > 0 && (
           <ul className="space-y-3" aria-label="Clipes gerados">
             {dados.clipes.map((c) => <ItemClipe key={c.id} clipe={c} />)}

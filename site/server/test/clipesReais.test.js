@@ -117,6 +117,8 @@ describe('clipes reais (DEMO-SLAP)', () => {
     const a = createApp({ config, db: banco.db, r2Client })
     const get = await request(a).get(`/api/matches/${MATCH}/clipes-reais`).set('Cookie', cookie)
     expect(get.body).toEqual({ disponivel: false, clipes: [] })
+    // Desligado não toca nas tabelas da 0059 (podem nem ter sido criadas ainda).
+    expect(banco.db.query.mock.calls.some(([sql]) => sql.includes('clipes_reais'))).toBe(false)
     const post = await request(a).post(`/api/matches/${MATCH}/clipes-reais`).set('Cookie', cookie).send({ kills: [TK] })
     expect(post.status).toBe(503)
   })
