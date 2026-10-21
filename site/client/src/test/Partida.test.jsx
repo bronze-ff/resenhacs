@@ -2,7 +2,7 @@
 // Escopo: o destaque do MVP na página da Partida (FIL-56) — o mesmo MVP que o card
 // dessa partida já mostra no Feed, que antes não aparecia em lugar nenhum no detalhe.
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import Partida from '../pages/Partida.jsx'
 
@@ -85,9 +85,10 @@ describe('Partida — destaque do MVP', () => {
 
 async function abrirClipeDoJogador(partida) {
   montar(partida)
-  fireEvent.click(await screen.findByRole('tab', { name: 'Clipes' }))
-  // O seletor de jogador e o <select> "Anexar clipe" expõem o mesmo nick.
-  const [seletor] = screen.getAllByRole('button', { name: /fih/i })
+  // Sem abas: os Clipes ficam numa seção própria no fim da página. O nick também aparece
+  // no Frente a frente, então a busca fica restrita à região dos Clipes.
+  const clipes = await screen.findByRole('region', { name: 'Clipes' })
+  const [seletor] = within(clipes).getAllByRole('button', { name: /fih/i })
   fireEvent.click(seletor)
 }
 
@@ -127,7 +128,7 @@ describe('Partida — clipe sem demo arquivada', () => {
 })
 
 describe('Partida — deep link de round (Granadas: "Ver no Replay 2D")', () => {
-  it('?round=&tick=&frame= abre direto a aba do Replay 2D', async () => {
+  it('?round=&tick=&frame= rola até o Replay 2D', async () => {
     // jsdom não implementa scrollIntoView (a Partida rola até o Replay 2D ao abrir)
     Element.prototype.scrollIntoView = vi.fn()
     vi.stubGlobal('fetch', vi.fn().mockImplementation((url) => {
@@ -143,7 +144,8 @@ describe('Partida — deep link de round (Granadas: "Ver no Replay 2D")', () => 
         </Routes>
       </MemoryRouter>,
     )
-    // replayUrl null -> a aba do Replay 2D mostra o estado de indisponível
+    // replayUrl null -> a seção do Replay 2D mostra o estado de indisponível
     expect(await screen.findByText('Replay 2D indisponível')).toBeInTheDocument()
+    await waitFor(() => expect(Element.prototype.scrollIntoView).toHaveBeenCalled())
   })
 })

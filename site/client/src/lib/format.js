@@ -138,6 +138,15 @@ export function categoriaArma(weapon) {
   return CATEGORIA_ARMA[weapon] ?? 'pistol'
 }
 
+// Rótulo legível do Highlight: o Coletor grava o id cru ("triple", "clutch_1v3").
+const ROTULOS_HIGHLIGHT = { triple: '3K', quad: '4K', ace: 'Ace' }
+export function rotuloHighlight(kind) {
+  const k = String(kind ?? '').toLowerCase()
+  if (ROTULOS_HIGHLIGHT[k]) return ROTULOS_HIGHLIGHT[k]
+  const clutch = k.match(/^clutch_1v(\d)$/)
+  return clutch ? `Clutch 1v${clutch[1]}` : String(kind ?? '')
+}
+
 // Rótulo do tipo de compra (eco/forçado/semi/full), cor incluída.
 export const TIPO_COMPRA = {
   eco: { label: 'Eco', cor: 'text-texto-fraco' },

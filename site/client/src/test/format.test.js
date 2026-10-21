@@ -1,6 +1,16 @@
 // site/client/src/test/format.test.js
 import { describe, it, expect } from 'vitest'
-import { contadorRegressivo, dataHora, datetimeLocalBrasiliaParaIso, origemPartida, paraDatetimeLocalBrasilia } from '../lib/format.js'
+import { contadorRegressivo, dataHora, datetimeLocalBrasiliaParaIso, origemPartida, paraDatetimeLocalBrasilia, rotuloHighlight } from '../lib/format.js'
+
+describe('rotuloHighlight', () => {
+  it('troca o id cru do Coletor por um rótulo legível', () => {
+    expect(rotuloHighlight('triple')).toBe('3K')
+    expect(rotuloHighlight('quad')).toBe('4K')
+    expect(rotuloHighlight('ACE')).toBe('Ace')
+    expect(rotuloHighlight('clutch_1v3')).toBe('Clutch 1v3')
+    expect(rotuloHighlight('outro')).toBe('outro')
+  })
+})
 
 describe('dataHora', () => {
   it('sempre renderiza no horario de Brasilia, independente do fuso do dispositivo', () => {

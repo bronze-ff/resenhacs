@@ -272,7 +272,16 @@ export function desenharFrame(ctx, round, f, radar, replay, aoCarregarIcone) {
 
 // `matchId` (opcional): liga o botão "Levar pro quadro", que abre o Quadro tático com os
 // jogadores vivos do frame atual. Sem ele (demo pública, card de tática) o botão não aparece.
-export default function ReplayViewer({ replay, seek, matchId = null }) {
+// "m:ss" a partir do frame (tempo desde o fim do freezetime).
+function tempoDoFrame(frame, tickRate) {
+  const s = Math.floor(frame / tickRate)
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+}
+
+// `palco`: layout da página da Partida, com o canvas maior e a lista de kills do round
+// ao lado (clicar numa kill volta 3 s antes dela). `painelExtra(round)` entra embaixo
+// da lista. `onRoundChange` avisa quem está fora qual round está na tela.
+export default function ReplayViewer({ replay, seek, matchId = null, palco = false, painelExtra = null, onRoundChange = null }) {
   const canvasRef = useRef(null)
   const radarRef = useRef(null)
   const rafRef = useRef(0)
@@ -303,6 +312,10 @@ export default function ReplayViewer({ replay, seek, matchId = null }) {
   const round = replay.rounds[roundIdx]
   const frames = round?.frames ?? []
   const total = frames.length
+
+  useEffect(() => {
+    if (round) onRoundChange?.(round.round)
+  }, [round?.round]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Carrega a imagem de radar do mapa (opcional; se não existir, usa a grade).
   // radarPronto força o redesenho quando a imagem termina de carregar.
@@ -364,7 +377,7 @@ export default function ReplayViewer({ replay, seek, matchId = null }) {
           ))}
         </Select>
         <Button variante="primario" onClick={() => setTocando((t) => !t)} className="min-w-24">
-          {tocando ? 'Pausar' : 'Play'}
+          {tocando ? 'Pausar' : 'Reproduzir'}
         </Button>
         <Select value={velocidade} onChange={(e) => setVelocidade(Number(e.target.value))}>
           {[0.5, 1, 2, 4].map((v) => <option key={v} value={v}>{v}x</option>)}
@@ -391,7 +404,9 @@ export default function ReplayViewer({ replay, seek, matchId = null }) {
           </Button>
         )}
       </div>
-      <div className="relative mx-auto w-full max-w-[640px]">
+      {/* Palco: o canvas tem o lado limitado pela altura da tela; a sobra da largura vai pro painel do round, não pra margem. */}
+      <div className={palco ? 'grid gap-4 lg:grid-cols-[minmax(0,calc(100vh-11rem))_minmax(20rem,1fr)] lg:items-start' : ''}>
+      <div className={`relative w-full ${palco ? 'mx-auto max-w-[calc(100vh-11rem)] lg:mx-0' : 'mx-auto max-w-[640px]'}`}>
         <canvas
           ref={canvasRef}
           width={TAM}
@@ -423,6 +438,63 @@ export default function ReplayViewer({ replay, seek, matchId = null }) {
             </div>
           ))}
         </div>
+      </div>
+      {palco && (
+        <aside className="space-y-4" aria-label={`Round ${round?.round ?? ''}`}>
+          {(frames[frameAtual]?.players ?? []).length > 0 && (
+            <div className="grid grid-cols-2 gap-3">
+              {['CT', 'T'].map((lado) => (
+                <div key={lado}>
+                  <p className="rotulo mb-1.5" style={{ color: COR_LADO[lado] }}>{lado}</p>
+                  <ul className="space-y-1">
+                    {frames[frameAtual].players.filter((p) => p.side === lado).map((p) => (
+                      <li key={p.id} className="flex items-center gap-2 font-mono text-xs">
+                        <span className={`min-w-0 flex-1 truncate ${p.alive ? 'text-texto' : 'text-texto-fraco/50 line-through'}`}>
+                          {replay.names?.[p.id] ?? p.id}
+                        </span>
+                        <span className="h-1.5 w-12 shrink-0 overflow-hidden rounded-full bg-fundo" aria-hidden="true">
+                          <span className="block h-full" style={{ width: `${p.alive ? p.hp : 0}%`, background: COR_LADO[lado] }} />
+                        </span>
+                        <span className="w-7 shrink-0 text-right tabular-nums text-texto-fraco">{p.alive ? p.hp : <><span aria-hidden="true">–</span><span className="sr-only">morto</span></>}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          )}
+          <div>
+            <p className="rotulo mb-2">Kills do round {round?.round}</p>
+            {(round?.kills ?? []).length === 0 ? (
+              <p className="text-xs text-texto-fraco">{total === 0 ? 'Carregando o round…' : 'Nenhuma kill nesse round.'}</p>
+            ) : (
+              <ol className="divide-y divide-borda overflow-hidden rounded-[var(--radius-medio)] border border-borda">
+                {round.kills.map((k, i) => (
+                  <li key={`${k.t}-${i}`}>
+                    <button
+                      type="button"
+                      onClick={() => { setFrameAtual(Math.max(0, k.t - 3 * replay.tickRate)); setTocando(true) }}
+                      title="Assistir essa kill"
+                      className={`flex w-full items-center gap-2 px-2.5 py-1.5 text-left font-mono text-xs transition-colors hover:bg-superficie-alta ${k.t > frameAtual ? 'opacity-50' : ''}`}
+                    >
+                      <span className="w-9 shrink-0 tabular-nums text-texto-fraco">{tempoDoFrame(k.t, replay.tickRate)}</span>
+                      <span className="min-w-0 truncate font-semibold" style={{ color: COR_LADO[ladoNoTick(round, k.t, k.killer)] ?? '#e6edf3' }}>
+                        {k.killer ? (replay.names?.[k.killer] ?? k.killer) : 'mundo'}
+                      </span>
+                      <span className="shrink-0 text-texto-fraco">{nomeArma(k.weapon)}{k.headshot ? ' · hs' : ''}</span>
+                      <span className="shrink-0 text-texto-fraco" aria-hidden="true">→</span>
+                      <span className="min-w-0 truncate font-semibold" style={{ color: COR_LADO[ladoNoTick(round, k.t, k.victim)] ?? '#e6edf3' }}>
+                        {replay.names?.[k.victim] ?? k.victim}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </div>
+          {painelExtra && round && painelExtra(round.round)}
+        </aside>
+      )}
       </div>
     </div>
   )
