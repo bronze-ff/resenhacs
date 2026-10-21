@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { nomeMapa } from '../lib/format.js'
-import { Abas, Avatar, Button, Card, EstadoErro, EstadoVazio, MapIcon, SectionHeader, Skeleton, SkeletonLista } from '../components/ui'
+import { Abas, Avatar, Button, Card, EstadoErro, EstadoVazio, Explicacao, MapIcon, SectionHeader, Skeleton, SkeletonLista } from '../components/ui'
+import { METRICAS, METRICAS_PREMIO } from '../lib/metricas.js'
 
 // "Resenha da semana / do mês": prêmios de zoeira do grupo no período (referência:
 // Leetify Recap). Dados de GET /api/premios — só Partidas visíveis ao viewer, só o
@@ -50,21 +51,23 @@ export function formatarValor(valor, formato) {
     case 'decimal2': return Number(valor).toFixed(2)
     case 'decimal1': return Number(valor).toFixed(1)
     case 'pct100': return `${Math.round(valor)}%`
+    case 'segundos': {
+      const s = Math.round(valor)
+      return s < 60 ? `${s}s` : `${Math.floor(s / 60)}min ${String(s % 60).padStart(2, '0')}s`
+    }
     default: return String(Math.round(valor))
   }
 }
 
+// O tom (mérito/vergonha) vem da coluna em que o card está, não de uma etiqueta no card.
 function CardPremio({ p }) {
-  const bom = p.tom === 'bom'
   const quem = p.mapa ? nomeMapa(p.mapa) : p.jogadores.map((j) => j.nick).join(' e ')
+  const metrica = METRICAS_PREMIO[p.id]
   return (
     <Card as="article" className="flex flex-col gap-3.5 p-4">
-      <div className="flex items-center justify-between gap-2">
-        <span className="font-semibold text-texto">{p.titulo}</span>
-        <span className={`text-xs ${bom ? 'text-sucesso' : 'text-perigo'}`}>
-          <span aria-hidden="true">{bom ? '▲ ' : '▼ '}</span>{bom ? 'mérito' : 'vergonha'}
-        </span>
-      </div>
+      <span className="self-start font-semibold text-texto">
+        <Explicacao metrica={metrica && { ...metrica, nome: p.titulo }}>{p.titulo}</Explicacao>
+      </span>
       <div className="flex items-center gap-3">
         {p.mapa ? (
           <MapIcon map={p.mapa} size={44} />
@@ -81,7 +84,10 @@ function CardPremio({ p }) {
           )}
           <div className="text-xs text-texto-fraco">{p.descricao}</div>
         </div>
-        <span className="font-mono text-[22px] tabular-nums text-texto">{formatarValor(p.valor, p.formato)}</span>
+        <span className="flex shrink-0 flex-col items-end">
+          <span className="font-mono text-[22px] leading-tight tabular-nums text-texto">{formatarValor(p.valor, p.formato)}</span>
+          {metrica?.unidade && <span className="text-[11px] text-texto-fraco">{metrica.unidade}</span>}
+        </span>
       </div>
     </Card>
   )
@@ -122,15 +128,15 @@ export default function Resenha() {
   const n = dados?.numeros
   const numeros = n
     ? [
-        { valor: n.partidas, nome: 'Partidas do grupo' },
-        { valor: `${String(n.horas).replace('.', ',')}h`, nome: 'De jogo juntos' },
-        { valor: n.winrate == null ? '–' : `${Math.round(n.winrate)}%`, nome: 'Winrate do grupo' },
-        { valor: n.clutches, nome: 'Clutches vencidos' },
+        { valor: n.partidas, nome: 'Partidas do grupo', metrica: METRICAS.partidasGrupo },
+        { valor: n.horas == null ? '–' : `${String(n.horas).replace('.', ',')}h`, nome: 'De jogo juntos', metrica: METRICAS.horasJuntos },
+        { valor: n.winrate == null ? '–' : `${Math.round(n.winrate)}%`, nome: 'Winrate do grupo', metrica: METRICAS.winrateGrupo },
+        { valor: n.clutches, nome: 'Clutches vencidos', metrica: METRICAS.clutchesGrupo },
       ]
     : []
 
   return (
-    <div className="mx-auto flex max-w-[1120px] flex-col gap-6">
+    <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Abas itens={ABAS} valor={tipo} onChange={(v) => ir(v, null)} rotulo="Período da resenha" />
         <div className="flex gap-2">
@@ -159,19 +165,21 @@ export default function Resenha() {
 
       {dados && (
         <>
-          <Card as="section" className="relative overflow-hidden px-5 py-7 sm:px-9 sm:py-9">
-            <div className="flex flex-wrap items-center gap-2 text-xs font-medium">
-              <span className="text-destaque-forte">{tipo === 'mes' ? 'Resenha do mês' : 'Resenha da semana'}</span>
-              <span className="text-texto-fraco">· {rotuloPeriodo(periodo)}</span>
+          <Card as="section" className="relative grid gap-8 overflow-hidden px-5 py-7 sm:px-9 sm:py-9 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] xl:items-end">
+            <div>
+              <div className="flex flex-wrap items-center gap-2 text-xs font-medium">
+                <span className="text-destaque-forte">{tipo === 'mes' ? 'Resenha do mês' : 'Resenha da semana'}</span>
+                <span className="text-texto-fraco">· {rotuloPeriodo(periodo)}</span>
+              </div>
+              <h2 className="mt-2.5 max-w-[680px] font-display text-[34px] font-semibold leading-none tracking-[-0.035em] text-texto sm:text-[56px]">
+                {manchete(periodo, premios)}
+              </h2>
             </div>
-            <h2 className="mt-2.5 max-w-[680px] font-display text-[34px] font-semibold leading-none tracking-[-0.035em] text-texto sm:text-[56px]">
-              {manchete(periodo, premios)}
-            </h2>
-            <div className="mt-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <div className="grid grid-cols-2 gap-x-6 gap-y-5">
               {numeros.map((x) => (
                 <div key={x.nome} className="border-t border-borda-forte pt-3">
                   <div className="font-mono text-[28px] font-medium tabular-nums text-texto sm:text-4xl">{x.valor}</div>
-                  <div className="mt-0.5 text-xs font-medium text-texto-fraco">{x.nome}</div>
+                  <div className="mt-0.5 text-xs font-medium text-texto-fraco"><Explicacao metrica={x.metrica}>{x.nome}</Explicacao></div>
                 </div>
               ))}
             </div>
@@ -193,8 +201,27 @@ export default function Resenha() {
                 )}
               />
             ) : (
-              <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-3">
-                {premios.map((p) => <CardPremio key={p.id} p={p} />)}
+              <div className="grid gap-6 xl:grid-cols-2">
+                {[
+                  { tom: 'bom', titulo: 'Mérito', cor: 'text-sucesso', seta: 'M12 19V5M6 11l6-6 6 6' },
+                  { tom: 'ruim', titulo: 'Vergonha', cor: 'text-perigo', seta: 'M12 5v14M6 13l6 6 6-6' },
+                ].map((g) => {
+                  const doGrupo = premios.filter((p) => (p.tom === 'bom') === (g.tom === 'bom'))
+                  if (doGrupo.length === 0) return null
+                  return (
+                    <div key={g.tom} className="space-y-3">
+                      <h3 className={`flex items-center gap-1.5 text-sm font-semibold ${g.cor}`}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5" aria-hidden="true">
+                          <path d={g.seta} />
+                        </svg>
+                        {g.titulo}
+                      </h3>
+                      <div className="grid gap-3.5 sm:grid-cols-2">
+                        {doGrupo.map((p) => <CardPremio key={p.id} p={p} />)}
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             )}
           </section>

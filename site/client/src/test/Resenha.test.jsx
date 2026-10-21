@@ -41,8 +41,9 @@ describe('Resenha (página)', () => {
     expect(screen.getByText('1.24')).toBeInTheDocument()
     expect(screen.getByText('Toguro e zezinho')).toBeInTheDocument()
     expect(screen.getByText('31%')).toBeInTheDocument()
-    // bom/ruim com texto + seta, não só cor
-    expect(screen.getAllByText('vergonha')).toHaveLength(1)
+    // bom/ruim agrupados em colunas com título + seta, não só cor
+    expect(screen.getByRole('heading', { name: 'Mérito' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Vergonha' })).toBeInTheDocument()
   })
 
   it('navega pro período anterior', async () => {
