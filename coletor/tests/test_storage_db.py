@@ -256,6 +256,18 @@ def test_store_parsed_dedupe_por_fingerprint_atualiza_ended_early_tambem():
     assert match_call[1][-6:-4] == (True, "765")
 
 
+def test_store_parsed_grava_duration_seconds_no_insert_e_no_update():
+    parsed = {**_parsed(), "duration_seconds": 2400}
+    conn = FakeConn()
+    db.store_parsed(conn, parsed, share_code="CSGO-x", source="valve_mm")
+    insert = next(c for c in conn.calls if c[0].startswith("insert into matches"))
+    assert "duration_seconds" in insert[0] and 2400 in insert[1]
+    conn = FakeConn(fingerprint_row=["11111111-1111-1111-1111-111111111111"])
+    db.store_parsed(conn, parsed, share_code="CSGO-x", source="valve_mm")
+    update = next(c for c in conn.calls if c[0].startswith("update matches set share_code"))
+    assert "duration_seconds = coalesce" in update[0] and 2400 in update[1]
+
+
 def test_store_parsed_grava_plataforma_manual():
     conn = FakeConn()
     parsed = _parsed()

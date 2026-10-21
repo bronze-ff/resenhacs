@@ -159,7 +159,7 @@ def trade_kills(kills, teams, janela=JANELA_TRADE_TICKS):
     return saida
 
 
-def clutch_outcomes(kills, teams, winner_by_round):
+def clutch_outcomes(kills, teams, winner_by_round, vivos_por_round=None):
     """Detecta tentativas de clutch (último vivo de um time vs 1+ inimigos) por round.
 
     Registra o clutcher de CADA time separadamente: num 1v1 os DOIS últimos vivos estão
@@ -171,11 +171,18 @@ def clutch_outcomes(kills, teams, winner_by_round):
     explode depois dele morrer), conta como clutch vencido, igual ao Leetify.
 
     Devolve lista de {steam_id64, round_number, vs, venceu, salvou}. `salvou` = sobreviveu
-    mas o round foi perdido (salvou a arma — o "SAVE" do Leetify)."""
+    mas o round foi perdido (salvou a arma — o "SAVE" do Leetify).
+
+    Vítima de team kill também sai dos vivos (bug antigo: o TK era filtrado e o morto
+    seguia "vivo"). `vivos_por_round` ({round: set(steam_id64)}, de parse `round_alive`)
+    tira quem já estava desconectado no início do round; sem dado, todos começam vivos."""
     saida = []
+    vivos_por_round = vivos_por_round or {}
     for round_number, round_kills in _agrupar_por_round(kills).items():
-        ordenado = sorted((k for k in round_kills if not k.get("team_kill")), key=lambda k: k["tick"])
+        ordenado = sorted(round_kills, key=lambda k: k["tick"])
         alive = set(teams.keys())
+        if vivos_por_round.get(round_number):
+            alive &= vivos_por_round[round_number]
         # Primeiro instante em que CADA time ficou com exatamente 1 vivo contra 1+ inimigo.
         inicio_por_time = {}
         for k in ordenado:
@@ -268,7 +275,10 @@ def enrich(parsed):
     entry = entry_duels(kills, teams, winner_by_round) if tem_tick else []
     trades = trade_kills(kills, teams) if tem_tick else []
     kast = kast_pct(kills, trades, teams.keys(), rounds_total) if tem_tick else {}
-    clutches = clutch_outcomes(kills, teams, winner_by_round) if tem_tick else []
+    vivos_por_round = {}
+    for v in parsed.get("round_alive", []):
+        vivos_por_round.setdefault(v["round_number"], set()).add(v["steam_id64"])
+    clutches = clutch_outcomes(kills, teams, winner_by_round, vivos_por_round) if tem_tick else []
 
     entry_kills, entry_deaths, entry_wins = {}, {}, {}
     for e in entry:
