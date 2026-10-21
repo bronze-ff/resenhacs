@@ -25,9 +25,69 @@ function appWith(handlers, extra = {}) {
 }
 
 describe('POST /api/upload/upload-url', () => {
+  it.each(['parsed', 'pending', 'failed', 'skipped', 'expired'])('Share Code de Partida %s só bloqueia se já processada', async (status) => {
+    presignUpload.mockClear()
+    const { app, db } = appWith([
+      ['from matches where share_code', status === 'parsed' ? [{ id: 'm1' }] : []],
+      ['insert into uploads_pendentes', [{ id: 'u1' }]],
+    ])
+    const shareCode = 'CSGO-aaaaa-bbbbb-ccccc-ddddd-eeeee'
+    const res = await request(app).post('/api/upload/upload-url').set('Cookie', cookie)
+      .send({ filename: 'x.dem', tamanho: 10, shareCode })
+    expect(res.status).toBe(status === 'parsed' ? 409 : 200)
+    if (status === 'parsed') {
+      expect(res.body.erro).toBe('Essa Partida já está registrada.')
+      expect(presignUpload).not.toHaveBeenCalled()
+      expect(db.query.mock.calls.some(([sql]) => sql.includes('insert into uploads_pendentes'))).toBe(false)
+    }
+    const [sql, params] = db.query.mock.calls.find(([q]) => q.includes('from matches where share_code'))
+    expect(sql).toContain("status = 'parsed'")
+    expect(params).toEqual([shareCode])
+  })
+
+  it('upload com alvo ignora Share Code do cliente mesmo se já processado', async () => {
+    const matchId = '11111111-1111-1111-1111-111111111111'
+    const { app, db } = appWith([
+      ['from matches m where m.id', [{ id: matchId, tem_demo: false, source: 'faceit', participou: true }]],
+      ['from matches where share_code', [{ id: 'existente' }]],
+      ['insert into uploads_pendentes', [{ id: 'u1' }]],
+    ])
+    const res = await request(app).post('/api/upload/upload-url').set('Cookie', cookie)
+      .send({ filename: 'x.dem', tamanho: 10, matchId, shareCode: 'CSGO-aaaaa-bbbbb-ccccc-ddddd-eeeee' })
+    expect(res.status).toBe(200)
+    expect(db.query.mock.calls.some(([sql]) => sql.includes('from matches where share_code'))).toBe(false)
+  })
+  it.each([null, '10', 1.5, -1, false])('recusa tamanho não inteiro positivo: %s', async (tamanho) => {
+    const { app, db } = appWith([])
+    const res = await request(app).post('/api/upload/upload-url').set('Cookie', cookie)
+      .send({ filename: 'x.dem', tamanho })
+    expect(res.status).toBe(400)
+    expect(db.query.mock.calls.some(([sql]) => sql.includes('insert into uploads_pendentes'))).toBe(false)
+  })
+
+  it('conta também processando e falhas recentes no teto por Jogador', async () => {
+    const { app, db } = appWith([['select count(*)', [{ n: 5 }]]])
+    const res = await request(app).post('/api/upload/upload-url').set('Cookie', cookie)
+      .send({ filename: 'x.dem', tamanho: 10 })
+    expect(res.status).toBe(429)
+    const [sql, params] = db.query.mock.calls.find(([q]) => q.includes('select count(*)'))
+    expect(sql).toContain("'processando'")
+    expect(sql).toContain("'falhou'")
+    expect(sql).toContain("interval '24 hours'")
+    expect(params).toEqual(['765'])
+  })
+
+  it('recusa data local sem fuso', async () => {
+    const { app } = appWith([['insert into uploads_pendentes', [{ id: 'u1' }]]])
+    const local = new Date(Date.now() - 3600000).toISOString().slice(0, 19)
+    const res = await request(app).post('/api/upload/upload-url').set('Cookie', cookie)
+      .send({ filename: 'x.dem', tamanho: 10, playedAt: local })
+    expect(res.status).toBe(400)
+    expect(res.body.erro).toBe('Data sem fuso')
+  })
   it('sem login: 401', async () => {
     const { app } = appWith([])
-    const res = await request(app).post('/api/upload/upload-url').send({ filename: 'x.dem' })
+    const res = await request(app).post('/api/upload/upload-url').send({ tamanho: 10, filename: 'x.dem' })
     expect(res.status).toBe(401)
   })
 
@@ -36,7 +96,7 @@ describe('POST /api/upload/upload-url', () => {
     const res = await request(app)
       .post('/api/upload/upload-url')
       .set('Cookie', cookie)
-      .send({ filename: 'x.dem' })
+      .send({ tamanho: 10, filename: 'x.dem' })
     expect(res.status).toBe(503)
   })
 
@@ -45,7 +105,7 @@ describe('POST /api/upload/upload-url', () => {
     const res = await request(app)
       .post('/api/upload/upload-url')
       .set('Cookie', cookie)
-      .send({ filename: 'demo.txt' })
+      .send({ tamanho: 10, filename: 'demo.txt' })
     expect(res.status).toBe(400)
     expect(res.body.erro).toMatch(/\.dem/)
   })
@@ -55,7 +115,7 @@ describe('POST /api/upload/upload-url', () => {
     const res = await request(app)
       .post('/api/upload/upload-url')
       .set('Cookie', cookie)
-      .send({ filename: 'x.dem', shareCode: 'nao-e-um-share-code' })
+      .send({ tamanho: 10, filename: 'x.dem', shareCode: 'nao-e-um-share-code' })
     expect(res.status).toBe(400)
     expect(res.body.erro).toMatch(/share code/i)
   })
@@ -65,7 +125,7 @@ describe('POST /api/upload/upload-url', () => {
     const res = await request(app)
       .post('/api/upload/upload-url')
       .set('Cookie', cookie)
-      .send({ filename: 'x.dem', playedAt: 'ontem à noite' })
+      .send({ tamanho: 10, filename: 'x.dem', playedAt: 'ontem à noite' })
     expect(res.status).toBe(400)
   })
 
@@ -75,7 +135,7 @@ describe('POST /api/upload/upload-url', () => {
     const res = await request(app)
       .post('/api/upload/upload-url')
       .set('Cookie', cookie)
-      .send({ filename: 'x.dem', playedAt: futuro })
+      .send({ tamanho: 10, filename: 'x.dem', playedAt: futuro })
     expect(res.status).toBe(400)
     expect(res.body.erro).toMatch(/entre.*dias/i)
   })
@@ -85,7 +145,7 @@ describe('POST /api/upload/upload-url', () => {
     const res = await request(app)
       .post('/api/upload/upload-url')
       .set('Cookie', cookie)
-      .send({ filename: 'x.dem', playedAt: '2026-13-45T99:99' })
+      .send({ tamanho: 10, filename: 'x.dem', playedAt: '2026-13-45T99:99' })
     expect(res.status).toBe(400)
     expect(res.body.erro).toMatch(/data.*hora inv[áa]lida/i)
   })
@@ -96,7 +156,7 @@ describe('POST /api/upload/upload-url', () => {
     const res = await request(app)
       .post('/api/upload/upload-url')
       .set('Cookie', cookie)
-      .send({ filename: 'x.dem', playedAt: antigo })
+      .send({ tamanho: 10, filename: 'x.dem', playedAt: antigo })
     expect(res.status).toBe(400)
     expect(res.body.erro).toMatch(/entre.*dias/i)
   })
@@ -107,7 +167,7 @@ describe('POST /api/upload/upload-url', () => {
     const res = await request(app)
       .post('/api/upload/upload-url')
       .set('Cookie', cookie)
-      .send({ filename: 'x.dem', playedAt: recente })
+      .send({ tamanho: 10, filename: 'x.dem', playedAt: recente })
     expect(res.status).toBe(200)
   })
 
@@ -117,7 +177,7 @@ describe('POST /api/upload/upload-url', () => {
     const res = await request(app)
       .post('/api/upload/upload-url')
       .set('Cookie', cookie)
-      .send({ filename: 'MinhaDemo.DEM', shareCode: 'CSGO-aaaaa-bbbbb-ccccc-ddddd-eeeee', playedAt })
+      .send({ tamanho: 10, filename: 'MinhaDemo.DEM', shareCode: 'CSGO-aaaaa-bbbbb-ccccc-ddddd-eeeee', playedAt })
     expect(res.status).toBe(200)
     expect(res.body.id).toBe('u1')
     expect(res.body.uploadUrl).toBe('https://r2.example/presigned-put')
@@ -125,7 +185,7 @@ describe('POST /api/upload/upload-url', () => {
     const insert = db.query.mock.calls.find((c) => c[0].includes('insert into uploads_pendentes'))
     expect(insert[0]).not.toContain('group_id')
     expect(insert[1]).toEqual(['765', res.body.key, 'CSGO-aaaaa-bbbbb-ccccc-ddddd-eeeee', playedAt, null, null])
-    expect(presignUpload).toHaveBeenCalledWith(expect.anything(), 'resenha-demos', res.body.key, 'application/octet-stream')
+    expect(presignUpload).toHaveBeenCalledWith(expect.anything(), 'resenha-demos', res.body.key, 'application/octet-stream', 900, 10)
   })
 
   it('plataforma manual invalida: 400', async () => {
@@ -133,7 +193,7 @@ describe('POST /api/upload/upload-url', () => {
     const res = await request(app)
       .post('/api/upload/upload-url')
       .set('Cookie', cookie)
-      .send({ filename: 'x.dem', plataformaManual: 'esl' })
+      .send({ tamanho: 10, filename: 'x.dem', plataformaManual: 'esl' })
     expect(res.status).toBe(400)
     expect(res.body.erro).toMatch(/plataforma/i)
   })
@@ -143,7 +203,7 @@ describe('POST /api/upload/upload-url', () => {
     const res = await request(app)
       .post('/api/upload/upload-url')
       .set('Cookie', cookie)
-      .send({ filename: 'x.dem', plataformaManual: 'gamers_club' })
+      .send({ tamanho: 10, filename: 'x.dem', plataformaManual: 'gamers_club' })
     expect(res.status).toBe(200)
     const insert = db.query.mock.calls.find((c) => c[0].includes('insert into uploads_pendentes'))
     expect(insert[1]).toEqual(['765', res.body.key, null, null, 'gamers_club', null])
@@ -185,13 +245,13 @@ describe('POST /api/upload/upload-url', () => {
     expect(res.status).toBe(200)
   })
 
-  it('sem tamanho (compat com cliente antigo): aceita normalmente', async () => {
+  it('sem tamanho: rejeita antes de criar o envio', async () => {
     const { app } = appWith([['insert into uploads_pendentes', [{ id: 'u1' }]]])
     const res = await request(app)
       .post('/api/upload/upload-url')
       .set('Cookie', cookie)
       .send({ filename: 'x.dem' })
-    expect(res.status).toBe(200)
+    expect(res.status).toBe(400)
   })
 
   // ---- envio amarrado a uma Partida (matchId) ----
@@ -203,7 +263,7 @@ describe('POST /api/upload/upload-url', () => {
     const res = await request(app)
       .post('/api/upload/upload-url')
       .set('Cookie', cookie)
-      .send({ filename: 'x.dem', matchId: 'nao-e-uuid' })
+      .send({ tamanho: 10, filename: 'x.dem', matchId: 'nao-e-uuid' })
     expect(res.status).toBe(400)
   })
 
@@ -213,7 +273,7 @@ describe('POST /api/upload/upload-url', () => {
     const res = await request(app)
       .post('/api/upload/upload-url')
       .set('Cookie', cookie)
-      .send({ filename: 'x.dem', matchId: UUID })
+      .send({ tamanho: 10, filename: 'x.dem', matchId: UUID })
     expect(res.status).toBe(403)
     expect(res.body.erro).toMatch(/jogou/i)
     expect(presignUpload).not.toHaveBeenCalled()
@@ -225,13 +285,13 @@ describe('POST /api/upload/upload-url', () => {
     const resNaoJogou = await request(naoJogou.app)
       .post('/api/upload/upload-url')
       .set('Cookie', cookie)
-      .send({ filename: 'x.dem', matchId: UUID })
+      .send({ tamanho: 10, filename: 'x.dem', matchId: UUID })
 
     const inexistente = appWith([['from matches m where m.id', []]])
     const resInexistente = await request(inexistente.app)
       .post('/api/upload/upload-url')
       .set('Cookie', cookie)
-      .send({ filename: 'x.dem', matchId: UUID })
+      .send({ tamanho: 10, filename: 'x.dem', matchId: UUID })
 
     expect(resInexistente.status).toBe(403)
     // Mesmo status E mesmo corpo — senão o 403 vira oráculo por causa da mensagem.
@@ -244,7 +304,7 @@ describe('POST /api/upload/upload-url', () => {
     const res = await request(app)
       .post('/api/upload/upload-url')
       .set('Cookie', cookie)
-      .send({ filename: 'x.dem', matchId: UUID })
+      .send({ tamanho: 10, filename: 'x.dem', matchId: UUID })
     expect(res.status).toBe(409)
     expect(res.body.erro).toMatch(/j[áa] tem demo/i)
     expect(presignUpload).not.toHaveBeenCalled()
@@ -256,7 +316,7 @@ describe('POST /api/upload/upload-url', () => {
     const res = await request(app)
       .post('/api/upload/upload-url')
       .set('Cookie', cookie)
-      .send({ filename: 'x.dem', matchId: UUID })
+      .send({ tamanho: 10, filename: 'x.dem', matchId: UUID })
     expect(res.status).toBe(409)
   })
 
@@ -269,7 +329,7 @@ describe('POST /api/upload/upload-url', () => {
       .post('/api/upload/upload-url')
       .set('Cookie', cookie)
       .send({
-        filename: 'x.dem',
+        tamanho: 10, filename: 'x.dem',
         matchId: UUID,
         shareCode: 'CSGO-aaaaa-bbbbb-ccccc-ddddd-eeeee',
         plataformaManual: 'gamers_club',
@@ -297,7 +357,7 @@ describe('POST /api/upload/upload-url', () => {
     const res = await request(app)
       .post('/api/upload/upload-url')
       .set('Cookie', cookie)
-      .send({ filename: 'x.dem', matchId: UUID })
+      .send({ tamanho: 10, filename: 'x.dem', matchId: UUID })
     expect(res.status).toBe(409)
     expect(res.body.erro).toMatch(/em andamento/i)
   })

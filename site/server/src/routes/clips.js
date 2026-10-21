@@ -28,6 +28,10 @@ export function createClipsRouter({ db, requireAuth }) {
     if (!UUID_RE.test(String(matchId))) return res.status(400).json({ erro: 'matchId inválido' })
     const provider = detectProvider(url ?? '')
     if (!provider) return res.status(400).json({ erro: 'URL do clipe inválida' })
+    if (provider === 'other') return res.status(400).json({ erro: 'URL do clipe não permitida' })
+    if (title != null && (typeof title !== 'string' || title.trim().length > 120)) {
+      return res.status(400).json({ erro: 'Título muito longo' })
+    }
     if (!/^\d{17}$/.test(String(steamId ?? ''))) {
       return res.status(400).json({ erro: 'steamId (de quem é a jogada) inválido' })
     }
@@ -72,7 +76,7 @@ export function createClipsRouter({ db, requireAuth }) {
       `insert into clips (match_id, highlight_id, steam_id64, url, provider, title, added_by)
        values ($1, $2, $3, $4, $5, $6, $7)
        returning id`,
-      [matchId, highlightId ?? null, steamId, url, provider, title ?? '', req.player.steamId],
+      [matchId, highlightId ?? null, steamId, url, provider, title?.trim() ?? '', req.player.steamId],
     )
     res.status(201).json({ id: rows[0].id, provider })
   })

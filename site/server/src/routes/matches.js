@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import { randomUUID } from 'node:crypto'
 import { limiteEstrito } from '../rateLimit.js'
 import { keyFromR2Url, streamObject, presignDownload } from '../r2.js'
 import { partidaVisivelExpr, noCirculoExpr } from '../friendships.js'
@@ -699,18 +700,38 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
     if (!jogador.demo_url) return res.status(404).json({ erro: 'Demo não arquivada pra essa partida' })
 
     const existente = await db.query(
-      'select status, clip_url from allstar_clips where match_id = $1 and steam_id64 = $2',
+      `select status, clip_url,
+              (request_id like 'reserva:%' and updated_at < now() - interval '5 minutes') as reserva_expirada
+       from allstar_clips where match_id = $1 and steam_id64 = $2`,
       [id, steamId],
     )
-    if (existente.rows.length > 0 && existente.rows[0].status !== 'Error') {
+    if (existente.rows.length > 0 && existente.rows[0].status !== 'Error' && !existente.rows[0].reserva_expirada) {
       // Já pedido antes (ex.: clique duplo) — devolve o que já existe em vez de pedir
-      // outro clipe do mesmo jogador. Status 'Error' passa direto: o jogador pode
-      // tentar de novo (a linha antiga é substituída pelo pedido novo logo abaixo).
+      // outro clipe do mesmo jogador. Error e reserva órfã permitem nova tentativa.
       return res.json({ status: existente.rows[0].status })
     }
 
     const demoKey = keyFromR2Url(jogador.demo_url, r2Bucket)
     if (!demoKey) return res.status(404).json({ erro: 'Demo fora do bucket configurado' })
+    const reservaId = `reserva:${randomUUID()}`
+    const reserva = await db.query(
+      `insert into allstar_clips (match_id, steam_id64, request_id, status)
+       values ($1, $2, $3, 'Submitted')
+       on conflict (match_id, steam_id64) do update
+         set request_id = excluded.request_id, status = 'Submitted', error_message = null, updated_at = now()
+         where allstar_clips.status = 'Error'
+           or (allstar_clips.status = 'Submitted' and allstar_clips.request_id like 'reserva:%'
+               and allstar_clips.updated_at < now() - interval '5 minutes')
+       returning id`,
+      [id, steamId, reservaId],
+    )
+    if (!reserva.rows.length) {
+      const atual = await db.query(
+        'select status, clip_url from allstar_clips where match_id = $1 and steam_id64 = $2',
+        [id, steamId],
+      )
+      return res.json({ status: atual.rows[0]?.status ?? 'Submitted' })
+    }
     try {
       // URL assinada temporária — o bucket é privado, o Allstar busca o .dem sozinho
       // do lado deles, não tem como autenticar como um Jogador nosso logado. 24h de
@@ -723,16 +744,14 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
         webhookUrl: `${config.appUrl}/api/allstar/webhook`,
         metadata: [{ key: 'matchId', value: id }, { key: 'steamId', value: steamId }],
       })
-      // Retry depois de Error: remove a tentativa falhada antes de gravar a nova —
-      // sem isso o GET /:id devolveria duas linhas pro mesmo jogador (o unique
-      // constraint em (match_id, steam_id64) rejeitaria o insert de qualquer forma).
-      await db.query("delete from allstar_clips where match_id = $1 and steam_id64 = $2 and status = 'Error'", [id, steamId])
-      await db.query('insert into allstar_clips (match_id, steam_id64, request_id) values ($1, $2, $3)', [id, steamId, requestId])
+      await db.query(
+        'update allstar_clips set request_id = $3, updated_at = now() where match_id = $1 and steam_id64 = $2 and request_id = $4',
+        [id, steamId, requestId, reservaId],
+      )
       res.json({ status: 'Submitted' })
     } catch (e) {
-      // Detalhe (trecho da resposta do Allstar) só no log do servidor, sem o SteamID;
-      // o client recebe mensagem genérica.
-      console.error(`allstar: falha ao pedir clipe na partida ${id}: ${e.message}`)
+      await db.query("update allstar_clips set status = 'Error', updated_at = now() where request_id = $1", [reservaId])
+      console.error('allstar: falha ao pedir clipe')
       res.status(502).json({ erro: 'Falha ao pedir o clipe ao Allstar. Tente de novo em alguns minutos.' })
     }
   })

@@ -458,14 +458,29 @@ export function createCompeticoesRouter({ db, requireAuth }) {
       return res.status(400).json({ erro: 'a partida desse clipe está fora do período da competição' })
     }
 
-    const { hoje, total } = await contarSubmissoes(db, comp.id, req.player.steamId)
-    if (hoje >= comp.limite_diario) return res.status(400).json({ erro: `limite diário de ${comp.limite_diario} clipes atingido` })
-    if (total >= comp.limite_total) return res.status(400).json({ erro: `limite total de ${comp.limite_total} clipes atingido` })
-
-    await db.query(
-      'insert into competicao_submissoes (competicao_id, allstar_clip_id, steam_id64) values ($1, $2, $3) on conflict do nothing',
-      [comp.id, allstarClipId, req.player.steamId],
-    )
+    const client = await db.connect()
+    try {
+      await client.query('begin')
+      await client.query('select pg_advisory_xact_lock(hashtext($1), hashtext($2))', [comp.id, req.player.steamId])
+      const { hoje, total } = await contarSubmissoes(client, comp.id, req.player.steamId)
+      if (hoje >= comp.limite_diario || total >= comp.limite_total) {
+        await client.query('rollback')
+        const erro = hoje >= comp.limite_diario
+          ? `limite diário de ${comp.limite_diario} clipes atingido`
+          : `limite total de ${comp.limite_total} clipes atingido`
+        return res.status(400).json({ erro })
+      }
+      await client.query(
+        'insert into competicao_submissoes (competicao_id, allstar_clip_id, steam_id64) values ($1, $2, $3) on conflict do nothing',
+        [comp.id, allstarClipId, req.player.steamId],
+      )
+      await client.query('commit')
+    } catch (e) {
+      await client.query('rollback').catch(() => {})
+      throw e
+    } finally {
+      client.release()
+    }
     res.json({ ok: true })
   })
 

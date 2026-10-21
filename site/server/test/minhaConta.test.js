@@ -20,6 +20,19 @@ function appWith(rows = []) {
 }
 
 describe('GET /api/minha-conta/exportar', () => {
+  it('exporta os dados novos e os vínculos de autoria do próprio Jogador', async () => {
+    const { app, db } = appWith()
+    const res = await request(app).get('/api/minha-conta/exportar').set('Cookie', cookie)
+    expect(res.status).toBe(200)
+    for (const chave of ['clips', 'clipesReais', 'quadros', 'taticas']) expect(res.body[chave]).toEqual([])
+    const sqls = db.query.mock.calls.map(([sql]) => sql)
+    expect(sqls.find((sql) => sql.includes('from players') && sql.includes('nick'))).toContain('premium')
+    expect(sqls.find((sql) => sql.includes('from players') && sql.includes('nick'))).toContain('faceit_sincronizado_em')
+    expect(sqls.find((sql) => sql.includes('from clips '))).toMatch(/added_by = \$1 or steam_id64 = \$1/)
+    expect(sqls.some((sql) => sql.includes('from clipes_reais where pedido_por = $1'))).toBe(true)
+    expect(sqls.some((sql) => sql.includes('from quadros_taticos where criado_por = $1'))).toBe(true)
+    expect(sqls.some((sql) => sql.includes('from taticas where criado_por = $1'))).toBe(true)
+  })
   it('sem login: 401', async () => {
     const { app } = appWith()
     expect((await request(app).get('/api/minha-conta/exportar')).status).toBe(401)
@@ -39,6 +52,19 @@ describe('GET /api/minha-conta/exportar', () => {
 })
 
 describe('DELETE /api/minha-conta', () => {
+  it('remove clipes e autoria e limpa Premium e sincronização FACEIT na transação', async () => {
+    const { app, cliente } = appWith()
+    const res = await request(app).delete('/api/minha-conta').set('Cookie', cookie).send({ confirmacao: 'EXCLUIR' })
+    expect(res.status).toBe(200)
+    const sqls = cliente.query.mock.calls.map(([sql]) => sql)
+    expect(sqls).toContain('delete from clips where added_by = $1 or steam_id64 = $1')
+    expect(sqls).toContain('delete from clipes_reais where pedido_por = $1')
+    expect(sqls).toContain('delete from quadros_taticos where criado_por = $1')
+    expect(sqls).toContain('delete from taticas where criado_por = $1')
+    const jogador = sqls.find((sql) => sql.includes('update players set'))
+    expect(jogador).toContain('premium = false')
+    expect(jogador).toContain('faceit_sincronizado_em = null')
+  })
   it('exige a confirmação EXCLUIR', async () => {
     const { app, cliente } = appWith()
     const res = await request(app).delete('/api/minha-conta').set('Cookie', cookie).send({})

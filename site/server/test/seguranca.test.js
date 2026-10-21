@@ -62,7 +62,7 @@ describe('competições', () => {
 describe('POST /api/upload/upload-url', () => {
   it('com 5 uploads pendentes, o 6º pedido recebe 429 sem gerar URL', async () => {
     const send = vi.fn()
-    const { app } = appWith([['from uploads_pendentes where adicionado_por', [{ n: 5 }]]], { r2Client: { send } })
+    const { app } = appWith([['from uploads_pendentes', [{ n: 5 }]]], { r2Client: { send } })
     const res = await request(app).post('/api/upload/upload-url').set('Cookie', token('765'))
       .send({ filename: 'x.dem', tamanho: 1000 })
     expect(res.status).toBe(429)

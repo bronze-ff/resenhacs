@@ -19,11 +19,12 @@ export class ErroDemoSlap extends Error {
   }
 }
 
-async function chamar(apiKey, metodo, caminho, corpo) {
+async function chamar(apiKey, metodo, caminho, corpo, signal) {
   const res = await fetch(`${BASE}${caminho}`, {
     method: metodo,
     headers: { 'x-api-key': apiKey, ...(corpo ? { 'Content-Type': 'application/json' } : {}) },
     ...(corpo ? { body: JSON.stringify(corpo) } : {}),
+    ...(signal ? { signal } : {}),
   })
   if (!res.ok) {
     const texto = await res.text().catch(() => '')
@@ -37,7 +38,7 @@ async function chamar(apiKey, metodo, caminho, corpo) {
 export function criarClienteDemoSlap(apiKey) {
   const enc = encodeURIComponent
   return {
-    analisar: async (url) => (await chamar(apiKey, 'POST', '/analyze/url', { url })).jobId,
+    analisar: async (url, { signal } = {}) => (await chamar(apiKey, 'POST', '/analyze/url', { url }, signal)).jobId,
     statusAnalise: (jobId) => chamar(apiKey, 'GET', `/analyze/${enc(jobId)}/status`),
     dadosAnalise: (jobId) => chamar(apiKey, 'GET', `/analyze/${enc(jobId)}/data`),
     renderizar: async (jobId, customClips, opcoes = {}) =>

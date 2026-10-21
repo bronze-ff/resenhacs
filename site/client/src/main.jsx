@@ -22,7 +22,7 @@ import './index.css'
 // Em `npm run dev` o modulo virtual e uma versao no-op: nada e registrado.
 registerSW({ immediate: true })
 
-await iniciarSentry()
+iniciarSentry().catch(() => {})
 iniciarPosthog()
 
 createRoot(document.getElementById('root')).render(

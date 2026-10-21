@@ -1,7 +1,9 @@
 // site/client/src/test/EnviarDemo.test.jsx
-import { describe, it, expect, vi } from 'vitest'
+import { afterEach, describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import EnviarDemo from '../pages/EnviarDemo.jsx'
+
+afterEach(() => vi.useRealTimers())
 
 function arquivoFalso(nome = 'partida.dem') {
   return new File(['conteudo'], nome, { type: 'application/octet-stream' })
@@ -22,6 +24,33 @@ function mockFetchSucesso() {
 }
 
 describe('EnviarDemo', () => {
+  it('preserva 19h de Brasília como 22h UTC no envio', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-22T00:00:00Z'))
+    mockFetchSucesso()
+    const { container } = render(<EnviarDemo />)
+    fireEvent.change(container.querySelector('input[type="file"]'), { target: { files: [arquivoFalso()] } })
+    const instante = new Date('2026-10-21T19:00:00-03:00')
+    fireEvent.change(screen.getByLabelText(/quando foi jogada/i), { target: { value: paraDatetimeLocal(instante) } })
+    fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
+    await waitFor(() => expect(screen.getByText(/envio recebido/i)).toBeInTheDocument())
+    expect(JSON.parse(global.fetch.mock.calls[0][1].body).playedAt).toBe('2026-10-21T22:00:00.000Z')
+  })
+  it('envia data ISO com fuso e o mesmo arquivo cujo tamanho foi declarado', async () => {
+    mockFetchSucesso()
+    const arquivo = arquivoFalso()
+    const { container } = render(<EnviarDemo />)
+    fireEvent.change(container.querySelector('input[type="file"]'), { target: { files: [arquivo] } })
+    const local = paraDatetimeLocal(new Date(Date.now() - 3600000))
+    fireEvent.change(screen.getByLabelText(/quando foi jogada/i), { target: { value: local } })
+    fireEvent.click(screen.getByRole('button', { name: /enviar/i }))
+    await waitFor(() => expect(screen.getByText(/envio recebido/i)).toBeInTheDocument())
+    const pedido = JSON.parse(global.fetch.mock.calls[0][1].body)
+    expect(pedido.playedAt).toMatch(/Z$/)
+    expect(new Date(pedido.playedAt).getTime()).toBe(new Date(local).getTime())
+    expect(pedido.tamanho).toBe(arquivo.size)
+    expect(global.fetch.mock.calls[1][1].body).toBe(arquivo)
+  })
   it('bloqueia envio com data no futuro', async () => {
     global.fetch = vi.fn()
     const { container } = render(<EnviarDemo />)

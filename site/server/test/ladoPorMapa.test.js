@@ -12,6 +12,16 @@ function appWith(rows) {
 }
 
 describe('GET /api/lado-mapa', () => {
+  it('considera só o círculo do viewer ao escolher o time, mesmo com adversário cadastrado', async () => {
+    const { app, db } = appWith([{ map: 'de_mirage', lado: 'CT', rounds: 2, vitorias: 2 }])
+    const res = await request(app).get('/api/lado-mapa').set('Cookie', cookie)
+    expect(res.body[0]?.rounds).toBe(2)
+    const [sql, params] = db.query.mock.calls.find(([q]) => q.includes('time_do_grupo'))
+    expect(sql).not.toContain('is_tracked')
+    expect(sql).toContain('fc.status = \'accepted\'')
+    expect(sql).toContain('mp.steam_id64 = $1')
+    expect(params).toEqual(['76561198000000009'])
+  })
   it('sem login: 401', async () => {
     const { app } = appWith([])
     expect((await request(app).get('/api/lado-mapa')).status).toBe(401)

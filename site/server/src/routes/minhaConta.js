@@ -20,10 +20,10 @@ export function createMinhaContaRouter({ db, requireAuth, config }) {
 
   router.get('/exportar', requireAuth, async (req, res) => {
     const eu = req.player.steamId
-    const [jogador, partidas, amizades, curso, clipes, submissoes, uploads] = await Promise.all([
+    const [jogador, partidas, amizades, curso, clipes, submissoes, uploads, clips, clipesReais, quadros, taticas] = await Promise.all([
       db.query(
         `select steam_id64, nick, avatar_url, faceit_id, faceit_nick, faceit_elo, faceit_skill_level,
-                conta_criada_em, created_at, tour_concluido,
+                conta_criada_em, created_at, tour_concluido, premium, faceit_sincronizado_em,
                 match_auth_code is not null as codigo_historico_configurado
          from players where steam_id64 = $1`,
         [eu],
@@ -52,6 +52,10 @@ export function createMinhaContaRouter({ db, requireAuth, config }) {
          from uploads_pendentes where adicionado_por = $1`,
         [eu],
       ),
+      db.query('select * from clips where added_by = $1 or steam_id64 = $1', [eu]),
+      db.query('select * from clipes_reais where pedido_por = $1', [eu]),
+      db.query('select * from quadros_taticos where criado_por = $1', [eu]),
+      db.query('select * from taticas where criado_por = $1', [eu]),
     ])
     res.attachment(`resenha-meus-dados-${eu}.json`)
     res.json({
@@ -63,6 +67,10 @@ export function createMinhaContaRouter({ db, requireAuth, config }) {
       clipes: clipes.rows,
       submissoesEmCompeticoes: submissoes.rows,
       demosEnviadas: uploads.rows,
+      clips: clips.rows,
+      clipesReais: clipesReais.rows,
+      quadros: quadros.rows,
+      taticas: taticas.rows,
     })
   })
 
@@ -80,6 +88,10 @@ export function createMinhaContaRouter({ db, requireAuth, config }) {
       await cliente.query('delete from curso_progresso where steam_id64 = $1', [eu])
       await cliente.query('delete from competicao_submissoes where steam_id64 = $1', [eu])
       await cliente.query('delete from allstar_clips where steam_id64 = $1', [eu])
+      await cliente.query('delete from clips where added_by = $1 or steam_id64 = $1', [eu])
+      await cliente.query('delete from clipes_reais where pedido_por = $1', [eu])
+      await cliente.query('delete from quadros_taticos where criado_por = $1', [eu])
+      await cliente.query('delete from taticas where criado_por = $1', [eu])
       // Todos os status (pendente, processando, falhou, concluida, limpo): a linha guarda
       // quem enviou e o share code. O Coletor não lê adicionado_por depois de pegar o
       // item, então apagar um "processando" só faz o update final dele não achar a linha;
@@ -97,7 +109,7 @@ export function createMinhaContaRouter({ db, requireAuth, config }) {
            nick = $2, avatar_url = null, match_auth_code = null, last_share_code = null,
            faceit_id = null, faceit_nick = null, faceit_elo = null, faceit_skill_level = null,
            faceit_elo_atualizado_em = null, conta_criada_em = null, tour_concluido = false,
-           is_super_admin = false, tokens_validos_apos = now()
+           is_super_admin = false, premium = false, faceit_sincronizado_em = null, tokens_validos_apos = now()
          where steam_id64 = $1`,
         [eu, NICK_REMOVIDO],
       )

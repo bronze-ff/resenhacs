@@ -1,9 +1,10 @@
-import { describe, it, expect, vi } from 'vitest'
+import { afterEach, describe, it, expect, vi } from 'vitest'
 import request from 'supertest'
 import { createApp } from '../src/app.js'
 import { signToken } from '../src/auth/jwt.js'
 import { ErroDemoSlap } from '../src/demoSlap.js'
 import { presignDownload } from '../src/r2.js'
+import { bancoTransacional } from './bancoTransacional.js'
 
 const config = {
   jwtSecret: 's', appUrl: 'http://localhost:5173', isProduction: false, r2Bucket: 'resenha-demos',
@@ -14,6 +15,7 @@ const AMIGO = '76561198000000004'
 const cookie = `resenha_token=${signToken({ steamId: EU, isSuperAdmin: false }, config.jwtSecret)}`
 const MATCH = '00000000-0000-0000-0000-0000000000aa'
 const DEMO = 'https://conta.r2.cloudflarestorage.com/resenha-demos/demos/x.dem'
+afterEach(() => vi.restoreAllMocks())
 
 // Banco falso com estado: a Partida, as kills, a análise e os clipes. Cada update
 // condicional da rota (reserva de passo) só "pega" se o status bate, como no Postgres.
@@ -27,15 +29,24 @@ function bancoFalso({ partida = { id: MATCH, map: 'de_dust2', demo_url: DEMO }, 
   const query = vi.fn(async (sql, p = []) => {
     if (sql.includes('tokens_validos_apos')) return { rows: [] }
     if (sql.includes('select is_super_admin, premium from players')) return { rows: [{ is_super_admin: false, premium }] }
-    if (sql.includes('from matches m where m.id')) return { rows: partida ? [partida] : [] }
+    if (sql.includes('from matches m where m.id')) return { rows: partida ? [{ ...partida, id: p[0] }] : [] }
     if (sql.includes('from kill_positions')) return { rows: kills.filter((k) => p[1].includes(k.tick)) }
-    if (sql.includes('count(*)::int as total')) return { rows: [{ total: pedidosHoje }] }
-    if (sql.includes('select status from demoslap_analises')) return { rows: estado.analise ? [estado.analise] : [] }
+    if (sql.includes('count(*)::int as total')) {
+      const total = pedidosHoje + estado.clipes.length
+      await new Promise((resolve) => setTimeout(resolve, 10))
+      return { rows: [{ total }] }
+    }
+    if (sql.includes('select status, job_id, updated_at from demoslap_analises')) return { rows: estado.analise ? [estado.analise] : [] }
     if (sql.includes('insert into demoslap_analises')) {
-      estado.analise = { job_id: p[1], status: 'working', tick_rate: null, erro: null }
+      estado.analise = { job_id: p[1], status: 'working', tick_rate: null, erro: null, updated_at: new Date() }
       return { rows: [] }
     }
-    if (sql.includes('select job_id, status, tick_rate, erro from demoslap_analises')) {
+    if (sql.includes('update demoslap_analises set job_id')) {
+      if (estado.analise.job_id !== p[2] || estado.analise.status !== 'working') return { rows: [] }
+      estado.analise.job_id = p[1]
+      return { rows: [{ match_id: MATCH }] }
+    }
+    if (sql.includes('select job_id, status, tick_rate, erro')) {
       return { rows: estado.analise ? [estado.analise] : [] }
     }
     if (sql.includes("update demoslap_analises set status = 'done'")) {
@@ -43,8 +54,10 @@ function bancoFalso({ partida = { id: MATCH, map: 'de_dust2', demo_url: DEMO }, 
       return { rows: [] }
     }
     if (sql.includes("update demoslap_analises set status = 'error'")) {
+      if (p[2] && (estado.analise.job_id !== p[2] || estado.analise.status !== 'working')) return { rows: [] }
+      if (sql.includes("interval '5 minutes'") && Date.now() - estado.analise.updated_at <= 300000) return { rows: [] }
       Object.assign(estado.analise, { status: 'error', erro: p[1] })
-      return { rows: [] }
+      return { rows: [{ ...estado.analise }] }
     }
     if (sql.includes('insert into clipes_reais')) {
       estado.clipes.push({
@@ -52,7 +65,7 @@ function bancoFalso({ partida = { id: MATCH, map: 'de_dust2', demo_url: DEMO }, 
         status: 'analisando', video_job_ids: null, fragmovie_job_id: null, erro: null,
         created_at: new Date(), updated_at: new Date(),
       })
-      return { rows: [] }
+      return { rows: [{ id: estado.clipes.at(-1).id }] }
     }
     if (sql.includes('from clipes_reais c')) {
       return {
@@ -78,7 +91,7 @@ function bancoFalso({ partida = { id: MATCH, map: 'de_dust2', demo_url: DEMO }, 
     }
     return { rows: [] }
   })
-  return { db: { query }, estado }
+  return { ...bancoTransacional(query), estado }
 }
 
 function demoSlapFalso(sobrescrever = {}) {
@@ -109,6 +122,65 @@ function app({ banco = bancoFalso(), demoSlap = demoSlapFalso() } = {}) {
 const TK = { tick: 10000, round: 3, pov: EU }
 
 describe('clipes reais (DEMO-SLAP)', () => {
+  it.each([false, true])('reserva de análise recente espera, antiga vira erro (antiga: %s)', async (antiga) => {
+    const banco = bancoFalso({
+      analise: { job_id: 'reserva:analise', status: 'working', updated_at: new Date(Date.now() - (antiga ? 600000 : 1000)) },
+      clipes: [{ id: 'c1', match_id: MATCH, pedido_por: EU, kills: [TK], status: 'analisando', updated_at: new Date() }],
+    })
+    const { app: a, demoSlap } = app({ banco })
+    const res = await request(a).get(`/api/matches/${MATCH}/clipes-reais`).set('Cookie', cookie)
+    expect(res.status).toBe(200)
+    expect(res.body.clipes[0].status).toBe(antiga ? 'erro' : 'analisando')
+    expect(demoSlap.statusAnalise).not.toHaveBeenCalled()
+    expect(demoSlap.renderizar).not.toHaveBeenCalled()
+  })
+
+  it('timeout de 10s cancela a análise e marca análise e clipe como erro', async () => {
+    const controller = new AbortController()
+    const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(controller.signal)
+    const banco = bancoFalso()
+    const analisar = vi.fn((_url, { signal } = {}) => new Promise((_resolve, reject) => {
+      if (!signal) return reject(new Error('sem cancelamento'))
+      signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+      setTimeout(() => controller.abort(new Error('tempo esgotado')), 5)
+    }))
+    const { app: a } = app({ banco, demoSlap: demoSlapFalso({ analisar }) })
+    const res = await request(a).post(`/api/matches/${MATCH}/clipes-reais`).set('Cookie', cookie).send({ kills: [TK] })
+    expect(res.status).toBe(502)
+    expect(timeout).toHaveBeenCalledWith(10000)
+    expect(banco.estado.analise.status).toBe('error')
+    expect(banco.estado.clipes[0].status).toBe('erro')
+    expect(banco.clientes.every((c) => !c.emTransacao && c.release.mock.calls.length === 1)).toBe(true)
+  })
+  it.each([EU, AMIGO])('dois POSTs simultâneos reservam uma única análise paga (segundo Jogador %s)', async (segundo) => {
+    const banco = bancoFalso()
+    const analisar = vi.fn(async () => {
+      const reservador = banco.clientes.find((c) => c.query.mock.calls.some(([sql]) => sql.includes('insert into demoslap_analises')))
+      expect(reservador.emTransacao).toBe(false)
+      expect(reservador.release).toHaveBeenCalledTimes(1)
+      expect(banco.db.query.mock.calls.some(([sql]) => sql.includes('insert into demoslap_analises'))).toBe(true)
+      expect(banco.db.query.mock.calls.some(([sql]) => sql.includes('insert into clipes_reais'))).toBe(true)
+      await new Promise((resolve) => setTimeout(resolve, 30))
+      return 'an1'
+    })
+    const { app: a } = app({ banco, demoSlap: demoSlapFalso({ analisar }) })
+    const respostas = await Promise.all([EU, segundo].map((steamId) => request(a)
+      .post(`/api/matches/${MATCH}/clipes-reais`)
+      .set('Cookie', `resenha_token=${signToken({ steamId }, config.jwtSecret)}`).send({ kills: [TK] })))
+    expect(respostas.map((r) => r.status)).toEqual([201, 201])
+    expect(analisar).toHaveBeenCalledTimes(1)
+    expect(banco.estado.clipes).toHaveLength(2)
+    expect(banco.db.query.mock.calls.some(([sql]) => sql.includes('update demoslap_analises set job_id'))).toBe(true)
+  })
+
+  it.each([MATCH, 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'])('dois POSTs não excedem a cota diária (segunda Partida %s)', async (segunda) => {
+    const banco = bancoFalso({ pedidosHoje: 9, analise: { job_id: 'an1', status: 'done', tick_rate: 64 } })
+    const { app: a } = app({ banco })
+    const respostas = await Promise.all([MATCH, segunda].map((matchId) => request(a)
+      .post(`/api/matches/${matchId}/clipes-reais`).set('Cookie', cookie).send({ kills: [TK] })))
+    expect(respostas.map((r) => r.status).sort()).toEqual([201, 429])
+    expect(banco.estado.clipes).toHaveLength(1)
+  })
   it('sem login: 401', async () => {
     const { app: a } = app()
     expect((await request(a).get(`/api/matches/${MATCH}/clipes-reais`)).status).toBe(401)
@@ -156,7 +228,7 @@ describe('clipes reais (DEMO-SLAP)', () => {
     const res = await request(a).post(`/api/matches/${MATCH}/clipes-reais`).set('Cookie', cookie)
       .send({ kills: [{ ...TK, pov: AMIGO }] })
     expect(res.status).toBe(201)
-    expect(demoSlap.analisar).toHaveBeenCalledWith('https://r2-assinada/x.dem')
+    expect(demoSlap.analisar).toHaveBeenCalledWith('https://r2-assinada/x.dem', { signal: expect.any(AbortSignal) })
     expect(demoSlap.renderizar).toHaveBeenCalledWith(
       'an1', [{ tick: 10000 - 256, duration: 7, povSteamId: AMIGO }], { highResolution: true },
     )
