@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import SecaoClipeReal, { descreverClipe } from '../components/clipes/SecaoClipeReal.jsx'
+import SecaoClipeReal, { descreverClipe, manterVideos } from '../components/clipes/SecaoClipeReal.jsx'
 
 const EU = { steamId: 'eu', nick: 'fih' }
 const AMIGO = { steamId: 'amigo', nick: 'Jubileu' }
@@ -198,5 +198,36 @@ describe('SecaoClipeReal', () => {
     await vi.advanceTimersByTimeAsync(10000)
     const depois = fetchMock.mock.calls.filter(([u]) => u.endsWith('/clipes-reais')).length
     expect(depois).toBeGreaterThan(antes)
+  })
+
+  it('a consulta automática não troca o vídeo que já está tocando', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const lista = (assinatura) => ({
+      disponivel: true, permitido: true,
+      clipes: [
+        { id: 'c2', status: 'juntando', kills: [{ round: 1 }, { round: 2 }], videos: [], pedidoPor: { nick: 'fih' } },
+        { id: 'c1', status: 'pronto', kills: [{ round: 4 }], videos: [`https://r2/c1.mp4?sig=${assinatura}`], pedidoPor: { nick: 'fih' } },
+      ],
+    })
+    let chamada = 0
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((url) => {
+      if (url.includes('/kills?')) return resposta(KILLS)
+      if (url.endsWith('/clipes-reais')) return resposta(lista(++chamada))
+      return resposta({}, false)
+    }))
+    const { container } = render(<SecaoClipeReal matchId="m1" jogadores={JOGADORES} viewerSteamId="eu" />)
+    await screen.findByText('Juntando os trechos…')
+    expect(container.querySelector('video')).toHaveAttribute('src', 'https://r2/c1.mp4?sig=1')
+    await vi.advanceTimersByTimeAsync(10000)
+    await waitFor(() => expect(chamada).toBeGreaterThan(1))
+    expect(container.querySelector('video')).toHaveAttribute('src', 'https://r2/c1.mp4?sig=1')
+  })
+})
+
+describe('manterVideos', () => {
+  it('mantém as URLs antigas dos mesmos vídeos e aceita o vídeo único quando ele chega', () => {
+    const antes = [{ id: 'a', videos: ['u1'] }, { id: 'b', videos: ['t1', 't2'] }]
+    const novos = [{ id: 'a', videos: ['u1-nova'] }, { id: 'b', videos: ['unico'] }, { id: 'c', videos: ['x'] }]
+    expect(manterVideos(antes, novos)).toEqual([{ id: 'a', videos: ['u1'] }, { id: 'b', videos: ['unico'] }, { id: 'c', videos: ['x'] }])
   })
 })
