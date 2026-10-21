@@ -19,13 +19,7 @@ export default function ReplayDemo() {
       <CabecalhoPagina
         eyebrow="Demonstração"
         titulo="Replay 2D — partida real"
-        descricao={
-          <>
-            Posições reais de uma partida de vocês (de_anubis, 1º round), extraídas da Demo
-            pelo Coletor. Coloque <code className="font-mono">de_anubis.png</code> em{' '}
-            <code className="font-mono">public/radars/</code> para o fundo do mapa aparecer alinhado.
-          </>
-        }
+        descricao="Posições reais de uma partida de vocês (de_anubis, 1º round), extraídas da Demo pelo Coletor."
       />
       {replay ? (
         <ReplayViewer replay={replay} />

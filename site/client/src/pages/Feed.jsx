@@ -7,7 +7,7 @@ import SessaoDeHoje, { sessaoDeHoje } from '../components/feed/SessaoDeHoje.jsx'
 import AvisoRecorde from '../components/feed/AvisoRecorde.jsx'
 import PrimeirosPassos from '../components/inicio/PrimeirosPassos.jsx'
 import {
-  Abas, Avatar, Button, CabecalhoPagina, Card, EstadoVazio, Select, SkeletonLista,
+  Abas, Avatar, Button, CabecalhoPagina, Card, EstadoErro, EstadoVazio, Select, SkeletonLista,
 } from '../components/ui'
 
 const MAPAS = ['de_anubis', 'de_ancient', 'de_cache', 'de_dust2', 'de_inferno', 'de_mirage', 'de_nuke', 'de_overpass', 'de_train', 'de_vertigo']
@@ -140,6 +140,10 @@ const TAMANHO_PAGINA = 20
 
 export default function Feed() {
   const [partidas, setPartidas] = useState(null)
+  // Falha de rede ou resposta não-ok: antes virava lista vazia e parecia "sem Partidas".
+  const [erroCarga, setErroCarga] = useState(false)
+  const [tentativa, setTentativa] = useState(0)
+  const [erroMais, setErroMais] = useState(false)
   const [de, setDe] = useState('')
   const [ate, setAte] = useState('')
   const [mapa, setMapa] = useState('')
@@ -197,9 +201,14 @@ export default function Feed() {
     const minhaRequisicao = ++requisicaoAtual.current
     setPartidas(null)
     setTemMais(false)
+    setErroCarga(false)
+    setErroMais(false)
     const qs = sessaoAtiva ? new URLSearchParams({ ids: sessaoAtiva.matchIds.join(',') }) : montarQs(0)
     fetch(`/api/matches?${qs}`)
-      .then((res) => (res.ok ? res.json() : []))
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        return res.json()
+      })
       .then((data) => {
         if (requisicaoAtual.current !== minhaRequisicao) return
         const lista = Array.isArray(data) ? data : []
@@ -210,16 +219,21 @@ export default function Feed() {
         if (requisicaoAtual.current !== minhaRequisicao) return
         setPartidas([])
         setTemMais(false)
+        setErroCarga(true)
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [de, ate, mapa, origem, plataforma, jogador, sessaoAtiva])
+  }, [de, ate, mapa, origem, plataforma, jogador, sessaoAtiva, tentativa])
 
   function carregarMais() {
     if (carregandoMais || !partidas || sessaoAtiva) return
     const minhaRequisicao = ++requisicaoAtual.current
     setCarregandoMais(true)
+    setErroMais(false)
     fetch(`/api/matches?${montarQs(partidas.length)}`)
-      .then((res) => (res.ok ? res.json() : []))
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        return res.json()
+      })
       .then((data) => {
         if (requisicaoAtual.current !== minhaRequisicao) return
         const lista = Array.isArray(data) ? data : []
@@ -232,8 +246,9 @@ export default function Feed() {
         setTemMais(lista.length === TAMANHO_PAGINA)
       })
       .catch(() => {
+        // Mantém as Partidas já na tela e o temMais: o erro troca o botão por "Tentar de novo".
         if (requisicaoAtual.current !== minhaRequisicao) return
-        setTemMais(false)
+        setErroMais(true)
       })
       .finally(() => {
         if (requisicaoAtual.current === minhaRequisicao) setCarregandoMais(false)
@@ -350,17 +365,34 @@ export default function Feed() {
       </div>
 
       {visiveis === null && <SkeletonLista linhas={5} altura="h-24" rotulo="Carregando Partidas" />}
-      {visiveis?.length === 0 && (
+      {erroCarga && (
+        <EstadoErro
+          mensagem="Não deu para carregar as Partidas. Confira a conexão e tente de novo."
+          acao={<Button variante="secundario" tamanho="sm" onClick={() => setTentativa((n) => n + 1)}>Tentar de novo</Button>}
+        />
+      )}
+      {!erroCarga && visiveis?.length === 0 && (
         <EstadoVazio
           titulo="Nenhuma Partida encontrada"
-          descricao={temFiltro ? 'Nada bate com esses filtros. Ajuste o período, o mapa ou o jogador.' : 'Assim que o Coletor sincronizar uma Partida do grupo, ela aparece aqui.'}
-          acao={temFiltro ? <Button variante="secundario" tamanho="sm" onClick={limparFiltros}>Limpar filtros</Button> : null}
+          descricao={temFiltro ? 'Nada bate com esses filtros. Ajuste o período, o mapa ou o jogador.' : 'Assim que o Coletor sincronizar uma Partida do grupo, ela aparece aqui. Para não esperar, envie uma Demo ou configure seu Share Code.'}
+          acao={temFiltro ? <Button variante="secundario" tamanho="sm" onClick={limparFiltros}>Limpar filtros</Button> : (
+            <div className="flex flex-col items-center gap-2 sm:flex-row">
+              <Button as={Link} to="/enviar-demo" variante="primario" tamanho="sm">Enviar Demo</Button>
+              <Button as={Link} to="/conta" variante="fantasma" tamanho="sm">Passo a passo do Share Code</Button>
+            </div>
+          )}
         />
       )}
       <div className={hoje ? 'grid gap-6 xl:grid-cols-[minmax(0,1fr)_300px] xl:items-start' : ''}>
         <div className="min-w-0 space-y-3">
           {visiveis?.map((m) => <CardPartidaFeed key={m.id} m={m} resultado={resultadoDoGrupo(m)} avatares={avatares} />)}
-          {temMais && (
+          {temMais && erroMais && (
+            <EstadoErro
+              mensagem="Não deu para carregar mais Partidas."
+              acao={<Button variante="secundario" tamanho="sm" onClick={carregarMais} carregando={carregandoMais}>Tentar de novo</Button>}
+            />
+          )}
+          {temMais && !erroMais && (
             <div className="flex justify-center pt-1">
               <Button variante="secundario" onClick={carregarMais} carregando={carregandoMais}>
                 {carregandoMais ? 'Carregando…' : 'Carregar mais'}

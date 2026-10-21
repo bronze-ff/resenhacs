@@ -4,6 +4,7 @@ import { useAuth } from '../auth/AuthContext.jsx'
 import { esquecerJogador } from '../observabilidade/posthog.js'
 import { Avatar, PremiumBadge, classesBotao } from './ui'
 import BuscaRapida from './BuscaRapida.jsx'
+import ErrorBoundary from './ErrorBoundary.jsx'
 import { usePrimeirosPassos } from './inicio/PrimeirosPassos.jsx'
 
 const CHAVE_SIDEBAR_COLAPSADA = 'resenha_sidebar_colapsada'
@@ -272,6 +273,7 @@ function IndicadorCompeticaoAtiva() {
 
 export default function Shell({ children }) {
   const { jogador } = useAuth()
+  const location = useLocation()
   const [menuAberto, setMenuAberto] = useState(false)
   const [colapsada, setColapsada] = useState(() => {
     try {
@@ -447,7 +449,10 @@ export default function Shell({ children }) {
             </button>
           </div>
         </header>
-        <main className="mx-auto w-full max-w-[1600px] px-4 pb-24 pt-5 lg:px-10 lg:py-8">{children}</main>
+        <main className="mx-auto w-full max-w-[1600px] px-4 pb-24 pt-5 lg:px-10 lg:py-8">
+          {/* Erro de render numa página fica dentro do Shell: a navegação continua e trocar de rota zera o erro. */}
+          <ErrorBoundary key={location.pathname} dentroDoShell>{children}</ErrorBoundary>
+        </main>
       </div>
       <BarraInferior menuAberto={menuAberto} onAbrirMenu={() => setMenuAberto(true)} temCompeticaoAtiva={temCompeticaoAtiva} />
     </div>

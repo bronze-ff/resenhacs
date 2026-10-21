@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './auth/AuthContext.jsx'
 import Shell from './components/Shell.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
@@ -27,6 +27,7 @@ import Apoie from './pages/Apoie.jsx'
 import Curso from './pages/Curso.jsx'
 import Privacidade from './pages/Privacidade.jsx'
 import Resenha from './pages/Resenha.jsx'
+import NaoEncontrada from './pages/NaoEncontrada.jsx'
 
 // Tela de espera enquanto /api/auth/me responde: marca pulsando no centro, em vez de
 // um "Carregando…" solto no canto.
@@ -39,10 +40,17 @@ function TelaCarregando() {
   )
 }
 
+// Sem sessão, /entrar recebe a rota pedida para o login voltar a ela. A query string
+// se perde (limite aceito); Entrar.jsx valida o valor antes de usar.
+function IrParaEntrar() {
+  const { pathname } = useLocation()
+  return <Navigate to={`/entrar?returnTo=${encodeURIComponent(pathname)}`} replace />
+}
+
 function RotaProtegida({ children }) {
   const { carregando, jogador } = useAuth()
   if (carregando) return <TelaCarregando />
-  if (!jogador) return <Navigate to="/entrar" replace />
+  if (!jogador) return <IrParaEntrar />
   if (!jogador.tourConcluido) return <Navigate to="/tour" replace />
   return <Shell>{children}</Shell>
 }
@@ -60,7 +68,7 @@ function RotaRaiz() {
 function RotaAdmin({ children }) {
   const { carregando, jogador } = useAuth()
   if (carregando) return <TelaCarregando />
-  if (!jogador) return <Navigate to="/entrar" replace />
+  if (!jogador) return <IrParaEntrar />
   if (!jogador.tourConcluido) return <Navigate to="/tour" replace />
   if (!jogador.isSuperAdmin) return <Navigate to="/" replace />
   return <Shell>{children}</Shell>
@@ -96,11 +104,19 @@ export default function App() {
           <Route path="/curso" element={<RotaProtegida><Curso /></RotaProtegida>} />
           <Route path="/admin" element={<RotaAdmin><Admin /></RotaAdmin>} />
           <Route path="/partidas-pro" element={<RotaAdmin><PartidasPro /></RotaAdmin>} />
+          <Route path="*" element={<RotaNaoEncontrada />} />
         </Routes>
         </ErrorBoundary>
       </BrowserRouter>
     </AuthProvider>
   )
+}
+
+function RotaNaoEncontrada() {
+  const { carregando, jogador } = useAuth()
+  if (carregando) return <TelaCarregando />
+  if (!jogador) return <NaoEncontrada />
+  return <Shell><NaoEncontrada logado /></Shell>
 }
 
 // Tour é a única página protegida que NÃO exige tourConcluido (é ela quem zera a flag).

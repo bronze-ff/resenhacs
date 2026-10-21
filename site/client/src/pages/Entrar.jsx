@@ -1,4 +1,13 @@
+import { useSearchParams } from 'react-router-dom'
 import { Button } from '../components/ui'
+
+// Mesma regra do server (routes/auth.js): só path interno, nunca destino externo.
+const RETURN_TO_VALIDO = /^\/[a-zA-Z0-9/_-]*$/
+
+export function hrefLoginSteam(returnTo) {
+  if (typeof returnTo !== 'string' || !RETURN_TO_VALIDO.test(returnTo)) return '/api/auth/steam'
+  return `/api/auth/steam?returnTo=${encodeURIComponent(returnTo)}`
+}
 
 function SteamIcon({ className }) {
   return (
@@ -9,6 +18,7 @@ function SteamIcon({ className }) {
 }
 
 export default function Entrar() {
+  const [searchParams] = useSearchParams()
   return (
     <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden px-6">
       <div className="relative z-10 flex flex-col items-center text-center">
@@ -33,7 +43,7 @@ export default function Entrar() {
 
         <Button
           as="a"
-          href="/api/auth/steam"
+          href={hrefLoginSteam(searchParams.get('returnTo'))}
           variante="primario"
           tamanho="lg"
           className="animate-surgir mt-10"

@@ -71,9 +71,20 @@ export default function Comparar() {
   const [ate, setAte] = useState('')
   const [dados, setDados] = useState(null)
   const [erro, setErro] = useState(null)
+  const [erroJogadores, setErroJogadores] = useState(false)
 
   useEffect(() => {
-    fetch('/api/players').then((res) => res.json()).then(setJogadores)
+    // Erro do server (ex.: { erro }) não pode virar a lista: o .map dos Selects quebrava.
+    fetch('/api/players')
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        return res.json()
+      })
+      .then((lista) => setJogadores(Array.isArray(lista) ? lista : []))
+      .catch(() => {
+        setJogadores([])
+        setErroJogadores(true)
+      })
   }, [])
 
   useEffect(() => {
@@ -127,6 +138,7 @@ export default function Comparar() {
         </div>
       </Card>
 
+      {erroJogadores && <EstadoErro mensagem="Não deu para carregar a lista de Jogadores. Recarregue a página." />}
       {erro && <EstadoErro mensagem={erro} />}
 
       {!dados && !erro && a && b && <SkeletonLista linhas={6} altura="h-12" rotulo="Comparando Jogadores" />}

@@ -710,14 +710,15 @@ export default function Partida() {
   function carregar() {
     // Reseta o erro a cada tentativa: um refetch falho (ex.: rede oscilou ao anexar
     // clipe) não pode transformar uma partida já carregada em "não encontrada".
+    // 404 é "não existe"; 5xx e rede caída são "tente de novo" (antes tudo virava 404).
     setErro(false)
     fetch(`/api/matches/${id}`)
       .then((res) => {
-        if (!res.ok) throw new Error()
-        return res.json()
+        if (res.status === 404) return setErro('nao-encontrada')
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        return res.json().then(setM)
       })
-      .then(setM)
-      .catch(() => setErro(true))
+      .catch(() => setErro('falha'))
   }
 
   async function promover(steamId) {
@@ -795,11 +796,19 @@ export default function Partida() {
     if (seek) replayRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [seek?.key]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (erro && !m) {
+  if (erro === 'nao-encontrada' && !m) {
     return (
       <EstadoVazio
         titulo="Partida não encontrada."
         acao={<Button as={Link} to="/" variante="secundario">← Partidas</Button>}
+      />
+    )
+  }
+  if (erro === 'falha' && !m) {
+    return (
+      <EstadoErro
+        mensagem="Não deu para carregar a Partida. Confira a conexão e tente de novo."
+        acao={<Button variante="secundario" tamanho="sm" onClick={carregar}>Tentar de novo</Button>}
       />
     )
   }
