@@ -23,6 +23,11 @@ export function killsDoJogador(kills, steamId) {
   return ordenarKills((kills ?? []).filter((k) => k.killer?.steamId === steamId))
 }
 
+// Mortes do jogador escolhido (modos Fails e Coaching do clipe).
+export function mortesDoJogador(kills, steamId) {
+  return ordenarKills((kills ?? []).filter((k) => k.victim?.steamId === steamId))
+}
+
 export function filtrarKills(kills, { soTkGranada = false } = {}) {
   if (!soTkGranada) return kills
   return kills.filter((k) => k.teamKill || ehGranada(k.weapon))

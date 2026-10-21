@@ -7,7 +7,7 @@ import { presignDownload } from '../src/r2.js'
 
 const config = {
   jwtSecret: 's', appUrl: 'http://localhost:5173', isProduction: false, r2Bucket: 'resenha-demos',
-  allstarApiKey: null, allstarSteamIds: new Set(), demoSlapApiKey: null,
+  allstarApiKey: null, allstarSteamIds: new Set(), demoSlapApiKey: null, demoSlapReaisPorCredito: 0.19,
 }
 const EU = '76561198000000009'
 const AMIGO = '76561198000000004'
@@ -17,7 +17,7 @@ const DEMO = 'https://conta.r2.cloudflarestorage.com/resenha-demos/demos/x.dem'
 
 // Banco falso com estado: a Partida, as kills, a análise e os clipes. Cada update
 // condicional da rota (reserva de passo) só "pega" se o status bate, como no Postgres.
-function bancoFalso({ partida = { id: MATCH, map: 'de_dust2', demo_url: DEMO }, analise = null, clipes = [], pedidosHoje = 0 } = {}) {
+function bancoFalso({ partida = { id: MATCH, map: 'de_dust2', demo_url: DEMO }, analise = null, clipes = [], pedidosHoje = 0, premium = true } = {}) {
   const estado = { analise, clipes: clipes.map((c) => ({ ...c })) }
   const kills = [
     { tick: 10000, round_number: 3, killer: EU, victim: AMIGO },
@@ -26,6 +26,7 @@ function bancoFalso({ partida = { id: MATCH, map: 'de_dust2', demo_url: DEMO }, 
   const clipe = (id) => estado.clipes.find((c) => c.id === id)
   const query = vi.fn(async (sql, p = []) => {
     if (sql.includes('tokens_validos_apos')) return { rows: [] }
+    if (sql.includes('select is_super_admin, premium from players')) return { rows: [{ is_super_admin: false, premium }] }
     if (sql.includes('from matches m where m.id')) return { rows: partida ? [partida] : [] }
     if (sql.includes('from kill_positions')) return { rows: kills.filter((k) => p[1].includes(k.tick)) }
     if (sql.includes('count(*)::int as total')) return { rows: [{ total: pedidosHoje }] }
@@ -47,7 +48,7 @@ function bancoFalso({ partida = { id: MATCH, map: 'de_dust2', demo_url: DEMO }, 
     }
     if (sql.includes('insert into clipes_reais')) {
       estado.clipes.push({
-        id: `c${estado.clipes.length + 1}`, match_id: p[0], pedido_por: p[1], kills: JSON.parse(p[2]),
+        id: `c${estado.clipes.length + 1}`, match_id: p[0], pedido_por: p[1], modo: p[2], kills: JSON.parse(p[3]),
         status: 'analisando', video_job_ids: null, fragmovie_job_id: null, erro: null,
         created_at: new Date(), updated_at: new Date(),
       })
@@ -89,6 +90,7 @@ function demoSlapFalso(sobrescrever = {}) {
     dadosRender: vi.fn().mockResolvedValue({
       highlightClips: { v1: { clipUrl: 'https://cdn.demo-slap.net/v1.mp4' }, v2: { clipUrl: 'https://cdn.demo-slap.net/v2.mp4' } },
     }),
+    calcular: vi.fn().mockResolvedValue(4),
     ...sobrescrever,
   }
 }
@@ -242,5 +244,60 @@ describe('clipes reais (DEMO-SLAP)', () => {
     const { app: a } = app({ banco })
     const res = await request(a).get(`/api/matches/${MATCH}/clipes-reais`).set('Cookie', cookie)
     expect(res.body.clipes[0].status).toBe('erro')
+  })
+
+  it('Jogador sem Premium: vê os clipes, mas não pede nem estima', async () => {
+    const { app: a, demoSlap } = app({ banco: bancoFalso({ premium: false }) })
+    const get = await request(a).get(`/api/matches/${MATCH}/clipes-reais`).set('Cookie', cookie)
+    expect(get.body).toMatchObject({ disponivel: true, permitido: false })
+    const post = await request(a).post(`/api/matches/${MATCH}/clipes-reais`).set('Cookie', cookie).send({ kills: [TK] })
+    expect(post.status).toBe(403)
+    const est = await request(a).post(`/api/matches/${MATCH}/clipes-reais/estimativa`).set('Cookie', cookie).send({ kills: [TK] })
+    expect(est.status).toBe(403)
+    expect(demoSlap.renderizar).not.toHaveBeenCalled()
+    expect(demoSlap.calcular).not.toHaveBeenCalled()
+  })
+
+  it('modo inválido: 400', async () => {
+    const { app: a } = app()
+    const res = await request(a).post(`/api/matches/${MATCH}/clipes-reais`).set('Cookie', cookie).send({ modo: 'x', kills: [TK] })
+    expect(res.status).toBe(400)
+  })
+
+  it('coaching: cada morte vira dois trechos, na visão de quem morreu e de quem matou', async () => {
+    const banco = bancoFalso({ analise: { job_id: 'an1', status: 'done', tick_rate: 64, erro: null } })
+    const { app: a, demoSlap } = app({ banco })
+    const res = await request(a).post(`/api/matches/${MATCH}/clipes-reais`).set('Cookie', cookie)
+      .send({ modo: 'coaching', kills: [{ ...TK, pov: AMIGO }] })
+    expect(res.status).toBe(201)
+    const [, clipes, opcoes] = demoSlap.renderizar.mock.calls[0]
+    expect(clipes.map((c) => c.povSteamId)).toEqual([AMIGO, EU])
+    expect(opcoes).toEqual({ highResolution: false, hideWatermark: true })
+    expect(banco.estado.clipes[0]).toMatchObject({ modo: 'coaching' })
+    expect(res.body.clipes[0]).toMatchObject({ modo: 'coaching', montagem: true })
+  })
+
+  it('fails só aceita a visão de quem morreu', async () => {
+    const { app: a } = app()
+    const res = await request(a).post(`/api/matches/${MATCH}/clipes-reais`).set('Cookie', cookie)
+      .send({ modo: 'fails', kills: [TK] })
+    expect(res.status).toBe(400)
+  })
+
+  it('cheater analysis grava na visão de quem matou, com X-Ray', async () => {
+    const banco = bancoFalso({ analise: { job_id: 'an1', status: 'done', tick_rate: 64, erro: null } })
+    const { app: a, demoSlap } = app({ banco })
+    await request(a).post(`/api/matches/${MATCH}/clipes-reais`).set('Cookie', cookie).send({ modo: 'cheater', kills: [TK] })
+    expect(demoSlap.renderizar.mock.calls[0][2]).toEqual({ highResolution: false, hideWatermark: true, showXRay: true })
+  })
+
+  it('estimativa: créditos da DEMO-SLAP + 1 da leitura da Demo, em reais, sem pedir nada', async () => {
+    const { app: a, banco, demoSlap } = app()
+    const res = await request(a).post(`/api/matches/${MATCH}/clipes-reais/estimativa`).set('Cookie', cookie)
+      .send({ modo: 'coaching', kills: [{ ...TK, pov: AMIGO }] })
+    expect(res.body).toEqual({ trechos: 2, creditos: 4, analise: 1, total: 5, reais: 0.95 })
+    expect(demoSlap.calcular.mock.calls[0][0]).toHaveLength(2)
+    expect(demoSlap.analisar).not.toHaveBeenCalled()
+    expect(banco.estado.clipes).toHaveLength(0)
   })
 })

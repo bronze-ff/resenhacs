@@ -45,5 +45,8 @@ export function loadConfig(env = process.env) {
     // Clipe real das kills escolhidas (DEMO-SLAP, src/demoSlap.js). Sem a chave, a aba
     // Clipes mostra que o recurso não está configurado e o POST devolve 503.
     demoSlapApiKey: env.DEMOSLAP_API_KEY ?? null,
+    // Só pra estimativa em reais mostrada antes de pedir o clipe. Padrão: pacote XS
+    // (€2,99 / 100 créditos) com o euro a ~R$ 6,30.
+    demoSlapReaisPorCredito: Number(env.DEMOSLAP_REAIS_POR_CREDITO) || 0.19,
   }
 }

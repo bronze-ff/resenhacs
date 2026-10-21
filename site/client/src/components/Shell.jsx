@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { esquecerJogador } from '../observabilidade/posthog.js'
-import { Avatar, classesBotao } from './ui'
+import { Avatar, PremiumBadge, classesBotao } from './ui'
 import BuscaRapida from './BuscaRapida.jsx'
 import { usePrimeirosPassos } from './inicio/PrimeirosPassos.jsx'
 
@@ -432,6 +432,7 @@ export default function Shell({ children }) {
             >
               <span aria-hidden="true"><Avatar p={jogador ? { ...jogador, team: null } : null} size={28} /></span>
               <span className="max-w-[56px] truncate text-[13px] font-medium text-texto sm:max-w-[140px]">{jogador?.nick}</span>
+              {jogador?.premium && <PremiumBadge compacta />}
             </Link>
             <button
               onClick={sair}
