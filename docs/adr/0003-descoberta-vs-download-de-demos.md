@@ -1,5 +1,8 @@
 # Descoberta de Partidas via Web API, download de demo manual (GC adiado)
 
+> **Substituído:** a Fase 2b foi feita. O `fetch` do Coletor baixa a Demo de matchmaking automaticamente, com o link resolvido pela conta-bot em `bot/src/resolve.js` (ver `coletor/README.md`). O texto abaixo registra a decisão original.
+
+
 A corrente de share codes é descoberta automaticamente pela Steam Web API
 (`GetNextMatchSharingCode`), mas o **download do .dem de matchmaking** exige o Game
 Coordinator da Valve — só acessível por uma conta-bot Steam (ValvePython/csgo) ou por
