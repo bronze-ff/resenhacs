@@ -128,8 +128,8 @@ function DegrauPodio({ r, posicao, souEu }) {
 
 // Card mobile (estilo app FACEIT): avatar + posição/nick + grade de 4 stats.
 // Destaca o próprio usuário logado com borda no destaque.
-function CardJogador({ r, posicao, souEu }) {
-  const explicar = posicao === 0
+// `explicar`: só o 1º card exibido mostra os "?" (repetir em todo card vira ruído).
+function CardJogador({ r, posicao, souEu, explicar = false }) {
   return (
     <Card
       as={Link}
@@ -381,9 +381,10 @@ export default function Ranking() {
           <SectionHeader titulo="Classificação" />
           {restoMobile.length > 0 && (
             <div className="space-y-2 lg:hidden">
-              {restoMobile.map((r) => {
+              {restoMobile.map((r, j) => {
                 const i = comPartida.indexOf(r)
-                return <CardJogador key={r.steamId} r={r} posicao={i} souEu={r.steamId === jogador?.steamId} />
+                // `posicao` é absoluta (o pódio come as 3 primeiras); o "?" vai no 1º card da lista.
+                return <CardJogador key={r.steamId} r={r} posicao={i} souEu={r.steamId === jogador?.steamId} explicar={j === 0} />
               })}
             </div>
           )}
