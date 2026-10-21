@@ -99,6 +99,7 @@ _CENARIO = {
             _hit(1100, 1, "A1", "L", "ak47", 20),
             _hit(1150, 1, "A1", "BOT", "ak47", 10),  # vítima sem time conhecido
             _hit(1200, 1, "L", "A2", "m4a1", 100),
+            _hit(400, 0, "A1", "A1", "inferno", 15),  # queimou no próprio molotov
         ],
         "player_blind": [
             {"tick": 300, "attacker_steamid": "A1", "user_steamid": "B2", "blind_duration": 2.0},
@@ -264,3 +265,26 @@ def test_build_replay_clutch_ignora_quem_nao_estava_no_inicio_do_round():
     assert r["rounds"][0]["clutch"] is not None
     assert r["rounds"][0]["clutch"]["steamid"] == "a1"
     assert r["rounds"][0]["clutch"]["vs"] == 1
+
+
+# ---- Dano em si mesmo não é fogo amigo ---------------------------------------------
+
+def test_parse_demo_dano_no_proprio_molotov_nao_e_fogo_amigo(monkeypatch, tmp_path):
+    out = _parse_demo_falso(monkeypatch, tmp_path)
+    a1 = _jogador(out, "A1")
+    assert a1["molotov_team_damage"] == 0
+    assert a1["utility_damage"] == 0
+    assert ("A1", "A1") not in {(d["attacker"], d["victim"]) for d in out["player_damage"]}
+
+
+# ---- duration_seconds ------------------------------------------------------------------
+
+def test_parse_demo_grava_duracao_do_1o_freeze_end_ao_fim_do_jogo(monkeypatch, tmp_path):
+    out = _parse_demo_falso(monkeypatch, tmp_path)
+    assert out["duration_seconds"] == round((2000 - 100) / 64)
+
+
+def test_fundir_partes_soma_a_duracao():
+    parte = {"players": [], "rounds": [], "duration_seconds": 600}
+    fundido, _ = parse.fundir_partes_mesmo_mapa([parte, {**parte, "duration_seconds": 900}])
+    assert fundido["duration_seconds"] == 1500

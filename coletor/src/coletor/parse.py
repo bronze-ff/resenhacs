@@ -782,6 +782,7 @@ def fundir_partes_mesmo_mapa(partes, rdatas=None):
         "player_damage": player_damage_fundido, "player_flashes": player_flashes_fundido,
         "player_round_damage": round_damage_fundido,
         "round_alive": round_alive_fundido,
+        "duration_seconds": sum(p.get("duration_seconds") or 0 for p in partes_corrigidas) or None,
         "players": _merge_players([p.get("players", []) for p in partes_corrigidas]),
     }
 
@@ -856,6 +857,10 @@ def parse_demo(path):
     end_tick = (
         int(win_panel["tick"].iloc[0]) - 100 if len(win_panel) else int(deaths["tick"].max())
     )
+    # Duração do jogo: do 1º freeze_end (começo do round 1, sem warmup) ao fim da
+    # partida. Demo de CS2 grava a 64 tick.
+    fim_do_jogo = int(win_panel["tick"].iloc[0]) if len(win_panel) else int(deaths["tick"].max())
+    duration_seconds = max(0, round((fim_do_jogo - first_freeze) / 64))
 
     # Times fixos A/B pelos freeze_end (ver _times_fixos). team_clan_name vem junto (só
     # partida de pro/LAN costuma trazer nome de clã) pra extrair o nome de cada lado
@@ -1039,7 +1044,8 @@ def parse_demo(path):
             hp = hp_restante.get((rn, vic), 100)
             dmg = max(0, min(dmg, hp))
             hp_restante[(rn, vic)] = hp - dmg
-        if not atk:
+        # Dano em si mesmo (própria HE/molotov) não é fogo amigo nem dano em inimigo.
+        if not atk or atk == vic:
             continue
         arma = r.get("weapon")
         # Jogador sem time conhecido (fora de `fixed`) não é inimigo nem aliado.
@@ -1301,6 +1307,7 @@ def parse_demo(path):
         "kill_positions": kill_positions,
         "player_round_damage": player_round_damage,
         "round_alive": round_alive,
+        "duration_seconds": duration_seconds,
         "ended_early": ended_early,
         "abandoned_by": abandoned_by,
     }

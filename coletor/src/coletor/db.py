@@ -56,6 +56,7 @@ def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status,
               demo_url = coalesce(%s, demo_url), replay_url = coalesce(%s, replay_url),
               status = %s, team_a_name = coalesce(%s, team_a_name),
               team_b_name = coalesce(%s, team_b_name),
+              duration_seconds = coalesce(%s, duration_seconds),
               ended_early = %s, abandoned_by_steam_id64 = %s,
               plataforma_manual = coalesce(%s, plataforma_manual),
               tem_demo = tem_demo or %s, fingerprint = %s
@@ -73,6 +74,7 @@ def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status,
                 status,
                 parsed.get("team_a_name"),
                 parsed.get("team_b_name"),
+                parsed.get("duration_seconds"),
                 parsed.get("ended_early", False),
                 parsed.get("abandoned_by"),
                 parsed.get("plataforma_manual"),
@@ -94,8 +96,8 @@ def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status,
     )
     cur.execute(
         f"""
-        insert into matches (share_code, source, map, score_a, score_b, played_at, demo_url, replay_url, status, fingerprint, team_a_name, team_b_name, ended_early, abandoned_by_steam_id64, plataforma_manual, tem_demo)
-        values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        insert into matches (share_code, source, map, score_a, score_b, played_at, demo_url, replay_url, status, fingerprint, team_a_name, team_b_name, duration_seconds, ended_early, abandoned_by_steam_id64, plataforma_manual, tem_demo)
+        values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         on conflict (share_code) do update set
           source = excluded.source, map = excluded.map,
           score_a = excluded.score_a, score_b = excluded.score_b,
@@ -106,6 +108,7 @@ def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status,
           fingerprint = excluded.fingerprint,
           team_a_name = coalesce(excluded.team_a_name, matches.team_a_name),
           team_b_name = coalesce(excluded.team_b_name, matches.team_b_name),
+          duration_seconds = coalesce(excluded.duration_seconds, matches.duration_seconds),
           ended_early = excluded.ended_early,
           abandoned_by_steam_id64 = excluded.abandoned_by_steam_id64,
           plataforma_manual = coalesce(excluded.plataforma_manual, matches.plataforma_manual),
@@ -125,6 +128,7 @@ def _insert_match(cur, share_code, source, parsed, demo_url, replay_url, status,
             fingerprint,
             parsed.get("team_a_name"),
             parsed.get("team_b_name"),
+            parsed.get("duration_seconds"),
             parsed.get("ended_early", False),
             parsed.get("abandoned_by"),
             parsed.get("plataforma_manual"),
