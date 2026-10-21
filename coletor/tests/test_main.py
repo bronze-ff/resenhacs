@@ -2,6 +2,7 @@ import bz2
 import datetime
 import gzip
 import json
+import subprocess
 import sys
 import types
 from pathlib import Path
@@ -111,7 +112,7 @@ def test_cmd_cleanup_default_corta_em_14_dias(monkeypatch):
     assert criado == []
     sql, params = conn.calls[0]
     assert "demo_url is not null" in sql
-    assert "played_at <" in sql
+    assert "greatest(played_at, created_at) <" in sql
     assert 13.9 < _dias_ate_o_limite(params) < 14.1
 
 
@@ -473,7 +474,7 @@ class _FilaCursor:
         self.conn.calls.append((self._last, params))
 
     def fetchall(self):
-        if self._last.startswith("select id, hltv_url, arquivo_r2_key from partidas_pro_fila"):
+        if self._last.startswith("select id, hltv_url, arquivo_r2_key, adicionado_em from partidas_pro_fila"):
             return self.conn.fila_rows
         return []
 
@@ -503,7 +504,7 @@ def _config_com_r2():
 
 
 def test_processar_fila_pro_com_arquivo_r2_key_baixa_do_r2_e_nao_chama_urlopen(monkeypatch):
-    conn = _FilaConn([("f1", None, "partidas-pro-pendentes/abc.dem")])
+    conn = _FilaConn([("f1", None, "partidas-pro-pendentes/abc.dem", None)])
     config = _config_com_r2()
 
     monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
@@ -548,7 +549,7 @@ def test_processar_fila_pro_com_arquivo_r2_key_baixa_do_r2_e_nao_chama_urlopen(m
 
 
 def test_processar_fila_pro_mantem_staging_no_r2_quando_falha(monkeypatch):
-    conn = _FilaConn([("f1", None, "partidas-pro-pendentes/abc.dem")])
+    conn = _FilaConn([("f1", None, "partidas-pro-pendentes/abc.dem", None)])
     config = _config_com_r2()
 
     monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
@@ -573,7 +574,7 @@ def test_processar_fila_pro_mantem_staging_no_r2_quando_falha(monkeypatch):
 
 
 def test_processar_fila_pro_ainda_suporta_hltv_url_via_urlopen(monkeypatch):
-    conn = _FilaConn([("f1", "https://hltv.org/download/demo/999", None)])
+    conn = _FilaConn([("f1", "https://hltv.org/download/demo/999", None, None)])
     config = _config_com_r2()
 
     monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
@@ -631,7 +632,7 @@ def test_processar_fila_pro_funde_partes_adjacentes_do_mesmo_mapa_num_so_match_i
     # reinício técnico no meio do mapa 1 (anubis) -> HLTV distribui como -p1/-p2
     # ADJACENTES no .rar; mapa 2 (inferno) é um .dem normal, grupo de 1. Devem sair
     # 2 match_ids (1 pra série anubis fundida + 1 pra inferno), não 3.
-    conn = _FilaConn([("f1", "https://hltv.org/download/demo/999", None)])
+    conn = _FilaConn([("f1", "https://hltv.org/download/demo/999", None, None)])
     config = _config_com_r2()
 
     monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
@@ -725,10 +726,14 @@ class _UploadsCursor:
     def fetchall(self):
         if self._last.startswith(
             "select id, adicionado_por, arquivo_r2_key, share_code, played_at, "
-            "plataforma_manual, match_alvo_id from uploads_pendentes"
+            "plataforma_manual, match_alvo_id, adicionado_em from uploads_pendentes"
         ):
             return self.conn.upload_rows
         return []
+
+    def fetchone(self):
+        # falhar_upload_pendente: "returning status" de quem ainda tem tentativa.
+        return ("pendente",)
 
 
 class _UploadsConn:
@@ -749,7 +754,7 @@ class _UploadsConn:
 
 
 def test_processar_uploads_pendentes_baixa_do_r2_e_apaga_em_sucesso(monkeypatch):
-    conn = _UploadsConn([("u1", "765", "uploads-pendentes/abc.dem", None, None, "gamers_club", None)])
+    conn = _UploadsConn([("u1", "765", "uploads-pendentes/abc.dem", None, None, "gamers_club", None, None)])
     config = _config_com_r2()
 
     monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
@@ -784,27 +789,32 @@ def test_processar_uploads_pendentes_baixa_do_r2_e_apaga_em_sucesso(monkeypatch)
 
 
 def test_processar_uploads_pendentes_mantem_staging_no_r2_quando_falha(monkeypatch):
-    conn = _UploadsConn([("u1", "765", "uploads-pendentes/abc.dem", None, None, None, None)])
+    conn = _UploadsConn([("u1", "765", "uploads-pendentes/abc.dem", None, None, None, None, None)])
     config = _config_com_r2()
 
     monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
     monkeypatch.setattr(main.storage_r2, "download_bytes", lambda client, bucket, key, **kw: b"dem-bytes")
     deletes = []
     monkeypatch.setattr(main.storage_r2, "delete_object", lambda client, bucket, key: deletes.append((bucket, key)))
-    monkeypatch.setattr(main, "ingest_demo", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("parser explodiu")))
+
+    def _ingest(*a, **kw):
+        raise RuntimeError("parser explodiu")
+
+    monkeypatch.setattr(main, "ingest_demo", _ingest)
 
     total = main.cmd_processar_uploads_pendentes(config, conn)
 
     assert total == 0
     assert deletes == []
-    update = next(c for c in conn.calls if c[0].startswith("update uploads_pendentes") and c[1][0] == "falhou")
-    assert "parser explodiu" in update[1][2]
+    # Erro transitório: volta pra fila contando tentativa (R06), não 'falhou' direto.
+    update = next(c for c in conn.calls if c[0].endswith("returning status"))
+    assert update[1] == (main._MAX_TENTATIVAS_UPLOAD, "parser explodiu", "u1")
 
 
 # ---- finding #2 da auditoria: teto de tamanho barra download de upload gigante ----
 
 def test_processar_uploads_pendentes_marca_falhou_quando_objeto_excede_o_teto(monkeypatch):
-    conn = _UploadsConn([("u1", "765", "uploads-pendentes/abc.dem", None, None, None, None)])
+    conn = _UploadsConn([("u1", "765", "uploads-pendentes/abc.dem", None, None, None, None, None)])
     config = _config_com_r2()
 
     monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
@@ -1091,7 +1101,7 @@ def test_ingest_demo_sem_alvo_com_colisao_de_fingerprint_permanece_transitoria(m
 
 
 def test_processar_uploads_pendentes_com_alvo_passa_o_alvo_pro_ingest(monkeypatch):
-    conn = _UploadsConn([("u1", "765", "uploads-pendentes/abc.dem", None, None, None, "m-alvo")])
+    conn = _UploadsConn([("u1", "765", "uploads-pendentes/abc.dem", None, None, None, "m-alvo", None)])
     config = _config_com_r2()
     monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
     monkeypatch.setattr(main.storage_r2, "download_bytes", lambda client, bucket, key, **kw: b"dem-bytes")
@@ -1126,7 +1136,7 @@ def test_processar_uploads_pendentes_com_alvo_mantem_o_source_original(monkeypat
     # "MANUAL" e a competição marca o clipe como origem não verificada (ver spec,
     # seção 5). Antes desta correção, cmd_processar_uploads_pendentes sempre
     # chamava ingest_demo com source="upload" fixo, mesmo com alvo presente.
-    conn = _UploadsConn([("u1", "765", "uploads-pendentes/abc.dem", None, None, None, "m-alvo")])
+    conn = _UploadsConn([("u1", "765", "uploads-pendentes/abc.dem", None, None, None, "m-alvo", None)])
     config = _config_com_r2()
     monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
     monkeypatch.setattr(main.storage_r2, "download_bytes", lambda client, bucket, key, **kw: b"dem-bytes")
@@ -1153,7 +1163,7 @@ def test_processar_uploads_pendentes_com_alvo_mantem_o_source_original(monkeypat
 
 def test_processar_uploads_pendentes_sem_alvo_continua_usando_upload(monkeypatch):
     # Regressão: o envio genérico (sem match_alvo_id) não muda de comportamento.
-    conn = _UploadsConn([("u1", "765", "uploads-pendentes/abc.dem", None, None, None, None)])
+    conn = _UploadsConn([("u1", "765", "uploads-pendentes/abc.dem", None, None, None, None, None)])
     config = _config_com_r2()
     monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
     monkeypatch.setattr(main.storage_r2, "download_bytes", lambda client, bucket, key, **kw: b"dem-bytes")
@@ -1180,7 +1190,7 @@ def test_processar_uploads_pendentes_sem_alvo_continua_usando_upload(monkeypatch
 def test_processar_uploads_pendentes_demo_que_nao_confere_falha_e_apaga_do_r2(monkeypatch):
     # Demo errada não fica certa na segunda tentativa — diferente da falha
     # transitória (rede/parser), que mantém o staging pro retry.
-    conn = _UploadsConn([("u1", "765", "uploads-pendentes/abc.dem", None, None, None, "m-alvo")])
+    conn = _UploadsConn([("u1", "765", "uploads-pendentes/abc.dem", None, None, None, "m-alvo", None)])
     config = _config_com_r2()
     monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
     monkeypatch.setattr(main.storage_r2, "download_bytes", lambda client, bucket, key, **kw: b"dem-bytes")
@@ -1405,7 +1415,7 @@ def test_baixar_com_teto_aborta_durante_o_streaming_sem_ler_indefinidamente(monk
 
 
 def test_processar_fila_pro_hltv_url_que_excede_o_teto_marca_falhou(monkeypatch):
-    conn = _FilaConn([("f1", "https://hltv.org/download/demo/999", None)])
+    conn = _FilaConn([("f1", "https://hltv.org/download/demo/999", None, None)])
     config = _config_com_r2()
     monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
 
@@ -1474,7 +1484,8 @@ def test_cmd_limpar_uploads_orfaos_erro_num_item_nao_derruba_os_outros(monkeypat
 
     assert total == 1
     assert marcados == ["u-bom"]
-    assert "R2 fora do ar" in capsys.readouterr().out
+    saida = capsys.readouterr().out
+    assert "RuntimeError" in saida and "R2 fora do ar" not in saida  # log sem mensagem crua
 
 
 # ---- juntar-clipes: vídeo único da montagem (DEMO-SLAP) ----
@@ -1534,7 +1545,8 @@ def test_cmd_juntar_clipes_trecho_sem_video_nao_grava_e_segue_pra_proxima(monkey
     assert main.cmd_juntar_clipes(_config_juntar(), object()) == 1
     assert [k for _, k, _, _ in uploads] == ["clipes/bom.mp4"]
     assert gravados == [("bom", "clipes/bom.mp4")]
-    assert "v9 sem vídeo" in capsys.readouterr().out
+    saida = capsys.readouterr().out
+    assert "falha ao juntar (RuntimeError)" in saida and "v9" not in saida  # log sem mensagem crua
 
 
 def test_baixar_trecho_recusa_esquema_que_nao_e_https(tmp_path):
@@ -1574,3 +1586,577 @@ def test_baixar_e_descomprimir_aborta_bomba_de_descompressao(tmp_path, monkeypat
     destino = tmp_path / "match.dem"
     with pytest.raises(RuntimeError, match="teto"):
         main._baixar_e_descomprimir("https://replay1.valve.net/x.dem.bz2", destino)
+
+
+# ---- R01: bot que falha não derruba o fetch (os passos seguintes do job rodam) ----
+
+@pytest.mark.parametrize("erro", [
+    RuntimeError("bot não devolveu nada (stderr: ERRO_STEAM_USER LoggedInElsewhere)"),
+    subprocess.TimeoutExpired(cmd="node", timeout=80, output=None, stderr="LoggedInElsewhere"),
+    json.JSONDecodeError("Expecting value", "LoggedInElsewhere", 0),
+])
+def test_cmd_fetch_resolver_falhando_nao_derruba_e_captura(monkeypatch, capsys, erro):
+    config = Config(env={"DATABASE_URL": "x"})
+    code = "CSGO-aaaaa-bbbbb-ccccc-ddddd-eeeee"
+    monkeypatch.setattr(main.dbmod, "list_pending_share_codes", lambda c, limit=None: [code])
+    monkeypatch.setattr(main.dbmod, "contar_pendentes", lambda c: 1)
+
+    def _resolver(codes, bot_dir, node_bin):
+        raise erro
+
+    monkeypatch.setattr(main, "_resolver_demo_urls", _resolver)
+    capturados = []
+    monkeypatch.setattr(main, "capturar_erro", lambda e, etapa: capturados.append((e, etapa)))
+    falhas = []
+    monkeypatch.setattr(main.dbmod, "falhar_fetch_pendente", lambda *a, **kw: falhas.append(a))
+
+    assert main.cmd_fetch(config, conn=object()) == 0
+    assert capturados == [(erro, "fetch")]
+    assert falhas == []  # nenhuma Partida perde tentativa por culpa do bot
+    saida = capsys.readouterr().out
+    assert "LoggedInElsewhere" not in saida  # stderr do bot não sai cru no log
+    assert type(erro).__name__ in saida
+
+
+# ---- R02: erro por item vai pro Sentry com a etapa ----
+
+def test_cmd_fetch_erro_de_download_captura_com_etapa(monkeypatch):
+    config = Config(env={"DATABASE_URL": "x"})
+    conn = types.SimpleNamespace(rollback=lambda: None)
+    code = "CSGO-aaaaa-bbbbb-ccccc-ddddd-eeeee"
+    monkeypatch.setattr(main.dbmod, "list_pending_share_codes", lambda c, limit=None: [code])
+    monkeypatch.setattr(main.dbmod, "contar_pendentes", lambda c: 1)
+    monkeypatch.setattr(
+        main, "_resolver_demo_urls",
+        lambda codes, bot_dir, node_bin: [{"shareCode": code, "demoUrl": "https://x", "matchTime": None}],
+    )
+    erro = RuntimeError("502 Bad Gateway")
+
+    def _baixar(url, destino):
+        raise erro
+
+    monkeypatch.setattr(main, "_baixar_e_descomprimir", _baixar)
+    monkeypatch.setattr(main.dbmod, "falhar_fetch_pendente", lambda *a, **kw: None)
+    capturados = []
+    monkeypatch.setattr(main, "capturar_erro", lambda e, etapa: capturados.append((e, etapa)))
+
+    main.cmd_fetch(config, conn)
+
+    assert capturados == [(erro, "fetch")]
+
+
+def test_cmd_cleanup_falha_ao_apagar_captura_com_etapa(monkeypatch, capsys):
+    url = "https://acc.r2.cloudflarestorage.com/resenha-demos/demos/m1.dem.bz2"
+    conn = _CleanupConn([("m1", url)])
+    erro = RuntimeError("R2 fora")
+
+    def _delete(*a):
+        raise erro
+
+    monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "client")
+    monkeypatch.setattr(main.storage_r2, "delete_object", _delete)
+    capturados = []
+    monkeypatch.setattr(main, "capturar_erro", lambda e, etapa: capturados.append((e, etapa)))
+
+    assert main.cmd_cleanup(_config_com_r2(), conn, days=14) == 0
+    assert capturados == [(erro, "cleanup")]
+    assert "R2 fora" not in capsys.readouterr().out
+
+
+# ---- R03: reprocess grava na MESMA Partida, mesmo sem Share Code ----
+
+def test_cmd_reprocess_grava_no_match_id_da_linha_mesmo_sem_share_code(monkeypatch):
+    # Partida de upload manual (sem Share Code): o parser novo muda o K/D, o
+    # fingerprint muda e a dedupe por conteúdo criaria uma linha nova. Com o id já
+    # conhecido, store_parsed grava direto nele.
+    conn = _ReprocessConn([
+        ("m-upload", None, "upload", "https://r2/demos/9.dem.bz2", "https://r2/replays/9.json", None),
+    ])
+    monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
+    monkeypatch.setattr(main.storage_r2, "key_from_url", lambda url, bucket: url.rsplit("/", 1)[-1])
+    monkeypatch.setattr(main.storage_r2, "download_bytes", lambda client, bucket, key, **kw: b"dem-bytes")
+    monkeypatch.setattr(main, "_descomprimir_dem_arquivado", lambda dados: b"dem-real")
+    monkeypatch.setattr(
+        main.parsemod, "parse_demo",
+        lambda path: {"players": [], "kills": [], "rounds": [], "map": "de_dust2", "highlights": []},
+    )
+    monkeypatch.setattr(main.transform, "fill_kd_from_kills", lambda players, kills: players)
+    monkeypatch.setattr(main.transform, "enrich", lambda parsed: parsed)
+    monkeypatch.setattr(main.parsemod, "extract_replay", lambda path: {"ticks": [], "kills": [], "rounds": []})
+    monkeypatch.setattr(main.replaymod, "build_replay", lambda *a, **kw: {"rounds": []})
+    monkeypatch.setattr(main.transform, "attach_replay_frames", lambda highlights, rounds: highlights)
+    monkeypatch.setattr(main, "_montar_lineups", lambda *a, **kw: [])
+    monkeypatch.setattr(main, "_upload_replay", lambda *a, **kw: None)
+    gravados = []
+    monkeypatch.setattr(main.dbmod, "store_parsed", lambda conn, parsed, **kw: gravados.append(kw) or "m-upload")
+
+    assert main.cmd_reprocess(_config_com_r2(), conn) == 1
+    assert gravados[0]["match_id_alvo"] == "m-upload"
+    assert gravados[0]["share_code"] is None
+
+
+def test_store_parsed_com_match_id_alvo_nao_cria_linha_nova():
+    # Integração com o db: K/D diferente (fingerprint novo, sem linha que case) e
+    # sem Share Code. Com match_id_alvo, é update na linha certa, nunca insert.
+    executados = []
+
+    class _Cur:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def execute(self, sql, params=None):
+            executados.append(" ".join(sql.split()))
+
+        def fetchone(self):
+            return None
+
+        def fetchall(self):
+            return []
+
+    class _Conn:
+        def cursor(self):
+            return _Cur()
+
+        def commit(self):
+            pass
+
+    parsed = {"map": "de_dust2", "score_a": 13, "score_b": 7, "players": [], "rounds": []}
+    mid = dbmod.store_parsed(_Conn(), parsed, share_code=None, source="upload", match_id_alvo="m-upload")
+
+    assert mid == "m-upload"
+    assert not any(s.startswith("insert into matches") for s in executados)
+    assert any(s.startswith("update matches set") for s in executados)
+
+
+# ---- R04: sem Share Code, a chave do R2 usa uuid4 (não hash de 32 bits) ----
+
+def test_finalizar_ingest_sem_share_code_usa_uuid_legivel_pela_url(monkeypatch, tmp_path):
+    import uuid
+
+    gravados = []
+    monkeypatch.setattr(main.dbmod, "store_parsed", lambda conn, parsed, **kw: gravados.append(kw) or "m1")
+    monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
+    chaves = []
+    monkeypatch.setattr(main.storage_r2, "upload_bytes", lambda client, bucket, key, data, **kw: chaves.append(key))
+    dem = tmp_path / "demo.dem"
+    dem.write_bytes(b"x")
+    config = _config_com_r2()
+
+    for _ in range(2):
+        main._finalizar_ingest(
+            config, conn=None, parsed={"players": []}, replay_json={"rounds": []},
+            dem_path_upload=dem, share_code=None, source="upload", upload=True, played_at=None,
+        )
+
+    demo_keys = [k for k in chaves if k.startswith("demos/")]
+    assert len(demo_keys) == 2 and demo_keys[0] != demo_keys[1]
+    for kw, key in zip(gravados, demo_keys):
+        ident = key[len("demos/"):-len(".dem.bz2")]
+        assert str(uuid.UUID(ident)) == ident
+        assert main.storage_r2.key_from_url(kw["demo_url"], config.r2_bucket) == key
+        assert main.storage_r2.key_from_url(kw["replay_url"], config.r2_bucket) == f"replays/{ident}.json"
+
+
+def test_finalizar_ingest_com_share_code_mantem_a_chave_do_match_id_da_valve(monkeypatch, tmp_path):
+    monkeypatch.setattr(main.dbmod, "store_parsed", lambda conn, parsed, **kw: "m1")
+    monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
+    chaves = []
+    monkeypatch.setattr(main.storage_r2, "upload_bytes", lambda client, bucket, key, data, **kw: chaves.append(key))
+    monkeypatch.setattr(main.sharecode, "decode", lambda code: {"match_id": 1234567890123})
+    dem = tmp_path / "demo.dem"
+    dem.write_bytes(b"x")
+    main._finalizar_ingest(
+        _config_com_r2(), conn=None, parsed={"players": []}, replay_json=None,
+        dem_path_upload=dem, share_code="CSGO-x", source="valve_mm", upload=True, played_at=None,
+    )
+    assert chaves == ["demos/1234567890123.dem.bz2"]
+
+
+# ---- R05: cleanup cobre played_at nulo e ingestão tardia ----
+
+def test_cmd_cleanup_usa_o_maior_entre_played_at_e_created_at():
+    conn = _CleanupConn([])
+    main.cmd_cleanup(_config_com_r2(), conn, days=14)
+    sql, params = conn.calls[0]
+    assert "greatest(played_at, created_at) < %s" in sql
+    assert 13.9 < _dias_ate_o_limite(params) < 14.1
+
+
+# ---- R06: upload — definitivo apaga na hora; transitório volta; 3a tentativa apaga ----
+
+def _fakes_upload(monkeypatch, erro, status_apos_falha="pendente", delete_falha=None):
+    conn = _UploadsConn([("u1", "765", "uploads-pendentes/abc.dem", None, None, None, None, None)])
+    monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
+
+    def _download(client, bucket, key, **kw):
+        if isinstance(erro, main.storage_r2.ArquivoGrandeDemaisError):
+            raise erro
+        return b"dem-bytes"
+
+    def _ingest(*a, **kw):
+        raise erro
+
+    monkeypatch.setattr(main.storage_r2, "download_bytes", _download)
+    monkeypatch.setattr(main, "ingest_demo", _ingest)
+    deletes = []
+
+    def _delete(client, bucket, key):
+        if delete_falha is not None:
+            raise delete_falha
+        deletes.append(key)
+
+    monkeypatch.setattr(main.storage_r2, "delete_object", _delete)
+    falhas = []
+    monkeypatch.setattr(
+        main.dbmod, "falhar_upload_pendente",
+        lambda c, upload_id, e, **kw: falhas.append((upload_id, e, kw.get("max_tentativas"))) or status_apos_falha,
+    )
+    capturados = []
+    monkeypatch.setattr(main, "capturar_erro", lambda e, etapa: capturados.append((e, etapa)))
+    return conn, deletes, falhas, capturados
+
+
+def _status_gravados(conn):
+    return [c[1][0] for c in conn.calls if c[0].startswith("update uploads_pendentes set status = %s")]
+
+
+def test_upload_erro_transitorio_volta_pra_fila_e_mantem_staging(monkeypatch, capsys):
+    erro = RuntimeError("parser explodiu")
+    conn, deletes, falhas, capturados = _fakes_upload(monkeypatch, erro, "pendente")
+
+    assert main.cmd_processar_uploads_pendentes(_config_com_r2(), conn) == 0
+
+    assert falhas == [("u1", erro, 3)]
+    assert deletes == []
+    assert _status_gravados(conn) == ["processando"]
+    assert capturados == [(erro, "processar-uploads-pendentes")]
+    assert "parser explodiu" not in capsys.readouterr().out
+
+
+def test_upload_terceira_tentativa_vira_falhou_e_apaga_staging(monkeypatch):
+    erro = OSError("R2 timeout")
+    conn, deletes, falhas, capturados = _fakes_upload(monkeypatch, erro, "falhou")
+
+    main.cmd_processar_uploads_pendentes(_config_com_r2(), conn)
+
+    assert falhas == [("u1", erro, 3)]
+    assert deletes == ["uploads-pendentes/abc.dem"]
+
+
+def test_upload_terceira_tentativa_com_delete_falhando_so_captura(monkeypatch):
+    erro = OSError("R2 timeout")
+    erro_del = OSError("R2 fora")
+    conn, deletes, falhas, capturados = _fakes_upload(monkeypatch, erro, "falhou", delete_falha=erro_del)
+
+    main.cmd_processar_uploads_pendentes(_config_com_r2(), conn)
+
+    assert falhas == [("u1", erro, 3)]
+    assert (erro_del, "processar-uploads-pendentes") in capturados
+    assert _status_gravados(conn) == ["processando"]  # o status já ficou no falhar_upload_pendente
+
+
+@pytest.mark.parametrize("erro", [
+    main.storage_r2.ArquivoGrandeDemaisError("objeto grande demais"),
+    main.DemoNaoConfereError("mapa errado"),
+])
+def test_upload_erro_definitivo_vira_falhou_e_apaga_staging_na_hora(monkeypatch, erro):
+    conn, deletes, falhas, capturados = _fakes_upload(monkeypatch, erro)
+
+    main.cmd_processar_uploads_pendentes(_config_com_r2(), conn)
+
+    assert falhas == []  # não gasta tentativa: nenhum retry muda o resultado
+    assert _status_gravados(conn) == ["processando", "falhou"]
+    assert deletes == ["uploads-pendentes/abc.dem"]
+
+
+def test_upload_erro_definitivo_com_delete_falhando_mantem_falhou_e_captura(monkeypatch):
+    erro = main.storage_r2.ArquivoGrandeDemaisError("objeto grande demais")
+    erro_del = OSError("R2 fora")
+    conn, deletes, falhas, capturados = _fakes_upload(monkeypatch, erro, delete_falha=erro_del)
+
+    main.cmd_processar_uploads_pendentes(_config_com_r2(), conn)
+
+    assert _status_gravados(conn) == ["processando", "falhou"]
+    assert (erro_del, "processar-uploads-pendentes") in capturados
+
+
+# ---- R106: série com mapa falho NÃO apaga o staging ----
+
+def _serie_dois_mapas(monkeypatch, mapas_que_falham):
+    """Fila com um .rar de 2 mapas em staging. ingest_demo simula a dedupe por
+    fingerprint do banco: o mesmo mapa ingerido de novo devolve o MESMO match_id."""
+    monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
+    monkeypatch.setattr(main.storage_r2, "download_bytes", lambda client, bucket, key, **kw: b"rar-bytes")
+
+    def _extrair(rar_path, destino):
+        destino.mkdir(parents=True, exist_ok=True)
+        caminhos = []
+        for nome in ("serie-m1-anubis.dem", "serie-m2-inferno.dem"):
+            dem = destino / nome
+            dem.write_bytes(b"x")
+            caminhos.append(dem)
+        return caminhos
+
+    monkeypatch.setattr(rar_extract, "extrair_dems_de_rar", _extrair)
+    monkeypatch.setattr(
+        main.parsemod, "cabecalho_mapa",
+        lambda path: "de_anubis" if "anubis" in path.name else "de_inferno",
+    )
+    banco = {}
+
+    def _ingest(cfg, cn, dem_path, source=None, upload=None, **kw):
+        if any(m in dem_path.name for m in mapas_que_falham):
+            raise RuntimeError("parser explodiu")
+        return banco.setdefault(dem_path.name, f"m-{len(banco) + 1}")
+
+    monkeypatch.setattr(main, "ingest_demo", _ingest)
+    deletes = []
+    monkeypatch.setattr(main.storage_r2, "delete_object", lambda client, bucket, key: deletes.append(key))
+    return banco, deletes
+
+
+def _updates_fila(conn):
+    return [c[1] for c in conn.calls if c[0].startswith("update partidas_pro_fila set status = %s")]
+
+
+def test_serie_com_mapa_falho_fica_falhou_com_match_ids_parciais_e_staging_intacto(monkeypatch):
+    conn = _FilaConn([("f1", None, "partidas-pro-pendentes/serie.rar", _AGORA_MENOS(60))])
+    banco, deletes = _serie_dois_mapas(monkeypatch, mapas_que_falham=["inferno"])
+
+    total = main.cmd_processar_fila_pro(_config_com_r2(), conn)
+
+    assert total == 0
+    assert deletes == []  # o retry do admin precisa do arquivo
+    status, match_id, erro, match_ids, _fila_id = _updates_fila(conn)[-1]
+    assert status == "falhou"
+    assert match_ids == ["m-1"] and match_id == "m-1"
+    assert "serie-m2-inferno.dem" in erro and "1/2" in erro
+
+
+def test_retry_da_serie_com_os_dois_mapas_ok_conclui_sem_duplicar(monkeypatch):
+    conn = _FilaConn([("f1", None, "partidas-pro-pendentes/serie.rar", _AGORA_MENOS(60))])
+    banco, deletes = _serie_dois_mapas(monkeypatch, mapas_que_falham=["inferno"])
+    main.cmd_processar_fila_pro(_config_com_r2(), conn)
+
+    # Retry do admin: o parser foi corrigido; a mesma fila roda de novo.
+    monkeypatch.setattr(main, "ingest_demo", lambda cfg, cn, dem_path, **kw: banco.setdefault(
+        dem_path.name, f"m-{len(banco) + 1}"))
+    conn.calls.clear()
+    total = main.cmd_processar_fila_pro(_config_com_r2(), conn)
+
+    assert total == 1
+    status, match_id, erro, match_ids, _fila_id = _updates_fila(conn)[-1]
+    assert status == "concluida"
+    assert match_ids == ["m-1", "m-2"]  # anubis reaproveitou a mesma Partida
+    assert len(banco) == 2
+    assert deletes == ["partidas-pro-pendentes/serie.rar"]
+
+
+# ---- R36: delete do staging da fila é best-effort ----
+
+def test_fila_concluida_com_delete_falhando_continua_concluida(monkeypatch):
+    conn = _FilaConn([("f1", None, "partidas-pro-pendentes/abc.dem", _AGORA_MENOS(60))])
+    monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
+    monkeypatch.setattr(main.storage_r2, "download_bytes", lambda client, bucket, key, **kw: b"dem-bytes")
+    monkeypatch.setattr(main, "ingest_demo", lambda cfg, cn, dem_path, **kw: "m1")
+    erro_del = OSError("R2 fora")
+
+    def _delete(client, bucket, key):
+        raise erro_del
+
+    monkeypatch.setattr(main.storage_r2, "delete_object", _delete)
+    capturados = []
+    monkeypatch.setattr(main, "capturar_erro", lambda e, etapa: capturados.append((e, etapa)))
+
+    assert main.cmd_processar_fila_pro(_config_com_r2(), conn) == 1
+    assert [u[0] for u in _updates_fila(conn)] == ["baixando", "processando", "concluida"]
+    assert _updates_fila(conn)[-1][3] == ["m1"]
+    assert capturados == [(erro_del, "processar-fila-pro")]
+
+
+def test_upload_concluido_com_delete_falhando_continua_concluido(monkeypatch):
+    conn = _UploadsConn([("u1", "765", "uploads-pendentes/abc.dem", None, None, None, None, _AGORA_MENOS(60))])
+    monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
+    monkeypatch.setattr(main.storage_r2, "download_bytes", lambda client, bucket, key, **kw: b"dem-bytes")
+    monkeypatch.setattr(main, "ingest_demo", lambda *a, **kw: "m1")
+    erro_del = OSError("R2 fora")
+
+    def _delete(client, bucket, key):
+        raise erro_del
+
+    monkeypatch.setattr(main.storage_r2, "delete_object", _delete)
+    falhas = []
+    monkeypatch.setattr(main.dbmod, "falhar_upload_pendente", lambda *a, **kw: falhas.append(a) or "pendente")
+    capturados = []
+    monkeypatch.setattr(main, "capturar_erro", lambda e, etapa: capturados.append((e, etapa)))
+
+    assert main.cmd_processar_uploads_pendentes(_config_com_r2(), conn) == 1
+    assert falhas == []  # o upload deu certo: não gasta tentativa nem volta pra fila
+    assert _status_gravados(conn) == ["processando", "concluido"]
+    assert capturados == [(erro_del, "processar-uploads-pendentes")]
+
+
+# ---- R37: item preso em baixando/processando vira 'falhou' no início do run ----
+
+def test_fila_pro_marca_interrompidos_antes_de_listar(monkeypatch):
+    conn = _FilaConn([])
+    assert main.cmd_processar_fila_pro(_config_com_r2(), conn) == 0
+    sql, params = conn.calls[0]
+    assert sql.startswith("update partidas_pro_fila set status = 'falhou'")
+    assert "status in ('baixando', 'processando')" in sql
+    assert params == ("interrompido no run anterior",)
+    assert conn.calls[1][0].startswith("select id, hltv_url, arquivo_r2_key")
+
+
+# ---- R107: staging ausente no R2 — janela de 20 min ----
+
+class _NoSuchKey(Exception):
+    def __init__(self, code="404"):
+        super().__init__(f"An error occurred ({code}) when calling the HeadObject operation: Not Found")
+        self.response = {"Error": {"Code": code}}
+
+
+def _AGORA_MENOS(minutos):
+    return datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=minutos)
+
+
+def test_objeto_ausente_reconhece_404_e_nosuchkey():
+    assert main.storage_r2.objeto_ausente(_NoSuchKey("404"))
+    assert main.storage_r2.objeto_ausente(_NoSuchKey("NoSuchKey"))
+    assert not main.storage_r2.objeto_ausente(_NoSuchKey("AccessDenied"))
+    assert not main.storage_r2.objeto_ausente(RuntimeError("x"))
+
+
+def _upload_sem_staging(monkeypatch, minutos):
+    conn = _UploadsConn([("u1", "765", "uploads-pendentes/abc.dem", None, None, None, None, _AGORA_MENOS(minutos))])
+    monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
+
+    def _download(client, bucket, key, **kw):
+        raise _NoSuchKey()
+
+    monkeypatch.setattr(main.storage_r2, "download_bytes", _download)
+    deletes = []
+    monkeypatch.setattr(main.storage_r2, "delete_object", lambda client, bucket, key: deletes.append(key))
+    falhas = []
+    monkeypatch.setattr(main.dbmod, "falhar_upload_pendente", lambda *a, **kw: falhas.append(a) or "pendente")
+    return conn, deletes, falhas
+
+
+def test_upload_sem_staging_com_menos_de_20_min_espera_sem_gastar_tentativa(monkeypatch):
+    conn, deletes, falhas = _upload_sem_staging(monkeypatch, minutos=19)
+    main.cmd_processar_uploads_pendentes(_config_com_r2(), conn)
+    assert falhas == []
+    assert _status_gravados(conn) == ["processando", "pendente"]
+    assert deletes == []
+
+
+def test_upload_sem_staging_com_20_min_ou_mais_vira_falhou(monkeypatch):
+    conn, deletes, falhas = _upload_sem_staging(monkeypatch, minutos=20)
+    main.cmd_processar_uploads_pendentes(_config_com_r2(), conn)
+    assert falhas == []
+    assert _status_gravados(conn) == ["processando", "falhou"]
+    assert deletes == []  # nada a apagar
+
+
+def _fila_sem_staging(monkeypatch, minutos):
+    conn = _FilaConn([("f1", None, "partidas-pro-pendentes/abc.dem", _AGORA_MENOS(minutos))])
+    monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
+
+    def _download(client, bucket, key, **kw):
+        raise _NoSuchKey("NoSuchKey")
+
+    monkeypatch.setattr(main.storage_r2, "download_bytes", _download)
+    return conn
+
+
+def test_fila_sem_staging_com_menos_de_20_min_volta_pra_pendente(monkeypatch):
+    conn = _fila_sem_staging(monkeypatch, minutos=5)
+    main.cmd_processar_fila_pro(_config_com_r2(), conn)
+    assert [u[0] for u in _updates_fila(conn)] == ["baixando", "pendente"]
+
+
+def test_fila_sem_staging_com_20_min_ou_mais_vira_falhou(monkeypatch):
+    conn = _fila_sem_staging(monkeypatch, minutos=25)
+    main.cmd_processar_fila_pro(_config_com_r2(), conn)
+    assert [u[0] for u in _updates_fila(conn)] == ["baixando", "falhou"]
+
+
+# ---- R35: link de Demo nulo do GC gasta tentativa e esgota em 3 ----
+
+def test_cmd_fetch_url_nula_esgota_em_3_rodadas_e_libera_o_lote(monkeypatch):
+    config = Config(env={"DATABASE_URL": "x"})
+    code = "CSGO-aaaaa-bbbbb-ccccc-ddddd-eeeee"
+    fila = {code: {"status": "pending", "tentativas": 0}}
+
+    def _pendentes(c, limit=None):
+        return [k for k, v in fila.items() if v["status"] == "pending"]
+
+    def _falhar(c, share_code, erro, max_tentativas=3):
+        item = fila[share_code]
+        item["tentativas"] += 1
+        if item["tentativas"] >= max_tentativas:
+            item["status"] = "failed"
+
+    monkeypatch.setattr(main.dbmod, "list_pending_share_codes", _pendentes)
+    monkeypatch.setattr(main.dbmod, "contar_pendentes", lambda c: len(_pendentes(c)))
+    monkeypatch.setattr(main.dbmod, "falhar_fetch_pendente", _falhar)
+    monkeypatch.setattr(
+        main, "_resolver_demo_urls",
+        lambda codes, bot_dir, node_bin: [{"shareCode": c, "demoUrl": None, "matchTime": None} for c in codes],
+    )
+
+    for _ in range(3):
+        main.cmd_fetch(config, conn=object())
+
+    assert fila[code] == {"status": "failed", "tentativas": 3}
+    assert _pendentes(None) == []  # o lote não fica preso nesse item
+
+
+# ---- R112: discover com todos os Jogadores falhando levanta no fim ----
+
+def _discover(monkeypatch, falham):
+    jogadores = [("765A", "auth-a", "CSGO-a"), ("765B", "auth-b", "CSGO-b")]
+    monkeypatch.setattr(main.dbmod, "list_tracked_players", lambda c: jogadores)
+
+    def _walk(key, steam_id64, auth, last):
+        if steam_id64 in falham:
+            raise RuntimeError(f"auth inválido de {steam_id64}")
+        return []
+
+    monkeypatch.setattr(main.steam_api, "walk_chain", _walk)
+    capturados = []
+    monkeypatch.setattr(main, "capturar_erro", lambda e, etapa: capturados.append(etapa))
+    return capturados
+
+
+def test_discover_com_todos_falhando_sinaliza_falha_total(monkeypatch, capsys):
+    capturados = _discover(monkeypatch, falham={"765A", "765B"})
+    with pytest.raises(main.FalhaTotalDiscover, match="falha total"):
+        main.cmd_discover(Config(env={"STEAM_API_KEY": "k"}), conn=object())
+    assert capturados == ["discover", "discover"]
+    assert "765A" not in capsys.readouterr().out
+
+
+def test_main_discover_com_falha_total_sai_sem_excecao(monkeypatch):
+    # O passo "Descobrir" do workflow precisa sair 0: os passos seguintes (fetch,
+    # cleanup, uploads, FACEIT) não têm if: !cancelled().
+    _discover(monkeypatch, falham={"765A", "765B"})
+    monkeypatch.setenv("DATABASE_URL", "postgres://x")
+    monkeypatch.setenv("STEAM_API_KEY", "k")
+    monkeypatch.delenv("SENTRY_DSN", raising=False)
+    monkeypatch.setattr(main.dbmod, "connect", lambda url: types.SimpleNamespace(close=lambda: None))
+    main.main(["discover"])
+
+
+def test_discover_com_falha_parcial_segue_normal(monkeypatch):
+    capturados = _discover(monkeypatch, falham={"765A"})
+    assert main.cmd_discover(Config(env={"STEAM_API_KEY": "k"}), conn=object()) == 0
+    assert capturados == ["discover"]
+
+
+def test_discover_sem_jogadores_nao_levanta(monkeypatch):
+    monkeypatch.setattr(main.dbmod, "list_tracked_players", lambda c: [])
+    assert main.cmd_discover(Config(env={"STEAM_API_KEY": "k"}), conn=object()) == 0

@@ -155,11 +155,11 @@ class FakeCursor:
         return ["00000000-0000-0000-0000-000000000001"]
 
     def fetchall(self):
-        if self._last.startswith("select id, hltv_url, arquivo_r2_key from partidas_pro_fila"):
+        if self._last.startswith("select id, hltv_url, arquivo_r2_key, adicionado_em from partidas_pro_fila"):
             return self.conn.fila_rows
         if self._last.startswith(
             "select id, adicionado_por, arquivo_r2_key, share_code, played_at, "
-            "plataforma_manual, match_alvo_id from uploads_pendentes"
+            "plataforma_manual, match_alvo_id, adicionado_em from uploads_pendentes"
         ):
             return self.conn.uploads_rows
         if self._last.startswith("select id, arquivo_r2_key from uploads_pendentes"):
@@ -885,3 +885,25 @@ def test_store_parsed_dedupe_por_fingerprint_atualiza_em_vez_de_inserir():
     assert any(s.startswith("update matches set share_code = coalesce") for s in sqls)
     # absorve o placeholder pending que segurava o share code
     assert any("status = 'pending'" in s and s.startswith("delete from matches") for s in sqls)
+
+
+# ---- R06: erro transitório de upload volta pra fila; esgotado vira 'falhou' ----
+
+def test_falhar_upload_pendente_conta_tentativa_e_devolve_o_status_final():
+    conn = FakeConn()
+    status = db.falhar_upload_pendente(conn, "u1", RuntimeError("R2 timeout"), max_tentativas=3)
+    sql, params = next(c for c in conn.calls if c[0].startswith("update uploads_pendentes"))
+    assert "when tentativas + 1 >= %s then 'falhou' else 'pendente'" in sql
+    assert "tentativas = tentativas + 1" in sql
+    assert "processando_desde = null" in sql
+    assert "returning status" in sql
+    assert params == (3, "R2 timeout", "u1")
+    assert conn.commits == 1
+    assert status == "00000000-0000-0000-0000-000000000001"  # o que o FakeCursor devolve
+
+
+def test_steam_ids_da_partida_devolve_conjunto():
+    conn = FakeConn()
+    assert db.steam_ids_da_partida(conn, "m1") == {"A", "B"}
+    select = next(c for c in conn.calls if c[0].startswith("select steam_id64 from match_players where match_id"))
+    assert select[1] == ("m1",)

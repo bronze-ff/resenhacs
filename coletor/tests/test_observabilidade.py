@@ -1,4 +1,6 @@
 import json
+
+import pytest
 import sys
 from pathlib import Path
 
@@ -166,3 +168,133 @@ def test_console_sai_e_span_perde_query():
     assert span["description"] == "GET https://api.exemplo.com/v1/jogadores"
     assert "http.query" not in span["data"]
     assert span["data"]["http.url"] == "https://api.exemplo.com/v1/jogadores"
+
+
+# ---- R02: capturar_erro manda o erro por item ao Sentry, com a etapa ----
+
+class _SdkFake:
+    def __init__(self):
+        self.capturados = []
+        self.tags = []
+
+    def new_scope(self):
+        sdk = self
+
+        class _Escopo:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def set_tag(self, chave, valor):
+                sdk.tags.append((chave, valor))
+
+        return _Escopo()
+
+    def capture_exception(self, erro):
+        self.capturados.append((erro, list(self.tags)))
+
+
+def test_capturar_erro_sem_dsn_e_no_op(monkeypatch):
+    import coletor.observabilidade as obs
+
+    sdk = _SdkFake()
+    monkeypatch.setitem(sys.modules, "sentry_sdk", sdk)
+    monkeypatch.setattr(obs, "_ativo", False)
+    obs.capturar_erro(RuntimeError("x"), "fetch")
+    assert sdk.capturados == []
+
+
+def test_capturar_erro_com_sdk_ativo_marca_a_etapa(monkeypatch):
+    import coletor.observabilidade as obs
+
+    sdk = _SdkFake()
+    monkeypatch.setitem(sys.modules, "sentry_sdk", sdk)
+    monkeypatch.setattr(obs, "_ativo", True)
+    erro = RuntimeError("x")
+    obs.capturar_erro(erro, "uploads")
+    assert sdk.capturados == [(erro, [("etapa", "uploads")])]
+
+
+def test_capturar_erro_nunca_derruba_quem_chama(monkeypatch):
+    import coletor.observabilidade as obs
+
+    class _SdkQuebrado(_SdkFake):
+        def capture_exception(self, erro):
+            raise OSError("transporte caiu")
+
+    monkeypatch.setitem(sys.modules, "sentry_sdk", _SdkQuebrado())
+    monkeypatch.setattr(obs, "_ativo", True)
+    obs.capturar_erro(RuntimeError("x"), "fetch")
+
+
+def test_tag_etapa_sobrevive_ao_scrub():
+    evento = minimizar_evento({"tags": {"etapa": "processar-uploads-pendentes"}})
+    assert evento["tags"] == {"etapa": "processar-uploads-pendentes"}
+
+
+
+# ---- R112: check-in do cron do discover (ok / error com o mesmo check_in_id) ----
+
+def _crons_fake(monkeypatch):
+    import types as _types
+    import coletor.observabilidade as obs
+
+    checkins = []
+
+    def capture_checkin(monitor_slug=None, check_in_id=None, status=None, duration=None, monitor_config=None):
+        checkins.append({"slug": monitor_slug, "id": check_in_id, "status": status,
+                         "config": monitor_config})
+        return check_in_id or "ck-1"
+
+    monkeypatch.setitem(sys.modules, "sentry_sdk.crons", _types.SimpleNamespace(capture_checkin=capture_checkin))
+    monkeypatch.setattr(obs, "_ativo", True)
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setenv("SENTRY_ENVIRONMENT", "producao")
+    capturados = []
+    monkeypatch.setattr(obs, "capturar_erro", lambda e, etapa: capturados.append((str(e), etapa)))
+    return obs, checkins, capturados
+
+
+def test_monitor_discover_parcial_ou_ok_fecha_check_in_ok(monkeypatch):
+    obs, checkins, capturados = _crons_fake(monkeypatch)
+    assert obs.em_monitor_discover(lambda: 3) == 3
+    assert [c["status"] for c in checkins] == ["in_progress", "ok"]
+    assert checkins[0]["slug"] == "resenhacs-coletor" and checkins[0]["config"] == obs.MONITOR_COLETOR
+    assert checkins[1]["id"] == "ck-1"
+    assert capturados == []
+
+
+def test_monitor_discover_falha_total_fecha_error_e_nao_levanta(monkeypatch):
+    obs, checkins, capturados = _crons_fake(monkeypatch)
+
+    def _discover():
+        raise obs.FalhaTotalDiscover("discover: falha total (2 Jogadores)")
+
+    assert obs.em_monitor_discover(_discover) is None
+    assert [c["status"] for c in checkins] == ["in_progress", "error"]
+    assert checkins[1]["id"] == "ck-1"  # mesmo check-in do in_progress
+    assert capturados == [("discover: falha total (2 Jogadores)", "discover")]
+
+
+def test_monitor_discover_falha_total_sem_dsn_e_no_op_e_nao_levanta(monkeypatch):
+    import coletor.observabilidade as obs
+
+    monkeypatch.setattr(obs, "_ativo", False)
+
+    def _discover():
+        raise obs.FalhaTotalDiscover("discover: falha total")
+
+    assert obs.em_monitor_discover(_discover) is None
+
+
+def test_monitor_discover_erro_inesperado_fecha_error_e_propaga(monkeypatch):
+    obs, checkins, capturados = _crons_fake(monkeypatch)
+
+    def _discover():
+        raise ConnectionError("banco fora")
+
+    with pytest.raises(ConnectionError):
+        obs.em_monitor_discover(_discover)
+    assert [c["status"] for c in checkins] == ["in_progress", "error"]

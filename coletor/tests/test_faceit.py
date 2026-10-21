@@ -245,3 +245,41 @@ def test_baixar_demo_usa_o_descompressor_com_teto(monkeypatch):
             http_post_json=lambda url, key, body: {"payload": {"download_url": "https://d/x"}},
             http_get_bytes=lambda url: bomba,
         )
+
+
+# ---- R108: download da FACEIT truncado não passa como Demo completa ----
+
+def test_descomprimir_gzip_cortado_levanta():
+    import gzip as _gz
+    completo = _gz.compress(b"demo inteira " * 1000)
+    with pytest.raises(RuntimeError, match="truncad"):
+        faceit._descomprimir_gzip_com_teto(completo[: len(completo) // 2])
+
+
+class _RespFake:
+    def __init__(self, dados, content_length):
+        self._dados = dados
+        self.headers = {} if content_length is None else {"Content-Length": str(content_length)}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def read(self, n=-1):
+        dados, self._dados = self._dados, b""
+        return dados
+
+
+def test_http_get_bytes_confere_content_length(monkeypatch):
+    monkeypatch.setattr(faceit.urllib.request, "urlopen", lambda url, timeout=None: _RespFake(b"abc", 10))
+    with pytest.raises(RuntimeError, match="truncad"):
+        faceit._http_get_bytes("https://cdn.faceit.com/x.dem.gz")
+
+
+def test_http_get_bytes_sem_content_length_ou_igual_passa(monkeypatch):
+    monkeypatch.setattr(faceit.urllib.request, "urlopen", lambda url, timeout=None: _RespFake(b"abc", 3))
+    assert faceit._http_get_bytes("https://cdn.faceit.com/x.dem.gz") == b"abc"
+    monkeypatch.setattr(faceit.urllib.request, "urlopen", lambda url, timeout=None: _RespFake(b"abc", None))
+    assert faceit._http_get_bytes("https://cdn.faceit.com/x.dem.gz") == b"abc"

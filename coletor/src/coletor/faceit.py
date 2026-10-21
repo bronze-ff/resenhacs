@@ -47,6 +47,7 @@ def _http_get_bytes(url, timeout=120, max_bytes=MAX_DEMO_COMPRIMIDA_BYTES):
     partes = []
     total = 0
     with urllib.request.urlopen(url, timeout=timeout) as resp:
+        content_length = resp.headers.get("Content-Length")
         while True:
             chunk = resp.read(1 << 20)
             if not chunk:
@@ -55,6 +56,9 @@ def _http_get_bytes(url, timeout=120, max_bytes=MAX_DEMO_COMPRIMIDA_BYTES):
             if total > max_bytes:
                 raise RuntimeError(f"demo da FACEIT excedeu o teto de {max_bytes} bytes")
             partes.append(chunk)
+    # Corte de conexão no meio: sem isso a Demo parcial seguia pro parser.
+    if content_length is not None and total != int(content_length):
+        raise RuntimeError(f"download da FACEIT truncado: recebido {total} bytes, esperado {content_length}")
     return b"".join(partes)
 
 
@@ -70,6 +74,8 @@ def _descomprimir_gzip_com_teto(dados, max_bytes=MAX_DEMO_BYTES):
     saida += dec.flush()
     if len(saida) > max_bytes:
         raise RuntimeError(f"demo da FACEIT descomprimida excedeu o teto de {max_bytes} bytes")
+    if not dec.eof:
+        raise RuntimeError("download da FACEIT truncado: stream gzip incompleto (sem EOF)")
     return bytes(saida)
 
 

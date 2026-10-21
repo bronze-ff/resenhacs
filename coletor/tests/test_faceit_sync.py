@@ -54,6 +54,7 @@ def base(monkeypatch):
                         lambda c, fmid, erro=None: gravado["encerradas"].append((fmid, erro)))
     monkeypatch.setattr(dbmod, "elo_snapshot", lambda c, s: (None, None))
     monkeypatch.setattr(dbmod, "atualizar_elo", lambda c, s, e, l: None)
+    monkeypatch.setattr(dbmod, "steam_ids_da_partida", lambda c, mid: set())
     monkeypatch.setattr(faceit, "listar_historico_5v5",
                         lambda *a, **kw: {"novas": [], "na_api": 0, "ja_conhecidas": 0, "ignoradas": 0})
     monkeypatch.setattr(faceit, "elo_atual", lambda key, fid, **kw: (None, None))
@@ -169,7 +170,8 @@ def test_fila_outro_erro_de_demo_loga_o_erro_e_agenda(base, monkeypatch, capsys)
                         lambda key, url, **kw: (_ for _ in ()).throw(RuntimeError("demo not ready")))
     _rodar()
     out = capsys.readouterr().out
-    assert "demo not ready" in out and "403" not in out
+    # Log público: só o tipo do erro, nunca a mensagem crua.
+    assert "RuntimeError" in out and "demo not ready" not in out and "403" not in out
     assert len(base["agendadas"]) == 1
 
 
@@ -331,3 +333,71 @@ def test_cmd_sincronizar_faceit_delega_com_ingest_demo_do_main(base, monkeypatch
     conn = types.SimpleNamespace(rollback=lambda: None)
     assert main.cmd_sincronizar_faceit(Config(env={"FACEIT_API_KEY": "k"}), conn) == 1
     assert base["marcadas"] == [("uuid-main", "fm1")]
+
+
+# ---- R02: erro por item vai pro Sentry com a etapa ----
+
+@pytest.fixture
+def capturados(monkeypatch):
+    lista = []
+    monkeypatch.setattr(faceit_sync, "capturar_erro", lambda e, etapa: lista.append((e, etapa)))
+    return lista
+
+
+def test_fila_falha_de_item_captura_com_etapa(base, monkeypatch, capturados, capsys):
+    erro = RuntimeError("api 500 com corpo")
+    monkeypatch.setattr(dbmod, "listar_faceit_pendentes", lambda c, limite=10: [("fm1", "111", 0)])
+    monkeypatch.setattr(faceit, "detalhes_partida", lambda key, mid, **kw: (_ for _ in ()).throw(erro))
+    _rodar()
+    assert capturados == [(erro, "sincronizar-faceit")]
+    assert "api 500 com corpo" not in capsys.readouterr().out
+
+
+def test_descoberta_que_falha_captura_com_etapa(base, monkeypatch, capturados, capsys):
+    erro = RuntimeError("timeout com url")
+    monkeypatch.setattr(faceit, "listar_historico_5v5", lambda *a, **kw: (_ for _ in ()).throw(erro))
+    _rodar()
+    assert capturados == [(erro, "sincronizar-faceit")]
+    assert "timeout com url" not in capsys.readouterr().out
+
+
+def test_erro_de_demo_que_nao_e_403_captura(base, monkeypatch, capturados):
+    erro = RuntimeError("demo not ready")
+    monkeypatch.setattr(dbmod, "listar_faceit_pendentes", lambda c, limite=10: [("fm1", "111", 0)])
+    monkeypatch.setattr(faceit, "detalhes_partida", lambda key, mid, **kw: _detalhes())
+    monkeypatch.setattr(faceit, "baixar_demo", lambda key, url, **kw: (_ for _ in ()).throw(erro))
+    _rodar()
+    assert capturados == [(erro, "sincronizar-faceit")]
+
+
+def test_403_da_downloads_api_nao_vai_pro_sentry(base, monkeypatch, capturados):
+    # Sem acesso à Downloads API é estado conhecido (aviso no log), não erro.
+    monkeypatch.setattr(dbmod, "listar_faceit_pendentes", lambda c, limite=10: [("fm1", "111", 0)])
+    monkeypatch.setattr(faceit, "detalhes_partida", lambda key, mid, **kw: _detalhes())
+    monkeypatch.setattr(faceit, "baixar_demo", lambda key, url, **kw: (_ for _ in ()).throw(_erro_403()))
+    _rodar()
+    assert capturados == []
+
+
+def test_elo_que_falha_captura_com_etapa(base, monkeypatch, capturados):
+    erro = RuntimeError("elo fora")
+    monkeypatch.setattr(faceit, "elo_atual", lambda key, fid, **kw: (_ for _ in ()).throw(erro))
+    _rodar()
+    assert capturados == [(erro, "sincronizar-faceit")]
+
+
+# ---- R113: ELO pra todos os vinculados do roster, não só quem enfileirou ----
+
+def test_elo_carimba_os_dois_vinculados_da_mesma_partida(base, monkeypatch):
+    antes_dt = AGORA - timedelta(days=2)
+    monkeypatch.setattr(dbmod, "listar_faceit_pendentes", lambda c, limite=10: [("fm1", "111", 0)])
+    monkeypatch.setattr(dbmod, "listar_vinculados_faceit", lambda c: [("111", "f-111"), ("222", "f-222")])
+    monkeypatch.setattr(dbmod, "steam_ids_da_partida", lambda c, mid: {"111", "222", "999"})
+    monkeypatch.setattr(faceit, "detalhes_partida", lambda key, mid, **kw: _detalhes())
+    monkeypatch.setattr(faceit, "baixar_demo", lambda key, url, **kw: b"dem")
+    monkeypatch.setattr(faceit, "elo_atual", lambda key, fid, **kw: (1500 if fid == "f-222" else 1425, 7))
+    monkeypatch.setattr(dbmod, "elo_snapshot", lambda c, s: (1400, antes_dt))
+    gravado = []
+    monkeypatch.setattr(dbmod, "gravar_elo_partida", lambda c, mid, s, b, a: gravado.append((mid, s, b, a)))
+    _rodar()
+    assert sorted(gravado) == [("uuid-demo", "111", 1400, 1425), ("uuid-demo", "222", 1400, 1500)]

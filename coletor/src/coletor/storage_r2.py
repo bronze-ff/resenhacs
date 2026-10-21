@@ -75,6 +75,19 @@ def download_bytes(client, bucket, key, max_bytes=None):
     return client.get_object(Bucket=bucket, Key=key)["Body"].read()
 
 
+# Códigos que o R2 (S3) devolve pra chave inexistente: HEAD dá "404", GET dá "NoSuchKey".
+_CODIGOS_AUSENTE = {"404", "NoSuchKey", "NotFound"}
+
+
+def objeto_ausente(erro):
+    """True se o erro do boto3 é de objeto que não existe no bucket. Lê o código pela
+    forma do ClientError (sem importar botocore, que o job de testes não instala)."""
+    resposta = getattr(erro, "response", None)
+    if not isinstance(resposta, dict):
+        return False
+    return str((resposta.get("Error") or {}).get("Code")) in _CODIGOS_AUSENTE
+
+
 def key_from_url(url, bucket):
     """Extrai a key de um demo_url/replay_url já gravado (endpoint/bucket/key) —
     usado no reprocessamento pra saber qual objeto baixar/sobrescrever sem depender

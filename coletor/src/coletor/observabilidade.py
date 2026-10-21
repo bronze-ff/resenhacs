@@ -245,15 +245,69 @@ def init_sentry():
     return True
 
 
-def em_monitor_discover(fn):
-    """Check-in do cron só na run de produção do Actions. Fora isso, só executa fn."""
-    if not (
+def capturar_erro(erro, etapa):
+    """Manda ao Sentry um erro que o laço por item engoliu, com a tag `etapa`.
+
+    No-op sem DSN. O evento passa pelo before_send (allowlist + scrub). Falha do
+    próprio Sentry nunca derruba quem chamou.
+    """
+    if not _ativo:
+        return
+    try:
+        import sentry_sdk
+
+        with sentry_sdk.new_scope() as escopo:
+            escopo.set_tag("etapa", etapa)
+            sentry_sdk.capture_exception(erro)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+class FalhaTotalDiscover(Exception):
+    """Todos os Jogadores falharam no discover. em_monitor_discover marca o check-in
+    como error e engole: o processo sai 0 pros passos seguintes do job rodarem."""
+
+
+def _monitorar():
+    return (
         _ativo
         and os.environ.get("GITHUB_ACTIONS") == "true"
         and os.environ.get("SENTRY_ENVIRONMENT") == "producao"
-    ):
-        return fn()
-    from sentry_sdk.crons import monitor
+    )
 
-    with monitor(monitor_slug="resenhacs-coletor", monitor_config=MONITOR_COLETOR):
-        return fn()
+
+def _check_in(status, check_in_id=None):
+    """Check-in manual do cron (in_progress abre, ok/error fecham o MESMO id).
+    Falha do Sentry nunca derruba o discover."""
+    try:
+        from sentry_sdk.crons import capture_checkin
+
+        return capture_checkin(
+            monitor_slug="resenhacs-coletor", check_in_id=check_in_id, status=status,
+            monitor_config=MONITOR_COLETOR if check_in_id is None else None,
+        )
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def em_monitor_discover(fn):
+    """Roda o discover com check-in do cron (só na run de produção do Actions).
+
+    Falha total (FalhaTotalDiscover): check-in error + capturar_erro, sem levantar.
+    Outro erro: check-in error e propaga, como o `with monitor` fazia."""
+    check_in_id = _check_in("in_progress") if _monitorar() else None
+    try:
+        resultado = fn()
+    except FalhaTotalDiscover as e:
+        capturar_erro(e, "discover")
+        if check_in_id is not None:
+            _check_in("error", check_in_id)
+        print(f"{e} — check-in do cron marcado como erro")
+        return None
+    except Exception:
+        if check_in_id is not None:
+            _check_in("error", check_in_id)
+        raise
+    if check_in_id is not None:
+        _check_in("ok", check_in_id)
+    return resultado
