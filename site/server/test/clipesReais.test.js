@@ -157,7 +157,7 @@ describe('clipes reais (DEMO-SLAP)', () => {
     expect(res.status).toBe(201)
     expect(demoSlap.analisar).toHaveBeenCalledWith('https://r2-assinada/x.dem')
     expect(demoSlap.renderizar).toHaveBeenCalledWith(
-      'an1', [{ tick: 10000 - 256, duration: 7, povSteamId: AMIGO }], { highResolution: false, hideWatermark: true },
+      'an1', [{ tick: 10000 - 256, duration: 7, povSteamId: AMIGO }], { highResolution: false },
     )
     expect(banco.estado.clipes[0]).toMatchObject({ status: 'renderizando', video_job_ids: ['v1'] })
     expect(res.body.clipes[0]).toMatchObject({ status: 'renderizando', montagem: false, videos: [] })
@@ -272,7 +272,7 @@ describe('clipes reais (DEMO-SLAP)', () => {
     expect(res.status).toBe(201)
     const [, clipes, opcoes] = demoSlap.renderizar.mock.calls[0]
     expect(clipes.map((c) => c.povSteamId)).toEqual([AMIGO, EU])
-    expect(opcoes).toEqual({ highResolution: false, hideWatermark: true })
+    expect(opcoes).toEqual({ highResolution: false })
     expect(banco.estado.clipes[0]).toMatchObject({ modo: 'coaching' })
     expect(res.body.clipes[0]).toMatchObject({ modo: 'coaching', montagem: true })
   })
@@ -288,7 +288,7 @@ describe('clipes reais (DEMO-SLAP)', () => {
     const banco = bancoFalso({ analise: { job_id: 'an1', status: 'done', tick_rate: 64, erro: null } })
     const { app: a, demoSlap } = app({ banco })
     await request(a).post(`/api/matches/${MATCH}/clipes-reais`).set('Cookie', cookie).send({ modo: 'cheater', kills: [TK] })
-    expect(demoSlap.renderizar.mock.calls[0][2]).toEqual({ highResolution: false, hideWatermark: true, showXRay: true })
+    expect(demoSlap.renderizar.mock.calls[0][2]).toEqual({ highResolution: false, showXRay: true })
   })
 
   it('estimativa: créditos da DEMO-SLAP + 1 da leitura da Demo, em reais, sem pedir nada', async () => {

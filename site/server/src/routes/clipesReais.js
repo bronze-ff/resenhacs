@@ -18,11 +18,10 @@ const RESERVA_EXPIRADA_MS = 5 * 60 * 1000
 
 const FINAIS = new Set(['pronto', 'erro'])
 
-// Sem alta resolução e sem a marca d'água da DEMO-SLAP: cada uma multiplica o preço por
-// 1,5, e trocar uma pela outra deixa o custo igual. Trecho de 5 s (mínimo de 1 crédito):
-// padrão 3, sem marca d'água 4, assim 2. A conta arredonda por pedido, não por trecho
-// (custom-credits-calc, 2026-10-21).
-const OPCOES_RENDER = { highResolution: false, hideWatermark: true }
+// Sem alta resolução, com a marca d'água da DEMO-SLAP. Alta resolução e tirar a marca
+// d'água encarecem o pedido. Montagem de 7 trechos de 5 s (custom-credits-calc,
+// 2026-10-21): padrão 16, sem alta resolução e sem marca d'água 16, assim 11.
+const OPCOES_RENDER = { highResolution: false }
 
 // Modos do pedido (migration 0061). Em cada kill marcada, a câmera segue:
 //   clipe    → quem o Jogador escolheu (quem matou ou quem morreu)
