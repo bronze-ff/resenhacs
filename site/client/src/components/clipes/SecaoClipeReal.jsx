@@ -25,12 +25,12 @@ export function descreverClipe(c) {
 }
 
 // Montagem = um trecho por kill, tocados em sequência no mesmo player (a DEMO-SLAP não
-// junta trechos do render-custom num vídeo só).
+// junta trechos do render-custom num vídeo só). Largura igual à do player da Allstar na Partida.
 function PlayerTrechos({ videos }) {
   const [atual, setAtual] = useState(0)
   const montagem = videos.length > 1
   return (
-    <div className="mt-3 space-y-2">
+    <div className="mt-3 space-y-2 lg:max-w-xl">
       <video
         src={videos[atual]}
         controls

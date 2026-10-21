@@ -18,6 +18,12 @@ const RESERVA_EXPIRADA_MS = 5 * 60 * 1000
 
 const FINAIS = new Set(['pronto', 'erro'])
 
+// Sem alta resolução e sem a marca d'água da DEMO-SLAP: cada uma multiplica o preço por
+// 1,5, e trocar uma pela outra deixa o custo igual. Trecho de 5 s (mínimo de 1 crédito):
+// padrão 3, sem marca d'água 4, assim 2. A conta arredonda por pedido, não por trecho
+// (custom-credits-calc, 2026-10-21).
+const OPCOES_RENDER = { highResolution: false, hideWatermark: true }
+
 function mensagemErro(e) {
   if (e instanceof ErroDemoSlap) return e.mensagem || 'A DEMO-SLAP recusou o pedido'
   return 'Falha ao falar com a DEMO-SLAP'
@@ -112,7 +118,7 @@ export function createClipesReaisRouter({ db, requireAuth, r2Client, r2Bucket, c
         )
         if (reserva.rows.length === 0) return
         try {
-          const ids = await cliente.renderizar(a.job_id, montarClipes(c.kills, a.tick_rate))
+          const ids = await cliente.renderizar(a.job_id, montarClipes(c.kills, a.tick_rate), OPCOES_RENDER)
           if (ids.length === 0) return marcarErro(c.id, 'A DEMO-SLAP não aceitou nenhum trecho')
           await db.query(
             "update clipes_reais set status = 'renderizando', video_job_ids = $2, updated_at = now() where id = $1",
