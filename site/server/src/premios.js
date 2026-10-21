@@ -79,8 +79,8 @@ export function calcularPremios(linhas, tipo = 'semana') {
     if (!porJogador.has(r.steam_id64)) {
       porJogador.set(r.steam_id64, {
         ...jogadorDe(r), partidas: 0, comRating: 0, somaRating: 0, kills: 0, hs: 0,
-        clutches: 0, utilidade: 0, teamKills: 0, danoTime: 0, aliadosCegados: 0, segCegados: 0,
-        mortesSemTrade: 0, partidasComDemo: 0,
+        clutches: 0, tentativas: 0, utilidade: 0, teamKills: 0, danoTime: 0, aliadosCegados: 0, segCegados: 0,
+        mortesSemTrade: 0, mortesComDemo: 0, partidasComDemo: 0,
       })
     }
     const j = porJogador.get(r.steam_id64)
@@ -89,6 +89,7 @@ export function calcularPremios(linhas, tipo = 'semana') {
     j.kills += n(r.kills)
     j.hs += n(r.headshot_kills)
     j.clutches += n(r.clutch_wins)
+    j.tentativas += n(r.clutch_attempts)
     j.utilidade += n(r.utility_damage)
     j.teamKills += n(r.team_kills)
     j.danoTime += n(r.he_team_damage) + n(r.molotov_team_damage)
@@ -98,6 +99,7 @@ export function calcularPremios(linhas, tipo = 'semana') {
     // (default) e faria toda morte dela virar "sem trade".
     if (r.tem_demo !== false) {
       j.partidasComDemo += 1
+      j.mortesComDemo += n(r.deaths)
       j.mortesSemTrade += Math.max(0, n(r.deaths) - n(r.traded_deaths))
     }
   }
@@ -151,25 +153,31 @@ export function calcularPremios(linhas, tipo = 'semana') {
     premios.push({ id, titulo, descricao: texto, jogadores: [jogadorDe({ steam_id64: achado.j.steamId, nick: achado.j.nick, avatar_url: achado.j.avatarUrl })], valor: achado.v, formato, tom })
   }
 
+  // Cada descrição traz a amostra por trás do número (partidas, tentativas, total), para o
+  // valor do card não ficar solto. Dupla e Mapa maldito já trazem V/D.
+  const partidasTxt = (q, sufixo = '') => `${q} ${q === 1 ? 'partida' : 'partidas'}${sufixo}`
+  const comDemoTxt = (j) => partidasTxt(j.partidasComDemo, ' com Demo')
+
   // O mínimo conta só Partidas com rating: FACEIT sem Demo não tem, e 1 Partida com rating
   // entre 4 passava no filtro como se fosse uma média de 4.
-  individual('carregou', 'Carregou', `Maior rating médio (mín. ${min.partidas} partidas)`,
+  individual('carregou', 'Carregou', (j) => `Rating médio em ${partidasTxt(j.comRating)} (mín. ${min.partidas})`,
     melhor(jogadores, (j) => (j.comRating ? arred(j.somaRating / j.comRating) : null), { filtro: (j) => j.comRating >= min.partidas }), 'decimal2', 'bom')
   // Rei do clutch, Fogo amigo e Flashador são o TOTAL do período: a graça é ver quanto o
-  // grupo acumulou no mês. O nº de Partidas vai junto para dar a escala. Dano no time e
-  // cegueira só existem com Demo, então a escala deles conta só Partidas com Demo.
-  const partidasTxt = (q, sufixo = '') => `${q} ${q === 1 ? 'partida' : 'partidas'}${sufixo}`
-  individual('clutch', 'Rei do clutch', (j) => `Clutches vencidos em ${partidasTxt(j.partidas)}`,
-    melhor(jogadores, (j) => j.clutches, { filtro: (j) => j.clutches > 0 }), 'int', 'bom')
-  individual('granadeiro', 'Granadeiro', 'Dano de utilitária por partida',
+  // grupo acumulou no mês. Dano no time e cegueira só existem com Demo, então a amostra
+  // deles conta só Partidas com Demo.
+  individual('clutch', 'Rei do clutch', (j) => (j.tentativas >= j.clutches
+    ? `Venceu ${j.clutches} de ${j.tentativas} tentativas, em ${partidasTxt(j.partidas)}`
+    : `Clutches vencidos em ${partidasTxt(j.partidas)}`),
+  melhor(jogadores, (j) => j.clutches, { filtro: (j) => j.clutches > 0 }), 'int', 'bom')
+  individual('granadeiro', 'Granadeiro', (j) => `Média em ${partidasTxt(j.partidas)} (${Math.round(j.utilidade)} de dano no total)`,
     melhor(jogadores, (j) => Math.round(j.utilidade / j.partidas), { filtro: (j) => comMinimo(j) && j.utilidade > 0 }), 'int', 'bom')
-  individual('fogo-amigo', 'Fogo amigo', (j) => `Dano no próprio time, TK vale 100, em ${partidasTxt(j.partidasComDemo, ' com Demo')}`,
+  individual('fogo-amigo', 'Fogo amigo', (j) => `${Math.round(j.danoTime)} de dano + ${j.teamKills} TK × 100, em ${comDemoTxt(j)}`,
     melhor(jogadores, (j) => j.danoTime + j.teamKills * 100, { filtro: (j) => j.danoTime + j.teamKills > 0 }), 'int', 'ruim')
-  individual('flashador', 'Flashador amigo', (j) => `Cegueira no próprio time em ${partidasTxt(j.partidasComDemo, ' com Demo')}`,
+  individual('flashador', 'Flashador amigo', (j) => `Cegou colegas ${j.aliadosCegados} ${j.aliadosCegados === 1 ? 'vez' : 'vezes'}, em ${comDemoTxt(j)}`,
     melhor(jogadores, (j) => arred(j.segCegados, 1), { filtro: (j) => j.aliadosCegados > 0 }), 'segundos', 'ruim')
-  individual('baiter', 'Baiter', 'Mortes sem trade por partida',
+  individual('baiter', 'Baiter', (j) => `${j.mortesSemTrade} de ${j.mortesComDemo} mortes sem trade, em ${comDemoTxt(j)}`,
     melhor(jogadores, (j) => (j.partidasComDemo ? arred(j.mortesSemTrade / j.partidasComDemo, 1) : null), { filtro: (j) => j.partidasComDemo >= min.partidas }), 'decimal1', 'ruim')
-  individual('alface', 'Mão de alface', `Menor HS% (mín. ${min.killsHs} kills)`,
+  individual('alface', 'Mão de alface', (j) => `${j.hs} HS em ${j.kills} kills (mín. ${min.killsHs} kills)`,
     melhor(jogadores, (j) => arred((j.hs / j.kills) * 100, 1), { menor: true, filtro: (j) => j.kills >= min.killsHs }), 'pct100', 'ruim')
 
   const dupla = [...duplas.values()]
