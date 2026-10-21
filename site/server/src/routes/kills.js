@@ -21,9 +21,13 @@ export function createKillsRouter({ db, requireAuth }) {
 
   router.get('/:id/kills', requireAuth, async (req, res) => {
     const { id } = req.params
+    // `jogador` = kills que ele fez; `vitima` = mortes dele (fails e coaching do clipe).
     const filtro = req.query.jogador
-    if (filtro != null && (typeof filtro !== 'string' || !STEAM_ID64.test(filtro))) {
-      return res.status(400).json({ erro: 'jogador inválido' })
+    const vitima = req.query.vitima
+    for (const v of [filtro, vitima]) {
+      if (v != null && (typeof v !== 'string' || !STEAM_ID64.test(v))) {
+        return res.status(400).json({ erro: 'jogador inválido' })
+      }
     }
 
     const matchQ = await db.query(
@@ -41,9 +45,9 @@ export function createKillsRouter({ db, requireAuth }) {
        left join match_players mk on mk.match_id = kp.match_id and mk.steam_id64 = kp.killer
        left join match_players mv on mv.match_id = kp.match_id and mv.steam_id64 = kp.victim
        left join match_players ma on ma.match_id = kp.match_id and ma.steam_id64 = kp.assister
-       where kp.match_id = $1 and ($2::text is null or kp.killer = $2)
+       where kp.match_id = $1 and ($2::text is null or kp.killer = $2) and ($3::text is null or kp.victim = $3)
        order by kp.round_number, kp.tick`,
-      [id, filtro ?? null],
+      [id, filtro ?? null, vitima ?? null],
     )
 
     res.json(

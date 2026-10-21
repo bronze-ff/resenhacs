@@ -44,6 +44,9 @@ export function criarClienteDemoSlap(apiKey) {
       (await chamar(apiKey, 'POST', `/render-custom/${enc(jobId)}`, { ...opcoes, customClips })).jobIds ?? [],
     statusRender: (jobId) => chamar(apiKey, 'GET', `/render/${enc(jobId)}/status`),
     dadosRender: (jobId) => chamar(apiKey, 'GET', `/render/${enc(jobId)}/data`),
+    // Mesmo corpo do render-custom; devolve os créditos sem gastar nada.
+    calcular: async (customClips, opcoes = {}) =>
+      (await chamar(apiKey, 'POST', '/custom-credits-calc', { ...opcoes, customClips })).credits,
   }
 }
 

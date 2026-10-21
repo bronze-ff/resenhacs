@@ -99,7 +99,7 @@ describe('GET /api/matches/:id/kills', () => {
     const [sql, params] = db.query.mock.calls.find(([s]) => s.includes('from kill_positions kp'))
     expect(sql).toContain('order by kp.round_number, kp.tick')
     expect(sql).not.toContain('is_team_kill = false')
-    expect(params).toEqual([MATCH, null])
+    expect(params).toEqual([MATCH, null, null])
   })
 
   it('?jogador filtra killer parametrizado', async () => {
@@ -112,7 +112,21 @@ describe('GET /api/matches/:id/kills', () => {
     expect(res.status).toBe(200)
     const [sql, params] = db.query.mock.calls.find(([s]) => s.includes('from kill_positions kp'))
     expect(sql).toContain('kp.killer = $2')
-    expect(params).toEqual([MATCH, '76561198000000001'])
+    expect(params).toEqual([MATCH, '76561198000000001', null])
+  })
+
+  it('?vitima filtra as mortes do Jogador', async () => {
+    const { app, db } = appWith([
+      ['from matches where id', [{ id: MATCH }]],
+      ['from kill_positions kp', [LINHA_KILL]],
+    ])
+    const res = await request(app)
+      .get(`/api/matches/${MATCH}/kills?vitima=76561198000000002`).set('Cookie', cookie)
+    expect(res.status).toBe(200)
+    const [sql, params] = db.query.mock.calls.find(([s]) => s.includes('from kill_positions kp'))
+    expect(sql).toContain('kp.victim = $3')
+    expect(params).toEqual([MATCH, null, '76561198000000002'])
+    expect((await request(app).get(`/api/matches/${MATCH}/kills?vitima=x`).set('Cookie', cookie)).status).toBe(400)
   })
 
   it('?jogador inválido: 400', async () => {

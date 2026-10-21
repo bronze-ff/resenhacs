@@ -15,15 +15,21 @@ function kill(extra) {
     ...extra,
   }
 }
-const KILLS = [kill({ round: 4, tick: 9000, weapon: 'hegrenade', victim: AMIGO, teamKill: true }), kill({ round: 6, tick: 15000 })]
+const KILLS = [
+  kill({ round: 4, tick: 9000, weapon: 'hegrenade', victim: AMIGO, teamKill: true }),
+  kill({ round: 6, tick: 15000 }),
+  kill({ round: 8, tick: 20000, killer: INIMIGO, victim: EU }),
+]
+const ESTIMATIVA = { trechos: 2, creditos: 4, analise: 1, total: 5, reais: 0.95 }
 
 function resposta(corpo, ok = true) {
   return Promise.resolve({ ok, json: async () => corpo })
 }
 
-function mockApi({ lista = { disponivel: true, clipes: [] }, post } = {}) {
+function mockApi({ lista = { disponivel: true, permitido: true, clipes: [] }, post } = {}) {
   const fetchMock = vi.fn().mockImplementation((url, opcoes) => {
     if (url.includes('/kills?')) return resposta(KILLS)
+    if (url.endsWith('/estimativa')) return resposta(ESTIMATIVA)
     if (url.endsWith('/clipes-reais') && opcoes?.method === 'POST') return post ? post(opcoes) : resposta({ clipes: [] })
     if (url.endsWith('/clipes-reais')) return resposta(lista)
     return resposta({}, false)
@@ -41,6 +47,11 @@ describe('descreverClipe', () => {
   it('kill sozinha e montagem', () => {
     expect(descreverClipe({ kills: [{ round: 4 }] })).toBe('Kill · round 4')
     expect(descreverClipe({ kills: [{ round: 4 }, { round: 6 }] })).toBe('Montagem de 2 kills · rounds 4, 6')
+  })
+
+  it('coaching conta a morte uma vez, mesmo com dois trechos', () => {
+    const kills = [{ round: 4, tick: 1, pov: 'a' }, { round: 4, tick: 1, pov: 'b' }]
+    expect(descreverClipe({ modo: 'coaching', kills })).toBe('Coaching · 1 morte · round 4')
   })
 })
 
@@ -71,9 +82,42 @@ describe('SecaoClipeReal', () => {
     await user.click(screen.getByText('Visão de quem morreu'))
     await user.click(screen.getByRole('button', { name: 'Gerar clipe' }))
     await waitFor(() => expect(post).toHaveBeenCalled())
-    const corpo = JSON.parse(fetchMock.mock.calls.find(([, o]) => o?.method === 'POST')[1].body)
-    expect(corpo).toEqual({ kills: [{ tick: 9000, round: 4, pov: 'amigo' }] })
+    const corpo = JSON.parse(fetchMock.mock.calls.find(([u, o]) => u.endsWith('/clipes-reais') && o?.method === 'POST')[1].body)
+    expect(corpo).toEqual({ modo: 'clipe', kills: [{ tick: 9000, round: 4, pov: 'amigo' }] })
     expect(await screen.findByText('Gravando no CS2…')).toBeInTheDocument()
+  })
+
+  it('sem Premium: avisa e não mostra o seletor', async () => {
+    mockApi({ lista: { disponivel: true, permitido: false, clipes: [] } })
+    render(<SecaoClipeReal matchId="m1" jogadores={JOGADORES} viewerSteamId="eu" />)
+    expect(await screen.findByText('Clipe de vídeo é para Jogador Premium')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Gerar/ })).not.toBeInTheDocument()
+  })
+
+  it('Fails lista as mortes do Jogador e pede na visão dele', async () => {
+    const post = vi.fn().mockReturnValue(resposta({ clipes: [] }))
+    const fetchMock = mockApi({ post })
+    const user = userEvent.setup()
+    render(<SecaoClipeReal matchId="m1" jogadores={JOGADORES} viewerSteamId="eu" />)
+    await user.click(await screen.findByText('Fails'))
+    await user.click(await screen.findByRole('checkbox', { name: /Round 8: rival/ }))
+    expect(screen.queryByText('Visão de quem morreu')).not.toBeInTheDocument()
+    expect(fetchMock.mock.calls.some(([u]) => u.includes('/kills?vitima=eu'))).toBe(true)
+    await user.click(screen.getByRole('button', { name: 'Gerar Fails (1 morte)' }))
+    await waitFor(() => expect(post).toHaveBeenCalled())
+    expect(JSON.parse(post.mock.calls[0][0].body)).toEqual({ modo: 'fails', kills: [{ tick: 20000, round: 8, pov: 'eu' }] })
+  })
+
+  it('mostra o custo em créditos e reais enquanto marca as kills', async () => {
+    const fetchMock = mockApi()
+    const user = userEvent.setup()
+    render(<SecaoClipeReal matchId="m1" jogadores={JOGADORES} viewerSteamId="eu" />)
+    await user.click(await screen.findByRole('checkbox', { name: /Round 6/ }))
+    expect(await screen.findByText('5 créditos')).toBeInTheDocument()
+    expect(screen.getByText(/inclui 1 da leitura da Demo/)).toBeInTheDocument()
+    expect(screen.getByText(/R\$\s0,95/)).toBeInTheDocument()
+    // Estimar não pede o clipe.
+    expect(fetchMock.mock.calls.some(([u, o]) => u.endsWith('/clipes-reais') && o?.method === 'POST')).toBe(false)
   })
 
   it('várias kills viram montagem', async () => {

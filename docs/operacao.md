@@ -105,9 +105,22 @@ Ligar:
 
 1. Criar conta em https://demo-slap.net e pedir a chave da API pelo Discord deles (link no topo de https://api-doc.demo-slap.net). No fórum `help`, a equipe pede o SteamID64 da conta por DM e manda a chave de volta.
 2. Pôr a chave em `DEMOSLAP_API_KEY` no projeto Vercel `resenhacs` (Production). Sem ela, a aba Clipes mostra "Clipe de vídeo ainda não configurado".
-3. Aplicar as migrations `0059_clipes_reais.sql` e `0060_clipes_reais_video_unico.sql`.
+3. Aplicar as migrations `0059_clipes_reais.sql`, `0060_clipes_reais_video_unico.sql` e `0061_clipes_reais_modos_e_liberacao.sql`.
 4. Pôr a mesma chave no secret `DEMOSLAP_API_KEY` do GitHub (repositório `bronze-ff/resenhacs`). Sem ele, o `juntar-clipes` é no-op e a montagem fica em trechos.
 5. No R2, criar uma regra de ciclo de vida que apaga o prefixo `clipes/` depois de 90 dias (o mesmo prazo da DEMO-SLAP).
+
+Quem pode pedir: só Jogador Premium e super admin. O admin marca quem é Premium em Admin → Jogadores Premium. Premium também ganha a badge ao lado do nick (topo do site e Perfil do Jogador). Quem não é Premium vê os clipes já gerados, mas não pede.
+
+Modos (escolhidos na aba Clipes):
+
+| Modo | O que grava | Câmera |
+|---|---|---|
+| Clipe | As kills marcadas | Quem matou ou quem morreu, à escolha |
+| Fails | As mortes marcadas do Jogador | Quem morreu |
+| Coaching | Cada morte marcada, duas vezes | Quem morreu, depois quem matou (custa o dobro) |
+| Cheater analysis | As kills marcadas de um suspeito | Quem matou, com X-Ray (`showXRay`) |
+
+Antes de pedir, a aba mostra o custo em créditos e em reais. O valor vem do `custom-credits-calc` da DEMO-SLAP (não gasta crédito), mais 1 crédito se a Demo ainda não foi lida. Os reais usam `DEMOSLAP_REAIS_POR_CREDITO` (padrão 0,19: pacote XS com o euro a ~R$ 6,30).
 
 Como funciona:
 
