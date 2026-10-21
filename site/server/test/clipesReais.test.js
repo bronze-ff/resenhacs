@@ -48,7 +48,7 @@ function bancoFalso({ partida = { id: MATCH, map: 'de_dust2', demo_url: DEMO }, 
     }
     if (sql.includes('insert into clipes_reais')) {
       estado.clipes.push({
-        id: `c${estado.clipes.length + 1}`, match_id: p[0], pedido_por: p[1], modo: p[2], kills: JSON.parse(p[3]),
+        id: `c${estado.clipes.length + 1}`, match_id: p[0], pedido_por: p[1], modo: p[2], kills: JSON.parse(p[3]), sem_marca: p[4],
         status: 'analisando', video_job_ids: null, fragmovie_job_id: null, erro: null,
         created_at: new Date(), updated_at: new Date(),
       })
@@ -71,6 +71,7 @@ function bancoFalso({ partida = { id: MATCH, map: 'de_dust2', demo_url: DEMO }, 
       return { rows: [] }
     }
     if (sql.includes("set status = 'pronto'")) { clipe(p[0]).status = 'pronto'; return { rows: [] } }
+    if (sql.includes("set status = 'juntando'")) { clipe(p[0]).status = 'juntando'; return { rows: [] } }
     if (sql.includes("set status = 'erro'")) {
       Object.assign(clipe(p[0]), { status: 'erro', erro: p[1] })
       return { rows: [] }
@@ -157,7 +158,7 @@ describe('clipes reais (DEMO-SLAP)', () => {
     expect(res.status).toBe(201)
     expect(demoSlap.analisar).toHaveBeenCalledWith('https://r2-assinada/x.dem')
     expect(demoSlap.renderizar).toHaveBeenCalledWith(
-      'an1', [{ tick: 10000 - 256, duration: 7, povSteamId: AMIGO }], { highResolution: false },
+      'an1', [{ tick: 10000 - 256, duration: 7, povSteamId: AMIGO }], { highResolution: true },
     )
     expect(banco.estado.clipes[0]).toMatchObject({ status: 'renderizando', video_job_ids: ['v1'] })
     expect(res.body.clipes[0]).toMatchObject({ status: 'renderizando', montagem: false, videos: [] })
@@ -182,17 +183,26 @@ describe('clipes reais (DEMO-SLAP)', () => {
     expect(res.body.clipes[0]).toMatchObject({ id: 'c1', status: 'pronto', videos: ['https://cdn.demo-slap.net/v1.mp4'] })
   })
 
-  it('montagem: com os trechos gravados fica pronta e entrega um vídeo por kill, na ordem', async () => {
+  it('montagem: com os trechos gravados espera a junção, sem mostrar os trechos soltos', async () => {
     const kills = [TK, { tick: 20000, round: 5, pov: EU }]
     const banco = bancoFalso({
       analise: { job_id: 'an1', status: 'done', tick_rate: 64, erro: null },
       clipes: [{ id: 'c1', match_id: MATCH, pedido_por: EU, kills, status: 'renderizando', video_job_ids: ['v2', 'v1'], fragmovie_job_id: null, updated_at: new Date() }],
     })
+    const { app: a, demoSlap } = app({ banco })
+    const res = await request(a).get(`/api/matches/${MATCH}/clipes-reais`).set('Cookie', cookie)
+    expect(res.body.clipes[0]).toMatchObject({ status: 'juntando', montagem: true, videos: [] })
+    expect(demoSlap.dadosRender).not.toHaveBeenCalled()
+  })
+
+  it('montagem que o Coletor não juntou em 1 h fica pronta com os trechos, na ordem', async () => {
+    const banco = bancoFalso({
+      analise: { job_id: 'an1', status: 'done', tick_rate: 64, erro: null },
+      clipes: [{ id: 'c1', match_id: MATCH, pedido_por: EU, kills: [TK, TK], status: 'juntando', video_job_ids: ['v2', 'v1'], updated_at: new Date(Date.now() - 61 * 60 * 1000) }],
+    })
     const { app: a } = app({ banco })
     const res = await request(a).get(`/api/matches/${MATCH}/clipes-reais`).set('Cookie', cookie)
-    expect(res.body.clipes[0]).toMatchObject({
-      status: 'pronto', montagem: true, videos: ['https://cdn.demo-slap.net/v2.mp4', 'https://cdn.demo-slap.net/v1.mp4'],
-    })
+    expect(res.body.clipes[0]).toMatchObject({ status: 'pronto', videos: ['https://cdn.demo-slap.net/v2.mp4', 'https://cdn.demo-slap.net/v1.mp4'] })
   })
 
   it('montagem já juntada pelo Coletor: entrega só o vídeo único do R2', async () => {
@@ -207,15 +217,6 @@ describe('clipes reais (DEMO-SLAP)', () => {
     expect(demoSlap.dadosRender).not.toHaveBeenCalled()
   })
 
-  it('pedido antigo parado em juntando vira pronto com os trechos', async () => {
-    const banco = bancoFalso({
-      analise: { job_id: 'an1', status: 'done', tick_rate: 64, erro: null },
-      clipes: [{ id: 'c1', match_id: MATCH, pedido_por: EU, kills: [TK, TK], status: 'juntando', video_job_ids: ['v1', 'v2'], fragmovie_job_id: 'f1', updated_at: new Date() }],
-    })
-    const { app: a } = app({ banco })
-    const res = await request(a).get(`/api/matches/${MATCH}/clipes-reais`).set('Cookie', cookie)
-    expect(res.body.clipes[0]).toMatchObject({ status: 'pronto', videos: ['https://cdn.demo-slap.net/v1.mp4', 'https://cdn.demo-slap.net/v2.mp4'] })
-  })
 
   it('DEMO-SLAP recusa o render (ex.: sem crédito): clipe vira erro com a mensagem deles', async () => {
     const banco = bancoFalso({ analise: { job_id: 'an1', status: 'done', tick_rate: 64, erro: null } })
@@ -272,7 +273,7 @@ describe('clipes reais (DEMO-SLAP)', () => {
     expect(res.status).toBe(201)
     const [, clipes, opcoes] = demoSlap.renderizar.mock.calls[0]
     expect(clipes.map((c) => c.povSteamId)).toEqual([AMIGO, EU])
-    expect(opcoes).toEqual({ highResolution: false })
+    expect(opcoes).toEqual({ highResolution: true })
     expect(banco.estado.clipes[0]).toMatchObject({ modo: 'coaching' })
     expect(res.body.clipes[0]).toMatchObject({ modo: 'coaching', montagem: true })
   })
@@ -288,14 +289,27 @@ describe('clipes reais (DEMO-SLAP)', () => {
     const banco = bancoFalso({ analise: { job_id: 'an1', status: 'done', tick_rate: 64, erro: null } })
     const { app: a, demoSlap } = app({ banco })
     await request(a).post(`/api/matches/${MATCH}/clipes-reais`).set('Cookie', cookie).send({ modo: 'cheater', kills: [TK] })
-    expect(demoSlap.renderizar.mock.calls[0][2]).toEqual({ highResolution: false, showXRay: true })
+    expect(demoSlap.renderizar.mock.calls[0][2]).toEqual({ highResolution: true, showXRay: true })
   })
 
-  it('estimativa: créditos da DEMO-SLAP + 1 da leitura da Demo, em reais, sem pedir nada', async () => {
-    const { app: a, banco, demoSlap } = app()
+  it('sem marca d\'água: guarda a escolha e pede o render com hideWatermark', async () => {
+    const banco = bancoFalso({ analise: { job_id: 'an1', status: 'done', tick_rate: 64, erro: null } })
+    const { app: a, demoSlap } = app({ banco })
+    const res = await request(a).post(`/api/matches/${MATCH}/clipes-reais`).set('Cookie', cookie).send({ kills: [TK], semMarca: true })
+    expect(demoSlap.renderizar.mock.calls[0][2]).toEqual({ highResolution: true, hideWatermark: true })
+    expect(banco.estado.clipes[0].sem_marca).toBe(true)
+    expect(res.body.clipes[0].semMarca).toBe(true)
+  })
+
+  it('estimativa: créditos da DEMO-SLAP + 1 da leitura da Demo, em reais, e o extra sem marca d\'água', async () => {
+    const calcular = vi.fn().mockImplementation(async (_clipes, opcoes) => (opcoes.hideWatermark ? 6 : 4))
+    const { app: a, banco, demoSlap } = app({ demoSlap: demoSlapFalso({ calcular }) })
     const res = await request(a).post(`/api/matches/${MATCH}/clipes-reais/estimativa`).set('Cookie', cookie)
       .send({ modo: 'coaching', kills: [{ ...TK, pov: AMIGO }] })
-    expect(res.body).toEqual({ trechos: 2, creditos: 4, analise: 1, total: 5, reais: 0.95 })
+    expect(res.body).toEqual({ trechos: 2, creditos: 4, analise: 1, total: 5, reais: 0.95, extraSemMarca: 2, reaisExtraSemMarca: 0.38 })
+    const semMarca = await request(a).post(`/api/matches/${MATCH}/clipes-reais/estimativa`).set('Cookie', cookie)
+      .send({ modo: 'coaching', kills: [{ ...TK, pov: AMIGO }], semMarca: true })
+    expect(semMarca.body).toMatchObject({ creditos: 6, total: 7 })
     expect(demoSlap.calcular.mock.calls[0][0]).toHaveLength(2)
     expect(demoSlap.analisar).not.toHaveBeenCalled()
     expect(banco.estado.clipes).toHaveLength(0)
