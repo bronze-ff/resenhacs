@@ -75,4 +75,15 @@ describe('calcularStatsPorLado', () => {
     // A2: assistiu no round 2, morreu no round 3 (sem kill/assist/trade lá), sobreviveu 1 e 4 -> 3/4 = 75%.
     expect(r.A2.kastPct).toBe(75)
   })
+
+  it('suicídio (killer === victim) conta só como morte, não como kill nem KAST', () => {
+    // kill_positions grava suicídio (própria HE/molotov) com killer == victim e
+    // is_team_kill = false, então ele passa pelo filtro da query.
+    const kills = [...KILLS, { roundNumber: 3, tick: 50, killer: 'A1', victim: 'A1', assister: null, headshot: false }]
+    const r = calcularStatsPorLado({ players: PLAYERS, rounds: ROUNDS, kills, roundDamage: ROUND_DAMAGE, filtro: 'T' })
+    expect(r.A1.kills).toBe(1)
+    expect(r.A1.deaths).toBe(1)
+    // round 3: só se matou -> não conta; round 4: kill -> 1/2.
+    expect(r.A1.kastPct).toBe(50)
+  })
 })

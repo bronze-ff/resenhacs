@@ -35,7 +35,7 @@ def world_to_radar(x, y, cal, size=RADAR_SIZE):
     return (round(_clamp01(px / size), 4), round(_clamp01(py / size), 4))
 
 
-def detect_clutch(round_kills, teams):
+def detect_clutch(round_kills, teams, vivos_no_inicio=None):
     """Detecta um clutch VENCIDO no round (pro anel dourado no Replay 2D): último vivo
     de um time que zera os inimigos sobrevivendo.
 
@@ -49,8 +49,11 @@ def detect_clutch(round_kills, teams):
     às vezes divergem (ex.: a bomba explode depois do clutcher já ter zerado os
     inimigos, mas ele morre em seguida: aqui conta, no resultado oficial não). Por isso
     `build_replay` recebe `winner_by_round` e usa como gate final antes de expor o anel
-    — ver ali."""
-    alive = set(teams.keys())
+    — ver ali.
+
+    `vivos_no_inicio` (opcional): quem estava vivo no 1º frame do round. Sem ele, todo
+    jogador da Partida começava vivo — inclusive quem já tinha desconectado."""
+    alive = set(teams.keys()) if vivos_no_inicio is None else set(vivos_no_inicio)
     inicio_por_time = {}
     for k in round_kills:
         alive.discard(k["victim"])
@@ -205,7 +208,8 @@ def build_replay(map_name, ticks, kills=None, extras=None, target_hz=8, winner_b
             if pos:
                 plant = {"t": ti, "x": pos["x"], "y": pos["y"]}
 
-        clutch = detect_clutch(rk, teams)
+        vivos_no_inicio = {p["id"] for p in frames[0]["players"] if p["alive"]}
+        clutch = detect_clutch(rk, teams, vivos_no_inicio or None)
         if clutch is not None and winner_by_round is not None and winner_by_round.get(r) != clutch["team"]:
             clutch = None  # o time "clutchou" (zerou os inimigos) mas não venceu o round oficialmente
         clutch_out = {"steamid": clutch["steamid"], "vs": clutch["vs"], "t": idx(r, clutch["tick"])} if clutch else None

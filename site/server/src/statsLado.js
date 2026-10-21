@@ -125,7 +125,11 @@ export function calcularStatsPorLado({ players, rounds, kills, roundDamage, filt
   for (const [time, steamIds] of porTime) {
     const roundNumbers = roundsDoTime(rounds, time, filtro)
     const roundSet = new Set(roundNumbers)
-    const killsDoTime = kills.filter((k) => !k.teamKill && roundSet.has(k.roundNumber))
+    // Suicídio (killer === victim, gravado com is_team_kill = false) é só morte: sem
+    // killer, não entra em kill, multikill, KAST nem trade.
+    const killsDoTime = kills
+      .filter((k) => !k.teamKill && roundSet.has(k.roundNumber))
+      .map((k) => (k.killer && k.killer === k.victim ? { ...k, killer: null } : k))
     const trades = tradeKills(killsDoTime, teams)
     const kast = kastPct(killsDoTime, trades, steamIds, roundNumbers)
 

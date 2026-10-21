@@ -4,12 +4,13 @@ Validado contra um demo real de matchmaking (de_anubis). demoparser2 é nativo (
 importado só aqui para os testes das transformações rodarem sem ele.
 
 Descobertas da API (CS2 / valve_demo_2):
-- round vem de `total_rounds_played` (0-based) passado em `other=`; não há evento round_end.
-- dano = soma de `player_hurt.dmg_health` por atacante.
+- round de kill/dano = janela do `round_freeze_end` (ver _round_pelas_janelas);
+  `total_rounds_played` (0-based) já avança no fim do round, antes das exit frags.
+- dano = soma de `player_hurt.dmg_health` por atacante, limitado pelo HP da vítima.
 - assist = `player_death.assister_steamid`.
 - placar = `team_rounds_total` (prop por jogador) lido no fim da partida.
 - time fixo A/B: `team_num` no 1º `round_freeze_end` (2=TR→A, 3=CT→B); estável apesar
-  da troca de lados no intervalo.
+  da troca de lados no intervalo. Quem entra depois herda pelo lado (_times_fixos).
 - warmup: filtra deaths por `is_warmup_period==False` e hurt por tick >= 1º freeze_end.
 - played_at: o formato .dem NÃO guarda data/hora real em lugar nenhum (header, cvars,
   hltv_versioninfo — nada). Usamos a mtime do arquivo como proxy (é quando foi baixado,
@@ -22,6 +23,66 @@ import os
 
 def _team_letter(team_number):
     return "A" if team_number == 2 else "B"
+
+
+def _times_fixos(registros):
+    """{steam_id64: "A"|"B"} a partir de snapshots de `team_num` em TODOS os
+    round_freeze_end (`registros`: [{steamid, tick, team_num}]).
+
+    O 1º freeze_end define a referência (2=TR→A, 3=CT→B). Bug antigo: só esse snapshot
+    era lido, então quem entrava depois (reconexão, substituto) sumia da Partida, e
+    team_num 0/1 (sem time/espectador) virava time B. Agora só 2/3 contam, e quem
+    aparece num freeze_end posterior herda a letra pelo lado que o time A ocupa naquele
+    round (o lado troca no intervalo)."""
+    por_tick = {}
+    for r in registros:
+        sid, team_num = _sid(r.get("steamid")), _num(r.get("team_num"))
+        if sid and team_num in (2, 3):
+            por_tick.setdefault(int(r["tick"]), {})[sid] = team_num
+    fixed = {}
+    for tick in sorted(por_tick):
+        lados = por_tick[tick]
+        if not fixed:
+            fixed = {sid: _team_letter(tn) for sid, tn in lados.items()}
+            continue
+        # 5 - team_num troca 2<->3: lado do time A visto por um jogador do time B.
+        lado_a = next((tn if fixed[s] == "A" else 5 - tn for s, tn in lados.items() if s in fixed), None)
+        if lado_a is None:
+            continue
+        for sid, tn in lados.items():
+            fixed.setdefault(sid, "A" if tn == lado_a else "B")
+    return fixed
+
+
+def _vivos_por_round(registros, tick_to_round):
+    """[{round_number, steam_id64}] de quem estava vivo no round_freeze_end de cada
+    round — base do clutch (transform.clutch_outcomes): desconectado não conta como
+    vivo. `registros`: [{steamid, tick, is_alive}]."""
+    saida = []
+    for r in registros:
+        sid, rn = _sid(r.get("steamid")), tick_to_round.get(int(r["tick"]))
+        if sid and rn is not None and _flag(r.get("is_alive")):
+            saida.append({"round_number": rn, "steam_id64": sid})
+    return saida
+
+
+def _round_pelas_janelas(tick_to_round):
+    """Função (tick, fallback) -> round_number pela janela do round: o round de um
+    evento é o do último round_freeze_end até aquele tick (mesma janela do Replay 2D).
+
+    Bug antigo: `total_rounds_played + 1` já avança quando o round é decidido, então a
+    kill/dano depois da vitória (exit frag, antes do round_officially_ended) caía no
+    round SEGUINTE. Evento antes do 1º freeze_end usa o `fallback`."""
+    import bisect
+
+    ticks = sorted(tick_to_round)
+    rounds = [tick_to_round[t] for t in ticks]
+
+    def round_do_tick(tick, fallback):
+        i = bisect.bisect_right(ticks, tick) - 1
+        return rounds[i] if i >= 0 else fallback
+
+    return round_do_tick
 
 
 def _lado_de_team_num(team_number):
@@ -104,7 +165,10 @@ def _detectar_abandono(score, end_ticks, disconnects, kills):
     parte da debandada normal de fim de partida, que sempre acontece por último), é
     candidato a ter sido quem abandonou. Só atribui quando há exatamente 1 candidato —
     ambíguo (2+ ao mesmo tempo, ou nenhum) fica sem atribuição (abandoned_by=None)."""
-    ended_early = score.get("A", 0) < _ROUNDS_PRA_VENCER_MR12 and score.get("B", 0) < _ROUNDS_PRA_VENCER_MR12
+    a, b = score.get("A", 0), score.get("B", 0)
+    # 12x12 é empate normal do Competitivo MR12 sem overtime, não abandono.
+    empate_mr12 = a == b == _ROUNDS_PRA_VENCER_MR12 - 1
+    ended_early = a < _ROUNDS_PRA_VENCER_MR12 and b < _ROUNDS_PRA_VENCER_MR12 and not empate_mr12
     if not ended_early or not end_ticks:
         return ended_early, None
 
@@ -311,6 +375,19 @@ def _tipo_de_compra(equip_value_time):
     if equip_value_time < 10000:
         return "forcado"
     if equip_value_time < 20000:
+        return "semi"
+    return "full"
+
+
+# Mesmo rótulo, limiar de UM jogador (o de cima é do time de 5 — aplicado ao gasto
+# individual, todo jogador saía "eco"). Âncoras de preço do CS2: pistola + colete
+# fica abaixo de $2.000; fuzil + colete (AK $2.700 + $650) passa de $3.300.
+def _tipo_de_compra_jogador(equip_value):
+    if equip_value < 1000:
+        return "eco"
+    if equip_value < 2000:
+        return "forcado"
+    if equip_value < 3300:
         return "semi"
     return "full"
 
@@ -668,7 +745,9 @@ def fundir_partes_mesmo_mapa(partes, rdatas=None):
 
     rounds_fundidos, kills_fundidos, econ_fundido, kill_pos_fundidas = [], [], [], []
     player_econ_fundido, purchases_por_parte, round_damage_fundido = [], [], []
+    round_alive_fundido = []
     for parte, offset in zip(partes_corrigidas, offsets):
+        round_alive_fundido += _offset_campo(parte.get("round_alive", []), offset, "round_number")
         rounds_fundidos += _offset_campo(parte.get("rounds", []), offset, "round_number")
         kills_fundidos += _offset_campo(parte.get("kills", []), offset, "round_number")
         econ_fundido += _offset_campo(parte.get("round_econ", []), offset, "round_number")
@@ -702,6 +781,7 @@ def fundir_partes_mesmo_mapa(partes, rdatas=None):
         "player_round_econ": player_econ_fundido, "purchases": purchases_fundidas,
         "player_damage": player_damage_fundido, "player_flashes": player_flashes_fundido,
         "player_round_damage": round_damage_fundido,
+        "round_alive": round_alive_fundido,
         "players": _merge_players([p.get("players", []) for p in partes_corrigidas]),
     }
 
@@ -750,6 +830,14 @@ def parse_demo(path):
 
     freeze = parser.parse_event("round_freeze_end", other=["total_rounds_played"])
     first_freeze = int(freeze["tick"].min())
+    tick_to_round = {int(t): int(rn) + 1 for t, rn in zip(freeze["tick"], freeze["total_rounds_played"])}
+    # Round de kill/dano/tiro pela janela do round, não por total_rounds_played (ver
+    # _round_pelas_janelas). Compra continua em total_rounds_played: ela acontece no
+    # freezetime, antes do freeze_end do próprio round.
+    round_do_tick = _round_pelas_janelas(tick_to_round)
+
+    def round_do_evento(r):
+        return round_do_tick(int(r["tick"]), int(r["total_rounds_played"]) + 1)
 
     hurt = parser.parse_event("player_hurt", other=["total_rounds_played", "weapon"])
     hurt = hurt[hurt["tick"] >= first_freeze]
@@ -760,8 +848,7 @@ def parse_demo(path):
     # weapon_fire DISTINGUE as duplas ambíguas (m4a1/m4a1_silencer etc.) certinho —
     # usado só pra corrigir o hit/dano ambíguo do player_hurt (ver _resolver_arma_hurt).
     mapa_variante = _mapa_variante_ambigua(
-        {"user_steamid": r.get("user_steamid"), "weapon": r.get("weapon"),
-         "round": int(r["total_rounds_played"]) + 1}
+        {"user_steamid": r.get("user_steamid"), "weapon": r.get("weapon"), "round": round_do_evento(r)}
         for r in fogo.to_dict("records")
     )
 
@@ -770,29 +857,27 @@ def parse_demo(path):
         int(win_panel["tick"].iloc[0]) - 100 if len(win_panel) else int(deaths["tick"].max())
     )
 
-    # Times fixos A/B pelo primeiro freeze_end. team_clan_name vem junto (só partida de
-    # pro/LAN costuma trazer nome de clã) pra extrair o nome de cada lado (_nomes_de_time).
-    snap0 = parser.parse_ticks(["team_num", "team_clan_name"], ticks=[first_freeze])
-    fixed = {}
-    for r in snap0.to_dict("records"):
-        team_num = _num(r.get("team_num"))
-        sid = _sid(r.get("steamid"))
-        if sid and team_num is not None:
-            fixed[sid] = _team_letter(team_num)
-    nome_a, nome_b = _nomes_de_time(snap0.to_dict("records"), fixed)
+    # Times fixos A/B pelos freeze_end (ver _times_fixos). team_clan_name vem junto (só
+    # partida de pro/LAN costuma trazer nome de clã) pra extrair o nome de cada lado
+    # (_nomes_de_time); is_alive dá quem começou cada round vivo (_vivos_por_round).
+    snap_freeze = parser.parse_ticks(
+        ["team_num", "team_clan_name", "is_alive"], ticks=sorted(tick_to_round),
+    ).to_dict("records")
+    fixed = _times_fixos(snap_freeze)
+    nome_a, nome_b = _nomes_de_time(snap_freeze, fixed)
+    round_alive = _vivos_por_round(snap_freeze, tick_to_round)
 
     # Economia por round×time: soma do equipamento dos 5 jogadores no fim do freezetime
     # (current_equip_value), classificada no esquema HLTV (_tipo_de_compra). Best-effort:
     # se o nome de campo não bater numa versão do demoparser2, cai pra lista vazia em
     # vez de derrubar o ingest inteiro (mesmo padrão de player_blind acima).
     # player_round_econ é o MESMO current_equip_value já lido pra somar o round_econ por
-    # time — só não descartamos mais o valor individual. buy_type por jogador usa a mesma
-    # classificação HLTV do time (_tipo_de_compra), só que sobre o gasto individual dele.
+    # time — só não descartamos mais o valor individual. buy_type por jogador usa o
+    # limiar individual (_tipo_de_compra_jogador), não o do time.
     round_econ = []
     player_round_econ = []
     lado_por_round = {}  # round_number -> "CT"/"T" que o time FIXO A ocupava (FIL-51)
     try:
-        tick_to_round = {int(t): int(rn) + 1 for t, rn in zip(freeze["tick"], freeze["total_rounds_played"])}
         # team_num no mesmo snapshot da econ (já é um parse_ticks nesses ticks mesmo) —
         # dá o lado FÍSICO (CT/T) de cada jogador naquele round, sem custo extra de parse.
         econ_df = parser.parse_ticks(["current_equip_value", "team_num"], ticks=sorted(tick_to_round.keys()))
@@ -808,7 +893,7 @@ def parse_demo(path):
             if sid:
                 player_round_econ.append({
                     "round_number": rn, "steam_id64": sid, "team": time,
-                    "equip_value": equip, "buy_type": _tipo_de_compra(equip),
+                    "equip_value": equip, "buy_type": _tipo_de_compra_jogador(equip),
                 })
             if time == "A" and rn not in lado_por_round:
                 lado = _lado_de_team_num(_num(r.get("team_num")))
@@ -870,10 +955,10 @@ def parse_demo(path):
     for r in deaths.to_dict("records"):
         atk, vic, ast = _sid(r.get("attacker_steamid")), _sid(r.get("user_steamid")), _sid(r.get("assister_steamid"))
         headshot = bool(r["headshot"])
-        team_kill = bool(atk and vic and atk != vic and fixed.get(atk) == fixed.get(vic))
+        team_kill = bool(atk and vic and atk != vic and fixed.get(atk) and fixed.get(atk) == fixed.get(vic))
         kills.append(
             {
-                "round_number": int(r["total_rounds_played"]) + 1,
+                "round_number": round_do_evento(r),
                 "tick": int(r["tick"]),
                 "attacker": atk,
                 "victim": vic,
@@ -941,18 +1026,29 @@ def parse_demo(path):
     # já carrega atacante+vítima+arma+dano, só nunca guardávamos o par, só o total do
     # atacante. Chave (atacante, vítima, arma) pra já vir separado por arma na consulta.
     damage_pares = {}
-    for r in hurt.to_dict("records"):
+    # HP que sobra pra cada (round, vítima): dmg_health vem cru (um tiro de AWP na
+    # cabeça marca ~400), então o dano real é limitado pelo HP antes do hit. Se o
+    # demoparser2 já limitar, o min() não muda nada.
+    hp_restante = {}
+    for r in sorted(hurt.to_dict("records"), key=lambda r: int(r["tick"])):
         atk = _sid(r.get("attacker_steamid"))
+        vic = _sid(r.get("user_steamid"))
+        rn = round_do_evento(r)
+        dmg = int(r["dmg_health"])
+        if vic:
+            hp = hp_restante.get((rn, vic), 100)
+            dmg = max(0, min(dmg, hp))
+            hp_restante[(rn, vic)] = hp - dmg
         if not atk:
             continue
-        dmg = int(r["dmg_health"])
-        vic = _sid(r.get("user_steamid"))
         arma = r.get("weapon")
-        rn = int(r["total_rounds_played"]) + 1
-        time_kill = bool(vic and fixed.get(atk) == fixed.get(vic))
+        # Jogador sem time conhecido (fora de `fixed`) não é inimigo nem aliado.
+        time_atk, time_vic = fixed.get(atk), fixed.get(vic)
+        time_kill = bool(vic and time_atk and time_atk == time_vic)
+        inimigo = bool(time_atk and time_vic and time_atk != time_vic)
         if time_kill:
             team_damage[atk] = team_damage.get(atk, 0) + dmg
-        else:
+        elif inimigo:
             damage[atk] = damage.get(atk, 0) + dmg
             round_damage[(rn, atk)] = round_damage.get((rn, atk), 0) + dmg
         if arma in _ARMAS_UTILITARIAS:
@@ -960,21 +1056,20 @@ def parse_demo(path):
             if arma == "hegrenade":
                 if time_kill:
                     he_team_damage[atk] = he_team_damage.get(atk, 0) + dmg
-                else:
+                elif inimigo:
                     he_damage[atk] = he_damage.get(atk, 0) + dmg
             elif arma == "inferno":
                 if time_kill:
                     molotov_team_damage[atk] = molotov_team_damage.get(atk, 0) + dmg
-                else:
+                elif inimigo:
                     molotov_damage[atk] = molotov_damage.get(atk, 0) + dmg
             arma_par = _arma_limpa(arma) or str(arma)
         elif _eh_arma_de_fogo(arma):
             shots_hit[atk] = shots_hit.get(atk, 0) + 1
-            round_no = int(r["total_rounds_played"]) + 1
-            arma_resolvida = _resolver_arma_hurt(mapa_variante, atk, round_no, _arma_limpa(arma))
+            arma_resolvida = _resolver_arma_hurt(mapa_variante, atk, rn, _arma_limpa(arma))
             slot = weapon_slot(atk, arma_resolvida)
             slot["shots_hit"] += 1
-            if not time_kill:
+            if inimigo:
                 slot["damage"] += dmg
             arma_par = arma_resolvida
         else:
@@ -1085,7 +1180,8 @@ def parse_demo(path):
             for k in kills:
                 if k["team_kill"] or k["victim"] != v["vitima"] or not (tick0 <= k["tick"] <= janela_fim):
                     continue
-                if fixed.get(k["attacker"]) == fixed.get(thrower):
+                # Quem matou é OUTRO aliado: kill do próprio lançador não é assist.
+                if k["attacker"] and k["attacker"] != thrower and fixed.get(k["attacker"]) == fixed.get(thrower):
                     flash_assists[thrower] = flash_assists.get(thrower, 0) + 1
                     creditou_assist = True
                     break
@@ -1204,6 +1300,7 @@ def parse_demo(path):
         "player_flashes": player_flashes,
         "kill_positions": kill_positions,
         "player_round_damage": player_round_damage,
+        "round_alive": round_alive,
         "ended_early": ended_early,
         "abandoned_by": abandoned_by,
     }
@@ -1225,18 +1322,14 @@ def extract_replay(path, target_hz=8, demo_tick_rate=64):
     inicios = sorted({int(t) for t in freeze["tick"].tolist()})
     fins = sorted({int(t) for t in ended["tick"].tolist()})  # dedupe: há 2 linhas por round
 
-    # Time fixo A/B pelo primeiro freeze_end (mesmo método de parse_demo, recalculado
-    # aqui porque extract_replay é uma passada independente). Precisa ser ESTÁVEL pro
-    # jogo inteiro — team_num sozinho é o lado atual (CT/T), que troca no intervalo;
-    # usar team_num por tick corrompia a detecção de clutch (replay.py) pra qualquer
-    # round antes da troca de lado, contando/perdendo clutches que nunca existiram.
+    # Time fixo A/B pelos freeze_end (_times_fixos, mesmo método de parse_demo,
+    # recalculado aqui porque extract_replay é uma passada independente). Precisa ser
+    # ESTÁVEL pro jogo inteiro — team_num sozinho é o lado atual (CT/T), que troca no
+    # intervalo; usar team_num por tick corrompia a detecção de clutch (replay.py) pra
+    # qualquer round antes da troca de lado, contando/perdendo clutches que nunca existiram.
     fixed = {}
     if inicios:
-        snap0 = parser.parse_ticks(["team_num"], ticks=[inicios[0]])
-        for r in snap0.to_dict("records"):
-            sid, team_num = _sid(r.get("steamid")), _num(r.get("team_num"))
-            if sid and team_num is not None:
-                fixed[sid] = _team_letter(team_num)
+        fixed = _times_fixos(parser.parse_ticks(["team_num"], ticks=inicios).to_dict("records"))
 
     passo = max(1, round(demo_tick_rate / target_hz))
     alvo = []
