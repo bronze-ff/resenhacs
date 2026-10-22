@@ -47,26 +47,29 @@ jobs:
             git diff --name-only "$BASE" "$HEAD" > changed.txt
             RANGE="$BASE..$HEAD"
           fi
-          client=false; server=false; coletor=false; bot=false; all=false
+          client=false; server=false; coletor=false; bot=false; extensao=false; all=false
           deps=false; wf=false; code=false
           if grep -qE '^site/client/' changed.txt; then client=true; fi
           if grep -qE '^site/server/' changed.txt; then server=true; fi
           if grep -qE '^coletor/' changed.txt; then coletor=true; fi
           if grep -qE '^bot/' changed.txt; then bot=true; fi
+          if grep -qE '^extensao/' changed.txt; then extensao=true; fi
+          if grep -qE '^shared/extensao/' changed.txt; then extensao=true; server=true; coletor=true; fi
           if grep -qE '^(package\.json|scripts/|\.github/workflows/ci\.yml$)' changed.txt; then all=true; fi
-          if [ "$all" = true ]; then client=true; server=true; coletor=true; bot=true; fi
+          if [ "$all" = true ]; then client=true; server=true; coletor=true; bot=true; extensao=true; fi
           # PR só de docs (ou sem código) ainda roda o verify inteiro.
-          if [ "$client" != true ] && [ "$server" != true ] && [ "$coletor" != true ] && [ "$bot" != true ]; then
-            client=true; server=true; coletor=true; bot=true
+          if [ "$client" != true ] && [ "$server" != true ] && [ "$coletor" != true ] && [ "$bot" != true ] && [ "$extensao" != true ]; then
+            client=true; server=true; coletor=true; bot=true; extensao=true
           fi
           if grep -qE '(^|/)(package-lock\.json|requirements[^/]*\.txt)$' changed.txt; then deps=true; fi
           if grep -qE '^\.github/' changed.txt; then wf=true; fi
-          if [ "$client" = true ] || [ "$server" = true ] || [ "$coletor" = true ] || [ "$bot" = true ]; then code=true; fi
+          if [ "$client" = true ] || [ "$server" = true ] || [ "$coletor" = true ] || [ "$bot" = true ] || [ "$extensao" = true ]; then code=true; fi
           {
             echo "client=$client"
             echo "server=$server"
             echo "coletor=$coletor"
             echo "bot=$bot"
+            echo "extensao=$extensao"
             echo "deps=$deps"
             echo "workflows=$wf"
             echo "code=$code"
@@ -79,13 +82,14 @@ jobs:
         run: docker run --rm -v "$PWD:/repo" "$GITLEAKS_IMAGE" git /repo --redact --exit-code 1 --log-opts="$RANGE"
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        if: steps.diff.outputs.client == 'true' || steps.diff.outputs.server == 'true'
+        if: steps.diff.outputs.client == 'true' || steps.diff.outputs.server == 'true' || steps.diff.outputs.extensao == 'true'
         with:
           node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: |
             site/client/package-lock.json
             site/server/package-lock.json
+            extensao/package-lock.json
 
       - name: npm ci (client)
         if: steps.diff.outputs.client == 'true'
@@ -96,6 +100,11 @@ jobs:
         if: steps.diff.outputs.server == 'true'
         working-directory: site/server
         run: npm ci
+
+      - name: npm ci (extensao)
+        if: steps.diff.outputs.extensao == 'true'
+        working-directory: extensao
+        run: npm ci --ignore-scripts
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         if: steps.diff.outputs.coletor == 'true'
@@ -119,12 +128,14 @@ jobs:
           RUN_SERVER: ${{ steps.diff.outputs.server }}
           RUN_COLETOR: ${{ steps.diff.outputs.coletor }}
           RUN_BOT: ${{ steps.diff.outputs.bot }}
+          RUN_EXTENSAO: ${{ steps.diff.outputs.extensao }}
         run: |
           args=()
           if [ "$RUN_CLIENT" = true ]; then args+=(client); fi
           if [ "$RUN_SERVER" = true ]; then args+=(server); fi
           if [ "$RUN_COLETOR" = true ]; then args+=(coletor); fi
           if [ "$RUN_BOT" = true ]; then args+=(bot); fi
+          if [ "$RUN_EXTENSAO" = true ]; then args+=(extensao); fi
           node scripts/verify.mjs "${args[@]}"
 
       # Pacote só de dev (vitest, postcss, …) não entra no bundle publicado.
