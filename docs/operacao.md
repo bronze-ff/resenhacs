@@ -15,7 +15,7 @@ O client faz proxy de `/api/*` para `https://resenhacs.vercel.app` em produção
 
 Coletor e backfill de replay: workflows `Coletor` e `R2 replays`. O cron do Coletor é a cada 10 minutos. Não há servidor próprio.
 
-Node na Vercel está em 24.x. O CI usa Node 22 (`.nvmrc`) e Python 3.12 (`.python-version`), o mesmo par dos workflows atuais. Esta onda não altera a versão da Vercel.
+Node na Vercel está em 24.x. O CI usa Node 24.22.1 (`.nvmrc`) e Python 3.12 (`.python-version`), o mesmo par dos workflows atuais. Esta onda não altera a versão da Vercel.
 
 ## Variáveis novas
 
