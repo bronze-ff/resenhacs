@@ -82,6 +82,12 @@ export function createApp({
   const app = express()
   // Não anunciar a stack (X-Powered-By: Express) pra quem varre o site atrás de alvo.
   app.disable('x-powered-by')
+  // Nada autenticado e nada com Set-Cookie pode ir pra CDN. O único GET público sem
+  // cookie e sem dado de Jogador é /api/health, que troca este valor no handler.
+  app.use((req, res, next) => {
+    res.set('Cache-Control', 'private, no-store')
+    next()
+  })
   // Em produção (Vercel) a função fica atrás de UM proxy (o edge deles), que sempre manda
   // X-Forwarded-For; sem confiar nesse hop o express-rate-limit não consegue identificar o
   // IP do cliente e lança erro de validação em TODA requisição (ERR_ERL_UNEXPECTED_X_FORWARDED_FOR),
@@ -103,7 +109,15 @@ export function createApp({
 
   patchRouterAsync()
 
-  app.get('/api/health', (req, res) => res.json({ ok: true }))
+  app.get('/api/health', (req, res) => {
+    // O limitador global grava RateLimit-* por IP. Se isso entrar no objeto da CDN,
+    // o próximo visitante recebe a cota de outro.
+    for (const nome of Object.keys(res.getHeaders())) {
+      if (String(nome).toLowerCase().startsWith('ratelimit')) res.removeHeader(nome)
+    }
+    res.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300')
+    res.json({ ok: true })
+  })
 
   const requireAuth = createRequireAuth(config.jwtSecret, db)
   const r2Client = r2ClientOverride !== undefined ? r2ClientOverride : createR2Client(config)
