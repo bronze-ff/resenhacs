@@ -87,9 +87,12 @@ export function createApp({
   // Não anunciar a stack (X-Powered-By: Express) pra quem varre o site atrás de alvo.
   app.disable('x-powered-by')
   // Só a API. O static (site/client/dist, quando staticDir existe) não pode herdar
-  // no-store: o JS/CSS com hash do Vite é cacheável. /api/health troca este valor.
+  // no-store: o JS/CSS com hash do Vite é cacheável. O roteamento do Express não
+  // diferencia maiúsculas, então /API/auth/me é a mesma rota que /api/auth/me.
+  // /api/health (e /API/health) troca este valor no handler.
   app.use((req, res, next) => {
-    if (req.path === '/api' || req.path.startsWith('/api/')) res.set('Cache-Control', 'private, no-store')
+    const caminho = req.path.toLowerCase()
+    if (caminho === '/api' || caminho.startsWith('/api/')) res.set('Cache-Control', 'private, no-store')
     next()
   })
   // Em produção (Vercel) a função fica atrás de UM proxy (o edge deles), que sempre manda
@@ -115,7 +118,8 @@ export function createApp({
 
   app.get('/api/health', (req, res) => {
     // O limitador global grava RateLimit-* por IP. Se isso entrar no objeto da CDN,
-    // o próximo visitante recebe a cota de outro.
+    // o próximo visitante recebe a cota de outro. Vale para /API/health: o Express
+    // entrega esta rota sem diferenciar maiúsculas.
     for (const nome of Object.keys(res.getHeaders())) {
       if (String(nome).toLowerCase().startsWith('ratelimit')) res.removeHeader(nome)
     }

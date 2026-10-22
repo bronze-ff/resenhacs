@@ -64,6 +64,22 @@ describe('Cache-Control', () => {
     expect(logado.headers['set-cookie']).toBeUndefined()
   })
 
+  it('prefixo /api ignora maiúsculas', async () => {
+    const app = appCom()
+    for (const url of ['/API/auth/me', '/Api/auth/me']) {
+      const res = await request(app).get(url)
+      expect(res.status, url).toBe(401)
+      expect(res.headers['cache-control'], url).toBe(CACHE_PRIVADO)
+      expect(res.headers['cache-control'], url).not.toContain('s-maxage')
+    }
+    const health = await request(app).get('/API/health')
+    expect(health.status).toBe(200)
+    expect(health.body).toEqual({ ok: true })
+    expect(health.headers['cache-control']).toBe(CACHE_HEALTH)
+    const raiz = await request(app).get('/API')
+    expect(raiz.headers['cache-control']).toBe(CACHE_PRIVADO)
+  })
+
   it('login Steam grava cookie e não é cache compartilhado', async () => {
     const res = await request(appCom()).get('/api/auth/steam')
     expect(res.status).toBe(302)
