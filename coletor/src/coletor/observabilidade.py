@@ -94,26 +94,42 @@ def _redigir(valor):
 
 
 _MAX_DECODIFICACOES = 3
+_SEQUENCIA_PERCENT = re.compile(r"(?:%[0-9A-Fa-f]{2})+")
+
+
+def _decodificar_sequencia(match):
+    try:
+        return bytes.fromhex(match.group(0).replace("%", "")).decode("utf-8")
+    except UnicodeDecodeError:
+        return match.group(0)  # não forma UTF-8: fica crua só ela, como no JS
 
 
 def redigir_string(valor):
     if not isinstance(valor, str):
         return valor
 
-    # Decodifica em camadas (%2540 -> %40 -> @) até estabilizar, no máximo 3 vezes, e
-    # aplica os padrões em cada camada. unquote não lança: % malformado fica como está e
-    # UTF-8 inválido vira U+FFFD, sem esconder o resto da string (Sentinela P1).
+    # Decodifica em camadas (%2540 -> %40 -> @) até estabilizar, no máximo 3 vezes. Cada
+    # sequência de %XX decodifica sozinha (igual ao decodificador por sequência do JS):
+    # % sem dois hex e UTF-8 inválido ficam crus sem esconder o resto da string.
     camadas = [valor]
     while True:
-        decodificado = unquote(camadas[-1], errors="replace")
+        decodificado = _SEQUENCIA_PERCENT.sub(_decodificar_sequencia, camadas[-1])
         if decodificado == camadas[-1]:
             break
         if len(camadas) > _MAX_DECODIFICACOES:
             return REDACTED  # ainda muda depois de 3 decodificações: falha fechada
         camadas.append(decodificado)
-    if any(_redigir(camada) == REDACTED for camada in camadas):
-        return REDACTED
-    return _redigir(valor)
+
+    sanitizada = None
+    for camada in camadas:
+        # A leitura tolerante (U+FFFD no UTF-8 inválido) também passa pelos padrões.
+        if _redigir(camada) == REDACTED or _redigir(unquote(camada, errors="replace")) == REDACTED:
+            return REDACTED
+        if _redigir(camada) != camada:
+            sanitizada = _redigir(camada)
+    # Falha fechada: a camada mais profunda que a sanitização mudou (ex.: query cortada
+    # numa camada decodificada); o original só sai se nenhuma camada mudou.
+    return valor if sanitizada is None else sanitizada
 
 
 def scrub_valor(valor, chave=None):

@@ -333,3 +333,37 @@ def test_percent_encoding_que_ainda_muda_depois_de_3_camadas_falha_fechado():
     assert redigir_string("/jogador/ana%25252540exemplo.com") == REDACTED
     # Sem dado sensível em camada nenhuma; 7 dígitos seguidos não casam com telefone.
     assert redigir_string("/partida/abc%2525252Fdef") == REDACTED
+
+
+# Lince P0 no 2bf2b74: o corte de query de uma camada decodificada não pode ser
+# descartado em favor do original (o e-mail codificado voltava inteiro).
+@pytest.mark.parametrize("mensagem", [
+    "/partida/abc%3Fx%3Dana%2540exemplo.com",
+    "/partida/abc%253Fx%253Dana%252540exemplo.com",
+    "/partida/abc%3Fx%3Dana%2540exemplo.com%E0%A4",
+])
+def test_before_send_devolve_a_camada_sanitizada_e_nao_o_original(mensagem):
+    import coletor.observabilidade as obs
+
+    final = obs.before_send({"message": mensagem}, None)["message"]
+    assert final in ("/partida/abc", REDACTED)
+    assert "exemplo" not in final
+
+
+# Prumo: decodificação por sequência de %XX, como o JS. Sequência que não forma UTF-8
+# fica crua só ela; % sem dois hex fica literal; nada disso esconde o resto.
+@pytest.mark.parametrize("valor", [
+    "/jogador/ana%2540exemplo.com/%ZZ",
+    "/jogador/ana%40exemplo.com/%E9%ZZ",
+    "/jogador/ana%40exemplo.com?x=%E0%A4",
+    "/p/%ZZ/ana%2540exemplo.com",
+])
+def test_sequencia_invalida_nao_esconde_o_resto(valor):
+    assert redigir_string(valor) == REDACTED
+
+
+def test_sequencia_utf8_invalida_fica_crua_e_nao_conta_como_camada():
+    # %E0%A4 não decodifica; a 4a passada não muda nada, então não é falha fechada. Sem
+    # sanitização que mude alguma camada, sai o original.
+    assert redigir_string("/x/%252525E0%252525A4") == "/x/%252525E0%252525A4"
+    assert redigir_string("/p/abc%20def/%E0%A4") == "/p/abc%20def/%E0%A4"
