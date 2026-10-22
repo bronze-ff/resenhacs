@@ -258,18 +258,24 @@ def montar_embed_clipes(match_id, clipes, app_url):
 
 def avisar_clipes(conn, webhook_url, app_url):
     """Posta os Clipes prontos ainda não avisados: 1 post por Partida, no máximo 3 por
-    execução. Devolve quantos posts fez. Post que falha libera a reserva e propaga."""
+    execução. Devolve quantos posts fez. Qualquer falha depois da 1ª reserva da Partida
+    (outra reserva, montagem ou post) libera todas as reservas dela e propaga."""
     posts = 0
     for match_id, clipes in _candidatos_clipes(conn).items():
         if posts >= MAX_POSTS_CLIPE:
             break
-        reservados = [c for c in clipes if _reservar_clipe(conn, c[0], c[1])]
-        if not reservados:
-            continue
+        reservados = []
         try:
+            for clipe in clipes:
+                if _reservar_clipe(conn, clipe[0], clipe[1]):
+                    reservados.append(clipe)
+            if not reservados:
+                continue
             _postar(webhook_url, montar_embed_clipes(match_id, reservados, app_url))
         except Exception:
-            _liberar_clipes(conn, reservados)
+            conn.rollback()  # a reserva que falhou deixa a transação abortada
+            if reservados:
+                _liberar_clipes(conn, reservados)
             raise
         posts += 1
     return posts

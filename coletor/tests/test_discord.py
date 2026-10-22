@@ -245,10 +245,12 @@ class _ConnSql:
         pass
 
 
-def _conn_clipes(reais=(), allstar=(), perdidos=()):
+def _conn_clipes(reais=(), allstar=(), perdidos=(), quebram=()):
     liberados = []
 
     def responder(sql, params):
+        if "discord_notificado_em = now()" in sql and params[0] in quebram:
+            raise RuntimeError("reserva falhou")
         if sql.startswith("select") and "from clipes_reais" in sql:
             return list(reais)
         if sql.startswith("select") and "from allstar_clips" in sql:
@@ -317,6 +319,28 @@ def test_post_com_erro_libera_a_reserva(monkeypatch, _sem_fixture_de_reserva):
     liberacoes = [s for s, _ in conn.execs if "discord_notificado_em = null" in s]
     assert any("update clipes_reais" in s for s in liberacoes)
     assert any("update allstar_clips" in s for s in liberacoes)
+
+
+def test_falha_na_segunda_reserva_libera_a_primeira(monkeypatch, _sem_fixture_de_reserva):
+    # Codex P1 no 67cdc9b: as reservas anteriores ficavam commitadas sem post.
+    chamadas = _capturar_urlopen(monkeypatch)
+    conn = _conn_clipes(
+        reais=[("c1", "m1", "de_nuke", "clipe", "Toguro")],
+        allstar=[("a1", "m1", "de_nuke", "allstar", None)],
+        quebram=("a1",),
+    )
+    with pytest.raises(RuntimeError):
+        discord.avisar_clipes(conn, WEBHOOK, "")
+    assert chamadas == []
+    assert [p[0] for p in conn.liberados] == ["c1"]
+
+
+def test_falha_na_primeira_reserva_nao_libera_nada(monkeypatch, _sem_fixture_de_reserva):
+    chamadas = _capturar_urlopen(monkeypatch)
+    conn = _conn_clipes(reais=[("c1", "m1", "de_nuke", "clipe", "Toguro")], quebram=("c1",))
+    with pytest.raises(RuntimeError):
+        discord.avisar_clipes(conn, WEBHOOK, "")
+    assert chamadas == [] and conn.liberados == []
 
 
 def test_nick_so_de_jogador_is_tracked(monkeypatch, _sem_fixture_de_reserva):
