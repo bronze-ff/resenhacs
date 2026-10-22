@@ -22,6 +22,7 @@ export const GRUPOS = [
       { to: '/', end: true, label: 'Início', icone: 'partidas' },
       { to: (j) => `/jogador/${j?.steamId ?? ''}`, label: 'Meu desempenho', icone: 'perfil' },
       { to: '/mapas', label: 'Mapas', icone: 'mapas' },
+      { to: '/pre-fila', label: 'Pré-fila', icone: 'preFila' },
       { to: '/enviar-demo', label: 'Enviar demo', icone: 'enviarDemo' },
     ],
   },
@@ -153,6 +154,14 @@ const NAV_ICONES = {
       <path d="M3 20C3 16.6863 5.68629 14 9 14C12.3137 14 15 16.6863 15 20" />
       <circle cx="17" cy="8" r="2.5" />
       <path d="M21 20C21 17.2386 19.2091 15 17 15" />
+    </svg>
+  ),
+  preFila: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
+      <circle cx="8" cy="8" r="3" />
+      <circle cx="16" cy="8" r="3" />
+      <path d="M3 20c0-3 2.2-5 5-5s5 2 5 5" />
+      <path d="M13.5 15.4c.8-.3 1.6-.4 2.5-.4 2.8 0 5 2 5 5" />
     </svg>
   ),
   comparar: (
