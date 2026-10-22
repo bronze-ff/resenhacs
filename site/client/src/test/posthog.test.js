@@ -7,6 +7,18 @@ const URL = 'https://resenha-phi.vercel.app/partida/abc?token=segredo&x=1#frag'
 const LIMPA = 'https://resenha-phi.vercel.app/partida/abc'
 
 describe('evento do PostHog', () => {
+  it('redige e-mail codificado no pathname e no referrer', () => {
+    const evento = limparEventoPosthog({
+      event: '$pageview',
+      properties: {
+        $pathname: '/jogador/ana%40exemplo.com',
+        $current_url: 'https://resenha.app/jogador/ana%40exemplo.com',
+        $referrer: 'https://externo.example/jogador/ana%40exemplo.com',
+        $initial_referrer: 'https://externo.example/jogador/ana%40exemplo.com',
+      },
+    })
+    for (const valor of Object.values(evento.properties)) expect(valor).toBe(REDACTED)
+  })
   it('tira query e fragment de URL, pathname, referrer e campos $initial_ / $prev_pageview_', () => {
     const evento = limparEventoPosthog({
       event: '$pageview',

@@ -1,5 +1,7 @@
 {
   "redige": [
+    "/jogador/ana%40exemplo.com",
+    "senha%3Dabc",
     "password",
     "PASSWORD",
     "passwd",
@@ -44,6 +46,7 @@
     "access_token vazou"
   ],
   "intactos": [
+    "/partida/abc%20def",
     "resenha",
     "Resenha",
     "resenhas",

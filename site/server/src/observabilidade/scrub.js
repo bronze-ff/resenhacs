@@ -81,6 +81,11 @@ export function redigirString(valor) {
   // Caminho relativo: a string inteira ou depois de espaço/aspas. // fica de fora.
   texto = texto.replace(/(^|[\s"'`(])(\/(?!\/)[^\s"'`<>)]*)/g, (trecho, pre, path) => pre + cortarUrl(path))
   if (PALAVRA.test(texto) || PII.some((re) => re.test(texto))) return REDACTED
+  try {
+    // shortcut: decodifica uma vez; ampliar se houver URLs com dupla codificação.
+    const decodificado = decodeURIComponent(texto)
+    if (PALAVRA.test(decodificado) || PII.some((re) => re.test(decodificado))) return REDACTED
+  } catch { /* Codificação inválida conserva a checagem do texto cru. */ }
   return texto
 }
 

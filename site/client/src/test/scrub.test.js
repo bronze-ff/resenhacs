@@ -7,6 +7,13 @@ const casos = JSON.parse(readFileSync(join(process.cwd(), '../../shared/observab
 const STEAM = '76561198000000000'
 
 describe('scrub de observabilidade', () => {
+  it.each(['/jogador/ana%40exemplo.com', 'senha%3Dabc'])('redige dado codificado uma vez: %s', (valor) => {
+    expect(redigirString(valor)).toBe(REDACTED)
+  })
+
+  it.each(['/partida/abc%20def', '/partida/%ZZ', '/partida/%E0%A4%A', '/jogador/ana%2540exemplo.com'])('preserva texto inofensivo ou codificação não suportada: %s', (valor) => {
+    expect(redigirString(valor)).toBe(valor)
+  })
   it('allowlist do request: sem header, cookie, body ou query', () => {
     const evento = minimizarEvento({
       request: {

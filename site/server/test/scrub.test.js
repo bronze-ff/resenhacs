@@ -6,6 +6,13 @@ import { chaveSensivel, minimizarEvento, REDACTED, redigirString } from '../src/
 const casos = JSON.parse(readFileSync(join(process.cwd(), '../../shared/observabilidade/casos-palavras.json'), 'utf8'))
 
 describe('scrub da API', () => {
+  it.each(['/jogador/ana%40exemplo.com', 'senha%3Dabc'])('redige dado codificado uma vez: %s', (valor) => {
+    expect(redigirString(valor)).toBe(REDACTED)
+  })
+
+  it.each(['/partida/abc%20def', '/partida/%ZZ', '/partida/%E0%A4%A', '/jogador/ana%2540exemplo.com'])('preserva texto inofensivo ou codificação não suportada: %s', (valor) => {
+    expect(redigirString(valor)).toBe(valor)
+  })
   it('não manda header, cookie, body nem query', () => {
     const evento = minimizarEvento({
       request: {
