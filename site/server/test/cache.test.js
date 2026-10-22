@@ -1,3 +1,6 @@
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import request from 'supertest'
 import { createApp } from '../src/app.js'
@@ -78,6 +81,45 @@ describe('Cache-Control', () => {
   it('path fora de /api não é página quando a função roda sem staticDir', async () => {
     const res = await request(appCom()).get('/wp-login.php')
     expect(res.status).toBe(404)
-    expect(res.headers['cache-control']).toBe(CACHE_PRIVADO)
+    expect(res.headers['cache-control'] ?? '').not.toContain('no-store')
+  })
+
+  it('static com hash é imutável e o HTML da SPA não leva no-store', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'resenha-dist-'))
+    mkdirSync(path.join(dir, 'assets'))
+    writeFileSync(path.join(dir, 'index.html'), '<html>resenha</html>')
+    writeFileSync(path.join(dir, 'assets', 'index-DyU7E96u.js'), 'console.log(1)')
+    writeFileSync(path.join(dir, 'assets', 'index-DyU7E96u.css'), 'body{}')
+    writeFileSync(path.join(dir, 'workbox-9c191d2f.js'), 'workbox')
+    writeFileSync(path.join(dir, 'assets', 'workbox-window.prod.es5-Bd17z0YL.js'), 'wb')
+    writeFileSync(path.join(dir, 'sw.js'), 'sw')
+    writeFileSync(path.join(dir, 'favicon.ico'), 'x')
+    const app = createApp({ config, staticDir: dir })
+    const imutavel = 'public, max-age=31536000, immutable'
+
+    const js = await request(app).get('/assets/index-DyU7E96u.js')
+    expect(js.status).toBe(200)
+    expect(js.headers['cache-control']).toBe(imutavel)
+
+    const css = await request(app).get('/assets/index-DyU7E96u.css')
+    expect(css.headers['cache-control']).toBe(imutavel)
+
+    const workbox = await request(app).get('/workbox-9c191d2f.js')
+    expect(workbox.headers['cache-control']).toBe(imutavel)
+    const workboxJanela = await request(app).get('/assets/workbox-window.prod.es5-Bd17z0YL.js')
+    expect(workboxJanela.headers['cache-control']).toBe(imutavel)
+
+    for (const url of ['/sw.js', '/favicon.ico', '/', '/jogadores']) {
+      const res = await request(app).get(url)
+      expect(res.status, url).toBe(200)
+      expect(res.headers['cache-control'], url).toBe('public, max-age=0')
+      expect(res.headers['cache-control'], url).not.toContain('no-store')
+    }
+
+    const health = await request(app).get('/api/health')
+    expect(health.headers['cache-control']).toBe(CACHE_HEALTH)
+    const api404 = await request(app).get('/api/inexistente')
+    expect(api404.status).toBe(404)
+    expect(api404.headers['cache-control']).toBe(CACHE_PRIVADO)
   })
 })

@@ -44,6 +44,10 @@ import { createR2Client } from './r2.js'
 // e mataria a função serverless (FUNCTION_INVOCATION_FAILED). No Express 4 os métodos de
 // rota vivem como propriedades da função Router exportada (que é o prototype dos routers
 // via setPrototypeOf) — embrulhamos cada um pra capturar a promise e chamar next(err).
+function assetComHash(arquivo) {
+  return /-[A-Za-z0-9_-]{8,}\.(?:js|mjs|css|map|woff2?|ttf|png|jpe?g|gif|svg|webp|ico)$/i.test(path.basename(arquivo))
+}
+
 function patchRouterAsync() {
   const embrulha = (fn) =>
     typeof fn === 'function' && fn.length < 4
@@ -82,10 +86,10 @@ export function createApp({
   const app = express()
   // Não anunciar a stack (X-Powered-By: Express) pra quem varre o site atrás de alvo.
   app.disable('x-powered-by')
-  // Nada autenticado e nada com Set-Cookie pode ir pra CDN. O único GET público sem
-  // cookie e sem dado de Jogador é /api/health, que troca este valor no handler.
+  // Só a API. O static (site/client/dist, quando staticDir existe) não pode herdar
+  // no-store: o JS/CSS com hash do Vite é cacheável. /api/health troca este valor.
   app.use((req, res, next) => {
-    res.set('Cache-Control', 'private, no-store')
+    if (req.path === '/api' || req.path.startsWith('/api/')) res.set('Cache-Control', 'private, no-store')
     next()
   })
   // Em produção (Vercel) a função fica atrás de UM proxy (o edge deles), que sempre manda
@@ -158,7 +162,13 @@ export function createApp({
   app.use('/api/extensao', createExtensaoRouter({ db, requireAuth, jwtSecret: config.jwtSecret }))
 
   if (staticDir) {
-    app.use(express.static(staticDir))
+    app.use(express.static(staticDir, {
+      setHeaders(res, arquivo) {
+        // Vite e o Workbox gravam o hash no nome (assets/index-DyU7E96u.js,
+        // workbox-9c191d2f.js). index.html, sw.js e favicon.ico ficam de fora.
+        if (assetComHash(arquivo)) res.set('Cache-Control', 'public, max-age=31536000, immutable')
+      },
+    }))
     app.get(/^\/(?!api\/).*/, (req, res) => {
       res.sendFile(path.join(staticDir, 'index.html'))
     })
