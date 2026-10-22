@@ -6,7 +6,7 @@ import { chaveSensivel, minimizarEvento, REDACTED, redigirString } from '../src/
 const casos = JSON.parse(readFileSync(join(process.cwd(), '../../shared/observabilidade/casos-palavras.json'), 'utf8'))
 
 describe('scrub da API', () => {
-  it.each(casos.sanitiza)('preserva a sanitização da camada decodificada: $entrada', ({ entrada, saida }) => {
+  it.each(casos.sanitiza)('sanitiza apenas a camada original: $entrada', ({ entrada, saida }) => {
     expect(redigirString(entrada)).toBe(saida)
     expect(minimizarEvento({ message: entrada }).message).toBe(saida)
   })

@@ -7,7 +7,7 @@ const casos = JSON.parse(readFileSync(join(process.cwd(), '../../shared/observab
 const STEAM = '76561198000000000'
 
 describe('scrub de observabilidade', () => {
-  it.each(casos.sanitiza)('preserva a sanitização da camada decodificada: $entrada', ({ entrada, saida }) => {
+  it.each(casos.sanitiza)('sanitiza apenas a camada original: $entrada', ({ entrada, saida }) => {
     expect(redigirString(entrada)).toBe(saida)
     expect(minimizarEvento({ message: entrada }).message).toBe(saida)
   })

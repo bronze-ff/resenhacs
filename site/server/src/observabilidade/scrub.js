@@ -87,17 +87,15 @@ function redigirCamada(valor) {
 
 export function redigirString(valor) {
   if (typeof valor !== 'string') return valor
-  let camada = valor
-  let saida = valor
+  const saida = redigirCamada(valor)
+  if (redigirCamada(saida) !== saida) return REDACTED
+  let camada = saida
   for (let decodificacoes = 0; ; decodificacoes++) {
-    const sanitizado = redigirCamada(camada)
-    if (sanitizado === REDACTED) return REDACTED
-    if (sanitizado !== camada) saida = sanitizado
     const decodificado = camada.replace(/(?:%[0-9A-Fa-f]{2})+/g, (trecho) =>
       DECODIFICADOR_UTF8.decode(Uint8Array.from(trecho.slice(1).split('%'), (byte) => Number.parseInt(byte, 16))))
     if (decodificado === camada) return saida
-    // Mais de três camadas falham fechado, mesmo sem um padrão sensível aparente.
-    if (decodificacoes === 3) return REDACTED
+    // Camadas decodificadas só detectam mudanças; nunca viram a saída.
+    if (decodificacoes === 3 || redigirCamada(decodificado) !== decodificado) return REDACTED
     camada = decodificado
   }
 }
