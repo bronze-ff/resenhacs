@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { describe, it, expect, vi, afterEach } from 'vitest'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { SecaoReplay } from '../pages/Partida.jsx'
 
 // Índice "streaming" (formato novo — FIL-54b): rounds só com metadados, sem `frames`.
@@ -56,5 +56,39 @@ describe('SecaoReplay — streaming por round', () => {
 
     expect(await screen.findByText('Round 1')).toBeInTheDocument()
     expect(fetch).toHaveBeenCalledTimes(1) // só o índice — nenhum /round/N
+  })
+})
+
+describe('SecaoReplay — pulo da lição com round em streaming', () => {
+  afterEach(() => { vi.unstubAllGlobals() })
+
+  it('round alvo que falha mostra o erro; depois do retry pula 5 s antes do k.t da vítima', async () => {
+    const quadros = Array.from({ length: 80 }, (_, t) => ({ t, players: [] }))
+    const round2 = { round: 2, frames: quadros, kills: [{ t: 64, victim: 's1' }], hits: [] }
+    let falharRound2 = true
+    vi.stubGlobal('requestAnimationFrame', () => 1)
+    vi.stubGlobal('cancelAnimationFrame', () => {})
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((url) => {
+      if (url === '/api/matches/m1/replay') return Promise.resolve({ ok: true, json: async () => INDICE_STREAMING })
+      if (url === '/api/matches/m1/replay/round/1') return Promise.resolve({ ok: true, json: async () => ROUND_1 })
+      if (url === '/api/matches/m1/replay/round/2') {
+        return falharRound2
+          ? Promise.resolve({ ok: false, status: 500, json: async () => ({}) })
+          : Promise.resolve({ ok: true, json: async () => round2 })
+      }
+      return Promise.resolve({ ok: false })
+    }))
+    const seek = { round: 2, frame: null, vitima: 's1', key: 'licao-2' }
+    render(<SecaoReplay replayUrl="/api/matches/m1/replay" seek={seek} onSelecionarPonto={() => {}} />)
+
+    expect(await screen.findByText('Não deu para carregar o round 2.')).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: /round 2/i })).toBeInTheDocument()
+
+    falharRound2 = false
+    fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }))
+    await waitFor(() => {
+      expect(screen.getByRole('slider', { name: 'Tempo do round' })).toHaveAttribute('aria-valuetext', '3 s de 10 s')
+    })
+    expect(screen.queryByText('Não deu para carregar o round 2.')).not.toBeInTheDocument()
   })
 })
