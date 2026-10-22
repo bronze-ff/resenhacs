@@ -67,18 +67,25 @@ export function soOrigemCaminho(valor) {
     if (u.protocol !== 'http:' && u.protocol !== 'https:') return valor
     return `${u.origin}${u.pathname}`
   } catch {
-    return valor
+    return REDACTED
   }
 }
 
 function cortarUrl(url) {
   const limpa = url.replace(/[),.;]+$/, '')
-  return soOrigemCaminho(limpa) + url.slice(limpa.length)
+  const caminho = soOrigemCaminho(limpa)
+  return caminho === REDACTED ? REDACTED : caminho + url.slice(limpa.length)
 }
 
 function redigirCamada(valor) {
   URL_RE.lastIndex = 0
-  let texto = valor.replace(URL_RE, cortarUrl)
+  let urlInvalida = false
+  let texto = valor.replace(URL_RE, (url) => {
+    const limpa = cortarUrl(url)
+    if (limpa === REDACTED) urlInvalida = true
+    return limpa
+  })
+  if (urlInvalida) return REDACTED
   // Caminho relativo: a string inteira ou depois de espaço/aspas. // fica de fora.
   texto = texto.replace(/(^|[\s"'`(])(\/(?!\/)[^\s"'`<>)]*)/g, (trecho, pre, path) => pre + cortarUrl(path))
   if (PALAVRA.test(texto) || PII.some((re) => re.test(texto))) return REDACTED

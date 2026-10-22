@@ -6,6 +6,20 @@ import { chaveSensivel, minimizarEvento, REDACTED, redigirString } from '../src/
 const casos = JSON.parse(readFileSync(join(process.cwd(), '../../shared/observabilidade/casos-palavras.json'), 'utf8'))
 
 describe('scrub da API', () => {
+  it.each([
+    'http://[foo',
+    'http%3A%2F%2F%5Bfoo',
+    'http%253A%252F%252F%255Bfoo',
+    'http%25253A%25252F%25252F%25255Bfoo',
+  ])('redige o valor inteiro se a URL for inválida em qualquer camada: %s', (url) => {
+    const message = `falha em ${url}, tente de novo`
+    expect(redigirString(message)).toBe(REDACTED)
+    expect(minimizarEvento({ message, request: { url } })).toEqual({
+      message: REDACTED,
+      request: { url: REDACTED },
+    })
+  })
+
   it.each(casos.sanitiza)('sanitiza apenas a camada original: $entrada', ({ entrada, saida }) => {
     expect(redigirString(entrada)).toBe(saida)
     expect(minimizarEvento({ message: entrada }).message).toBe(saida)
