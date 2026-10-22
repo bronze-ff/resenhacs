@@ -5,10 +5,10 @@ import { fileURLToPath } from 'node:url'
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const pedidos = new Set(process.argv.slice(2))
 const todos = pedidos.size === 0
-const partes = new Set(['client', 'server', 'coletor', 'bot'])
+const partes = new Set(['client', 'server', 'coletor', 'bot', 'extensao'])
 for (const pedido of pedidos) {
   if (!partes.has(pedido)) {
-    console.error(`Parte desconhecida: ${pedido}. Use client, server, coletor ou bot.`)
+    console.error(`Parte desconhecida: ${pedido}. Use client, server, coletor, bot ou extensao.`)
     process.exit(1)
   }
 }
@@ -44,4 +44,7 @@ if (quer('coletor')) {
 }
 if (quer('bot')) {
   run('node', ['--check', 'src/resolve.js'], path.join(root, 'bot'))
+}
+if (quer('extensao')) {
+  run('npm', ['test'], path.join(root, 'extensao'))
 }

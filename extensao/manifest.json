@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "ResenhaCS — Demo FACEIT",
+  "version": "0.1.0",
+  "description": "Leva ao ResenhaCS a Demo que você baixou pelo Watch Demo da FACEIT.",
+  "minimum_chrome_version": "116",
+  "permissions": ["downloads", "storage"],
+  "host_permissions": ["https://resenhacs.vercel.app/*"],
+  "externally_connectable": { "matches": ["https://resenha-phi.vercel.app/*"] },
+  "background": { "service_worker": "src/background.js", "type": "module" },
+  "action": {
+    "default_title": "ResenhaCS — Demo FACEIT",
+    "default_popup": "popup/popup.html",
+    "default_icon": { "16": "icons/icon-16.png", "48": "icons/icon-48.png", "128": "icons/icon-128.png" }
+  },
+  "icons": { "16": "icons/icon-16.png", "48": "icons/icon-48.png", "128": "icons/icon-128.png" },
+  "content_security_policy": { "extension_pages": "script-src 'self'; object-src 'self'" }
+}
