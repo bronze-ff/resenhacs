@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { Badge, Button, CabecalhoPagina, Card, EstadoErro, Input, classesBotao } from '../components/ui'
 import { useAuth } from '../auth/AuthContext.jsx'
 import PassoAPassoSteam from '../components/PassoAPassoSteam.jsx'
 import PrivacidadeConta from '../components/PrivacidadeConta.jsx'
 import SincronizacaoFaceit from '../components/SincronizacaoFaceit.jsx'
+import { EXTENSAO_ID, conectarExtensao } from '../lib/extensao.js'
 
 // Seta que gira 90° quando aberto — mesmo ícone pros dois estados, só rotaciona.
 function SetaExpandir({ aberto }) {
@@ -18,7 +19,58 @@ function SetaExpandir({ aberto }) {
   )
 }
 
-export default function Perfil() {
+const ERROS_EXTENSAO = {
+  indisponivel: 'A extensão ainda não está disponível.',
+  'sem-extensao': 'Não achei a extensão neste navegador. Instale a extensão, recarregue esta página e tente de novo.',
+  extensao: 'A extensão não conseguiu guardar a conexão. Tente de novo.',
+  servidor: 'Não deu para conectar a extensão. Tente de novo.',
+}
+
+// "Conectar extensão" (I9): entrega à extensão FACEIT um token que só serve para enviar
+// Demo. `conectar` e `disponivel` são injetáveis para teste. Sem ID da loja o botão fica
+// desativado com a nota, em vez de deixar clicar para um erro certo.
+function ExtensaoFaceit({ conectar, disponivel }) {
+  const [estado, setEstado] = useState({ fase: 'inicio' })
+
+  async function aoConectar() {
+    setEstado({ fase: 'conectando' })
+    const r = await conectar()
+    setEstado(r.ok ? { fase: 'conectada' } : { fase: 'erro', mensagem: r.mensagem ?? ERROS_EXTENSAO[r.motivo] ?? ERROS_EXTENSAO.servidor })
+  }
+
+  return (
+    <section aria-labelledby="extensao-faceit" className="space-y-3">
+      <h3 id="extensao-faceit" className="rotulo">Extensão FACEIT</h3>
+      <Card className="space-y-3 p-4 sm:p-5">
+        <p className="text-sm text-texto-fraco">
+          Quando você baixa a Demo de uma Partida FACEIT pelo botão Watch Demo, a extensão envia essa Demo ao ResenhaCS.
+          Ela não acessa nem automatiza o site da FACEIT.
+        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            variante="contorno"
+            onClick={aoConectar}
+            disabled={!disponivel || estado.fase === 'conectando'}
+            aria-describedby={disponivel ? undefined : 'extensao-indisponivel'}
+          >
+            {estado.fase === 'conectando' ? 'Conectando…' : 'Conectar extensão'}
+          </Button>
+          <Link to="/privacidade#extensao" className="text-sm text-texto-fraco underline underline-offset-2 hover:text-texto">
+            Como a extensão usa seus dados
+          </Link>
+        </div>
+        {!disponivel && <p id="extensao-indisponivel" className="text-sm text-texto-fraco">{ERROS_EXTENSAO.indisponivel}</p>}
+        {/* Sempre montado: o leitor de tela só anuncia mudança dentro de uma região viva que já existe. */}
+        <p role="status" className="text-sm text-sucesso empty:hidden">
+          {estado.fase === 'conectada' ? 'Extensão conectada. Sair do site desconecta a extensão.' : ''}
+        </p>
+        {estado.fase === 'erro' && <EstadoErro mensagem={estado.mensagem} />}
+      </Card>
+    </section>
+  )
+}
+
+export default function Perfil({ conectar = conectarExtensao, extensaoDisponivel = Boolean(EXTENSAO_ID) }) {
   const { jogador } = useAuth()
   const [matchAuthCode, setMatchAuthCode] = useState('')
   const [lastShareCode, setLastShareCode] = useState('')
@@ -140,6 +192,7 @@ export default function Perfil() {
           </p>
         )}
       </section>
+      <ExtensaoFaceit conectar={conectar} disponivel={extensaoDisponivel} />
       <PrivacidadeConta />
       </div>
       </div>

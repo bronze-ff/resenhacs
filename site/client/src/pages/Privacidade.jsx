@@ -1,4 +1,5 @@
-import { Link } from 'react-router-dom'
+import { useEffect } from 'react'
+import { Link, useLocation } from 'react-router-dom'
 
 // Aviso de privacidade (LGPD art. 9º: informação clara ao titular). Página pública —
 // acessível antes do login, linkada da Landing, do /entrar e da Minha conta.
@@ -6,9 +7,9 @@ import { Link } from 'react-router-dom'
 // página orienta a falar com o admin do grupo.
 const CONTATO = import.meta.env.VITE_CONTATO_PRIVACIDADE
 
-function Secao({ titulo, children }) {
+function Secao({ titulo, id, children }) {
   return (
-    <section className="space-y-3">
+    <section id={id} className="scroll-mt-6 space-y-3">
       <h2 className="font-display text-lg font-semibold text-texto">{titulo}</h2>
       <div className="space-y-3 text-sm leading-relaxed text-texto-fraco [&_strong]:font-medium [&_strong]:text-texto">{children}</div>
     </section>
@@ -16,6 +17,12 @@ function Secao({ titulo, children }) {
 }
 
 export default function Privacidade() {
+  // O router não rola até a âncora sozinho: /privacidade#extensao é o link da loja.
+  const { hash } = useLocation()
+  useEffect(() => {
+    if (hash) document.getElementById(hash.slice(1))?.scrollIntoView?.()
+  }, [hash])
+
   return (
     <div className="mx-auto max-w-3xl px-5 py-12 sm:py-16">
       <Link to="/" className="text-sm text-texto-fraco hover:text-texto">← Voltar</Link>
@@ -81,6 +88,28 @@ export default function Privacidade() {
             <li><strong>Desligar as métricas de uso</strong> — em Minha conta.</li>
             <li><strong>Pedir correção, informação ou remoção</strong> — pelo contato acima. Isso vale também para quem aparece numa partida sem ter conta no Resenha.</li>
           </ul>
+        </Secao>
+
+        {/* Texto igual ao de extensao/loja/dados.md (REVISÃO 2 do contrato da extensão). */}
+        <Secao titulo="Extensão FACEIT" id="extensao">
+          <p>
+            <strong>Propósito único:</strong> Quando você baixa a Demo de uma Partida FACEIT pelo botão Watch Demo, envia essa Demo ao ResenhaCS.
+          </p>
+          <ul className="list-disc space-y-2 pl-5">
+            <li><strong>Downloads:</strong> detectar o download da Demo que você iniciou na FACEIT. Só downloads de Demo do CDN da FACEIT são considerados; os outros são ignorados na hora, sem guardar nem enviar.</li>
+            <li><strong>Armazenamento:</strong> guardar o token do ResenhaCS e o histórico local dos envios, só no seu navegador.</li>
+            <li><strong>Site do ResenhaCS:</strong> enviar o id da Partida e o link da Demo ao ResenhaCS.</li>
+          </ul>
+          <p>Sem código remoto. Não acessa nem automatiza o site da FACEIT.</p>
+          <p>
+            <strong>Dados usados:</strong> informação de autenticação (o token do ResenhaCS) e, do site, só o link e o id da Partida do
+            download da Demo FACEIT. Não coleta histórico de navegação nem outros downloads. Não vende esses dados, não usa para
+            outro fim e não usa para crédito.
+          </p>
+          <p>
+            O token só serve para enviar Demo, vale 24 horas e é renovado por até 30 dias. Sair do site desconecta a extensão; o
+            botão “Desconectar” na extensão apaga o token e o histórico.
+          </p>
         </Secao>
 
         <Secao titulo="Segurança">
