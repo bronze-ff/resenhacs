@@ -6,11 +6,16 @@ import { chaveSensivel, minimizarEvento, REDACTED, redigirString } from '../src/
 const casos = JSON.parse(readFileSync(join(process.cwd(), '../../shared/observabilidade/casos-palavras.json'), 'utf8'))
 
 describe('scrub da API', () => {
-  it.each(['/jogador/ana%40exemplo.com', 'senha%3Dabc'])('redige dado codificado uma vez: %s', (valor) => {
+  it.each(casos.sanitiza)('preserva a sanitização da camada decodificada: $entrada', ({ entrada, saida }) => {
+    expect(redigirString(entrada)).toBe(saida)
+    expect(minimizarEvento({ message: entrada }).message).toBe(saida)
+  })
+
+  it.each(casos.redige)('redige o caso compartilhado: %s', (valor) => {
     expect(redigirString(valor)).toBe(REDACTED)
   })
 
-  it.each(['/partida/abc%20def', '/partida/%ZZ', '/partida/%E0%A4%A', '/jogador/ana%2540exemplo.com'])('preserva texto inofensivo ou codificação não suportada: %s', (valor) => {
+  it.each(['/partida/abc%20def', '/partida/%ZZ', '/partida/%E0%A4%A', '/p/abc%20def/%E0%A4'])('preserva o original sem dado sensível: %s', (valor) => {
     expect(redigirString(valor)).toBe(valor)
   })
   it('não manda header, cookie, body nem query', () => {
@@ -74,9 +79,6 @@ describe('scrub da API', () => {
   })
 
   it('aplica os casos compartilhados de palavra sensível', () => {
-    for (const amostra of casos.redige) {
-      expect(redigirString(amostra)).toBe(REDACTED)
-    }
     for (const amostra of casos.intactos) {
       expect(redigirString(amostra)).toBe(amostra)
     }

@@ -53,6 +53,8 @@ const PII = [
 ]
 
 const URL_RE = /https?:\/\/[^\s<>"']+/gi
+// Preservar BOM mantém os limites de palavra iguais aos do unquote do Python.
+const DECODIFICADOR_UTF8 = new TextDecoder('utf-8', { ignoreBOM: true })
 
 export function soOrigemCaminho(valor) {
   if (typeof valor !== 'string' || valor === '') return valor
@@ -74,19 +76,30 @@ function cortarUrl(url) {
   return soOrigemCaminho(limpa) + url.slice(limpa.length)
 }
 
-export function redigirString(valor) {
-  if (typeof valor !== 'string') return valor
+function redigirCamada(valor) {
   URL_RE.lastIndex = 0
   let texto = valor.replace(URL_RE, cortarUrl)
   // Caminho relativo: a string inteira ou depois de espaço/aspas. // fica de fora.
   texto = texto.replace(/(^|[\s"'`(])(\/(?!\/)[^\s"'`<>)]*)/g, (trecho, pre, path) => pre + cortarUrl(path))
   if (PALAVRA.test(texto) || PII.some((re) => re.test(texto))) return REDACTED
-  try {
-    // shortcut: decodifica uma vez; ampliar se houver URLs com dupla codificação.
-    const decodificado = decodeURIComponent(texto)
-    if (PALAVRA.test(decodificado) || PII.some((re) => re.test(decodificado))) return REDACTED
-  } catch { /* Codificação inválida conserva a checagem do texto cru. */ }
   return texto
+}
+
+export function redigirString(valor) {
+  if (typeof valor !== 'string') return valor
+  let camada = valor
+  let saida = valor
+  for (let decodificacoes = 0; ; decodificacoes++) {
+    const sanitizado = redigirCamada(camada)
+    if (sanitizado === REDACTED) return REDACTED
+    if (sanitizado !== camada) saida = sanitizado
+    const decodificado = camada.replace(/(?:%[0-9A-Fa-f]{2})+/g, (trecho) =>
+      DECODIFICADOR_UTF8.decode(Uint8Array.from(trecho.slice(1).split('%'), (byte) => Number.parseInt(byte, 16))))
+    if (decodificado === camada) return saida
+    // Mais de três camadas falham fechado, mesmo sem um padrão sensível aparente.
+    if (decodificacoes === 3) return REDACTED
+    camada = decodificado
+  }
 }
 
 export function scrubValor(valor, chave) {
