@@ -137,9 +137,20 @@ describe('Tour', () => {
 describe('destinoAposTour', () => {
   it('aceita só caminho interno', () => {
     expect(destinoAposTour('/partida/p1')).toBe('/partida/p1')
-    expect(destinoAposTour('/comparar?a=1&b=2')).toBe('/comparar?a=1&b=2')
-    for (const ruim of [null, undefined, '', 'partida', 'https://mal.com', '//mal.com', '/\\mal.com', 'javascript:alert(1)']) {
-      expect(destinoAposTour(ruim)).toBe('/')
+    expect(destinoAposTour('/comparar?a=1&b=2#topo')).toBe('/comparar?a=1&b=2#topo')
+    const ruins = [
+      null, undefined, '', 'partida', 'https://evil.test', 'javascript:alert(1)',
+      '//evil.test', '/\\evil.test',
+      new URLSearchParams('r=%2F%09%2Fevil.test').get('r'),
+      '/\n/evil.test', '/\r/evil.test',
+      '/tour', '/tour/', '/tour?returnTo=%2Ftour', '/./tour',
+    ]
+    for (const ruim of ruins) {
+      expect(destinoAposTour(ruim), JSON.stringify(ruim)).toBe('/')
     }
+  })
+
+  it('não confunde rota que só começa com "tour"', () => {
+    expect(destinoAposTour('/tourney')).toBe('/tourney')
   })
 })

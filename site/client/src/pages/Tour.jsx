@@ -6,11 +6,19 @@ import PassoAPassoSteam from '../components/PassoAPassoSteam.jsx'
 const NOMES_PASSOS = ['Boas-vindas', 'Steam', 'FACEIT', 'Menu']
 const TOTAL_PASSOS = NOMES_PASSOS.length
 
-// Só caminho interno: começa com "/" e não com "//" nem "/\" (o navegador lê os dois
-// como outro host). Qualquer outra coisa volta para o início.
+// Só caminho interno: começa com "/", não tem caractere de controle (o navegador descarta
+// TAB/LF/CR e "/\t/x" vira "//x") e resolve na mesma origem. Voltar para o próprio tour
+// prenderia o Jogador nele. Qualquer outra coisa volta para o início.
 export function destinoAposTour(returnTo) {
-  if (typeof returnTo !== 'string' || !returnTo.startsWith('/') || /^\/[/\\]/.test(returnTo)) return '/'
-  return returnTo
+  if (typeof returnTo !== 'string' || !returnTo.startsWith('/') || /[\u0000-\u001f\u007f]/.test(returnTo)) return '/'
+  let u
+  try {
+    u = new URL(returnTo, window.location.origin)
+  } catch {
+    return '/'
+  }
+  if (u.origin !== window.location.origin || /^\/tour(\/|$)/.test(u.pathname)) return '/'
+  return u.pathname + u.search + u.hash
 }
 
 export default function Tour() {
