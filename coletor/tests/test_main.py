@@ -730,7 +730,7 @@ class _UploadsCursor:
     def fetchall(self):
         if self._last.startswith(
             "select id, adicionado_por, arquivo_r2_key, share_code, played_at, "
-            "plataforma_manual, match_alvo_id, adicionado_em from uploads_pendentes"
+            "plataforma_manual, match_alvo_id, adicionado_em, origem_url from uploads_pendentes"
         ):
             return self.conn.upload_rows
         return []
@@ -812,7 +812,7 @@ def test_processar_uploads_pendentes_mantem_staging_no_r2_quando_falha(monkeypat
     assert deletes == []
     # Erro transitório: volta pra fila contando tentativa (R06), não 'falhou' direto.
     update = next(c for c in conn.calls if c[0].endswith("returning status"))
-    assert update[1] == (main._MAX_TENTATIVAS_UPLOAD, "parser explodiu", "u1")
+    assert update[1] == (main._MAX_TENTATIVAS_UPLOAD, "parser explodiu", main._MAX_TENTATIVAS_UPLOAD, "u1")
 
 
 # ---- finding #2 da auditoria: teto de tamanho barra download de upload gigante ----

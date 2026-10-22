@@ -13,6 +13,7 @@ import urllib.request
 from datetime import datetime, timezone
 
 from . import rede
+from .storage_r2 import ArquivoGrandeDemaisError
 
 BASE_DATA = "https://open.faceit.com/data/v4"
 URL_DOWNLOAD = "https://open.faceit.com/download/v2/demos/download"
@@ -43,25 +44,71 @@ MAX_DEMO_COMPRIMIDA_BYTES = 1_000_000_000
 MAX_DEMO_BYTES = 3_000_000_000
 
 
-def _http_get_bytes(url, timeout=120, max_bytes=MAX_DEMO_COMPRIMIDA_BYTES):
+def _http_get_bytes(url, timeout=120, max_bytes=MAX_DEMO_COMPRIMIDA_BYTES, hosts_exatos=None):
     if urllib.parse.urlsplit(url).scheme != "https":
         raise RuntimeError("URL assinada da FACEIT sem https")
     partes = []
     total = 0
-    with rede.abrir_url(url, timeout=timeout) as resp:
+    with rede.abrir_url(url, timeout=timeout, hosts_exatos=hosts_exatos) as resp:
         content_length = resp.headers.get("Content-Length")
+        # Recusa antes de ler: o tamanho anunciado já passa do teto.
+        if content_length is not None and int(content_length) > max_bytes:
+            raise ArquivoGrandeDemaisError(f"demo da FACEIT excedeu o teto de {max_bytes} bytes")
         while True:
             chunk = resp.read(1 << 20)
             if not chunk:
                 break
             total += len(chunk)
             if total > max_bytes:
-                raise RuntimeError(f"demo da FACEIT excedeu o teto de {max_bytes} bytes")
+                raise ArquivoGrandeDemaisError(f"demo da FACEIT excedeu o teto de {max_bytes} bytes")
             partes.append(chunk)
     # Corte de conexão no meio: sem isso a Demo parcial seguia pro parser.
     if content_length is not None and total != int(content_length):
         raise RuntimeError(f"download da FACEIT truncado: recebido {total} bytes, esperado {content_length}")
     return b"".join(partes)
+
+
+# Hosts do CDN de Demo da FACEIT aceitos no link vindo da extensão (igualdade exata, em
+# todo salto). Vazia até o X0 trazer os hosts reais: toda URL é recusada (falha fechada).
+# Igual a shared/extensao/faceit-demo-hosts.json (teste de igualdade).
+FACEIT_DEMO_HOSTS = ()
+MSG_LINK_EXPIRADO = "O link da FACEIT expirou. Envie o arquivo baixado pela página da Partida."
+
+
+class LinkExpiradoError(Exception):
+    """403/410 no link assinado da FACEIT. Definitivo: tentar de novo não muda."""
+
+    def __init__(self):
+        super().__init__(MSG_LINK_EXPIRADO)
+
+
+class DownloadFaceitError(Exception):
+    """Falha transitória no download do link da extensão, sem o link na mensagem."""
+
+
+def validar_origem_url(url):
+    """Link de Demo vindo da extensão: a mesma regra que rede.abrir_url aplica em todo
+    salto (https, até 2048 caracteres, sem usuário/senha, porta padrão, host exato)."""
+    rede.validar_host_exato(url, FACEIT_DEMO_HOSTS)
+
+
+def baixar_demo_origem(url, timeout=120):
+    """Baixa o .dem.gz do link assinado que a extensão mandou (caminho B). A allowlist
+    exata vale em todo redirect; Content-Length e leitura com teto de comprimido."""
+    validar_origem_url(url)
+    try:
+        return _http_get_bytes(
+            url, timeout=timeout, max_bytes=MAX_DEMO_COMPRIMIDA_BYTES, hosts_exatos=FACEIT_DEMO_HOSTS,
+        )
+    except urllib.error.HTTPError as e:
+        if e.code in (403, 410):
+            raise LinkExpiradoError() from None
+        raise DownloadFaceitError(f"falha ao baixar a Demo da FACEIT (HTTP {e.code})") from None
+    except (rede.HostNaoPermitidoError, ArquivoGrandeDemaisError):
+        raise
+    except Exception as e:  # noqa: BLE001
+        # A exceção original (URLError, RuntimeError de truncado) pode trazer o link.
+        raise DownloadFaceitError(f"falha ao baixar a Demo da FACEIT ({type(e).__name__})") from None
 
 
 def _descomprimir_gzip_com_teto(dados, max_bytes=MAX_DEMO_BYTES):

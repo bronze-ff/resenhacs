@@ -273,15 +273,15 @@ class _RespFake:
 
 
 def test_http_get_bytes_confere_content_length(monkeypatch):
-    monkeypatch.setattr(faceit.rede, "abrir_url", lambda url, timeout=None, dominios=None: _RespFake(b"abc", 10))
+    monkeypatch.setattr(faceit.rede, "abrir_url", lambda url, timeout=None, dominios=None, **kw: _RespFake(b"abc", 10))
     with pytest.raises(RuntimeError, match="truncad"):
         faceit._http_get_bytes("https://cdn.faceit.com/x.dem.gz")
 
 
 def test_http_get_bytes_sem_content_length_ou_igual_passa(monkeypatch):
-    monkeypatch.setattr(faceit.rede, "abrir_url", lambda url, timeout=None, dominios=None: _RespFake(b"abc", 3))
+    monkeypatch.setattr(faceit.rede, "abrir_url", lambda url, timeout=None, dominios=None, **kw: _RespFake(b"abc", 3))
     assert faceit._http_get_bytes("https://cdn.faceit.com/x.dem.gz") == b"abc"
-    monkeypatch.setattr(faceit.rede, "abrir_url", lambda url, timeout=None, dominios=None: _RespFake(b"abc", None))
+    monkeypatch.setattr(faceit.rede, "abrir_url", lambda url, timeout=None, dominios=None, **kw: _RespFake(b"abc", None))
     assert faceit._http_get_bytes("https://cdn.faceit.com/x.dem.gz") == b"abc"
 
 
@@ -308,7 +308,7 @@ def test_http_get_bytes_usa_abrir_url_sem_lista_de_dominios(monkeypatch):
 
     pedidos = []
 
-    def _abrir(url, timeout, dominios=None):
+    def _abrir(url, timeout, dominios=None, **kw):
         pedidos.append((url, dominios))
         return _Resp()
 

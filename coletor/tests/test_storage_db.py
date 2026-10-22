@@ -159,7 +159,7 @@ class FakeCursor:
             return self.conn.fila_rows
         if self._last.startswith(
             "select id, adicionado_por, arquivo_r2_key, share_code, played_at, "
-            "plataforma_manual, match_alvo_id, adicionado_em from uploads_pendentes"
+            "plataforma_manual, match_alvo_id, adicionado_em, origem_url from uploads_pendentes"
         ):
             return self.conn.uploads_rows
         if self._last.startswith("select id, arquivo_r2_key from uploads_pendentes"):
@@ -645,7 +645,7 @@ def test_reverter_uploads_travados_gera_sql_com_teto_de_tempo_e_tentativas():
     assert "processando_desde < now()" in sql
     assert "tentativas = tentativas + 1" in sql
     assert "processando_desde = null" in sql
-    assert params == (3, 3, "travado em 'processando' por mais de 30 min — provável processo morto no meio", 30)
+    assert params == (3, 3, "travado em 'processando' por mais de 30 min — provável processo morto no meio", 3, 30)
     assert conn.commits == 1
     assert ids == []  # FakeCursor.fetchall() não reconhece essa query -> []
 
@@ -912,7 +912,7 @@ def test_falhar_upload_pendente_conta_tentativa_e_devolve_o_status_final():
     assert "tentativas = tentativas + 1" in sql
     assert "processando_desde = null" in sql
     assert "returning status" in sql
-    assert params == (3, "R2 timeout", "u1")
+    assert params == (3, "R2 timeout", 3, "u1")
     assert conn.commits == 1
     assert status == "00000000-0000-0000-0000-000000000001"  # o que o FakeCursor devolve
 
