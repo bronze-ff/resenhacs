@@ -518,3 +518,14 @@ def test_resenha_falha_na_consulta_libera_a_semana(monkeypatch, onde):
     delete = next(p for s, p in conn.execs if s.startswith("delete"))
     assert delete == (datetime.date(2026, 10, 19),)
     assert conn.commits == 2  # reserva e liberação
+
+
+def test_backfill_da_0063_so_marca_clipe_pronto():
+    # Codex P2 no bdfec22: Clipe em processamento ficava marcado e nunca era avisado.
+    sql = " ".join((RAIZ / "supabase/migrations/0063_discord_avisos.sql").read_text(encoding="utf-8").split())
+    assert ("update clipes_reais set discord_notificado_em = now() "
+            "where status = 'pronto' and discord_notificado_em is null;") in sql
+    assert ("update allstar_clips set discord_notificado_em = now() "
+            "where status = 'Processed' and discord_notificado_em is null;") in sql
+    assert sql.count("update ") == 2
+

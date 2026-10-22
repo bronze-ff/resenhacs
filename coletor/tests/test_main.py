@@ -5,6 +5,7 @@ import json
 import subprocess
 import sys
 import types
+import urllib.error
 from pathlib import Path
 
 import pytest
@@ -2487,6 +2488,36 @@ def test_avisar_discord_outra_falha_vai_pro_sentry_e_sai_0(monkeypatch, capsys):
     assert capturados == ["avisar-discord"]
     assert "tok" not in saida
     assert conn.fechada
+
+
+@pytest.mark.parametrize("erro", [
+    OSError("falhou https://discord.com/api/webhooks/123/tok-secreto"),
+    urllib.error.HTTPError("https://discord.com/api/webhooks/123/tok-secreto", 429, "Too Many", {}, None),
+])
+def test_avisar_discord_sentry_recebe_erro_neutro_sem_o_webhook(monkeypatch, erro):
+    # Codex P0 no bdfec22: o scrub mantém o caminho, e o token do webhook está nele.
+    from sentry_sdk.utils import event_from_exception
+
+    from coletor.observabilidade import before_send
+
+    monkeypatch.setenv("DISCORD_WEBHOOK_URL", "https://discord.com/api/webhooks/123/tok-secreto")
+    eventos = []
+
+    def _capturar(e, etapa):
+        evento, hint = event_from_exception(e)
+        eventos.append(before_send(evento, hint))
+
+    monkeypatch.setattr(main, "capturar_erro", _capturar)
+    monkeypatch.setattr(main.discord, "avisar_clipes", lambda c, w, a: (_ for _ in ()).throw(erro))
+    monkeypatch.setattr(main.discord, "avisar_resenha_semanal", lambda c, w, a, agora: False)
+    main.cmd_avisar_discord(Config(env={"DATABASE_URL": "x"}), conectar=lambda url: _ConnAviso())
+
+    final = json.dumps(eventos)
+    assert len(eventos) == 1
+    assert "webhooks" not in final and "tok-secreto" not in final and "discord.com" not in final
+    valor = eventos[0]["exception"]["values"][-1]
+    assert valor["type"] == "AvisoDiscordError"
+    assert valor["value"] == type(erro).__name__ + (" 429" if isinstance(erro, urllib.error.HTTPError) else "")
 
 
 def test_avisar_discord_chama_clipes_e_resenha(monkeypatch):

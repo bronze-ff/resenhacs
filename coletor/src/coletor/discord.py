@@ -105,6 +105,16 @@ def montar_embed(dados, match_id, app_url):
     return {"embeds": [embed], "allowed_mentions": {"parse": []}}
 
 
+class AvisoDiscordError(Exception):
+    """Substituta neutra que vai ao Sentry: só o tipo do erro original e o status HTTP.
+    A mensagem original pode carregar a URL do webhook (/api/webhooks/<id>/<token>)."""
+
+
+def erro_neutro(erro):
+    codigo = getattr(erro, "code", None)
+    return AvisoDiscordError(f"{type(erro).__name__}{f' {codigo}' if isinstance(codigo, int) else ''}")
+
+
 def _postar(webhook_url, payload):
     req = urllib.request.Request(
         webhook_url,

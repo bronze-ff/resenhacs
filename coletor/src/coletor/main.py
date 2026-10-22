@@ -1270,7 +1270,7 @@ def cmd_avisar_discord(config, conectar=None, agora=None):
         if getattr(e, "sqlstate", None) in _SQLSTATE_SEM_0063:
             print(f"avisar-discord: migration 0063 não aplicada ({type(e).__name__})")
         else:
-            capturar_erro(e, "avisar-discord")
+            capturar_erro(discord.erro_neutro(e), "avisar-discord")
             print(f"aviso: avisar-discord falhou ({type(e).__name__})")
 
     conn = None

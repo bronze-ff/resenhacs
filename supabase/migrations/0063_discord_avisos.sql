@@ -4,9 +4,12 @@
 alter table clipes_reais add column if not exists discord_notificado_em timestamptz;
 alter table allstar_clips add column if not exists discord_notificado_em timestamptz;
 
--- Clipes que já existem não devem ser anunciados.
-update clipes_reais set discord_notificado_em = now() where discord_notificado_em is null;
-update allstar_clips set discord_notificado_em = now() where discord_notificado_em is null;
+-- Clipes já prontos não devem ser anunciados. Clipe ainda em processamento fica null
+-- e é avisado quando ficar pronto.
+update clipes_reais set discord_notificado_em = now()
+  where status = 'pronto' and discord_notificado_em is null;
+update allstar_clips set discord_notificado_em = now()
+  where status = 'Processed' and discord_notificado_em is null;
 
 -- Uma linha por semana postada (semana = segunda-feira, fuso de São Paulo). A chave
 -- primária garante um post por semana mesmo com duas execuções ao mesmo tempo.
