@@ -6,6 +6,7 @@ import { partidaVisivelExpr, noCirculoExpr } from '../friendships.js'
 import { calcularStatsPorLado } from '../statsLado.js'
 import { inicioDoDiaSql, fimDoDiaSql } from '../fuso.js'
 import { pedirMelhorClipeDoJogador } from '../allstarClip.js'
+import { calcularLicoes } from '../licoes.js'
 
 // Categoria de arma pro Head to Head (estilo Leetify: agrupa kills por família de
 // arma em vez de listar cada uma). Faca/granadas caem em "Outras".
@@ -516,6 +517,37 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
       steamId,
       rounds: [...porRound.values()].sort((a, b) => a.roundNumber - b.roundNumber),
     })
+  })
+
+  router.get('/:id/licoes/:steamId', requireAuth, async (req, res) => {
+    const { id, steamId } = req.params
+    if (!/^\d{17}$/.test(steamId)) return res.status(400).json({ erro: 'Jogador inválido' })
+    const matchQ = await db.query(
+      `select m.id from matches m where m.id = $1 and ${partidaVisivelExpr('m', '$2')}`,
+      [id, req.player.steamId],
+    )
+    if (matchQ.rows.length === 0) return res.status(404).json({ erro: 'Partida não encontrada' })
+    const jogadoresQ = await db.query('select steam_id64, team from match_players where match_id = $1', [id])
+    if (!jogadoresQ.rows.some((j) => j.steam_id64 === steamId)) {
+      return res.status(404).json({ erro: 'Partida ou jogador não encontrado' })
+    }
+    const [killsQ, flashesQ] = await Promise.all([
+      db.query('select round_number, tick, killer, victim, is_team_kill from kill_positions where match_id = $1', [id]),
+      db.query(
+        'select attacker, victim, count, duration_sum from match_player_flashes where match_id = $1 and attacker = $2',
+        [id, steamId],
+      ),
+    ])
+    res.json(calcularLicoes({
+      steamId,
+      jogadores: jogadoresQ.rows.map((j) => ({ steamId: j.steam_id64, team: j.team })),
+      kills: killsQ.rows.map((k) => ({
+        roundNumber: k.round_number, tick: k.tick, killer: k.killer, victim: k.victim, isTeamKill: k.is_team_kill,
+      })),
+      flashes: flashesQ.rows.map((f) => ({
+        attacker: f.attacker, victim: f.victim, count: f.count, durationSum: Number(f.duration_sum),
+      })),
+    }))
   })
 
   // Head to Head: jogador de referência (steamId) comparado contra TODOS os
