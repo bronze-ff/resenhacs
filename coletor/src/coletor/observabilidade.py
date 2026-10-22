@@ -97,31 +97,28 @@ _MAX_DECODIFICACOES = 3
 
 
 def redigir_string(valor):
+    """R119 v2: devolve S0 (o valor sanitizado sem decodificar) ou o marcador. Nunca texto
+    de camada decodificada. Mesma regra do scrub.js."""
     if not isinstance(valor, str):
         return valor
 
-    # Decodifica em camadas (%2540 -> %40 -> @) até estabilizar, no máximo 3 vezes, todas
-    # no modo tolerante: % sem dois hex fica literal e UTF-8 inválido vira U+FFFD (conta
-    # como mudança e não decodifica de novo). Mesma regra do scrub.js.
-    camadas = [valor]
-    while True:
-        decodificado = unquote(camadas[-1], errors="replace")
-        if decodificado == camadas[-1]:
-            break
-        if len(camadas) > _MAX_DECODIFICACOES:
-            return REDACTED  # ainda muda depois de 3 decodificações: falha fechada
-        camadas.append(decodificado)
-
-    sanitizada = None
-    for camada in camadas:
-        redigida = _redigir(camada)
-        if redigida == REDACTED:
-            return REDACTED  # redação integral tem prioridade
-        if redigida != camada:
-            sanitizada = redigida
-    # A camada mais profunda que a sanitização mudou (ex.: query que só aparece depois de
-    # decodificar sai cortada); o original só volta se nenhuma camada mudou.
-    return valor if sanitizada is None else sanitizada
+    s0 = _redigir(valor)
+    if s0 == REDACTED or _redigir(s0) != s0:
+        return REDACTED
+    # Camadas de detecção a partir de S0, no modo tolerante: % sem dois hex fica literal e
+    # UTF-8 inválido vira U+FFFD (conta como mudança e não decodifica de novo). Camada que
+    # a sanitização mudaria (redação ou corte de URL/query) vira marcador.
+    camada = s0
+    for _ in range(_MAX_DECODIFICACOES):
+        decodificada = unquote(camada, errors="replace")
+        if decodificada == camada:
+            return s0
+        if _redigir(decodificada) != decodificada:
+            return REDACTED
+        camada = decodificada
+    if unquote(camada, errors="replace") != camada:
+        return REDACTED  # ainda muda depois de 3 decodificações: falha fechada
+    return s0
 
 
 def scrub_valor(valor, chave=None):

@@ -338,32 +338,30 @@ def test_percent_encoding_que_ainda_muda_depois_de_3_camadas_falha_fechado():
     assert redigir_string("/partida/abc%2525252Fdef") == REDACTED
 
 
-# Lince P0 no 2bf2b74: o corte de query de uma camada decodificada não pode ser
-# descartado em favor do original (o e-mail codificado voltava inteiro).
+# REGRA FINAL v2 (R119): a saída é S0 (o valor sanitizado sem decodificar) ou o marcador.
+# Nunca texto de camada decodificada. As camadas C1..C3 saem de S0 e só detectam.
 @pytest.mark.parametrize("mensagem", [
     "/partida/abc%3Fx%3Dana%2540exemplo.com",
     "/partida/abc%253Fx%253Dana%252540exemplo.com",
     "/partida/abc%3Fx%3Dana%2540exemplo.com%E0%A4",
+    "/partida/abc%3Ftoken%3D%2520abc123xyz",
+    "/partida/abc%3Fx%3D1",  # query que só aparece depois de decodificar
 ])
-def test_before_send_devolve_a_camada_sanitizada_e_nao_o_original(mensagem):
+def test_before_send_camada_decodificada_que_muda_vira_marcador(mensagem):
     import coletor.observabilidade as obs
 
-    final = obs.before_send({"message": mensagem}, None)["message"]
-    assert final in ("/partida/abc", REDACTED)
-    assert "exemplo" not in final
+    assert obs.before_send({"message": mensagem}, None)["message"] == REDACTED
 
 
-# REGRA FINAL: todas as camadas no modo tolerante. % sem dois hex fica literal e UTF-8
-# inválido vira U+FFFD; nada disso esconde o resto da string.
-@pytest.mark.parametrize("valor", [
-    "/jogador/ana%2540exemplo.com/%ZZ",
-    "/jogador/ana%40exemplo.com/%E9%ZZ",
-    "/jogador/ana%40exemplo.com?x=%E0%A4",
-    "/jogador/ana%2540exemplo.com/%E0%A4",
-    "/p/%ZZ/ana%2540exemplo.com",
+@pytest.mark.parametrize("entrada", [
+    "/partida/abc?token=%20abc123xyz",
+    "/partida/abc?token=%09abc123xyz",
+    "/partida/abc?token=%0Aabc123xyz",
+    "/partida/abc?token=%EF%BB%BFabc123xyz",
+    "/partida/abc?x=1",
 ])
-def test_sequencia_invalida_nao_esconde_o_resto(valor):
-    assert redigir_string(valor) == REDACTED
+def test_saida_e_s0_quando_nenhuma_camada_de_s0_muda_na_sanitizacao(entrada):
+    assert redigir_string(entrada) == "/partida/abc"
 
 
 def test_before_send_sequencia_com_byte_invalido_decodifica_o_resto():
@@ -374,19 +372,23 @@ def test_before_send_sequencia_com_byte_invalido_decodifica_o_resto():
     assert evento["message"] == REDACTED
 
 
+@pytest.mark.parametrize("valor", [
+    "/jogador/ana%2540exemplo.com/%ZZ",
+    "/jogador/ana%40exemplo.com/%E9%ZZ",
+    "/jogador/ana%40exemplo.com?x=%E0%A4",
+    "/jogador/ana%2540exemplo.com/%E0%A4",
+    "/jogador/ana%2540exemplo.com/x%E0%61",
+    "/p/%ZZ/ana%2540exemplo.com",
+])
+def test_sequencia_invalida_nao_esconde_o_resto(valor):
+    assert redigir_string(valor) == REDACTED
+
+
 def test_utf8_invalido_conta_como_mudanca_de_camada():
     # 3 decodificações levam a %E0%A4; a 4a ainda mudaria (vira U+FFFD): falha fechada.
     assert redigir_string("/x/%252525E0%252525A4") == REDACTED
+    assert redigir_string("/x/%E0%A4") == "/x/%E0%A4"
     assert redigir_string("/p/abc%20def/%E0%A4") == "/p/abc%20def/%E0%A4"
-
-
-@pytest.mark.parametrize("entrada, saida", [
-    ("/partida/abc%3Fx%3Dana%2540exemplo.com", "/partida/abc"),
-    ("/partida/abc%253Fx%253Dana%252540exemplo.com", "/partida/abc"),
-    ("/partida/abc%3Fx%3D1", "/partida/abc"),  # query só aparece depois de decodificar
-])
-def test_sanitiza_devolve_a_camada_mais_profunda_que_mudou(entrada, saida):
-    assert redigir_string(entrada) == saida
 
 
 def test_camada_1_limpa_e_camada_2_sensivel_sai_redigida():
