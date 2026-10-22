@@ -175,6 +175,10 @@ def test_hosts_exatos_recusa_url_inicial_fora_da_lista_sem_abrir(transporte, url
     "https://outro.com/b.dem.gz",
     "https://sub.cdn.demos-teste.example/b.dem.gz",
     "http://cdn.demos-teste.example/b.dem.gz",
+    # Sentinela P3: a validação da URL inicial vale em todo salto.
+    "https://cdn.demos-teste.example:8443/b.dem.gz",
+    "https://user:senha@cdn.demos-teste.example/b.dem.gz",
+    pytest.param("https://cdn.demos-teste.example/" + "a" * 2048, id="url-longa"),
 ])
 def test_hosts_exatos_recusa_redirect_para_fora_da_lista(transporte, destino):
     transporte.rotas["https://cdn.demos-teste.example/a.dem.gz"] = destino
@@ -198,4 +202,10 @@ def test_hosts_exatos_mantem_a_regra_de_ip(transporte, monkeypatch):
 def test_sem_hosts_exatos_o_redirect_segue_so_a_regra_de_ip(transporte):
     transporte.rotas["https://outro.com/a"] = "https://sub.cdn.demos-teste.example/b"
     with rede.abrir_url("https://outro.com/a", timeout=5) as resp:
+        assert resp.read() == b"ok"
+
+
+def test_hosts_exatos_aceita_porta_443_explicita_no_redirect(transporte):
+    transporte.rotas["https://cdn.demos-teste.example/a.dem.gz"] = "https://cdn.demos-teste.example:443/b.dem.gz"
+    with rede.abrir_url("https://cdn.demos-teste.example/a.dem.gz", timeout=5, hosts_exatos=HOSTS) as resp:
         assert resp.read() == b"ok"

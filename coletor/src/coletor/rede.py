@@ -53,6 +53,26 @@ def _ip_recusado(ip):
     return any(endereco in faixa for faixa in _FAIXAS_RECUSADAS if faixa.version == endereco.version)
 
 
+MAX_URL_HOST_EXATO = 2048
+
+
+def validar_host_exato(url, hosts_exatos):
+    """Allowlist exata (CDN da FACEIT), na URL inicial e em todo redirect: só https, até
+    2048 caracteres, sem usuário/senha, porta padrão e host igual, sem sufixo. Vazia
+    recusa tudo. A mensagem nunca traz a URL."""
+    partes = urllib.parse.urlsplit(url)
+    try:
+        porta = partes.port
+    except ValueError:
+        porta = -1
+    if (
+        len(url) > MAX_URL_HOST_EXATO or partes.scheme != "https"
+        or partes.username is not None or partes.password is not None
+        or porta not in (None, 443) or partes.hostname not in hosts_exatos
+    ):
+        raise HostNaoPermitidoError("host fora da allowlist")
+
+
 def _checar(url, dominios=None, hosts_exatos=None):
     # shortcut: DNS rebinding entre esta checagem e a conexão não está coberto; fixar o IP
     # resolvido na conexão se a origem das URLs deixar de ser Valve/HLTV/FACEIT.
@@ -64,9 +84,8 @@ def _checar(url, dominios=None, hosts_exatos=None):
         raise HostNaoPermitidoError("URL sem host")
     if dominios and not any(host == d or host.endswith("." + d) for d in dominios):
         raise HostNaoPermitidoError("domínio fora da lista")
-    # Allowlist exata (CDN da FACEIT): só https e host igual, sem sufixo. Vazia recusa tudo.
-    if hosts_exatos is not None and (partes.scheme != "https" or host not in hosts_exatos):
-        raise HostNaoPermitidoError("host fora da allowlist")
+    if hosts_exatos is not None:
+        validar_host_exato(url, hosts_exatos)
     # Falha de DNS propaga como OSError: é transitória, não recusa.
     if any(_ip_recusado(ip) for ip in _resolver(host)):
         raise HostNaoPermitidoError("host resolve para IP interno")

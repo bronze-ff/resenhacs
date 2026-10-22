@@ -72,7 +72,6 @@ def _http_get_bytes(url, timeout=120, max_bytes=MAX_DEMO_COMPRIMIDA_BYTES, hosts
 # todo salto). Vazia até o X0 trazer os hosts reais: toda URL é recusada (falha fechada).
 # Igual a shared/extensao/faceit-demo-hosts.json (teste de igualdade).
 FACEIT_DEMO_HOSTS = ()
-_MAX_ORIGEM_URL = 2048
 MSG_LINK_EXPIRADO = "O link da FACEIT expirou. Envie o arquivo baixado pela página da Partida."
 
 
@@ -88,19 +87,9 @@ class DownloadFaceitError(Exception):
 
 
 def validar_origem_url(url):
-    """Link de Demo vindo da extensão: só https, até 2048 caracteres, sem usuário/senha,
-    porta padrão e host exato em FACEIT_DEMO_HOSTS. Mensagens sem o link."""
-    partes = urllib.parse.urlsplit(url)
-    try:
-        porta = partes.port
-    except ValueError:
-        porta = -1
-    if (
-        len(url) > _MAX_ORIGEM_URL or partes.scheme != "https"
-        or partes.username is not None or partes.password is not None
-        or porta not in (None, 443) or partes.hostname not in FACEIT_DEMO_HOSTS
-    ):
-        raise rede.HostNaoPermitidoError("link de Demo da FACEIT recusado")
+    """Link de Demo vindo da extensão: a mesma regra que rede.abrir_url aplica em todo
+    salto (https, até 2048 caracteres, sem usuário/senha, porta padrão, host exato)."""
+    rede.validar_host_exato(url, FACEIT_DEMO_HOSTS)
 
 
 def baixar_demo_origem(url, timeout=120):
