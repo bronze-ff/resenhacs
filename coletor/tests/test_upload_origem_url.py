@@ -141,9 +141,9 @@ class _Conn:
 DEMO_GZ = gzip.compress(b"demo")
 
 
-def _fila(monkeypatch, baixar):
-    linha = ("u1", "765", "uploads-pendentes/u1.dem.gz", None, None, None, "m-alvo", None, LINK)
-    estado = {"atualizacoes": [], "falhas": [], "sentry": [], "ingest": [], "r2_baixado": False}
+def _fila(monkeypatch, baixar, arquivo_r2_key="uploads-pendentes/u1.dem.gz", status_falha="pendente"):
+    linha = ("u1", "765", arquivo_r2_key, None, None, None, "m-alvo", None, LINK)
+    estado = {"atualizacoes": [], "falhas": [], "sentry": [], "ingest": [], "r2_baixado": False, "apagados": []}
     monkeypatch.setattr(main.dbmod, "reverter_uploads_travados", lambda *a, **kw: [])
     monkeypatch.setattr(main.dbmod, "listar_uploads_pendentes", lambda c: [linha])
     monkeypatch.setattr(
@@ -152,7 +152,7 @@ def _fila(monkeypatch, baixar):
     )
     monkeypatch.setattr(
         main.dbmod, "falhar_upload_pendente",
-        lambda c, upload_id, erro, **kw: estado["falhas"].append(str(erro)) or "pendente",
+        lambda c, upload_id, erro, **kw: estado["falhas"].append(str(erro)) or status_falha,
     )
     monkeypatch.setattr(main.dbmod, "dados_da_partida_alvo", lambda c, mid: {
         "map": "de_nuke", "steam_ids": {"765"}, "source": "faceit", "score_a": 13, "score_b": 7,
@@ -164,7 +164,12 @@ def _fila(monkeypatch, baixar):
         raise AssertionError("linha com origem_url não lê staging do R2")
 
     monkeypatch.setattr(main.storage_r2, "download_bytes", _r2)
-    monkeypatch.setattr(main.storage_r2, "delete_object", lambda *a, **kw: None)
+    def _apagar(client, bucket, key):
+        if key is None:
+            raise ValueError("key nula")  # o boto3 real recusa Key=None
+        estado["apagados"].append(key)
+
+    monkeypatch.setattr(main.storage_r2, "delete_object", _apagar)
     monkeypatch.setattr(main.faceit, "baixar_demo_origem", baixar)
     monkeypatch.setattr(main, "capturar_erro", lambda e, etapa: estado["sentry"].append(e))
 
@@ -244,6 +249,28 @@ def test_erro_transitorio_nao_vaza_o_link_em_log_sentry_nem_erro(monkeypatch, ca
     for texto in vistos:
         assert HOST not in texto and "segredo" not in texto and "Signature" not in texto
     assert estado["falhas"] and all(e.__suppress_context__ for e in estado["sentry"])
+
+
+def _ok(url):
+    return DEMO_GZ
+
+
+def _expirado(url):
+    raise faceit.LinkExpiradoError()
+
+
+def _transitorio(url):
+    raise faceit.DownloadFaceitError("falha transitória (URLError)")
+
+
+@pytest.mark.parametrize("baixar", [_ok, _expirado, _transitorio])
+def test_origem_url_sem_staging_nao_tenta_apagar_do_r2(monkeypatch, baixar):
+    # Codex P2 no 880f41f: com arquivo_r2_key null, sucesso e erro apagavam Key=None e
+    # geravam erro falso no Sentry.
+    config, conn, estado = _fila(monkeypatch, baixar, arquivo_r2_key=None, status_falha="falhou")
+    main.cmd_processar_uploads_pendentes(config, conn)
+    assert estado["apagados"] == []
+    assert not any(isinstance(e, ValueError) for e in estado["sentry"])
 
 
 # ---- db: origem_url no select e zerada ao terminar ----

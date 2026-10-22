@@ -683,6 +683,8 @@ def _apagar_staging_upload(client, config, upload_id, arquivo_r2_key):
     """Apaga o .dem de staging de um upload que virou 'falhou'. Falha aqui (R2 fora)
     não muda o status nem derruba a fila: só vai pro Sentry, e o órfão fica pro
     cmd_limpar_uploads_orfaos."""
+    if not arquivo_r2_key:
+        return  # upload da extensão FACEIT (origem_url): não há staging no R2
     try:
         storage_r2.delete_object(client, config.r2_bucket, arquivo_r2_key)
     except Exception as e_del:  # noqa: BLE001
