@@ -178,18 +178,22 @@ _ROTULO_MODO = {
 MAX_POSTS_CLIPE = 3
 MAX_LINHAS_CLIPE = 5
 
-# Nick só de Jogador do grupo (is_tracked); de fora vira nulo e a linha diz só "Clipe".
+# Nick só de Jogador do grupo (match_players.is_tracked, como dados_da_partida); de fora
+# vira nulo e a linha diz só "Clipe".
+_NICK_DO_GRUPO = "case when mp.is_tracked then coalesce(nullif(p.nick, ''), mp.nick) end"
 _SQL_CLIPES_REAIS = (
-    "select c.id, c.match_id, m.map, c.modo, case when p.is_tracked then nullif(p.nick, '') end "
+    f"select c.id, c.match_id, m.map, c.modo, {_NICK_DO_GRUPO} "
     "from clipes_reais c join matches m on m.id = c.match_id "
+    "left join match_players mp on mp.match_id = c.match_id and mp.steam_id64 = c.pedido_por "
     "left join players p on p.steam_id64 = c.pedido_por "
     "where c.status = 'pronto' and c.discord_notificado_em is null "
     "and c.updated_at > now() - interval '48 hours' "
     "order by c.updated_at limit 20"
 )
 _SQL_CLIPES_ALLSTAR = (
-    "select c.id, c.match_id, m.map, 'allstar', case when p.is_tracked then nullif(p.nick, '') end "
+    f"select c.id, c.match_id, m.map, 'allstar', {_NICK_DO_GRUPO} "
     "from allstar_clips c join matches m on m.id = c.match_id "
+    "left join match_players mp on mp.match_id = c.match_id and mp.steam_id64 = c.steam_id64 "
     "left join players p on p.steam_id64 = c.steam_id64 "
     "where c.status = 'Processed' and c.discord_notificado_em is null "
     "and c.updated_at > now() - interval '48 hours' "

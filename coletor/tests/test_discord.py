@@ -328,7 +328,9 @@ def test_nick_so_de_jogador_is_tracked(monkeypatch, _sem_fixture_de_reserva):
     selects = [s for s, _ in conn.execs if s.startswith("select")]
     assert len(selects) == 2
     for s in selects:
-        assert "is_tracked" in s
+        # is_tracked existe só em match_players (0001), não em players.
+        assert "mp.is_tracked" in s
+        assert "p.is_tracked" not in s.replace("mp.is_tracked", "")
         assert "discord_notificado_em is null" in s
         assert "48 hours" in s
         assert "limit 20" in s
@@ -439,3 +441,35 @@ def test_resenha_post_com_erro_libera_a_semana(monkeypatch):
         discord.avisar_resenha_semanal(conn, WEBHOOK, "", SEGUNDA_10H)
     delete = next(p for s, p in conn.execs if s.startswith("delete"))
     assert delete == (datetime.date(2026, 10, 19),)
+
+
+def _colunas_das_migrations():
+    """{tabela: {colunas}} lido de create table e add column de supabase/migrations."""
+    import re
+
+    colunas = {}
+    for arq in sorted((RAIZ / "supabase/migrations").glob("*.sql")):
+        sql = re.sub(r"--[^\n]*", "", arq.read_text(encoding="utf-8")).lower()
+        for m in re.finditer(r"create table (?:if not exists )?(?:public\.)?(\w+)\s*\((.*?)\n\);", sql, re.S):
+            for linha in m.group(2).split("\n"):
+                nome = re.match(r"\s*(\w+)\s", linha + " ")
+                if nome and nome.group(1) not in ("primary", "unique", "constraint", "check", "foreign"):
+                    colunas.setdefault(m.group(1), set()).add(nome.group(1))
+        for m in re.finditer(r"alter table (?:if exists )?(?:only )?(?:public\.)?(\w+)((?:\s*,?\s*add column (?:if not exists )?\w+[^,;]*)+)", sql):
+            for col in re.findall(r"add column (?:if not exists )?(\w+)", m.group(2)):
+                colunas.setdefault(m.group(1), set()).add(col)
+    return colunas
+
+
+def test_sql_do_f3_so_usa_coluna_que_existe_nas_migrations():
+    import re
+
+    colunas = _colunas_das_migrations()
+    assert "is_tracked" in colunas["match_players"]
+    assert "is_tracked" not in colunas["players"]
+    for sql in (discord._SQL_CLIPES_REAIS, discord._SQL_CLIPES_ALLSTAR, discord._SQL_SEMANA):
+        aliases = dict((a, t) for t, a in re.findall(r"(?:from|join) (\w+) (\w+)", sql))
+        usados = re.findall(r"\b([a-z]{1,2})\.(\w+)", sql)
+        assert usados
+        for alias, col in usados:
+            assert col in colunas[aliases[alias]], f"{aliases[alias]}.{col} não existe"

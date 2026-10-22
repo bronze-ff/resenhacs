@@ -54,12 +54,12 @@ Step "Avisar no Discord" do `coletor.yml`, depois do FACEIT, a cada 10 min. Usa
 - **Clipe pronto:** Clipe real (`clipes_reais` em `pronto`) ou Allstar (`Processed`)
   das últimas 48 h que ainda não foi avisado. Um post por Partida, no máximo 3 posts
   por execução, com até 5 linhas "nick · modo". Nick só de Jogador do grupo
-  (`is_tracked`); de fora aparece só "Clipe". O `pronto` de alguns Clipes só é gravado
+  (`match_players.is_tracked` naquela Partida); de fora aparece só "Clipe". O `pronto` de alguns Clipes só é gravado
   quando alguém abre a aba Clipes, então o aviso sai na execução seguinte.
 - **Resenha da semana:** segunda-feira a partir das 10:00 de São Paulo, uma vez por
   semana (reserva em `discord_resenha_semanal`). Mostra a semana anterior: Partidas,
   vitórias, derrotas e 3 prêmios (Carregou, Rei do clutch, Granadeiro) com a mesma
-  regra de `site/server/src/premios.js`. O grupo é o de quem tem `is_tracked`, não o
+  regra de `site/server/src/premios.js`. O grupo é `match_players.is_tracked`, não o
   círculo de cada Jogador, então os números podem diferir da tela. Semana sem Partida
   não posta.
 - Sem webhook: não abre o banco. Sem a 0063: avisa no log e sai 0. Outro erro: Sentry

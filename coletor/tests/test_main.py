@@ -2500,3 +2500,19 @@ def test_avisar_discord_chama_clipes_e_resenha(monkeypatch):
     )
     assert main.cmd_avisar_discord(Config(env={"DATABASE_URL": "x"}), conectar=lambda url: _ConnAviso()) == 0
     assert chamadas == [("clipes", "https://resenha.app"), ("resenha", True)]
+
+
+def test_avisar_discord_falha_nos_clipes_nao_impede_a_resenha(monkeypatch):
+    monkeypatch.setenv("DISCORD_WEBHOOK_URL", "https://discord.com/api/webhooks/1/tok")
+    capturados = []
+    monkeypatch.setattr(main, "capturar_erro", lambda e, etapa: capturados.append(etapa))
+
+    def _clipes(c, w, a):
+        raise OSError("rede")
+
+    resenhas = []
+    monkeypatch.setattr(main.discord, "avisar_clipes", _clipes)
+    monkeypatch.setattr(main.discord, "avisar_resenha_semanal", lambda c, w, a, agora: resenhas.append(1) or True)
+    assert main.cmd_avisar_discord(Config(env={"DATABASE_URL": "x"}), conectar=lambda url: _ConnAviso()) == 0
+    assert resenhas == [1]
+    assert capturados == ["avisar-discord"]

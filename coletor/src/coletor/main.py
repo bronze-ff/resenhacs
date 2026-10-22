@@ -1265,19 +1265,30 @@ def cmd_avisar_discord(config, conectar=None, agora=None):
         return 0
     app_url = os.environ.get("APP_URL", "")
     agora = agora or datetime.datetime.now(datetime.timezone.utc)
-    conn = None
-    try:
-        conn = (conectar or dbmod.connect)(config.database_url)
-        clipes = discord.avisar_clipes(conn, webhook_url, app_url)
-        resenha = discord.avisar_resenha_semanal(conn, webhook_url, app_url, agora)
-        print(f"avisar-discord: {clipes} post(s) de Clipe; Resenha da semana {'postada' if resenha else 'não postada'}")
-    except Exception as e:  # noqa: BLE001
+    def _falhou(e):
         # Só o tipo: a mensagem de erro de rede pode carregar a URL do webhook (com token).
         if getattr(e, "sqlstate", None) in _SQLSTATE_SEM_0063:
             print(f"avisar-discord: migration 0063 não aplicada ({type(e).__name__})")
         else:
             capturar_erro(e, "avisar-discord")
             print(f"aviso: avisar-discord falhou ({type(e).__name__})")
+
+    conn = None
+    try:
+        conn = (conectar or dbmod.connect)(config.database_url)
+        # Cada aviso isolado: falha no de Clipe não impede a Resenha da semana.
+        etapas = (
+            ("posts de Clipe", lambda: discord.avisar_clipes(conn, webhook_url, app_url)),
+            ("Resenha da semana postada", lambda: discord.avisar_resenha_semanal(conn, webhook_url, app_url, agora)),
+        )
+        for nome, etapa in etapas:
+            try:
+                print(f"avisar-discord: {nome}: {etapa()}")
+            except Exception as e:  # noqa: BLE001
+                conn.rollback()
+                _falhou(e)
+    except Exception as e:  # noqa: BLE001
+        _falhou(e)
     finally:
         if conn is not None:
             conn.close()
