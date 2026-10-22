@@ -149,9 +149,9 @@ export function createApp({
   // eslint-disable-next-line no-unused-vars
   app.use((err, req, res, next) => {
     capturarErro(err)
-    // Só mensagem e código no log: o objeto inteiro de erro do pg traz `detail` com
-    // valores das linhas (SteamID, nick). O Sentry já recebe o erro completo, com scrub.
-    console.error(`erro não tratado em ${req.method} ${req.path}: ${err?.code ?? ''} ${err?.message ?? err}`)
+    const tipo = err instanceof TypeError ? 'TypeError' : err instanceof SyntaxError ? 'SyntaxError' : 'Error'
+    const sqlstate = typeof err?.code === 'string' && /^[0-9A-Z]{5}$/.test(err.code) ? err.code : null
+    console.error('api: erro não tratado', { tipo, sqlstate })
     if (!res.headersSent) res.status(500).json({ erro: 'Erro interno' })
   })
 

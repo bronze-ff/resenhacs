@@ -1,10 +1,13 @@
-import { describe, it, expect } from 'vitest'
+import { afterEach, describe, it, expect, vi } from 'vitest'
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import request from 'supertest'
 import { createApp } from '../src/app.js'
 import { loadConfig } from '../src/config.js'
+import { signToken } from '../src/auth/jwt.js'
+
+afterEach(() => vi.restoreAllMocks())
 
 export const testConfig = {
   jwtSecret: 'segredo-de-teste',
@@ -66,6 +69,38 @@ describe('GET /api/health', () => {
     const res = await request(app).get('/api/health')
     expect(res.status).toBe(200)
     expect(res.body).toEqual({ ok: true })
+  })
+})
+
+describe('log do handler global', () => {
+  it.each([[TypeError, 'TypeError'], [SyntaxError, 'SyntaxError']])('registra somente o tipo nativo de %s', async (Classe, tipo) => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const db = { query: vi.fn(async (sql) => {
+      if (sql.includes('tokens_validos_apos')) return { rows: [] }
+      throw new Classe('DADO-DA-REQUISICAO')
+    }) }
+    const app = createApp({ config: testConfig, db })
+    const cookie = `resenha_token=${signToken({ steamId: '765' }, testConfig.jwtSecret)}`
+    expect((await request(app).get('/api/matches/invalido').set('Cookie', cookie)).status).toBe(500)
+    expect(log.mock.calls[0]).toEqual(['api: erro não tratado', { tipo, sqlstate: null }])
+    expect(JSON.stringify(log.mock.calls)).not.toContain('DADO-DA-REQUISICAO')
+  })
+  it.each(['22P02', 'DADO-DA-REQUISICAO'])('omite caminho e erro bruto (código: %s)', async (code) => {
+    const valor = 'DADO-DA-REQUISICAO'
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const erro = Object.assign(new Error(`invalid input syntax for uuid: ${valor}`), { name: valor, code })
+    const db = { query: vi.fn(async (sql) => {
+      if (sql.includes('tokens_validos_apos')) return { rows: [] }
+      throw erro
+    }) }
+    const app = createApp({ config: testConfig, db })
+    const cookie = `resenha_token=${signToken({ steamId: '765' }, testConfig.jwtSecret)}`
+    const res = await request(app).get(`/api/matches/${valor}`).set('Cookie', cookie)
+    expect(res.status).toBe(500)
+    expect(res.body).toEqual({ erro: 'Erro interno' })
+    expect(log).toHaveBeenCalledTimes(1)
+    expect(JSON.stringify(log.mock.calls)).not.toContain(valor)
+    expect(log.mock.calls[0]).toEqual(['api: erro não tratado', { tipo: 'Error', sqlstate: code === '22P02' ? '22P02' : null }])
   })
 })
 

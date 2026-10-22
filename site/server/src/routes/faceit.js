@@ -78,10 +78,7 @@ export function createFaceitRouter({ config, db, fetchImpl = fetch }) {
       }),
     })
     if (!tokenRes.ok) {
-      const corpo = await tokenRes.text().catch(() => '')
-      // Status + começo do corpo de erro da FACEIT (a resposta de erro não tem segredo
-      // nenhum — é o suficiente pra distinguir "exige client_secret" de outra causa).
-      console.log(`faceit token exchange falhou: ${tokenRes.status} ${corpo.slice(0, 300)}`)
+      console.log('faceit: falha na autenticação', { status: tokenRes.status })
       return res.redirect(erroRedirect)
     }
     const tokenBody = await tokenRes.json()

@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import request from 'supertest'
 import { createApp } from '../src/app.js'
 import { signToken } from '../src/auth/jwt.js'
+import { bancoTransacional } from './bancoTransacional.js'
 
 vi.mock('../src/r2.js', async (importOriginal) => {
   const original = await importOriginal()
@@ -21,10 +22,40 @@ function appWith(handlers, extra = {}) {
       return Promise.resolve({ rows: [] })
     }),
   }
-  return { app: createApp({ config, db, r2Client: { send: vi.fn() }, ...extra }), db }
+  return { app: createApp({ config, db: bancoTransacional(db.query).db, r2Client: { send: vi.fn() }, ...extra }), db }
 }
 
 describe('POST /api/upload/upload-url', () => {
+  it('seis POSTs simultâneos com quatro uploads ativos reservam só a última vaga', async () => {
+    presignUpload.mockClear()
+    let quantidade = 4
+    const query = vi.fn(async (sql) => {
+      if (sql.includes('select count(*)')) {
+        const n = quantidade
+        await new Promise((resolve) => setTimeout(resolve, 10))
+        return { rows: [{ n }] }
+      }
+      if (sql.includes('insert into uploads_pendentes')) {
+        quantidade++
+        return { rows: [{ id: `u${quantidade}` }] }
+      }
+      return { rows: [] }
+    })
+    const { db, clientes } = bancoTransacional(query)
+    const app = createApp({ config, db, r2Client: { send: vi.fn() } })
+    const respostas = await Promise.all(Array.from({ length: 6 }, () => request(app)
+      .post('/api/upload/upload-url').set('Cookie', cookie).send({ filename: 'x.dem', tamanho: 10 })))
+    expect(respostas.map((res) => res.status).sort()).toEqual([200, 429, 429, 429, 429, 429])
+    expect(quantidade).toBe(5)
+    expect(presignUpload).toHaveBeenCalledTimes(1)
+    expect(clientes).toHaveLength(6)
+    expect(clientes.every((client) => !client.emTransacao && client.release.mock.calls.length === 1)).toBe(true)
+    const aceito = clientes.find((client) => client.query.mock.calls.some(([sql]) => sql.includes('insert into uploads_pendentes')))
+    const comandos = aceito.query.mock.calls.map(([sql]) => sql)
+    expect(comandos[0]).toBe('begin')
+    expect(comandos.findIndex((sql) => sql.includes('select count(*)'))).toBeLessThan(comandos.findIndex((sql) => sql.includes('insert into uploads_pendentes')))
+    expect(comandos.at(-1)).toBe('commit')
+  })
   it.each(['parsed', 'pending', 'failed', 'skipped', 'expired'])('Share Code de Partida %s só bloqueia se já processada', async (status) => {
     presignUpload.mockClear()
     const { app, db } = appWith([
@@ -353,7 +384,7 @@ describe('POST /api/upload/upload-url', () => {
         return Promise.resolve({ rows: [] })
       }),
     }
-    const app = createApp({ config, db, r2Client: { send: vi.fn() } })
+    const app = createApp({ config, db: bancoTransacional(db.query).db, r2Client: { send: vi.fn() } })
     const res = await request(app)
       .post('/api/upload/upload-url')
       .set('Cookie', cookie)

@@ -1,8 +1,10 @@
-import { describe, it, expect, vi } from 'vitest'
+import { afterEach, describe, it, expect, vi } from 'vitest'
 import request from 'supertest'
 import { createApp } from '../src/app.js'
 import { signToken } from '../src/auth/jwt.js'
 import { bancoTransacional } from './bancoTransacional.js'
+
+afterEach(() => vi.restoreAllMocks())
 
 const config = { jwtSecret: 's', appUrl: 'http://localhost:5173', isProduction: false, faceitClientId: 'client-123' }
 const cookie = `resenha_token=${signToken({ steamId: '111' }, config.jwtSecret)}`
@@ -41,6 +43,21 @@ describe('GET /api/faceit/login', () => {
 })
 
 describe('GET /api/faceit/callback', () => {
+  it('não registra o corpo bruto da falha de autenticação FACEIT', async () => {
+    const valor = 'DADO-DA-REQUISICAO'
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const { db } = appWith()
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: false, status: 400, text: async () => `falha: ${valor}` })
+    const app = createApp({ config, db, faceitFetchImpl: fetchImpl })
+    const login = await request(app).get('/api/faceit/login').set('Cookie', cookie)
+    const cookies = login.headers['set-cookie'].map((c) => c.split(';')[0])
+    const state = cookies.find((c) => c.startsWith('resenha_faceit_state=')).split('=')[1]
+    const res = await request(app).get(`/api/faceit/callback?code=abc&state=${state}`)
+      .set('Cookie', [cookie, ...cookies].join('; '))
+    expect(res.headers.location).toBe(`${config.appUrl}/conta?erro=faceit-invalido`)
+    expect(JSON.stringify(log.mock.calls)).not.toContain(valor)
+    expect(log).toHaveBeenCalledWith('faceit: falha na autenticação', { status: 400 })
+  })
   it('dois callbacks não vinculam o mesmo FACEIT a dois Jogadores', async () => {
     const donos = new Set()
     const query = vi.fn(async (sql, params) => {

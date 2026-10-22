@@ -3,6 +3,7 @@ import { describe, it, expect, vi } from 'vitest'
 import request from 'supertest'
 import { createApp } from '../src/app.js'
 import { signToken } from '../src/auth/jwt.js'
+import { bancoTransacional } from './bancoTransacional.js'
 
 const config = { jwtSecret: 's', appUrl: 'http://localhost:5173', isProduction: false, r2Bucket: 'resenha-demos' }
 const token = (steamId, isSuperAdmin = false) => `resenha_token=${signToken({ steamId, isSuperAdmin }, config.jwtSecret)}`
@@ -14,7 +15,7 @@ function appWith(handlers, extra = {}) {
       return Promise.resolve({ rows: [], rowCount: 0 })
     }),
   }
-  return { app: createApp({ config, db, r2Client: { send: vi.fn() }, ...extra }), db }
+  return { app: createApp({ config, db: bancoTransacional(db.query).db, r2Client: { send: vi.fn() }, ...extra }), db }
 }
 
 describe('cabeçalhos', () => {
