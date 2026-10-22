@@ -473,3 +473,48 @@ def test_sql_do_f3_so_usa_coluna_que_existe_nas_migrations():
         assert usados
         for alias, col in usados:
             assert col in colunas[aliases[alias]], f"{aliases[alias]}.{col} não existe"
+
+
+class _ConnSemanaFalha(_ConnSql):
+    """Falha na consulta da semana (execute) ou no fetchall, depois da reserva."""
+
+    def __init__(self, onde):
+        super().__init__(_conn_semana(linhas=LINHAS_SEMANA).responder)
+        self.onde = onde
+        self.ordem = []
+
+    def cursor(self):
+        conn = self
+        cur = _CurSql(self)
+        execute, fetchall = cur.execute, cur.fetchall
+
+        def _execute(sql, params=None):
+            conn.ordem.append(sql.split()[0])
+            if conn.onde == "execute" and sql.startswith("select"):
+                raise RuntimeError("consulta falhou")
+            execute(sql, params)
+
+        def _fetchall():
+            if conn.onde == "fetchall" and conn.ordem[-1] == "select":
+                raise RuntimeError("fetchall falhou")
+            return fetchall()
+
+        cur.execute, cur.fetchall = _execute, _fetchall
+        return cur
+
+    def rollback(self):
+        self.ordem.append("rollback")
+
+
+@pytest.mark.parametrize("onde", ["execute", "fetchall"])
+def test_resenha_falha_na_consulta_libera_a_semana(monkeypatch, onde):
+    # Codex P2 no dd66c56: a reserva ficava e a semana se perdia para sempre.
+    chamadas = _capturar_urlopen(monkeypatch)
+    conn = _ConnSemanaFalha(onde)
+    with pytest.raises(RuntimeError):
+        discord.avisar_resenha_semanal(conn, WEBHOOK, "", SEGUNDA_10H)
+    assert chamadas == []
+    assert conn.ordem[-2:] == ["rollback", "delete"]
+    delete = next(p for s, p in conn.execs if s.startswith("delete"))
+    assert delete == (datetime.date(2026, 10, 19),)
+    assert conn.commits == 2  # reserva e liberação

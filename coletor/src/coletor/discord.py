@@ -395,14 +395,17 @@ def avisar_resenha_semanal(conn, webhook_url, app_url, agora):
     conn.commit()
     if not reservou:
         return False
-    with conn.cursor() as cur:
-        cur.execute(_SQL_SEMANA, (semana, semana + datetime.timedelta(days=7)))
-        linhas = [dict(zip(_COLUNAS_SEMANA, r)) for r in cur.fetchall()]
-    if not linhas:
-        return False  # a reserva fica: semana sem Partida não posta mais tarde
+    # Falha tratada depois da reserva (consulta, montagem ou envio) libera a semana.
+    # Só um crash entre a reserva e o post perde o aviso (decisão 7).
     try:
+        with conn.cursor() as cur:
+            cur.execute(_SQL_SEMANA, (semana, semana + datetime.timedelta(days=7)))
+            linhas = [dict(zip(_COLUNAS_SEMANA, r)) for r in cur.fetchall()]
+        if not linhas:
+            return False  # a reserva fica: semana sem Partida não posta mais tarde
         _postar(webhook_url, montar_embed_resenha(calcular_premios_semana(linhas), semana, app_url))
     except Exception:
+        conn.rollback()  # a consulta que falhou deixa a transação abortada
         with conn.cursor() as cur:
             cur.execute("delete from discord_resenha_semanal where semana = %s", (semana,))
         conn.commit()
