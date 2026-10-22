@@ -64,6 +64,9 @@ def test_casos_compartilhados_e_padrao_igual_ao_javascript():
         assert minimizar_evento({"message": amostra})["message"] == REDACTED
     for amostra in CASOS["intactos"]:
         assert redigir_string(amostra) == amostra
+    for caso in CASOS.get("sanitiza", []):
+        assert redigir_string(caso["entrada"]) == caso["saida"]
+        assert minimizar_evento({"message": caso["entrada"]})["message"] == caso["saida"]
     for chave in CASOS["chavesSensiveis"]:
         assert chave_sensivel(chave)
         tags = minimizar_evento({"tags": {chave: "valor-limpo"}})["tags"]
@@ -350,20 +353,42 @@ def test_before_send_devolve_a_camada_sanitizada_e_nao_o_original(mensagem):
     assert "exemplo" not in final
 
 
-# Prumo: decodificação por sequência de %XX, como o JS. Sequência que não forma UTF-8
-# fica crua só ela; % sem dois hex fica literal; nada disso esconde o resto.
+# REGRA FINAL: todas as camadas no modo tolerante. % sem dois hex fica literal e UTF-8
+# inválido vira U+FFFD; nada disso esconde o resto da string.
 @pytest.mark.parametrize("valor", [
     "/jogador/ana%2540exemplo.com/%ZZ",
     "/jogador/ana%40exemplo.com/%E9%ZZ",
     "/jogador/ana%40exemplo.com?x=%E0%A4",
+    "/jogador/ana%2540exemplo.com/%E0%A4",
     "/p/%ZZ/ana%2540exemplo.com",
 ])
 def test_sequencia_invalida_nao_esconde_o_resto(valor):
     assert redigir_string(valor) == REDACTED
 
 
-def test_sequencia_utf8_invalida_fica_crua_e_nao_conta_como_camada():
-    # %E0%A4 não decodifica; a 4a passada não muda nada, então não é falha fechada. Sem
-    # sanitização que mude alguma camada, sai o original.
-    assert redigir_string("/x/%252525E0%252525A4") == "/x/%252525E0%252525A4"
+def test_before_send_sequencia_com_byte_invalido_decodifica_o_resto():
+    # Sentinela P0 no 0a70eb6: a sequência inteira ficava crua por causa do %E0.
+    import coletor.observabilidade as obs
+
+    evento = obs.before_send({"message": "/jogador/x%E0%61%6E%61%25%34%30exemplo.com"}, None)
+    assert evento["message"] == REDACTED
+
+
+def test_utf8_invalido_conta_como_mudanca_de_camada():
+    # 3 decodificações levam a %E0%A4; a 4a ainda mudaria (vira U+FFFD): falha fechada.
+    assert redigir_string("/x/%252525E0%252525A4") == REDACTED
     assert redigir_string("/p/abc%20def/%E0%A4") == "/p/abc%20def/%E0%A4"
+
+
+@pytest.mark.parametrize("entrada, saida", [
+    ("/partida/abc%3Fx%3Dana%2540exemplo.com", "/partida/abc"),
+    ("/partida/abc%253Fx%253Dana%252540exemplo.com", "/partida/abc"),
+    ("/partida/abc%3Fx%3D1", "/partida/abc"),  # query só aparece depois de decodificar
+])
+def test_sanitiza_devolve_a_camada_mais_profunda_que_mudou(entrada, saida):
+    assert redigir_string(entrada) == saida
+
+
+def test_camada_1_limpa_e_camada_2_sensivel_sai_redigida():
+    # camada 1: /jogador/ana%40exemplo.com (limpa); camada 2: e-mail.
+    assert redigir_string("/jogador/ana%2540exemplo.com") == REDACTED

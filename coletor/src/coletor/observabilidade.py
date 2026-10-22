@@ -94,26 +94,18 @@ def _redigir(valor):
 
 
 _MAX_DECODIFICACOES = 3
-_SEQUENCIA_PERCENT = re.compile(r"(?:%[0-9A-Fa-f]{2})+")
-
-
-def _decodificar_sequencia(match):
-    try:
-        return bytes.fromhex(match.group(0).replace("%", "")).decode("utf-8")
-    except UnicodeDecodeError:
-        return match.group(0)  # não forma UTF-8: fica crua só ela, como no JS
 
 
 def redigir_string(valor):
     if not isinstance(valor, str):
         return valor
 
-    # Decodifica em camadas (%2540 -> %40 -> @) até estabilizar, no máximo 3 vezes. Cada
-    # sequência de %XX decodifica sozinha (igual ao decodificador por sequência do JS):
-    # % sem dois hex e UTF-8 inválido ficam crus sem esconder o resto da string.
+    # Decodifica em camadas (%2540 -> %40 -> @) até estabilizar, no máximo 3 vezes, todas
+    # no modo tolerante: % sem dois hex fica literal e UTF-8 inválido vira U+FFFD (conta
+    # como mudança e não decodifica de novo). Mesma regra do scrub.js.
     camadas = [valor]
     while True:
-        decodificado = _SEQUENCIA_PERCENT.sub(_decodificar_sequencia, camadas[-1])
+        decodificado = unquote(camadas[-1], errors="replace")
         if decodificado == camadas[-1]:
             break
         if len(camadas) > _MAX_DECODIFICACOES:
@@ -122,13 +114,13 @@ def redigir_string(valor):
 
     sanitizada = None
     for camada in camadas:
-        # A leitura tolerante (U+FFFD no UTF-8 inválido) também passa pelos padrões.
-        if _redigir(camada) == REDACTED or _redigir(unquote(camada, errors="replace")) == REDACTED:
-            return REDACTED
-        if _redigir(camada) != camada:
-            sanitizada = _redigir(camada)
-    # Falha fechada: a camada mais profunda que a sanitização mudou (ex.: query cortada
-    # numa camada decodificada); o original só sai se nenhuma camada mudou.
+        redigida = _redigir(camada)
+        if redigida == REDACTED:
+            return REDACTED  # redação integral tem prioridade
+        if redigida != camada:
+            sanitizada = redigida
+    # A camada mais profunda que a sanitização mudou (ex.: query que só aparece depois de
+    # decodificar sai cortada); o original só volta se nenhuma camada mudou.
     return valor if sanitizada is None else sanitizada
 
 
