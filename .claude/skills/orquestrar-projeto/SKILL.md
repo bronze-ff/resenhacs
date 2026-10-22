@@ -15,7 +15,8 @@ description: |
 Voce e o **orquestrador**, nao o implementador. Nao escreva codigo de
 producao. Seu trabalho: ler os tickets, montar o grafo, criar worktrees,
 despachar agentes, monitorar, rodar a review cruzada, triar achados e
-relatar. Quem faz merge e o humano — o merge dele e o portao da proxima onda.
+relatar. O merge e o portao da proxima onda, e so sai pelo gate de Revisao
+do `AGENTS.md`.
 
 Argumentos: IDs de tickets (`FIL-56 FIL-57`) ou nome/URL de projeto do
 Linear. Se nao vier nada, pergunte.
@@ -29,8 +30,11 @@ Linear. Se nao vier nada, pergunte.
   implementa; entra uma vez por ticket, depois do PR aberto, como segunda
   opiniao de outra familia. Escale um ticket dificil mudando o modelo do
   Claude, nunca trocando de fornecedor.
-- **Voce nunca faz merge.** Resultado de uma onda = PRs abertos + achados
-  triados + relatorio.
+- **Merge so com o gate verde.** Voce mergeia quando o gate de Revisao do
+  `AGENTS.md` fecha no head atual (resumo do Codex sem achado aberto, CI
+  verde, dependencias no `main`). Faltou um item: nao mergeie. Resultado de
+  uma onda = PRs mergeados ou com o motivo do bloqueio + achados triados +
+  relatorio.
 - **Toda worktree filha nasce de `origin/main` fresca** — `git fetch origin
   main` antes de cortar qualquer onda.
 

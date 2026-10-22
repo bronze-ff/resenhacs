@@ -610,8 +610,8 @@ precisar alargar o regex.
   correção válido.
 - **CI VERDE (falta triagem)** — verde não é o gate inteiro. Repete até a
   fingerprint exata ser triada.
-- **CI + REVIEW OK** — PR pronto pra revisão humana. Feedback novo revoga esse
-  estado. **Não mergeie.**
+- **CI + REVIEW OK** — confira o gate de Revisão do `AGENTS.md` no head atual.
+  Fechou: mergeie. Feedback novo revoga esse estado.
 - **PR MERGEADO** — avance pra Fase 5.
 
 ### Triagem de review
@@ -683,7 +683,8 @@ Algumas coisas são gatilho do humano. Mostre na hora certa; nunca execute:
 - **Rollout de feature flag** (conta de teste → coorte → 100%) — decisão de
   founder, atrás do ticket de regressão verde.
 - **Sync de documentação** — depois de PR que mexeu em docs.
-- **O merge.** Sempre.
+- **O merge fora do gate.** Com o gate de Revisão do `AGENTS.md` verde, o
+  orquestrador mergeia; sem ele, ninguém mergeia.
 
 ---
 

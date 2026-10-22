@@ -108,7 +108,7 @@ Nunca logar dado pessoal. O scrub está em `site/client/src/observabilidade/scru
 
 ## Revisão
 
-Todo PR passa por Codex Review. O Codex revisa sozinho ao abrir o PR; depois de cada push, o Maestro comenta `@codex review` para ele revisar o head novo. Não peça o review por comentário se quem abriu o PR foi um agente Cursor.
+Todo PR passa por Codex Review. O Codex revisa sozinho ao abrir o PR; depois de cada push, o Maestro comenta `@codex review` para ele revisar o head novo. Em PR aberto por `cursor[bot]`, o Maestro não comenta: o Filippe pede o review do head novo, e sem esse review o PR não mergeia.
 
 Gate de merge. O Maestro só mergeia quando tudo isto vale para o head atual:
 
