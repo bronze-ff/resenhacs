@@ -14,6 +14,7 @@ import SecaoClipeReal from '../components/clipes/SecaoClipeReal.jsx'
 import Espelho from '../components/partida/Espelho.jsx'
 import FaixaRounds from '../components/partida/FaixaRounds.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
+import SecaoLicoes from '../components/SecaoLicoes.jsx'
 import { useTransicaoModal } from '../lib/useTransicaoModal.js'
 
 // Carregamento (índice + /round/:n, streaming por round — FIL-54b) mora no
@@ -898,6 +899,15 @@ export default function Partida() {
           )}
         </section>
       )}
+
+      <SecaoLicoes
+        matchId={m.id}
+        jogadores={m.players}
+        jogadorLogado={jogador}
+        temDemo={m.temDemo}
+        onVerRound={m.replayUrl ? (rn) => irParaMomento(rn, 0) : null}
+        semReplay={!m.replayUrl}
+      />
 
       <section ref={replayRef} className="scroll-mt-20 space-y-3">
         <SectionHeader titulo="Replay 2D" margem="nenhuma" />
