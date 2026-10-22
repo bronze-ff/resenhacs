@@ -6,6 +6,13 @@ import PassoAPassoSteam from '../components/PassoAPassoSteam.jsx'
 const NOMES_PASSOS = ['Boas-vindas', 'Steam', 'FACEIT', 'Menu']
 const TOTAL_PASSOS = NOMES_PASSOS.length
 
+// Só caminho interno: começa com "/" e não com "//" nem "/\" (o navegador lê os dois
+// como outro host). Qualquer outra coisa volta para o início.
+export function destinoAposTour(returnTo) {
+  if (typeof returnTo !== 'string' || !returnTo.startsWith('/') || /^\/[/\\]/.test(returnTo)) return '/'
+  return returnTo
+}
+
 export default function Tour() {
   const { jogador } = useAuth()
   const [passo, setPasso] = useState(0)
@@ -19,7 +26,7 @@ export default function Tour() {
       setMensagem('Erro ao concluir o tour. Tente novamente.')
       return
     }
-    window.location.href = '/'
+    window.location.href = destinoAposTour(new URLSearchParams(window.location.search).get('returnTo'))
   }
 
   async function salvarSteam(e) {

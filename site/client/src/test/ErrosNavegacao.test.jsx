@@ -243,3 +243,21 @@ describe('Perfil — FACEIT já vinculada', () => {
     expect(await screen.findByText('Essa conta FACEIT já está vinculada a outro Jogador.')).toBeInTheDocument()
   })
 })
+
+describe('primeiro login com tour pendente', () => {
+  it('rota protegida manda para /tour levando o returnTo', async () => {
+    mockApp({ ...JOGADOR, tourConcluido: false })
+    window.history.replaceState(null, '', '/partida/p1?aba=rounds')
+    render(<App />)
+    expect(await screen.findByText('Bem-vindo ao Resenha')).toBeInTheDocument()
+    expect(window.location.pathname).toBe('/tour')
+    expect(new URLSearchParams(window.location.search).get('returnTo')).toBe('/partida/p1?aba=rounds')
+  })
+
+  it('raiz manda para /tour sem returnTo', async () => {
+    mockApp({ ...JOGADOR, tourConcluido: false })
+    render(<App />)
+    expect(await screen.findByText('Bem-vindo ao Resenha')).toBeInTheDocument()
+    expect(window.location.search).toBe('')
+  })
+})

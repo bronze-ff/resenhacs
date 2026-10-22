@@ -47,11 +47,18 @@ function IrParaEntrar() {
   return <Navigate to={`/entrar?returnTo=${encodeURIComponent(pathname)}`} replace />
 }
 
+// Primeiro login: o tour leva junto a rota pedida e volta para ela ao concluir.
+function IrParaTour() {
+  const { pathname, search } = useLocation()
+  const destino = pathname + search
+  return <Navigate to={destino === '/' ? '/tour' : `/tour?returnTo=${encodeURIComponent(destino)}`} replace />
+}
+
 function RotaProtegida({ children }) {
   const { carregando, jogador } = useAuth()
   if (carregando) return <TelaCarregando />
   if (!jogador) return <IrParaEntrar />
-  if (!jogador.tourConcluido) return <Navigate to="/tour" replace />
+  if (!jogador.tourConcluido) return <IrParaTour />
   return <Shell>{children}</Shell>
 }
 
@@ -69,7 +76,7 @@ function RotaAdmin({ children }) {
   const { carregando, jogador } = useAuth()
   if (carregando) return <TelaCarregando />
   if (!jogador) return <IrParaEntrar />
-  if (!jogador.tourConcluido) return <Navigate to="/tour" replace />
+  if (!jogador.tourConcluido) return <IrParaTour />
   if (!jogador.isSuperAdmin) return <Navigate to="/" replace />
   return <Shell>{children}</Shell>
 }

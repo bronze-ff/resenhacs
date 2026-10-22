@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { AuthProvider } from '../auth/AuthContext.jsx'
-import Tour from '../pages/Tour.jsx'
+import Tour, { destinoAposTour } from '../pages/Tour.jsx'
 
 // jogador autenticado, tour ainda não concluído — é o estado em que a página
 // Tour normalmente é montada.
@@ -17,11 +17,11 @@ const JOGADOR = {
 // concluir() troca window.location.href por uma navegação real (não usa react-router),
 // então window.location precisa ser substituível pra o teste conseguir observar o
 // destino sem navegar de verdade (o que quebraria o jsdom).
-function stubLocation() {
+function stubLocation(search = '') {
   const original = window.location
   Object.defineProperty(window, 'location', {
     writable: true,
-    value: { ...original, href: '' },
+    value: { ...original, href: '', search },
   })
   return () => Object.defineProperty(window, 'location', { writable: true, value: original })
 }
@@ -115,5 +115,31 @@ describe('Tour', () => {
     expect(window.location.href).toBe('')
 
     restoreLocation()
+  })
+
+  it('concluir volta para o returnTo interno que veio da rota protegida', async () => {
+    mockFetch(() => Promise.resolve({ ok: true }))
+    const restoreLocation = stubLocation('?returnTo=%2Fpartida%2Fp1%3Faba%3Drounds')
+
+    render(
+      <AuthProvider>
+        <Tour />
+      </AuthProvider>,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: /pular tour/i }))
+    await vi.waitFor(() => expect(window.location.href).toBe('/partida/p1?aba=rounds'))
+
+    restoreLocation()
+  })
+})
+
+describe('destinoAposTour', () => {
+  it('aceita só caminho interno', () => {
+    expect(destinoAposTour('/partida/p1')).toBe('/partida/p1')
+    expect(destinoAposTour('/comparar?a=1&b=2')).toBe('/comparar?a=1&b=2')
+    for (const ruim of [null, undefined, '', 'partida', 'https://mal.com', '//mal.com', '/\\mal.com', 'javascript:alert(1)']) {
+      expect(destinoAposTour(ruim)).toBe('/')
+    }
   })
 })
