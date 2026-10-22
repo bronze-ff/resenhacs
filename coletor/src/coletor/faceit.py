@@ -12,6 +12,8 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 
+from . import rede
+
 BASE_DATA = "https://open.faceit.com/data/v4"
 URL_DOWNLOAD = "https://open.faceit.com/download/v2/demos/download"
 PAGINA = 100
@@ -46,7 +48,7 @@ def _http_get_bytes(url, timeout=120, max_bytes=MAX_DEMO_COMPRIMIDA_BYTES):
         raise RuntimeError("URL assinada da FACEIT sem https")
     partes = []
     total = 0
-    with urllib.request.urlopen(url, timeout=timeout) as resp:
+    with rede.abrir_url(url, timeout=timeout) as resp:
         content_length = resp.headers.get("Content-Length")
         while True:
             chunk = resp.read(1 << 20)

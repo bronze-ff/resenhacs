@@ -7,7 +7,7 @@ A lista de palavras mora em palavras.py.
 
 import os
 import re
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import unquote, urlsplit, urlunsplit
 
 from .palavras import PALAVRA, chave_sensivel
 
@@ -85,14 +85,26 @@ def _cortar_url(url):
     return so_origem_caminho(limpa) + url[len(limpa):]
 
 
-def redigir_string(valor):
-    if not isinstance(valor, str):
-        return valor
-
+def _redigir(valor):
     texto = _URL.sub(lambda match: _cortar_url(match.group(0)), valor)
     texto = _REL.sub(lambda match: match.group(1) + _cortar_url(match.group(2)), texto)
     if PALAVRA.search(texto) or any(padrao.search(texto) for padrao in _PII):
         return REDACTED
+    return texto
+
+
+def redigir_string(valor):
+    if not isinstance(valor, str):
+        return valor
+
+    texto = _redigir(valor)
+    # unquote não lança: % malformado fica como está.
+    # shortcut: decodifica uma vez só; %2540 escapa. Decodificar em laço se aparecer no Sentry.
+    decodificado = unquote(valor)
+    if decodificado != valor:
+        redigido = _redigir(decodificado)
+        if redigido != decodificado:
+            return redigido
     return texto
 
 

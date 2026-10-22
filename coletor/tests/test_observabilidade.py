@@ -298,3 +298,19 @@ def test_monitor_discover_erro_inesperado_fecha_error_e_propaga(monkeypatch):
     with pytest.raises(ConnectionError):
         obs.em_monitor_discover(_discover)
     assert [c["status"] for c in checkins] == ["in_progress", "error"]
+
+
+def test_percent_encoding_e_redigido_depois_de_decodificar():
+    # Mesmos casos do casos-palavras.json (R119); o laço compartilhado cobre quando o JSON chegar.
+    assert redigir_string("/jogador/ana%40exemplo.com") == REDACTED
+    assert redigir_string("senha%3Dabc") == REDACTED
+    assert redigir_string("/partida/abc%20def") == "/partida/abc%20def"
+    assert redigir_string("erro pa%73sword=1") == REDACTED
+    assert minimizar_evento({"message": "liga%20(11)%203456-7890"})["message"] == REDACTED
+
+
+def test_percent_malformado_nao_lanca_e_decodifica_uma_vez():
+    assert redigir_string("100% certo") == "100% certo"
+    assert redigir_string("/partida/%E0%A4%A") == "/partida/%E0%A4%A"
+    # %2540 vira %40 numa decodificação só; o e-mail só apareceria na segunda.
+    assert redigir_string("/jogador/ana%2540exemplo.com") == "/jogador/ana%2540exemplo.com"

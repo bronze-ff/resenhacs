@@ -1,0 +1,126 @@
+import email.message
+import io
+import sys
+import urllib.error
+import urllib.response
+import urllib.request
+from pathlib import Path
+
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+from coletor import rede
+from coletor.rede import HostNaoPermitidoError
+
+# host -> IP; o resolver falso nunca toca DNS de verdade.
+DNS = {
+    "replay.valve.net": "155.133.226.1",
+    "www.hltv.org": "104.16.1.1",
+    "cdn.hltv.org": "104.16.1.2",
+    "demos.faceit.com": "34.120.1.1",
+    "outro.com": "93.184.216.34",
+    "interno.local": "10.0.0.5",
+}
+
+
+class _Transporte(urllib.request.HTTPHandler, urllib.request.HTTPSHandler):
+    """Responde sem rede: URL em `rotas` vira redirect 302; o resto, 200 com corpo."""
+
+    def __init__(self, rotas):
+        super().__init__()
+        self.rotas = rotas
+        self.abertas = []
+
+    def _responder(self, req):
+        url = req.full_url
+        self.abertas.append(url)
+        cabecalhos = email.message.Message()
+        if url in self.rotas:
+            cabecalhos["Location"] = self.rotas[url]
+            resp = urllib.response.addinfourl(io.BytesIO(b""), cabecalhos, url, 302)
+            resp.msg = "Found"
+            return resp
+        resp = urllib.response.addinfourl(io.BytesIO(b"ok"), cabecalhos, url, 200)
+        resp.msg = "OK"
+        return resp
+
+    http_open = _responder
+    https_open = _responder
+
+
+@pytest.fixture
+def transporte(monkeypatch):
+    monkeypatch.setattr(rede, "_resolver", lambda host: [DNS.get(host) or host])
+    t = _Transporte({})
+    monkeypatch.setattr(rede, "_TRANSPORTE", (t,))
+    return t
+
+
+def test_redirect_publico_e_aceito(transporte):
+    transporte.rotas["https://replay.valve.net/a.dem.bz2"] = "https://outro.com/b.dem.bz2"
+    with rede.abrir_url("https://replay.valve.net/a.dem.bz2", timeout=5) as resp:
+        assert resp.read() == b"ok"
+    assert transporte.abertas == ["https://replay.valve.net/a.dem.bz2", "https://outro.com/b.dem.bz2"]
+
+
+@pytest.mark.parametrize("destino", [
+    "http://127.0.0.1/x",
+    "http://169.254.169.254/latest/meta-data/",
+    "http://10.1.2.3/x",
+    "http://interno.local/x",
+    "http://[::1]/x",
+    "http://[::ffff:127.0.0.1]/x",
+    "http://0.0.0.0/x",
+    "http://224.0.0.1/x",
+])
+def test_redirect_para_ip_interno_e_recusado(transporte, destino):
+    transporte.rotas["https://replay.valve.net/a.dem.bz2"] = destino
+    with pytest.raises(HostNaoPermitidoError):
+        rede.abrir_url("https://replay.valve.net/a.dem.bz2", timeout=5)
+    assert transporte.abertas == ["https://replay.valve.net/a.dem.bz2"]
+
+
+def test_url_inicial_interna_e_recusada_sem_abrir(transporte):
+    with pytest.raises(HostNaoPermitidoError):
+        rede.abrir_url("http://127.0.0.1:8080/x", timeout=5)
+    assert transporte.abertas == []
+
+
+def test_esquema_que_nao_e_http_e_recusado(transporte):
+    with pytest.raises(HostNaoPermitidoError):
+        rede.abrir_url("file:///etc/passwd", timeout=5)
+    transporte.rotas["https://replay.valve.net/a"] = "ftp://outro.com/x"
+    with pytest.raises((HostNaoPermitidoError, urllib.error.HTTPError)):
+        rede.abrir_url("https://replay.valve.net/a", timeout=5)
+
+
+def test_dominios_valem_so_na_url_inicial(transporte):
+    with pytest.raises(HostNaoPermitidoError):
+        rede.abrir_url("https://outro.com/x.rar", timeout=5, dominios=("hltv.org",))
+    with pytest.raises(HostNaoPermitidoError):
+        rede.abrir_url("https://hltv.org.outro.com/x.rar", timeout=5, dominios=("hltv.org",))
+    transporte.rotas["https://www.hltv.org/download/demo/1"] = "https://outro.com/1.rar"
+    with rede.abrir_url("https://www.hltv.org/download/demo/1", timeout=5, dominios=("hltv.org",)) as resp:
+        assert resp.read() == b"ok"
+
+
+def test_redirect_de_hltv_para_ip_interno_e_recusado(transporte):
+    transporte.rotas["https://www.hltv.org/download/demo/1"] = "http://169.254.169.254/"
+    with pytest.raises(HostNaoPermitidoError):
+        rede.abrir_url("https://www.hltv.org/download/demo/1", timeout=5, dominios=("hltv.org",))
+
+
+def test_mais_de_5_redirects_e_recusado(transporte):
+    for i in range(6):
+        transporte.rotas[f"https://outro.com/{i}"] = f"https://outro.com/{i + 1}"
+    with pytest.raises(urllib.error.HTTPError):
+        rede.abrir_url("https://outro.com/0", timeout=5)
+    assert len(transporte.abertas) == 6
+
+
+def test_5_redirects_passam(transporte):
+    for i in range(5):
+        transporte.rotas[f"https://outro.com/{i}"] = f"https://outro.com/{i + 1}"
+    with rede.abrir_url("https://outro.com/0", timeout=5) as resp:
+        assert resp.read() == b"ok"

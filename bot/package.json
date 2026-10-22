@@ -10,6 +10,7 @@
     "globaloffensive": "^3.3.0"
   },
   "overrides": {
-    "steam-appticket": "^2.0.1"
+    "steam-appticket": "^2.0.1",
+    "adm-zip": "^0.6.1"
   }
 }
