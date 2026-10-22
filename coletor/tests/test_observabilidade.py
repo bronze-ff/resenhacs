@@ -322,6 +322,13 @@ def test_percent_encoding_em_camadas_e_redigido():
     assert redigir_string("se%25256Eha%253Dabc") == REDACTED
 
 
+def test_utf8_invalido_em_outra_parte_nao_esconde_o_email():
+    # Sentinela P1 no a5e2d0c: o UnicodeDecodeError parava antes da 1a camada.
+    assert redigir_string("/jogador/ana%40exemplo.com?x=%E0%A4") == REDACTED
+    assert redigir_string("/jogador/ana%2540exemplo.com/%E0%A4") == REDACTED
+    assert redigir_string("/partida/abc%20def/%E0%A4") == "/partida/abc%20def/%E0%A4"
+
+
 def test_percent_encoding_que_ainda_muda_depois_de_3_camadas_falha_fechado():
     assert redigir_string("/jogador/ana%25252540exemplo.com") == REDACTED
     # Sem dado sensível em camada nenhuma; 7 dígitos seguidos não casam com telefone.

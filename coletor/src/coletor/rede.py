@@ -34,13 +34,14 @@ def _ipv4_embutido(endereco):
         return None
     if endereco.ipv4_mapped:
         return endereco.ipv4_mapped
-    if endereco in _NAT64:
+    # 64:ff9b::/96 (NAT64) e ::/96 (IPv4-compatível, obsoleto) levam o IPv4 nos 32 bits finais.
+    if endereco in _NAT64 or int(endereco) >> 32 == 0:
         return ipaddress.IPv4Address(int(endereco) & 0xFFFFFFFF)
     return endereco.sixtofour
 
 
 def _ip_recusado(ip):
-    """Aceita só IP global. IPv4 embutido (::ffff:0:0/96, 64:ff9b::/96, 2002::/16)
+    """Aceita só IP global. IPv4 embutido (::ffff:0:0/96, ::/96, 64:ff9b::/96, 2002::/16)
     passa pela mesma regra."""
     endereco = ipaddress.ip_address(ip.split("%", 1)[0])
     embutido = _ipv4_embutido(endereco)

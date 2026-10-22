@@ -101,13 +101,11 @@ def redigir_string(valor):
         return valor
 
     # Decodifica em camadas (%2540 -> %40 -> @) até estabilizar, no máximo 3 vezes, e
-    # aplica os padrões em cada camada. % malformado para a decodificação ali.
+    # aplica os padrões em cada camada. unquote não lança: % malformado fica como está e
+    # UTF-8 inválido vira U+FFFD, sem esconder o resto da string (Sentinela P1).
     camadas = [valor]
     while True:
-        try:
-            decodificado = unquote(camadas[-1], errors="strict")
-        except UnicodeDecodeError:
-            break
+        decodificado = unquote(camadas[-1], errors="replace")
         if decodificado == camadas[-1]:
             break
         if len(camadas) > _MAX_DECODIFICACOES:

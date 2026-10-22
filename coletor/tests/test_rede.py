@@ -134,6 +134,7 @@ def test_5_redirects_passam(transporte):
     "64:ff9b::a9fe:a9fe", "64:ff9b::7f00:1",  # 64:ff9b::/96 (169.254.169.254, 127.0.0.1)
     "2002:a9fe:a9fe::1", "2002:0a00:0001::1",  # 2002::/16 (169.254.169.254, 10.0.0.1)
     "192.0.0.8", "198.18.0.1", "fc00::1",    # não globais
+    "::7f00:1", "::a9fe:a9fe", "::a00:1",     # IPv4-compatível ::/96 (127.0.0.1, 169.254.169.254, 10.0.0.1)
 ])
 def test_ip_fora_do_global_e_recusado(ip):
     assert rede._ip_recusado(ip)
