@@ -423,6 +423,8 @@ export default function ReplayViewer({
     if (idxSeek === -1 || seekPronto || seekAplicado.current === seek.key) return
     setRoundIdx(idxSeek)
     setFrameAtual(0)
+    // Pausa até o pulo: senão o loop, ao reiniciar com os frames, recomeça do frame 0.
+    setTocando(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seek?.key, idxSeek])
   useEffect(() => {
