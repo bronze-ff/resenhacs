@@ -48,7 +48,7 @@ export default function EnviarDemo() {
 
   function escolherArquivo(lista) {
     const f = lista?.[0]
-    if (f && f.name.toLowerCase().endsWith('.dem')) setArquivo(f)
+    if (f && /\.dem(?:\.gz)?$/i.test(f.name)) setArquivo(f)
   }
 
   const onDrop = useCallback((e) => {
@@ -101,7 +101,7 @@ export default function EnviarDemo() {
   }
 
   const PASSOS = [
-    { titulo: 'Envie o .dem', feito: true },
+    { titulo: 'Envie o .dem ou .dem.gz', feito: true },
     { titulo: 'Fila de processamento', feito: resultado },
     { titulo: 'Parseado pelo Coletor (~30min)', feito: false },
     { titulo: 'Aparece no Feed', feito: false },
@@ -112,7 +112,7 @@ export default function EnviarDemo() {
       <CabecalhoPagina
         eyebrow="Upload manual"
         titulo="Enviar demo"
-        descricao="Baixe o .dem em CS2 → Assistir → Suas Partidas (ou do Faceit/GC) e envie aqui. O processamento roda a cada ~30 minutos — a Partida aparece no Feed quando terminar."
+        descricao="Baixe o .dem ou .dem.gz em CS2 → Assistir → Suas Partidas (ou na FACEIT/GC) e envie aqui. O processamento roda a cada ~30 minutos — a Partida aparece no Feed quando terminar."
       />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(17rem,0.48fr)]">
@@ -143,7 +143,7 @@ export default function EnviarDemo() {
                 {arquivo ? <IconeArquivo /> : <IconeUpload />}
               </span>
               <span className="block w-full truncate px-2 text-center font-display text-lg font-semibold text-texto" title={arquivo?.name}>
-                {arquivo ? arquivo.name : arrastando ? 'Solte pra anexar' : 'Arraste o .dem aqui ou clique pra escolher'}
+                {arquivo ? arquivo.name : arrastando ? 'Solte pra anexar' : 'Arraste o .dem ou .dem.gz aqui ou clique pra escolher'}
               </span>
               {!arquivo && <span className="text-sm text-texto-fraco">Arquivos de demo do Counter-Strike 2</span>}
               {arquivo && (
@@ -156,7 +156,7 @@ export default function EnviarDemo() {
               <input
                 id="arquivo"
                 type="file"
-                accept=".dem"
+                accept=".dem,.dem.gz"
                 onChange={(e) => escolherArquivo(e.target.files)}
                 className="hidden"
               />
@@ -201,7 +201,7 @@ export default function EnviarDemo() {
             )}
 
             <div className="flex flex-col-reverse gap-3 border-t border-borda pt-5 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-xs text-texto-fraco">{arquivo ? 'Pronto pra enviar.' : 'Escolha um arquivo .dem pra liberar o envio.'}</p>
+              <p className="text-xs text-texto-fraco">{arquivo ? 'Pronto pra enviar.' : 'Escolha um arquivo .dem ou .dem.gz pra liberar o envio.'}</p>
               <Button type="submit" variante="primario" tamanho="lg" carregando={enviando} disabled={!arquivo}>
                 {enviando ? 'Enviando…' : 'Enviar'}
               </Button>

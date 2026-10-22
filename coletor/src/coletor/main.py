@@ -37,6 +37,7 @@ from . import sharecode
 from . import steam_api
 from . import faceit
 from . import faceit_sync
+from . import descompressao
 from . import storage_r2
 from . import transform
 from .config import Config
@@ -609,7 +610,12 @@ def cmd_processar_uploads_pendentes(config, conn):
                     client, config.r2_bucket, arquivo_r2_key, max_bytes=_MAX_UPLOAD_BYTES,
                 )
                 dem_path = tmp / "demo.dem"
-                dem_path.write_bytes(dados_dem)
+                if arquivo_r2_key.endswith(".dem.gz"):
+                    descompressao.descomprimir_gzip(
+                        dados_dem, dem_path, max_bytes=_MAX_UPLOAD_BYTES,
+                    )
+                else:
+                    dem_path.write_bytes(dados_dem)
 
                 match_id = ingest_demo(
                     config, conn, dem_path,
@@ -621,8 +627,8 @@ def cmd_processar_uploads_pendentes(config, conn):
                 print(f"  {upload_id}: concluido ({match_id})")
                 total += 1
                 concluido = True
-        except (DemoNaoConfereError, storage_r2.ArquivoGrandeDemaisError) as e:
-            # Falha DEFINITIVA (mapa/roster errado, arquivo acima do teto): nenhum
+        except (DemoNaoConfereError, storage_r2.ArquivoGrandeDemaisError, descompressao.GzipInvalidoError) as e:
+            # Falha DEFINITIVA (validação, tamanho ou gzip inválido): nenhum
             # retry muda o resultado, então o staging sai na hora.
             conn.rollback()
             dbmod.atualizar_upload_pendente(conn, upload_id, "falhou", erro=str(e)[:500])

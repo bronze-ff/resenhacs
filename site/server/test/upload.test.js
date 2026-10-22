@@ -116,6 +116,30 @@ describe('POST /api/upload/upload-url', () => {
     expect(res.status).toBe(400)
     expect(res.body.erro).toBe('Data sem fuso')
   })
+  it.each(['partida.dem.gz', 'PARTIDA.DEM.GZ'])('aceita %s e preserva o formato na chave do Coletor', async (filename) => {
+    const { app, db } = appWith([['insert into uploads_pendentes', [{ id: 'u1' }]]])
+    const res = await request(app).post('/api/upload/upload-url').set('Cookie', cookie).send({ filename, tamanho: 100 })
+    expect(res.status).toBe(200)
+    expect(res.body.key).toMatch(/^uploads-pendentes\/[0-9a-f-]+\.dem\.gz$/)
+    expect(presignUpload).toHaveBeenLastCalledWith(expect.anything(), 'resenha-demos', res.body.key, 'application/octet-stream', 900, 100)
+    const insercao = db.query.mock.calls.find(([sql]) => sql.includes('insert into uploads_pendentes'))
+    expect(insercao[1][1]).toBe(res.body.key)
+  })
+
+  it.each(['demo.gz', 'demo.dem.gz.exe', 'demo.dem.bz2'])('recusa formato fora da lista: %s', async (filename) => {
+    const { app } = appWith([])
+    const res = await request(app).post('/api/upload/upload-url').set('Cookie', cookie).send({ filename, tamanho: 100 })
+    expect(res.status).toBe(400)
+  })
+
+  it('mantém o teto sobre o tamanho comprimido enviado', async () => {
+    const { app } = appWith([])
+    const res = await request(app).post('/api/upload/upload-url').set('Cookie', cookie)
+      .send({ filename: 'partida.dem.gz', tamanho: 400 * 1024 * 1024 + 1 })
+    expect(res.status).toBe(400)
+    expect(res.body.erro).toMatch(/limite de 400MB/)
+  })
+
   it('sem login: 401', async () => {
     const { app } = appWith([])
     const res = await request(app).post('/api/upload/upload-url').send({ tamanho: 10, filename: 'x.dem' })

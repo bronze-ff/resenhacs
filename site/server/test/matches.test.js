@@ -425,6 +425,14 @@ describe('GET /api/matches/:id — temDemo e demoUpload', () => {
     expect(res.body.demoUpload).toEqual({ status: 'processando', erro: null, enviadoPorVoce: true })
   })
 
+  it.each(['1-4a9a2655-8247-4f0b-b532-9b710fc6eb87', null])('detalhe: expõe o id FACEIT %s para a sala', async (faceitMatchId) => {
+    const { app, db } = appComPartida({ match: { source: 'faceit', faceit_match_id: faceitMatchId }, uploads: [] })
+    const res = await request(app).get('/api/matches/m1').set('Cookie', cookie)
+    expect(res.status).toBe(200)
+    expect(res.body.faceitMatchId).toBe(faceitMatchId)
+    expect(db.query.mock.calls.find(([sql]) => sql.includes('from matches mt'))[0]).toContain('mt.faceit_match_id')
+  })
+
   it('detalhe: erro do envio só aparece pra quem enviou', async () => {
     const { app } = appComPartida({
       match: { tem_demo: false },

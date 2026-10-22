@@ -17,15 +17,30 @@ beforeEach(() => {
 })
 
 describe('AvisoPartidaSemDemo', () => {
+  it('liga à sala da FACEIT com instrução de download e envio', () => {
+    const faceitMatchId = '1-4a9a2655-8247-4f0b-b532-9b710fc6eb87'
+    render(<AvisoPartidaSemDemo partida={{ ...partida, faceitMatchId }} euSteamId="765" />)
+    const link = screen.getByRole('link', { name: /sala da FACEIT/i })
+    expect(link).toHaveAttribute('href', `https://www.faceit.com/en/cs2/room/${faceitMatchId}`)
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer')
+    expect(screen.getByText(/Watch Demo/)).toHaveTextContent(/\.dem ou \.dem\.gz/)
+  })
+
+  it.each([null, '', 'javascript:alert(1)', '../sala', '1-invalido'])('sem sala inventada para id %s', (faceitMatchId) => {
+    render(<AvisoPartidaSemDemo partida={{ ...partida, faceitMatchId }} euSteamId="765" />)
+    expect(screen.queryByRole('link')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /enviar demo desta partida/i })).toBeInTheDocument()
+  })
+
   it('Partida FACEIT sem demo: aviso + CTA de envio pra quem jogou', () => {
     render(<AvisoPartidaSemDemo partida={partida} euSteamId="765" />)
-    expect(screen.getByText('Partida da FACEIT sem demo — estatísticas básicas')).toBeInTheDocument()
+    expect(screen.getByText('Partida FACEIT sem Demo: kills, mortes por round e clipes precisam do arquivo .dem')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /enviar demo desta partida/i })).toBeInTheDocument()
   })
 
   it('quem não jogou vê o aviso, mas não o botão', () => {
     render(<AvisoPartidaSemDemo partida={partida} euSteamId="000" />)
-    expect(screen.getByText(/sem demo — estatísticas básicas/)).toBeInTheDocument()
+    expect(screen.getByText(/Partida FACEIT sem Demo:/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /enviar demo/i })).not.toBeInTheDocument()
   })
 

@@ -60,13 +60,14 @@ export default function EnviarDemoDaPartida({ partida, euSteamId, onEnviado }) {
     setErro(null)
     const f = lista?.[0]
     if (!f) return
-    if (!f.name.toLowerCase().endsWith('.dem')) {
-      setErro('Só arquivos .dem são aceitos.')
+    if (!/\.dem(?:\.gz)?$/i.test(f.name)) {
+      setErro('Só arquivos .dem ou .dem.gz são aceitos.')
       setArquivo(null)
       if (input) input.value = ''
       return
     }
-    if (await cabecalhoDivergeDoMapa(f, partida.map)) {
+    // O cabeçalho comprimido não contém o mapa; o Coletor valida após descomprimir.
+    if (!f.name.toLowerCase().endsWith('.gz') && await cabecalhoDivergeDoMapa(f, partida.map)) {
       const mapa = await mapaDoCabecalho(f)
       setErro(`Essa demo é de ${nomeMapa(mapa)} e esta partida foi em ${nomeMapa(partida.map)}.`)
       setArquivo(null)
@@ -125,14 +126,14 @@ export default function EnviarDemoDaPartida({ partida, euSteamId, onEnviado }) {
       ) : (
         <div className="space-y-3 border border-borda bg-superficie p-4">
           <p className="text-sm text-texto-fraco">
-            Baixe a demo desta partida na FACEIT e envie aqui. O processamento roda a cada ~30
-            minutos e destrava KAST, rating, economia, replay e clipes.
+            Baixe a Demo desta Partida na FACEIT e envie aqui (.dem ou .dem.gz). O processamento roda a cada ~30
+            minutos e destrava KAST, rating, economia, Replay 2D e Clipes.
           </p>
-          <Campo rotulo="Arquivo .dem" htmlFor="demo-da-partida" erro={erro}>
+          <Campo rotulo="Arquivo .dem ou .dem.gz" htmlFor="demo-da-partida" erro={erro}>
             <input
               id="demo-da-partida"
               type="file"
-              accept=".dem"
+              accept=".dem,.dem.gz"
               onChange={(e) => escolher(e.target.files, e.target)}
               className={`${classeEntrada} font-mono text-xs file:mr-3 file:border-0 file:bg-superficie-alta file:px-2 file:py-1 file:text-texto`}
             />

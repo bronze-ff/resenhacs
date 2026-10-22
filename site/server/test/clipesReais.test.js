@@ -244,6 +244,18 @@ describe('clipes reais (DEMO-SLAP)', () => {
     expect(demoSlap.renderizar).toHaveBeenCalledTimes(1)
   })
 
+  it('reutiliza análise concluída mesmo depois da Demo bruta expirar', async () => {
+    const banco = bancoFalso({
+      partida: { id: MATCH, map: 'de_dust2', demo_url: null, tem_demo: true },
+      analise: { job_id: 'an1', status: 'done', tick_rate: 64, erro: null },
+    })
+    const { app: a, demoSlap } = app({ banco })
+    const res = await request(a).post(`/api/matches/${MATCH}/clipes-reais`).set('Cookie', cookie).send({ kills: [TK] })
+    expect(res.status).toBe(201)
+    expect(demoSlap.analisar).not.toHaveBeenCalled()
+    expect(demoSlap.renderizar).toHaveBeenCalledWith('an1', expect.any(Array), { highResolution: true })
+  })
+
   it('clipe gravado: GET marca pronto e devolve a URL do vídeo', async () => {
     const banco = bancoFalso({
       analise: { job_id: 'an1', status: 'done', tick_rate: 64, erro: null },
