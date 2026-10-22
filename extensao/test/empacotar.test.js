@@ -130,6 +130,16 @@ describe('empacotamento da extensão', () => {
     expect(referenciasRuntime(raizXext).filter((nome) => !empacotados.has(nome))).toEqual([])
   })
 
+  it.skipIf(!existsSync(path.join(raizXext, 'manifest.json')))('textos do ZIP do X-EXT não contêm CR', () => {
+    const raiz = fixture()
+    for (const nome of Object.keys(arquivos)) copyFileSync(path.join(raizXext, nome), path.join(raiz, nome))
+    const resultado = executar(raiz)
+    expect(resultado.status, resultado.stderr).toBe(0)
+    for (const { nome, dados } of lerZip(resultado.stdout.trim())) {
+      if (!nome.endsWith('.png')) expect(dados.includes(13), nome).toBe(false)
+    }
+  })
+
   it.each(['src/background.js', 'popup/popup.js'])('detecta dependência estática ausente do ZIP em %s', (origem) => {
     const raiz = fixture()
     const novo = path.posix.join(path.posix.dirname(origem), 'novo.js')
