@@ -980,8 +980,18 @@ def _upload_replay(client, bucket, rkey, replay_json):
         _upload_json_gzip(client, bucket, f"{base}/round-{round_number}.json", round_data)
 
 
+def _id_do_conteudo(dem_paths):
+    """uuid do sha256 dos bytes das Demos (as partes na ordem). Estável no retry do mesmo
+    arquivo; Partidas distintas com o mesmo fingerprint têm Demos diferentes."""
+    total = hashlib.sha256()
+    for caminho in dem_paths:
+        with open(caminho, "rb") as fh:
+            total.update(hashlib.file_digest(fh, "sha256").digest())
+    return str(uuid.UUID(total.hexdigest()[:32]))
+
+
 def _finalizar_ingest(config, conn, parsed, replay_json, dem_path_upload, share_code,
-                      source, upload, played_at, match_id_alvo=None):
+                      source, upload, played_at, match_id_alvo=None, dem_paths=None):
     """Cauda comum de ingest_demo/ingest_demo_multiparte: arquiva demo+replay no R2 (se
     configurado) e grava no banco. Devolve match_id. `dem_path_upload` é o .dem cujos
     bytes brutos sobem pro R2 (partida de arquivo único: o próprio; partida fundida de
@@ -989,15 +999,16 @@ def _finalizar_ingest(config, conn, parsed, replay_json, dem_path_upload, share_
     demo_url = replay_url = None
     if upload and config.r2_endpoint:
         client = storage_r2.make_client(config)
-        # Sem Share Code, a chave sai da Partida que o banco vai deduplicar: a alvo ou a
-        # digital (mesmo fingerprint de store_parsed). O retry de uma série pro regrava os
-        # mesmos objetos em vez de deixar órfãos. O hash de 32 bits do caminho colidia.
+        # Sem Share Code, a chave é a Partida alvo ou o hash do conteúdo das Demos: o
+        # retry de uma série pro regrava os mesmos objetos em vez de deixar órfãos. O
+        # fingerprint não serve (Partidas curtas distintas colidem) nem o hash de 32 bits
+        # do caminho (colidia e regravava a Demo e o Replay 2D de outra Partida).
         if share_code:
             ids = sharecode.decode(share_code)
         elif match_id_alvo is not None:
             ids = {"match_id": str(match_id_alvo)}
         else:
-            ids = {"match_id": str(uuid.UUID(dbmod.match_fingerprint(parsed)))}
+            ids = {"match_id": _id_do_conteudo(dem_paths or [dem_path_upload])}
 
         key = storage_r2.demo_key(ids["match_id"])
         with open(dem_path_upload, "rb") as fh:
@@ -1195,7 +1206,8 @@ def ingest_demo_multiparte(config, conn, dem_paths, share_code=None, source="pro
     # incompleto (só a última parte), mesma limitação que já existiria pra qualquer
     # .dem cortado; documentado aqui de propósito pra não surpreender no futuro.
     return _finalizar_ingest(
-        config, conn, parsed, replay_json, dem_paths[-1], share_code, source, upload, played_at
+        config, conn, parsed, replay_json, dem_paths[-1], share_code, source, upload, played_at,
+        dem_paths=dem_paths,
     )
 
 

@@ -1731,18 +1731,21 @@ def test_store_parsed_com_match_id_alvo_nao_cria_linha_nova():
     assert any(s.startswith("update matches set") for s in executados)
 
 
-# ---- R04: sem Share Code, a chave do R2 sai da Partida deduplicada (não hash de 32 bits) ----
+# ---- R04: sem Share Code, a chave do R2 sai do conteúdo da Demo (não hash de 32 bits) ----
 
-def _finalizar_sem_share_code(monkeypatch, tmp_path, parseds, alvo=None):
+def _finalizar_sem_share_code(monkeypatch, tmp_path, demos, alvo=None):
+    """`demos`: bytes do .dem de cada chamada. Todas com o mesmo parsed (mesmo fingerprint)."""
     gravados = []
     monkeypatch.setattr(main.dbmod, "store_parsed", lambda conn, parsed, **kw: gravados.append(kw) or "m1")
     monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
     chaves = []
     monkeypatch.setattr(main.storage_r2, "upload_bytes", lambda client, bucket, key, data, **kw: chaves.append(key))
-    dem = tmp_path / "demo.dem"
-    dem.write_bytes(b"x")
     config = _config_com_r2()
-    for parsed in parseds:
+    parsed = {"map": "de_anubis", "score_a": 13, "score_b": 0,
+              "players": [{"steam_id64": "76561198000000001", "kills": 13, "deaths": 0}]}
+    for i, conteudo in enumerate(demos):
+        dem = tmp_path / f"demo-{i}.dem"
+        dem.write_bytes(conteudo)
         main._finalizar_ingest(
             config, conn=None, parsed=parsed, replay_json={"rounds": []},
             dem_path_upload=dem, share_code=None, source="upload", upload=True, played_at=None,
@@ -1751,16 +1754,10 @@ def _finalizar_sem_share_code(monkeypatch, tmp_path, parseds, alvo=None):
     return config, gravados, [k for k in chaves if k.startswith("demos/")]
 
 
-def _parsed_mapa(mapa):
-    return {"map": mapa, "score_a": 13, "score_b": 7,
-            "players": [{"steam_id64": "76561198000000001", "kills": 20, "deaths": 10}]}
-
-
-def test_finalizar_ingest_sem_share_code_usa_uuid_legivel_pela_url(monkeypatch, tmp_path):
+def test_partidas_com_mesmo_fingerprint_e_demos_diferentes_tem_chaves_diferentes(monkeypatch, tmp_path):
     import uuid
 
-    config, gravados, demo_keys = _finalizar_sem_share_code(
-        monkeypatch, tmp_path, [_parsed_mapa("de_anubis"), _parsed_mapa("de_inferno")])
+    config, gravados, demo_keys = _finalizar_sem_share_code(monkeypatch, tmp_path, [b"partida-1", b"partida-2"])
 
     assert len(demo_keys) == 2 and demo_keys[0] != demo_keys[1]
     for kw, key in zip(gravados, demo_keys):
@@ -1770,22 +1767,31 @@ def test_finalizar_ingest_sem_share_code_usa_uuid_legivel_pela_url(monkeypatch, 
         assert main.storage_r2.key_from_url(kw["replay_url"], config.r2_bucket) == f"replays/{ident}.json"
 
 
-def test_retry_do_mesmo_mapa_sem_share_code_regrava_a_mesma_chave(monkeypatch, tmp_path):
-    # Retry da série pro: o banco deduplica pelo fingerprint, e o R2 tem que regravar
-    # os mesmos objetos em vez de deixar a Demo e o Replay 2D antigos órfãos.
-    _config, _gravados, demo_keys = _finalizar_sem_share_code(
-        monkeypatch, tmp_path, [_parsed_mapa("de_anubis"), _parsed_mapa("de_anubis")])
+def test_mesmo_arquivo_duas_vezes_regrava_a_mesma_chave(monkeypatch, tmp_path):
+    # Retry da série pro: regrava os mesmos objetos em vez de deixar a Demo e o Replay 2D
+    # antigos órfãos no R2.
+    _config, _gravados, demo_keys = _finalizar_sem_share_code(monkeypatch, tmp_path, [b"mesma", b"mesma"])
 
     assert len(demo_keys) == 2 and demo_keys[0] == demo_keys[1]
 
 
 def test_finalizar_ingest_com_alvo_usa_a_chave_da_partida_alvo(monkeypatch, tmp_path):
     alvo = "0b3f5c1e-1111-4222-8333-444455556666"
-    _config, gravados, demo_keys = _finalizar_sem_share_code(
-        monkeypatch, tmp_path, [_parsed_mapa("de_anubis")], alvo=alvo)
+    _config, gravados, demo_keys = _finalizar_sem_share_code(monkeypatch, tmp_path, [b"x"], alvo=alvo)
 
     assert demo_keys == [f"demos/{alvo}.dem.bz2"]
     assert gravados[0]["match_id_alvo"] == alvo
+
+
+def test_id_do_conteudo_cobre_todas_as_partes_na_ordem(tmp_path):
+    p1, p2, p3 = (tmp_path / n for n in ("p1.dem", "p2.dem", "p3.dem"))
+    p1.write_bytes(b"parte-1")
+    p2.write_bytes(b"parte-2")
+    p3.write_bytes(b"outra-parte-1")
+
+    assert main._id_do_conteudo([p1, p2]) == main._id_do_conteudo([p1, p2])
+    assert main._id_do_conteudo([p1, p2]) != main._id_do_conteudo([p3, p2])  # mesma última parte
+    assert main._id_do_conteudo([p1, p2]) != main._id_do_conteudo([p2])
 
 
 def test_finalizar_ingest_com_share_code_mantem_a_chave_do_match_id_da_valve(monkeypatch, tmp_path):
