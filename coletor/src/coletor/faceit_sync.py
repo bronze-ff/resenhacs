@@ -23,6 +23,7 @@ from pathlib import Path
 from . import discord
 from . import db as dbmod
 from . import faceit
+from .observabilidade import capturar_erro
 
 MARGEM_DESCOBERTA = timedelta(days=3)
 JANELA_DEMO = timedelta(days=28)
@@ -69,7 +70,8 @@ class _Rodada:
                 print(MSG_SEM_ACESSO)
             self.sem_acesso = True
             return
-        print(f"  {self.ref(faceit_match_id)}: Demo falhou ({type(erro).__name__}: {erro})")
+        capturar_erro(erro, "sincronizar-faceit")
+        print(f"  {self.ref(faceit_match_id)}: Demo falhou ({type(erro).__name__})")
 
 
 def _baixar_e_ingerir(config, conn, ingest_demo, demo_url, played_at, source, alvo=None):
@@ -108,10 +110,12 @@ def descobrir(config, conn, vinculados, ref, agora):
             )
         except Exception as e:  # noqa: BLE001
             conn.rollback()
-            print(f"  descoberta {ref(steam_id64)}: FALHOU ({type(e).__name__}: {e})")
+            capturar_erro(e, "sincronizar-faceit")
+            print(f"  descoberta {ref(steam_id64)}: FALHOU ({type(e).__name__})")
 
 
-def processar_fila(config, conn, ingest_demo, rodada, agora, limite):
+def processar_fila(config, conn, ingest_demo, rodada, agora, limite, vinculados=()):
+    ids_vinculados = {steam for steam, _faceit_id in vinculados}
     ingeridas_por_membro = {}
     total = 0
     for faceit_match_id, steam_id64, _tentativas in dbmod.listar_faceit_pendentes(conn, limite):
@@ -174,12 +178,17 @@ def processar_fila(config, conn, ingest_demo, rodada, agora, limite):
                 else:
                     print(f"  {r}: ok só com estatísticas")
 
-            ingeridas_por_membro.setdefault(steam_id64, []).append((match_id, finished))
+            # Todo vinculado que jogou a Partida ganha o carimbo de ELO, não só quem
+            # a enfileirou (dois do grupo no mesmo lobby).
+            membros = {steam_id64} | (dbmod.steam_ids_da_partida(conn, match_id) & ids_vinculados)
+            for membro in membros:
+                ingeridas_por_membro.setdefault(membro, []).append((match_id, finished))
             total += 1
         except Exception as e:  # noqa: BLE001
             conn.rollback()
+            capturar_erro(e, "sincronizar-faceit")
             dbmod.falhar_faceit_pendente(conn, faceit_match_id, e)
-            print(f"  {r}: FALHOU ({type(e).__name__}: {e})")
+            print(f"  {r}: FALHOU ({type(e).__name__})")
     return total, ingeridas_por_membro
 
 
@@ -232,7 +241,7 @@ def retentar_demos(config, conn, ingest_demo, rodada, agora, erros_definitivos=(
             conn.rollback()
             if erros_definitivos and isinstance(e, erros_definitivos):
                 dbmod.encerrar_retry_demo(conn, faceit_match_id, e)
-                print(f"  {r}: Demo não confere com a Partida ({e}) — re-tentativa encerrada")
+                print(f"  {r}: Demo não confere com a Partida — re-tentativa encerrada")
                 continue
             rodada.registrar_erro_demo(faceit_match_id, e)
             dbmod.agendar_retry_demo(conn, faceit_match_id, agora + espera_retry(n), n, e)
@@ -253,6 +262,7 @@ def atualizar_elos(config, conn, vinculados, ingeridas_por_membro, ref):
             dbmod.atualizar_elo(conn, steam_id64, elo, level)
         except Exception as e:  # noqa: BLE001
             conn.rollback()
+            capturar_erro(e, "sincronizar-faceit")
             print(f"  elo {ref(steam_id64)}: FALHOU ({type(e).__name__})")
 
 
@@ -270,7 +280,7 @@ def sincronizar(config, conn, ingest_demo, ref, limite=10, agora=None,
     rodada = _Rodada(ref)
 
     descobrir(config, conn, vinculados, ref, agora)
-    total, ingeridas = processar_fila(config, conn, ingest_demo, rodada, agora, limite)
+    total, ingeridas = processar_fila(config, conn, ingest_demo, rodada, agora, limite, vinculados)
     retentar_demos(config, conn, ingest_demo, rodada, agora, erros_definitivos)
     atualizar_elos(config, conn, vinculados, ingeridas, ref)
 

@@ -1,91 +1,95 @@
 # Coletor
 
-Descobre Partidas, parseia demos de CS2 e grava stats + highlights no banco do Resenha.
-Python + [demoparser2](https://github.com/LaihoE/demoparser). Ver [ADR-0001](../docs/adr/0001-coletor-python-github-actions.md).
+Descobre Partidas, baixa e parseia Demos de CS2 e grava stats, highlights e Replay 2D no
+banco do Resenha. Python + [demoparser2](https://github.com/LaihoE/demoparser). Ver
+[ADR-0001](../docs/adr/0001-coletor-python-github-actions.md).
 
-## Dois modos
+## Como roda
 
-| Comando | O que faz | Precisa de |
+O job `sincroniza` de `.github/workflows/coletor.yml` roda a cada 10 min (`*/10`). Os
+passos, em ordem:
+
+| Passo | Comando | O que faz |
 |---|---|---|
-| `python -m coletor.main discover` | Anda a corrente de share codes de cada Jogador (Steam Web API) e registra Partidas novas como `pending`, com `played_at` = hora da descoberta. Roda de hora em hora no GitHub Actions. | `DATABASE_URL`, `STEAM_API_KEY` |
-| `python -m coletor.main ingest <demo.dem> --share-code CSGO-… --source upload [--played-at ISO8601]` | Parseia um `.dem` local, arquiva no R2 e grava stats/highlights. Caminho **manual**. Sem `--played-at`, cai pra mtime do arquivo (pode estar errada — ver abaixo). | `DATABASE_URL` (+ R2 opcional) |
+| Descobrir | `discover` | Anda a corrente de Share Codes de cada Jogador (Steam Web API) e grava as Partidas novas como `pending`. Se todos os Jogadores falharem, o check-in do cron `resenhacs-coletor` fica `error` e o processo sai 0. |
+| Baixar e ingerir | `fetch` | Até 15 Partidas pendentes por run. O bot (`bot/src/resolve.js`) pega o link do `.dem` no Game Coordinator; o Coletor baixa, parseia, arquiva no R2 e grava. `played_at` vira o horário real da Partida (vem do GC). Erro de download gasta uma tentativa (3 no total). Bot fora não derruba o job. |
+| Limpar | `cleanup --days 14` | Apaga do R2 o `.dem` bruto de Partidas com mais de 14 dias (ADR-0006). Conta a partir do maior entre `played_at` e `created_at`. O Replay 2D fica. |
+| Fila pro | `processar-fila-pro` | Partidas profissionais enviadas pelo super admin (`.rar`/`.dem`). Série com mapa falho fica `falhou` com os mapas já gravados e o arquivo no R2 pro retry. |
+| Uploads | `processar-uploads-pendentes` | Demos enviadas pelo Jogador em `/enviar-demo`. Detalhe abaixo. |
+| Montagens | `juntar-clipes` | Junta os trechos de uma montagem da aba Clipes num vídeo único no R2 (DEMO-SLAP + ffmpeg). Sem `DEMOSLAP_API_KEY`, não faz nada. |
+| FACEIT | `sincronizar-faceit` | Descobre e ingere Partidas 5v5 dos Jogadores com FACEIT vinculada, mais o ELO. |
 
-Rodar sempre com `PYTHONPATH=src` (o pacote fica em `src/coletor`). Também dá pra usar
-`ingest` pela tela do site (`/enviar-demo`) em vez do terminal — ver `site/server/src/routes/upload.js`
-(só funciona local/self-hosted, roda o Python via `child_process`).
+Comandos sob demanda (inputs do `workflow_dispatch` ou terminal): `reprocess
+[--since YYYY-MM-DD | --match-id UUID]`, `configurar-cors`, `avatares`,
+`limpar-uploads-orfaos [--days N]`, `ingest <demo.dem>`. O workflow manual
+`r2-replays.yml` roda `inventario-r2` e `comprimir-replays`.
+
+Local: rode com `PYTHONPATH=src` (o pacote fica em `src/coletor`), por exemplo
+`python -m coletor.main discover`. Variáveis em `.env.example`.
+
+## Upload do Jogador (`processar-uploads-pendentes`)
+
+O site gera uma URL assinada (15 min) e o navegador sobe o `.dem` direto pro R2
+(`uploads-pendentes/<uuid>.dem`). O Coletor baixa, valida e ingere.
+
+- Sucesso: `concluido`, e o arquivo de staging sai do R2.
+- Erro definitivo (Demo não confere com a Partida, arquivo acima de 400 MB): `falhou`, e o staging sai na hora.
+- Erro transitório (R2, banco, rede, parser): volta pra `pendente` com `tentativas + 1`. Na 3ª vira `falhou` e o staging sai.
+- Arquivo ainda não chegou ao R2: com menos de 20 min do pedido, espera sem gastar tentativa; depois disso, `falhou`.
+- Falha ao apagar o staging não muda o status; o erro vai pro Sentry e o arquivo órfão fica pro `limpar-uploads-orfaos`.
 
 ## Data da Partida (`played_at`)
 
-O formato `.dem` **não guarda data/hora em lugar nenhum** (confirmado: nem header, nem
-cvars, nem `hltv_versioninfo`). `discover` grava a hora da descoberta (precisa, já que
-roda de hora em hora); `ingest` manual sem `--played-at` cai pra mtime do arquivo, que
-só reflete quando o `.dem` foi baixado/copiado — pode estar bem errada se isso aconteceu
-dias depois de jogado. Use `--played-at "2026-07-09T20:15:00-03:00"` quando souber a
-data certa (ou preencha o campo equivalente na tela de upload).
-
-## Limitação conhecida: download automático de demo de MM
-
-`discover` descobre os share codes automaticamente (via `GetNextMatchSharingCode`, só
-Web API — sem bot), mas o **download do `.dem` de matchmaking** exige uma conexão
-autenticada ao Game Coordinator da Valve, confirmado em múltiplas fontes (documentação
-da Valve, [node-globaloffensive](https://github.com/DoctorMcKay/node-globaloffensive),
-[cs-demo-downloader](https://github.com/claabs/cs-demo-downloader)): a Web API consegue
-iterar share codes, mas a URL do replay em si só sai do GC. Não existe atalho documentado
-pra pular essa etapa — nem o `match_auth_code` que já coletamos no onboarding resolve
-sozinho, ele só alimenta a descoberta.
-
-Isso não roda no GitHub Actions sem uma conta Steam dedicada (bot) conectada via
-`steam-user`/`globaloffensive` (Node) — decisão pendente do dono do projeto (guardar
-credenciais de login como secret tem implicações de segurança que só ele pode pesar).
-Enquanto isso:
-
-- Partidas descobertas ficam `pending` (aparecem no site como "demo pendente").
-- O caminho que funciona hoje é o `ingest` manual (CLI ou `/enviar-demo`) — inclusive
-  para Faceit/Gamers Club, que dão o `.dem` para download direto.
-
-Resolver o GC (conta-bot) é a **Fase 2b** — o `ingest_demo()` já isola o ponto onde a
-URL do demo entraria.
+O formato `.dem` **não guarda data/hora em lugar nenhum** (nem header, nem cvars, nem
+`hltv_versioninfo`). `discover` grava a hora da descoberta e o `fetch` troca pelo
+horário real que o GC devolve. No `ingest` manual, sem `--played-at`, vale a mtime do
+arquivo, que pode estar errada. Use `--played-at "2026-07-09T20:15:00-03:00"` quando
+souber a data certa.
 
 ## Segredos (GitHub → Settings → Secrets → Actions)
 
-- `DATABASE_URL` — Session Pooler do Supabase (IPv4).
-- `STEAM_API_KEY` — https://steamcommunity.com/dev/apikey.
-- `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` — Cloudflare R2 (para `ingest`).
-- `DISCORD_WEBHOOK_URL` — opcional. Webhook do canal do grupo no Discord. Quando uma Partida com Jogador do grupo termina de ser ingerida (`fetch`, uploads, FACEIT; Partida pro não), posta um embed com mapa, placar, resultado do grupo, MVP do grupo (rating) e o link `${APP_URL}/partida/<id>`. Sem SteamID. Vazio = no-op; erro de rede só vira aviso no log (sem a URL), nunca derruba o job. Ver `src/coletor/discord.py`.
-- `APP_URL` — base do link do embed do Discord.
+| Secret | Uso |
+|---|---|
+| `DATABASE_URL` | Session Pooler do Supabase (IPv4). Todos os passos. |
+| `STEAM_API_KEY` | https://steamcommunity.com/dev/apikey. `discover`, avatares, FACEIT. |
+| `STEAM_BOT_USER`, `STEAM_BOT_PASS` | Conta-bot do `fetch` (ver `bot/README.md`). |
+| `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | Cloudflare R2: Demo, Replay 2D, staging, montagens. |
+| `FACEIT_API_KEY` | `sincronizar-faceit`. |
+| `DEMOSLAP_API_KEY` | `juntar-clipes`. Opcional. |
+| `DISCORD_WEBHOOK_URL` | Opcional. Embed no canal do grupo quando uma Partida com Jogador do grupo é ingerida (Partida pro não). Sem SteamID. Erro de rede vira aviso no log, nunca derruba o job. Ver `src/coletor/discord.py`. |
+| `APP_URL` | Base do link do embed: a origem do client (`https://resenha-phi.vercel.app`). |
+| `SENTRY_DSN` | Projeto `resenhacs-coletor`. Vazio = Sentry desligado. |
+
+## Observabilidade
+
+Sem `SENTRY_DSN` nada é enviado. Com DSN, todo erro tratado por item (uma Partida, um
+upload, um Jogador) vai pro Sentry com a tag `etapa` (`fetch`, `cleanup`,
+`processar-uploads-pendentes`…), passando pelo scrub de `src/coletor/observabilidade.py`.
+O log do Actions é público: sai só o tipo do erro, nunca a mensagem, o Share Code ou o
+SteamID (estes viram uma referência curta por hash).
 
 ## Dependência de sistema: `unar` (extração de `.rar` do HLTV)
 
-`coletor/src/coletor/rar_extract.py` usa a biblioteca Python `rarfile` (ver
-`requirements.txt`) pra extrair o `.dem` de dentro do `.rar` que o HLTV distribui pra
-demos de partida profissional. `rarfile` não descompacta sozinha — ela chama uma
-ferramenta externa. Usamos `unar` (The Unarchiver, licença BSD) em vez do `unrar`
-proprietário, pra não ter restrição de licença no runner do GitHub Actions.
+`src/coletor/rar_extract.py` usa a biblioteca Python `rarfile` pra extrair o `.dem` de
+dentro do `.rar` das Partidas profissionais. `rarfile` chama uma ferramenta externa:
+usamos `unar` (licença BSD) em vez do `unrar` proprietário.
 
-- **CI (GitHub Actions, Ubuntu):** `apt-get install -y unar` (ver workflow — Task 8).
-- **Local (Linux):** `apt-get install unar` (Debian/Ubuntu) ou equivalente da distro.
+- **CI (GitHub Actions, Ubuntu):** `apt-get install -y unar` (passo do workflow).
+- **Local (Linux):** `apt-get install unar` ou equivalente da distro.
 - **Local (macOS):** `brew install unar`.
 - **Local (Windows):** não há build oficial de `unar`; `test_extrai_dem_do_rar` pode
-  falhar localmente por falta dessa ferramenta no PATH — funciona normalmente no CI
-  (Ubuntu), que é o ambiente de execução real do coletor. Fixtures pequenas e sem
-  compressão (`store`, gravadas por `WinRAR`/`7-Zip`) às vezes passam mesmo sem `unar`
-  porque `rarfile` sabe ler esse caso em Python puro, mas isso não é garantido pra
-  `.rar` reais (comprimidos) do HLTV.
+  falhar localmente. Fixtures pequenas sem compressão às vezes passam porque `rarfile`
+  lê esse caso em Python puro, mas isso não vale pra `.rar` reais do HLTV.
 
 ## Manutenção: limpeza de uploads órfãos no R2
-
-Um upload manual (`/enviar-demo`) que falha definitivamente (`status = 'falhou'`) deixa
-o `.dem` de staging parado no bucket R2 pra sempre — diferente da fila de Partidas Pro,
-que reaproveita o staging no retry e tem `cleanup`/`reprocess` pro caminho de sucesso.
 
 ```
 python -m coletor.main limpar-uploads-orfaos [--days N]
 ```
 
 Apaga do R2 o objeto de todo upload `falhou` há mais de `N` dias (default: 30) e marca
-o item como `limpo` no banco (idempotente — não tenta apagar o mesmo objeto duas vezes).
-**Não roda automaticamente** (sem cron/schedule no GitHub Actions ainda) — rode manual
-quando quiser liberar espaço, ou adicione um schedule próprio se isso virar rotina.
+o item como `limpo`. Cobre o caso raro em que apagar o staging falhou na hora.
+**Não roda automaticamente**: não há passo no workflow.
 
 ## Testes
 
@@ -94,8 +98,8 @@ pip install -r dev-requirements.txt
 python -m pytest -q
 ```
 
-As transformações (share code, stats, rating, highlights, escrita no banco, upload)
-são testadas com dados sintéticos e fakes — sem precisar de `.dem` real nem de rede.
-O único ponto validável apenas contra um demo real é `parse.py` (a extração via
-demoparser2); dano/assist e placar round-a-round são finalizados lá quando houver um
-demo de teste.
+Ou, da raiz do repositório: `node scripts/verify.mjs coletor`.
+
+As transformações (Share Code, stats, rating, highlights, escrita no banco, upload)
+são testadas com dados sintéticos e fakes, sem `.dem` real nem rede. Só `parse.py`
+(a extração via demoparser2) depende de uma Demo real.

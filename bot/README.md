@@ -1,37 +1,44 @@
-# Bot (Fase 2b — download automático de demo)
+# Bot (Share Code → link do .dem)
 
-Node + `steam-user` + `globaloffensive`: conecta como uma conta Steam dedicada ao
-Game Coordinator do CS2 pra pedir informação de partida (e, no futuro, a URL de
-download do `.dem`) a partir de um share code — sem precisar do jogo instalado.
+Node + `steam-user` + `globaloffensive`. Conecta como uma conta Steam dedicada ao Game
+Coordinator do CS2 e devolve o link de download do `.dem` de cada Share Code. Só o GC
+sabe esse link: nenhuma Web API da Steam entrega a URL da Demo de matchmaking.
 
-## Status
+## Como o Coletor usa
 
-- ✅ Login funciona. **Importante**: `accountName` é o **nome de usuário** da Steam
-  (ex.: `resenhacs_bot`), **não o e-mail** de cadastro — erro `InvalidPassword` mesmo
-  com senha certa geralmente é isso.
-- ✅ Conexão ao Game Coordinator funciona (`connectedToGC`), depois que a conta tem
-  o CS2 na biblioteca (é grátis: `store.steampowered.com/app/730` → Jogar).
-- ⏳ `csgo.requestGame(shareCode)` devolve `matchList` **vazio** mesmo com um share
-  code real e recente (~1 dia). Suspeita: contas novas do CS2 têm o Game Coordinator
-  restrito até vincular telefone (é assim que a Valve define Trust Factor/Prime) —
-  não confirmado ainda, precisa verificar telefone na conta e testar de novo.
+`python -m coletor.main fetch` (passo "Baixar e ingerir Partidas pendentes" do
+`.github/workflows/coletor.yml`, a cada 10 min) chama:
 
-## Scripts de teste
+```
+node src/resolve.js CODE1 CODE2 ...
+```
+
+1. O script loga **uma vez** na conta-bot e resolve os códigos em sequência.
+2. Imprime em stdout um JSON: `[{ "shareCode", "demoUrl" (ou null), "matchTime" (epoch ou null) }]`.
+3. Sai com 0. Erro de login ou GC travado sai com 1 (o stderr leva o motivo).
+
+O Coletor baixa o `.dem.bz2` de `demoUrl`, descomprime e ingere. Se o bot falhar
+(Steam fora, `LoggedInElsewhere`, timeout), o fetch registra o erro e termina sem
+derrubar os passos seguintes do job; as Partidas continuam pendentes. `demoUrl` nulo
+gasta uma tentativa da Partida (3 no total).
+
+## Conta-bot
+
+- `accountName` é o **nome de usuário** da Steam, não o e-mail. `InvalidPassword` com
+  senha certa costuma ser isso.
+- A conta precisa ter o CS2 na biblioteca (grátis) e telefone verificado.
+- Uma sessão por vez: com o CS2 aberto em outro lugar, a Steam derruba com
+  `LoggedInElsewhere`. O grupo de concorrência `coletor` do workflow garante um run por vez.
+
+Credenciais: `STEAM_BOT_USER` e `STEAM_BOT_PASS` (ver `.env.example`). No Actions são
+secrets do repositório. Local, ficam em `bot/.env` (git-ignored); o Coletor lê esse
+arquivo quando as variáveis não estão no ambiente.
+
+## Scripts de diagnóstico
 
 - `src/test-login.js` — só login + conexão ao GC.
-- `src/test-matchinfo.js <share-code>` — login + GC + pede match info, imprime a
-  resposta completa (pra descobrir a estrutura exata quando `requestGame` funcionar).
+- `src/test-matchinfo.js <share-code>` — login + GC + imprime a resposta completa do `requestGame`.
 
-Ambos rodam com `STEAM_BOT_USER`/`STEAM_BOT_PASS` no `.env` local (git-ignored) ou
-nos Secrets do GitHub Actions (já configurados no repo).
-
-## Próximos passos (quando o GC responder de verdade)
-
-1. Extrair a URL do demo da resposta de `matchList` (provavelmente em
-   `roundstatsall[].map`, padrão herdado do CS:GO — a confirmar).
-2. Baixar o `.dem.bz2`, descomprimir.
-3. Handoff pro Coletor Python (`ingest`) — mesmo padrão do upload manual
-   (`site/server/src/routes/upload.js`), só que disparado por este bot em vez de um
-   humano.
-4. Rodar como novo job no `.github/workflows/coletor.yml`, ou como processo
-   separado — a decidir conforme a frequência necessária.
+```
+node --env-file=.env src/test-login.js
+```

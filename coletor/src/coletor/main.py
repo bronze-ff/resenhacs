@@ -20,10 +20,13 @@ import argparse
 import sys
 
 import bz2
+import datetime
 import hashlib
 import json
+import subprocess
 import urllib.parse
 import urllib.request
+import uuid
 
 from . import db as dbmod
 from . import discord
@@ -37,7 +40,7 @@ from . import faceit_sync
 from . import storage_r2
 from . import transform
 from .config import Config
-from .observabilidade import em_monitor_discover, init_sentry
+from .observabilidade import FalhaTotalDiscover, capturar_erro, em_monitor_discover, init_sentry
 
 # Janela em que o .dem bruto fica no R2 (ADR-0006). O workflow passa o mesmo número
 # em `cleanup --days`. replay.json, uploads e curso-mira/ não entram nessa conta.
@@ -47,13 +50,17 @@ RETENCAO_DEMO_DIAS = 14
 def cmd_discover(config, conn):
     config.require("steam_api_key")
     total = 0
-    for steam_id64, auth_code, last_code in dbmod.list_tracked_players(conn):
+    jogadores = dbmod.list_tracked_players(conn)
+    falhas = 0
+    for steam_id64, auth_code, last_code in jogadores:
         # Um jogador com auth code inválido/expirado (ou rate limit persistente) não deve
         # abortar a descoberta dos outros.
         try:
             novos = steam_api.walk_chain(config.steam_api_key, steam_id64, auth_code, last_code)
         except Exception as e:  # noqa: BLE001
-            print(f"{_ref(steam_id64)}: erro ao andar a corrente ({e}) — pulando")
+            capturar_erro(e, "discover")
+            print(f"{_ref(steam_id64)}: erro ao andar a corrente ({type(e).__name__}) — pulando")
+            falhas += 1
             continue
         for code in novos:
             if sharecode.is_valid(code):
@@ -63,6 +70,10 @@ def cmd_discover(config, conn):
             dbmod.set_last_share_code(conn, steam_id64, novos[-1])
         print(f"{_ref(steam_id64)}: {len(novos)} share codes novos")
     print(f"discover: {total} Partidas pendentes registradas")
+    if jogadores and falhas == len(jogadores):
+        # Todos falharam (Steam fora, chave revogada): em_monitor_discover marca o
+        # check-in do cron como error, sem derrubar o processo.
+        raise FalhaTotalDiscover(f"discover: falha total ({falhas} Jogadores)")
     return total
 
 
@@ -223,7 +234,15 @@ def cmd_fetch(config, conn, since=None, bot_dir=None, node_bin="node"):
 
     bot_dir = bot_dir or (Path(__file__).resolve().parents[3] / "bot")
     print(f"fetch: resolvendo {len(codes)} share code(s) via Game Coordinator…")
-    resolvidos = _resolver_demo_urls(codes, bot_dir, node_bin)
+    try:
+        resolvidos = _resolver_demo_urls(codes, bot_dir, node_bin)
+    except (RuntimeError, subprocess.TimeoutExpired, json.JSONDecodeError) as e:
+        # Bot fora (Steam, LoggedInElsewhere, timeout do GC): as Partidas continuam
+        # pendentes sem gastar tentativa, e o job segue pros passos seguintes
+        # (cleanup, uploads, FACEIT). O stderr do bot não vai pro log público.
+        capturar_erro(e, "fetch")
+        print(f"fetch: bot não resolveu os share codes ({type(e).__name__}) — tenta de novo na próxima run")
+        return 0
 
     since_ts = None
     if since:
@@ -233,7 +252,12 @@ def cmd_fetch(config, conn, since=None, bot_dir=None, node_bin="node"):
     for r in resolvidos:
         code, url, mt = r.get("shareCode"), r.get("demoUrl"), r.get("matchTime")
         if not url:
-            print(f"  {_ref(code)}: sem link de demo (GC não devolveu) — deixando pendente")
+            # Gasta tentativa: sem isso, um código que o GC nunca resolve ficava no topo
+            # da fila pra sempre e segurava o lote de 15.
+            print(f"  {_ref(code)}: sem link de demo (GC não devolveu)")
+            dbmod.falhar_fetch_pendente(
+                conn, code, "GC não devolveu link de demo", max_tentativas=_MAX_TENTATIVAS_FETCH,
+            )
             continue
         if since_ts is not None and mt is not None and mt < since_ts:
             print(f"  {_ref(code)}: antes de {since} — marcando como skipped")
@@ -264,7 +288,8 @@ def cmd_fetch(config, conn, since=None, bot_dir=None, node_bin="node"):
             # tentativas; até lá fica 'pending' e é re-baixada automaticamente no
             # próximo ciclo do fetch.
             conn.rollback()
-            print(f"  {_ref(code)}: FALHOU ({e})")
+            capturar_erro(e, "fetch")
+            print(f"  {_ref(code)}: FALHOU ({type(e).__name__})")
             dbmod.falhar_fetch_pendente(conn, code, e, max_tentativas=_MAX_TENTATIVAS_FETCH)
 
     print(f"fetch: {total} Partida(s) ingerida(s)")
@@ -280,8 +305,11 @@ def cmd_cleanup(config, conn, days=RETENCAO_DEMO_DIAS):
 
     limite = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=days)
     with conn.cursor() as cur:
+        # greatest ignora nulo: Partida sem played_at cai em created_at, e uma ingestão
+        # tardia (Partida antiga enviada agora) ganha os 14 dias a partir da chegada.
         cur.execute(
-            "select id, demo_url from matches where status = 'parsed' and demo_url is not null and played_at < %s",
+            "select id, demo_url from matches where status = 'parsed' and demo_url is not null "
+            "and greatest(played_at, created_at) < %s",
             (limite,),
         )
         rows = cur.fetchall()
@@ -304,7 +332,8 @@ def cmd_cleanup(config, conn, days=RETENCAO_DEMO_DIAS):
             print(f"  {match_id}: demo apagado ({key})")
         except Exception as e:  # noqa: BLE001
             conn.rollback()
-            print(f"  {match_id}: falha ao apagar ({e})")
+            capturar_erro(e, "cleanup")
+            print(f"  {match_id}: falha ao apagar ({type(e).__name__})")
     print(f"cleanup: {total} demo(s) apagado(s)")
     return total
 
@@ -344,6 +373,10 @@ def cmd_processar_fila_pro(config, conn):
 
     from . import rar_extract
 
+    interrompidos = dbmod.interromper_fila_pro(conn)
+    if interrompidos:
+        print(f"processar-fila-pro: {len(interrompidos)} item(ns) interrompido(s) no run anterior viraram 'falhou'")
+
     pendentes = dbmod.listar_fila_pro_pendente(conn)
     if not pendentes:
         print("processar-fila-pro: nenhuma partida pendente")
@@ -351,8 +384,9 @@ def cmd_processar_fila_pro(config, conn):
 
     client = storage_r2.make_client(config)
     total = 0
-    for fila_id, hltv_url, arquivo_r2_key in pendentes:
+    for fila_id, hltv_url, arquivo_r2_key, adicionado_em in pendentes:
         dbmod.atualizar_fila_pro(conn, fila_id, "baixando")
+        concluida = False
         try:
             with tempfile.TemporaryDirectory() as tmp:
                 tmp = Path(tmp)
@@ -386,7 +420,7 @@ def cmd_processar_fila_pro(config, conn):
                     grupos = _agrupar_dems_por_mapa(dem_paths)
 
                 match_ids = []
-                erros_mapas = []
+                mapas_falhos = []
                 for grupo in grupos:
                     try:
                         if len(grupo) == 1:
@@ -396,34 +430,53 @@ def cmd_processar_fila_pro(config, conn):
                         match_ids.append(mid)
                     except Exception as e:  # noqa: BLE001
                         conn.rollback()
-                        erros_mapas.append(str(e))
-                        print(f"  {fila_id}: mapa {grupo[0].name} FALHOU ({e})")
+                        # Vai pra coluna erro (só o super admin vê), não pro log público.
+                        mapas_falhos.append(f"{grupo[0].name} ({type(e).__name__}: {str(e)[:120]})")
+                        capturar_erro(e, "processar-fila-pro")
+                        print(f"  {fila_id}: mapa {grupo[0].name} FALHOU ({type(e).__name__})")
 
-                if not match_ids:
-                    # Nenhum mapa processou — mesmo fluxo de erro que já existia.
-                    raise RuntimeError(erros_mapas[0] if erros_mapas else "nenhum mapa processado")
-
-                erro_nota = None
-                if erros_mapas:
-                    erro_nota = (
+                if mapas_falhos:
+                    # Série incompleta: 'falhou' guardando os mapas já gravados, e o
+                    # staging fica pro retry do admin. No retry, os mapas que já
+                    # entraram casam pelo fingerprint e não duplicam.
+                    erro = (
                         f"{len(match_ids)}/{len(grupos)} mapas processados; "
-                        f"falhou: {erros_mapas[0]}"
+                        f"falharam: {', '.join(mapas_falhos)}"
                     )[:500]
+                    dbmod.atualizar_fila_pro(
+                        conn, fila_id, "falhou",
+                        match_id=match_ids[0] if match_ids else None, match_ids=match_ids, erro=erro,
+                    )
+                    print(f"  {fila_id}: FALHOU ({len(match_ids)}/{len(grupos)} mapa(s))")
+                    continue
 
-                dbmod.atualizar_fila_pro(
-                    conn, fila_id, "concluida", match_id=match_ids[0], match_ids=match_ids, erro=erro_nota
-                )
+                dbmod.atualizar_fila_pro(conn, fila_id, "concluida", match_id=match_ids[0], match_ids=match_ids)
                 print(f"  {fila_id}: concluida ({len(match_ids)}/{len(grupos)} mapa(s))")
                 total += 1
-
-                # Apaga o staging só em sucesso — numa falha o arquivo continua no R2
-                # pro botão de retry reaproveitar sem o admin subir de novo.
-                if arquivo_r2_key:
-                    storage_r2.delete_object(client, config.r2_bucket, arquivo_r2_key)
+                concluida = True
         except Exception as e:  # noqa: BLE001
             conn.rollback()
+            if arquivo_r2_key and storage_r2.objeto_ausente(e):
+                # O PUT do admin ainda pode estar subindo (URL assinada vale 15 min).
+                if _staging_recente(adicionado_em):
+                    dbmod.atualizar_fila_pro(conn, fila_id, "pendente")
+                    print(f"  {fila_id}: arquivo ainda não chegou ao R2 — espera a próxima run")
+                else:
+                    dbmod.atualizar_fila_pro(conn, fila_id, "falhou", erro="o arquivo não chegou ao R2")
+                    print(f"  {fila_id}: FALHOU (arquivo não chegou ao R2)")
+                continue
+            capturar_erro(e, "processar-fila-pro")
             dbmod.atualizar_fila_pro(conn, fila_id, "falhou", erro=str(e)[:500])
-            print(f"  {fila_id}: FALHOU ({e})")
+            print(f"  {fila_id}: FALHOU ({type(e).__name__})")
+
+        # Staging só sai quando a série inteira entrou. Fora do try: falha no delete
+        # não muda status nem match_ids (o órfão fica pro retry/limpeza).
+        if concluida and arquivo_r2_key:
+            try:
+                storage_r2.delete_object(client, config.r2_bucket, arquivo_r2_key)
+            except Exception as e_del:  # noqa: BLE001
+                capturar_erro(e_del, "processar-fila-pro")
+                print(f"  {fila_id}: aviso — staging não foi apagado do R2 ({type(e_del).__name__})")
 
     print(f"processar-fila-pro: {total} partida(s) processada(s)")
     return total
@@ -436,6 +489,19 @@ _MAX_UPLOAD_BYTES = 400 * 1024 * 1024
 # Auditoria finding #8: quanto tempo um item pode ficar 'processando' antes de ser
 # considerado travado (processo morreu no meio — crash do runner, timeout do job).
 _TIMEOUT_PROCESSANDO_MINUTOS = 30
+
+# Erro transitório num upload manual: quantas tentativas antes de virar 'falhou'.
+_MAX_TENTATIVAS_UPLOAD = 3
+
+# Staging ausente no R2 até esta idade é PUT ainda em andamento (a URL assinada vale
+# 15 min), não falha. Depois disso o arquivo não vem mais.
+_JANELA_STAGING_AUSENTE = datetime.timedelta(minutes=20)
+
+
+def _staging_recente(adicionado_em):
+    if adicionado_em is None:
+        return False
+    return datetime.datetime.now(datetime.timezone.utc) - adicionado_em < _JANELA_STAGING_AUSENTE
 
 
 class DemoNaoConfereError(Exception):
@@ -514,8 +580,9 @@ def cmd_processar_uploads_pendentes(config, conn):
     client = storage_r2.make_client(config)
     total = 0
     for (upload_id, adicionado_por, arquivo_r2_key, share_code, played_at,
-         plataforma_manual, match_alvo_id) in pendentes:
+         plataforma_manual, match_alvo_id, adicionado_em) in pendentes:
         dbmod.atualizar_upload_pendente(conn, upload_id, "processando")
+        concluido = False
         try:
             alvo = None
             # Com alvo, a Partida enriquecida CONTINUA sendo a mesma Partida que já
@@ -548,38 +615,59 @@ def cmd_processar_uploads_pendentes(config, conn):
                     config, conn, dem_path,
                     share_code=share_code, source=source_do_upload, upload=True,
                     played_at=played_at, plataforma_manual=plataforma_manual,
-                    alvo=alvo,
+                    alvo=alvo, enviado_por=adicionado_por,
                 )
                 dbmod.atualizar_upload_pendente(conn, upload_id, "concluido", match_id=match_id)
                 print(f"  {upload_id}: concluido ({match_id})")
                 total += 1
-                # Apaga o staging só em sucesso — numa falha o arquivo continua no R2
-                # pro reprocessamento futuro reaproveitar sem o jogador subir de novo.
-                storage_r2.delete_object(client, config.r2_bucket, arquivo_r2_key)
-        except DemoNaoConfereError as e:
-            # Falha DEFINITIVA (mapa/roster errado): guardar o staging só ocuparia
-            # espaço pra sempre, já que nenhum retry vai mudar o resultado. O status
-            # 'falhou' já foi gravado acima — se o delete_object falhar (R2 fora do
-            # ar), isso não pode derrubar o resto da fila (o for de cima processando
-            # os outros envios pendentes da rodada); o arquivo órfão fica pro
-            # cmd_limpar_uploads_orfaos limpar depois.
+                concluido = True
+        except (DemoNaoConfereError, storage_r2.ArquivoGrandeDemaisError) as e:
+            # Falha DEFINITIVA (mapa/roster errado, arquivo acima do teto): nenhum
+            # retry muda o resultado, então o staging sai na hora.
             conn.rollback()
             dbmod.atualizar_upload_pendente(conn, upload_id, "falhou", erro=str(e)[:500])
-            try:
-                storage_r2.delete_object(client, config.r2_bucket, arquivo_r2_key)
-            except Exception as e_del:  # noqa: BLE001
-                print(
-                    f"  {upload_id}: aviso — staging não foi apagado do R2 ({e_del}); "
-                    "cmd_limpar_uploads_orfaos vai limpar depois"
-                )
-            print(f"  {upload_id}: RECUSADO ({e})")
+            _apagar_staging_upload(client, config, upload_id, arquivo_r2_key)
+            print(f"  {upload_id}: RECUSADO ({type(e).__name__})")
         except Exception as e:  # noqa: BLE001
             conn.rollback()
-            dbmod.atualizar_upload_pendente(conn, upload_id, "falhou", erro=str(e)[:500])
-            print(f"  {upload_id}: FALHOU ({e})")
+            if storage_r2.objeto_ausente(e):
+                # O PUT do Jogador ainda pode estar subindo (URL assinada vale 15 min):
+                # espera sem gastar tentativa. Depois da janela, não vem mais.
+                if _staging_recente(adicionado_em):
+                    dbmod.atualizar_upload_pendente(conn, upload_id, "pendente")
+                    print(f"  {upload_id}: arquivo ainda não chegou ao R2 — espera a próxima run")
+                else:
+                    dbmod.atualizar_upload_pendente(conn, upload_id, "falhou", erro="o arquivo não chegou ao R2")
+                    print(f"  {upload_id}: FALHOU (arquivo não chegou ao R2)")
+                continue
+            # Transitório (R2, DB, rede, parser): volta pra fila. Na última tentativa
+            # vira 'falhou' e o staging sai junto (sem Demo órfã no R2, prazo LGPD).
+            capturar_erro(e, "processar-uploads-pendentes")
+            status = dbmod.falhar_upload_pendente(
+                conn, upload_id, e, max_tentativas=_MAX_TENTATIVAS_UPLOAD,
+            )
+            print(f"  {upload_id}: FALHOU ({type(e).__name__}) — {status}")
+            if status == "falhou":
+                _apagar_staging_upload(client, config, upload_id, arquivo_r2_key)
+
+        # Staging sai em sucesso, fora do try: falha no delete não muda status nem
+        # match_id (o órfão fica pro cmd_limpar_uploads_orfaos).
+        if concluido:
+            _apagar_staging_upload(client, config, upload_id, arquivo_r2_key)
 
     print(f"processar-uploads-pendentes: {total} partida(s) processada(s)")
     return total
+
+
+def _apagar_staging_upload(client, config, upload_id, arquivo_r2_key):
+    """Apaga o .dem de staging de um upload que virou 'falhou'. Falha aqui (R2 fora)
+    não muda o status nem derruba a fila: só vai pro Sentry, e o órfão fica pro
+    cmd_limpar_uploads_orfaos."""
+    try:
+        storage_r2.delete_object(client, config.r2_bucket, arquivo_r2_key)
+    except Exception as e_del:  # noqa: BLE001
+        capturar_erro(e_del, "processar-uploads-pendentes")
+        print(f"  {upload_id}: aviso — staging não foi apagado do R2 ({type(e_del).__name__})")
 
 
 def cmd_limpar_uploads_orfaos(config, conn, dias=30):
@@ -604,7 +692,8 @@ def cmd_limpar_uploads_orfaos(config, conn, dias=30):
             total += 1
             print(f"  {upload_id}: objeto órfão apagado ({arquivo_r2_key})")
         except Exception as e:  # noqa: BLE001
-            print(f"  {upload_id}: falha ao apagar ({e})")
+            capturar_erro(e, "limpar-uploads-orfaos")
+            print(f"  {upload_id}: falha ao apagar ({type(e).__name__})")
     print(f"limpar-uploads-orfaos: {total} objeto(s) apagado(s)")
     return total
 
@@ -696,7 +785,8 @@ def cmd_juntar_clipes(config, conn):
             total += 1
             print(f"  {clipe_id}: {len(trechos)} trechos juntados ({key})")
         except Exception as e:  # noqa: BLE001
-            print(f"  {clipe_id}: falha ao juntar ({e})")
+            capturar_erro(e, "juntar-clipes")
+            print(f"  {clipe_id}: falha ao juntar ({type(e).__name__})")
     print(f"juntar-clipes: {total} montagem(ns) com vídeo único")
     return total
 
@@ -832,6 +922,9 @@ def cmd_reprocess(config, conn, match_id=None, since=None):
                     conn, parsed, share_code=share_code, source=source or "valve_mm",
                     demo_url=demo_url, replay_url=replay_url, prefer_new_played_at=False,
                     tem_demo=True,
+                    # O id já é conhecido: sem isso, Partida sem Share Code cujo K/D
+                    # mudou com o parser novo perdia a dedupe e virava linha nova.
+                    match_id_alvo=mid,
                 )
                 with conn.cursor() as cur2:
                     cur2.execute("update matches set reprocessed_at = now() where id = %s", (mid,))
@@ -840,7 +933,8 @@ def cmd_reprocess(config, conn, match_id=None, since=None):
                 total += 1
         except Exception as e:  # noqa: BLE001
             conn.rollback()
-            print(f"  {mid}: FALHOU ({e})")
+            capturar_erro(e, "reprocess")
+            print(f"  {mid}: FALHOU ({type(e).__name__})")
     print(f"reprocess: {total} Partida(s) reprocessada(s)")
     return total
 
@@ -886,8 +980,18 @@ def _upload_replay(client, bucket, rkey, replay_json):
         _upload_json_gzip(client, bucket, f"{base}/round-{round_number}.json", round_data)
 
 
+def _id_do_conteudo(dem_paths):
+    """uuid do sha256 dos bytes das Demos (as partes na ordem). Estável no retry do mesmo
+    arquivo; Partidas distintas com o mesmo fingerprint têm Demos diferentes."""
+    total = hashlib.sha256()
+    for caminho in dem_paths:
+        with open(caminho, "rb") as fh:
+            total.update(hashlib.file_digest(fh, "sha256").digest())
+    return str(uuid.UUID(total.hexdigest()[:32]))
+
+
 def _finalizar_ingest(config, conn, parsed, replay_json, dem_path_upload, share_code,
-                      source, upload, played_at, match_id_alvo=None):
+                      source, upload, played_at, match_id_alvo=None, dem_paths=None):
     """Cauda comum de ingest_demo/ingest_demo_multiparte: arquiva demo+replay no R2 (se
     configurado) e grava no banco. Devolve match_id. `dem_path_upload` é o .dem cujos
     bytes brutos sobem pro R2 (partida de arquivo único: o próprio; partida fundida de
@@ -895,7 +999,16 @@ def _finalizar_ingest(config, conn, parsed, replay_json, dem_path_upload, share_
     demo_url = replay_url = None
     if upload and config.r2_endpoint:
         client = storage_r2.make_client(config)
-        ids = sharecode.decode(share_code) if share_code else {"match_id": dem_path_upload.__hash__() & 0xFFFFFFFF}
+        # Sem Share Code, a chave é a Partida alvo ou o hash do conteúdo das Demos: o
+        # retry de uma série pro regrava os mesmos objetos em vez de deixar órfãos. O
+        # fingerprint não serve (Partidas curtas distintas colidem) nem o hash de 32 bits
+        # do caminho (colidia e regravava a Demo e o Replay 2D de outra Partida).
+        if share_code:
+            ids = sharecode.decode(share_code)
+        elif match_id_alvo is not None:
+            ids = {"match_id": str(match_id_alvo)}
+        else:
+            ids = {"match_id": _id_do_conteudo(dem_paths or [dem_path_upload])}
 
         key = storage_r2.demo_key(ids["match_id"])
         with open(dem_path_upload, "rb") as fh:
@@ -933,11 +1046,35 @@ def _atualizar_avatares(config, conn, steam_ids):
         mapa = steam_api.buscar_avatares(config.steam_api_key, faltando)
         dbmod.upsert_avatares(conn, mapa)
     except Exception as e:  # noqa: BLE001
-        print(f"aviso: avatares Steam não atualizados ({e})")
+        print(f"aviso: avatares Steam não atualizados ({type(e).__name__})")
+
+
+MSG_SEM_PARTICIPACAO = "Você nem seus amigos aparecem nesta Demo."
+MSG_PARTIDA_JA_REGISTRADA = "Essa Partida já está registrada."
+MSG_DEMO_DE_OUTRA_PARTIDA = "Essa Demo não é da Partida desse Share Code."
+
+
+def _validar_envio(conn, parsed, enviado_por, share_code):
+    """Upload do Jogador sem alvo (R114). Roda antes de qualquer gravação no R2 ou no
+    banco: sem isso, um Share Code alheio regravava demos/<id>, replays/<id> e o
+    mapa/placar/roster da Partida dele (on conflict (share_code) do update)."""
+    participantes = {p["steam_id64"] for p in parsed.get("players", [])}
+    if enviado_por not in participantes and not (participantes & dbmod.amigos_aceitos(conn, enviado_por)):
+        raise DemoNaoConfereError(MSG_SEM_PARTICIPACAO)
+    partida = dbmod.partida_por_share_code(conn, share_code) if share_code else None
+    if partida is None:
+        return
+    status, descoberta_por = partida
+    if status == "parsed":
+        raise DemoNaoConfereError(MSG_PARTIDA_JA_REGISTRADA)
+    # Quem descobriu o Share Code joga a Partida real: sem ele na Demo, é outra Partida
+    # tentando ocupar a linha pendente de alguém. Linha antiga sem discovered_by passa.
+    if descoberta_por and descoberta_por not in participantes:
+        raise DemoNaoConfereError(MSG_DEMO_DE_OUTRA_PARTIDA)
 
 
 def ingest_demo(config, conn, path, share_code=None, source="upload", upload=True,
-                played_at=None, plataforma_manual=None, alvo=None):
+                played_at=None, plataforma_manual=None, alvo=None, enviado_por=None):
     """Parseia um .dem, arquiva no R2 (se configurado) e grava no banco. Devolve match_id.
 
     `played_at` (ISO 8601, opcional): quando o operador sabe a hora real da Partida,
@@ -959,6 +1096,8 @@ def ingest_demo(config, conn, path, share_code=None, source="upload", upload=Tru
     parsed = transform.enrich(parsed)
     if alvo is not None:
         _validar_demo_contra_alvo(parsed, alvo)
+    elif enviado_por is not None:
+        _validar_envio(conn, parsed, enviado_por, share_code)
     if played_at:
         parsed["played_at"] = played_at
     parsed["plataforma_manual"] = plataforma_manual
@@ -982,7 +1121,7 @@ def ingest_demo(config, conn, path, share_code=None, source="upload", upload=Tru
         parsed["highlights"] = transform.attach_replay_frames(parsed["highlights"], replay_json["rounds"])
         parsed["lineups"] = _montar_lineups(rdata, replay_json, parsed["map"], source)
     except Exception as e:  # noqa: BLE001
-        print(f"aviso: replay 2D / clutch não gerado ({e})")
+        print(f"aviso: replay 2D / clutch não gerado ({type(e).__name__})")
 
     try:
         match_id = _finalizar_ingest(
@@ -1038,7 +1177,7 @@ def ingest_demo_multiparte(config, conn, dem_paths, share_code=None, source="pro
     try:
         rdatas = [parsemod.extract_replay(p) for p in dem_paths]
     except Exception as e:  # noqa: BLE001
-        print(f"aviso: replay 2D não gerado pro grupo ({e})")
+        print(f"aviso: replay 2D não gerado pro grupo ({type(e).__name__})")
         rdatas = []
 
     parsed, rdata = parsemod.fundir_partes_mesmo_mapa(partes, rdatas or None)
@@ -1059,7 +1198,7 @@ def ingest_demo_multiparte(config, conn, dem_paths, share_code=None, source="pro
             parsed["highlights"] = transform.attach_replay_frames(parsed["highlights"], replay_json["rounds"])
             parsed["lineups"] = _montar_lineups(rdata, replay_json, parsed["map"], source)
         except Exception as e:  # noqa: BLE001
-            print(f"aviso: replay 2D / clutch não gerado ({e})")
+            print(f"aviso: replay 2D / clutch não gerado ({type(e).__name__})")
 
     # .dem BRUTO arquivado pro reprocessamento (cmd_reprocess baixa de volta um único
     # .dem pra reparsear com parse_demo, que não sabe fundir partes): sobe a ÚLTIMA
@@ -1067,7 +1206,8 @@ def ingest_demo_multiparte(config, conn, dem_paths, share_code=None, source="pro
     # incompleto (só a última parte), mesma limitação que já existiria pra qualquer
     # .dem cortado; documentado aqui de propósito pra não surpreender no futuro.
     return _finalizar_ingest(
-        config, conn, parsed, replay_json, dem_paths[-1], share_code, source, upload, played_at
+        config, conn, parsed, replay_json, dem_paths[-1], share_code, source, upload, played_at,
+        dem_paths=dem_paths,
     )
 
 

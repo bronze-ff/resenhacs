@@ -573,17 +573,36 @@ def set_last_share_code(conn, steam_id64, share_code):
 def listar_fila_pro_pendente(conn):
     with conn.cursor() as cur:
         cur.execute(
-            "select id, hltv_url, arquivo_r2_key from partidas_pro_fila "
+            "select id, hltv_url, arquivo_r2_key, adicionado_em from partidas_pro_fila "
             "where status = 'pendente' order by adicionado_em"
         )
         return cur.fetchall()
 
 
+def interromper_fila_pro(conn):
+    """Item preso em 'baixando'/'processando' é de um run que morreu no meio (o grupo
+    de concorrência `coletor` garante um run por vez). Vira 'falhou' pro admin usar o
+    retry. Devolve os ids (só pra log)."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "update partidas_pro_fila set status = 'falhou', erro = %s "
+            "where status in ('baixando', 'processando') returning id",
+            ("interrompido no run anterior",),
+        )
+        ids = [r[0] for r in cur.fetchall()]
+    conn.commit()
+    return ids
+
+
 def atualizar_fila_pro(conn, fila_id, status, match_id=None, erro=None, match_ids=None):
     with conn.cursor() as cur:
         cur.execute(
-            "update partidas_pro_fila set status = %s, match_id = %s, erro = %s, match_ids = %s where id = %s",
-            (status, match_id, erro, match_ids if match_ids is not None else [], fila_id),
+            # Merge com os ids já gravados: o retry de uma série parcial não perde o mapa
+            # que entrou antes, e a troca de status (baixando, falhou) não zera a lista.
+            "update partidas_pro_fila set status = %s, match_id = coalesce(%s, match_id), erro = %s, "
+            "match_ids = array(select x from unnest(match_ids || %s::uuid[]) with ordinality as t(x, n) "
+            "group by x order by min(n)) where id = %s",
+            (status, match_id, erro, match_ids or [], fila_id),
         )
     conn.commit()
 
@@ -594,7 +613,7 @@ def listar_uploads_pendentes(conn):
     with conn.cursor() as cur:
         cur.execute(
             "select id, adicionado_por, arquivo_r2_key, share_code, played_at, "
-            "plataforma_manual, match_alvo_id "
+            "plataforma_manual, match_alvo_id, adicionado_em "
             "from uploads_pendentes where status = 'pendente' order by adicionado_em"
         )
         return cur.fetchall()
@@ -646,6 +665,24 @@ def atualizar_upload_pendente(conn, upload_id, status, match_id=None, erro=None)
                 (status, match_id, erro, upload_id),
             )
     conn.commit()
+
+
+def falhar_upload_pendente(conn, upload_id, erro, max_tentativas=3):
+    """Erro transitório (R2, DB, rede, parser) num upload manual: volta pra 'pendente'
+    com tentativas + 1, ou vira 'falhou' quando esgota `max_tentativas` — mesma
+    semântica de falhar_fetch_pendente. Devolve o status gravado, pra quem chama
+    apagar o staging quando virou 'falhou'."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "update uploads_pendentes set "
+            "status = case when tentativas + 1 >= %s then 'falhou' else 'pendente' end, "
+            "tentativas = tentativas + 1, erro = %s, processando_desde = null "
+            "where id = %s returning status",
+            (max_tentativas, str(erro)[:500], upload_id),
+        )
+        row = cur.fetchone()
+    conn.commit()
+    return row[0] if row else None
 
 
 def reverter_uploads_travados(conn, minutos=30, max_tentativas=3):
@@ -866,6 +903,33 @@ def marcar_faceit_match(conn, match_id, faceit_match_id):
             (faceit_match_id, match_id),
         )
     conn.commit()
+
+
+def partida_por_share_code(conn, share_code):
+    """(status, discovered_by) da Partida com esse Share Code, ou None se não existe."""
+    with conn.cursor() as cur:
+        cur.execute("select status, discovered_by from matches where share_code = %s", (share_code,))
+        row = cur.fetchone()
+    return (row[0], row[1]) if row else None
+
+
+def amigos_aceitos(conn, steam_id64):
+    """SteamIDs dos amigos com amizade 'accepted' (par canônico: o Jogador pode estar
+    em player_a ou em player_b)."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "select case when player_a = %s then player_b else player_a end from friendships "
+            "where status = 'accepted' and (player_a = %s or player_b = %s)",
+            (steam_id64, steam_id64, steam_id64),
+        )
+        return {r[0] for r in cur.fetchall()}
+
+
+def steam_ids_da_partida(conn, match_id):
+    """SteamIDs dos Participantes gravados na Partida (roster inteiro)."""
+    with conn.cursor() as cur:
+        cur.execute("select steam_id64 from match_players where match_id = %s", (match_id,))
+        return {r[0] for r in cur.fetchall()}
 
 
 def elo_snapshot(conn, steam_id64):
