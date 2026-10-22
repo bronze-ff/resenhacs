@@ -14,6 +14,12 @@ describe('expansão 0064', () => {
   })
 })
 
+it('0065 indexa a cota por Jogador e data somente para envios da extensão', () => {
+  const sql = readFileSync(new URL('../../../supabase/migrations/0065_indice_cota_extensao.sql', import.meta.url), 'utf8')
+    .replace(/--[^\n]*/g, '').replace(/\s+/g, ' ').trim()
+  expect(sql).toMatch(/^create index if not exists \w+ on uploads_pendentes \(adicionado_por, adicionado_em\) where origem = 'extensao';$/)
+})
+
 const shared = new URL('../../../shared/extensao/faceit-demo-hosts.json', import.meta.url)
 const pacote = new URL('../../../extensao/package.json', import.meta.url)
 it('hosts fechados antes do X-PKG e iguais ao JSON após integração (obrigatório antes do PR)', () => {

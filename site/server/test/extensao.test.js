@@ -4,6 +4,7 @@ import cookieParser from 'cookie-parser'
 import request from 'supertest'
 import jwt from 'jsonwebtoken'
 import { createExtensaoRouter, FACEIT_DEMO_HOSTS } from '../src/routes/extensao.js'
+import * as extensao from '../src/routes/extensao.js'
 import { assinarTokenExtensao } from '../src/auth/tokenExtensao.js'
 import { createRequireAuth } from '../src/auth/middleware.js'
 import { signToken } from '../src/auth/jwt.js'
@@ -172,6 +173,35 @@ describe('I9 envio e fronteiras', () => {
     const observacao = JSON.stringify([log.mock.calls, capturarErro.mock.calls.map(([e]) => ({ message: e.message, stack: e.stack, cause: e.cause }))])
     for (const dado of ['privado', 'assinatura', corpo.downloadUrl, steamId]) expect(observacao).not.toContain(dado)
     expect(capturarErro).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([[false, false], [true, false], [false, true], [true, true]])('createApp real não encaminha erro bruto nem duplica captura (connect=%s, compat=%s)', async (naConexao, compat) => {
+    capturarErro.mockClear()
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const erro = new Error(`privado ${corpo.downloadUrl} ${steamId}`)
+    const { db } = preparar(naConexao ? { erroConnect: erro } : { erroInsert: erro })
+    const criarRouter = extensao.createExtensaoRouter
+    vi.spyOn(extensao, 'createExtensaoRouter').mockImplementation((opcoes) => criarRouter({ ...opcoes, faceitDemoHosts: hosts }))
+    if (compat) {
+      // Reproduz o catch(next) de compatibilidade junto ao encaminhamento do Express 5.
+      const post = express.Router.prototype.post
+      vi.spyOn(express.Router.prototype, 'post').mockImplementation(function (path, ...handlers) {
+        return post.call(this, path, ...handlers.map((handler) => function (req, res, next) {
+          const out = handler(req, res, next)
+          if (out && typeof out.catch === 'function') out.catch(next)
+          return out
+        }))
+      })
+    }
+    const app = createApp({ config: { jwtSecret }, db })
+    const res = await request(app).post('/api/extensao/envio').set('Authorization', bearer()).send(corpo)
+    await new Promise(setImmediate)
+    expect(res.status).toBe(500)
+    expect(res.body).toEqual({ erro: 'Erro interno' })
+    const observacao = JSON.stringify([log.mock.calls, capturarErro.mock.calls.map(([e]) => ({ message: e.message, stack: e.stack, cause: e.cause }))])
+    for (const dado of ['privado', 'assinatura', corpo.downloadUrl, steamId]) expect(observacao).not.toContain(dado)
+    expect(capturarErro).toHaveBeenCalledTimes(1)
+    expect(capturarErro.mock.calls[0][0]).not.toBe(erro)
   })
 
   it('mount real preserva limite 4 KB e rejeita JSON inválido sem capturar seu corpo', async () => {

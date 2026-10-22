@@ -48,8 +48,9 @@ export function createExtensaoRouter({ db, requireAuth, jwtSecret, faceitDemoHos
     const { faceitMatchId, downloadUrl } = req.body
     if (typeof faceitMatchId !== 'string' || !FACEIT_MATCH_ID.test(faceitMatchId)) return res.status(400).json({ erro: 'Partida FACEIT inválida' })
     if (!urlPermitida(downloadUrl, faceitDemoHosts)) return res.status(400).json({ erro: 'Link de Demo inválido' })
-    const client = await db.connect()
+    let client
     try {
+      client = await db.connect()
       await client.query('begin')
       const cota = await checarCotaUpload(client, req.player.steamId)
       if (cota) {
@@ -86,12 +87,14 @@ export function createExtensaoRouter({ db, requireAuth, jwtSecret, faceitDemoHos
       await client.query('commit')
       return res.status(202).json({ id: inserido.rows[0].id, matchId })
     } catch (erro) {
-      await client.query('rollback').catch(() => {})
+      if (client) await client.query('rollback').catch(() => {})
       if (erro?.code === '23505' && erro.constraint === 'uploads_pendentes_alvo_ativo_idx') {
         return res.status(409).json({ erro: 'Já existe um envio em andamento pra esta partida' })
       }
-      throw erro
-    } finally { client.release() }
+      // Responder aqui evita rejeitar a promise com o erro que contém dados do envio.
+      capturarErro(new Error('Falha na API da extensão'))
+      return res.status(500).json({ erro: 'Erro interno' })
+    } finally { client?.release() }
   })
 
   router.use((erro, req, res, next) => {
