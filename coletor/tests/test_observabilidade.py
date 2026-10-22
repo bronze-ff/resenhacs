@@ -394,3 +394,15 @@ def test_utf8_invalido_conta_como_mudanca_de_camada():
 def test_camada_1_limpa_e_camada_2_sensivel_sai_redigida():
     # camada 1: /jogador/ana%40exemplo.com (limpa); camada 2: e-mail.
     assert redigir_string("/jogador/ana%2540exemplo.com") == REDACTED
+
+
+@pytest.mark.parametrize("mensagem", [
+    "http://[foo",
+    "falhou em http%3A%2F%2F%5Bfoo",
+    "falhou em http%253A%252F%252F%255Bfoo",
+])
+def test_before_send_url_malformada_em_qualquer_camada_vira_marcador(mensagem):
+    # Codex P2 no 07aee8a: urlsplit lançava ValueError (Invalid IPv6 URL) e quebrava o before_send.
+    import coletor.observabilidade as obs
+
+    assert obs.before_send({"message": mensagem}, None)["message"] == REDACTED

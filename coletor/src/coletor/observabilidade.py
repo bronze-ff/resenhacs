@@ -101,7 +101,13 @@ def redigir_string(valor):
     de camada decodificada. Mesma regra do scrub.js."""
     if not isinstance(valor, str):
         return valor
+    try:
+        return _s0_ou_marcador(valor)
+    except ValueError:
+        return REDACTED  # URL que o urlsplit não entende (ex.: http://[foo), em qualquer camada
 
+
+def _s0_ou_marcador(valor):
     s0 = _redigir(valor)
     if s0 == REDACTED or _redigir(s0) != s0:
         return REDACTED
