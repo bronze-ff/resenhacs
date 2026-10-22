@@ -1249,6 +1249,41 @@ def cmd_avatares(config, conn):
     return len(mapa)
 
 
+# Coluna ou tabela da migration 0063 ainda não aplicada (UndefinedColumn, UndefinedTable).
+_SQLSTATE_SEM_0063 = ("42703", "42P01")
+
+
+def cmd_avisar_discord(config, conectar=None, agora=None):
+    """Clipe pronto e Resenha da semana no Discord. Sempre devolve 0: o step nunca
+    derruba o job. Sem DISCORD_WEBHOOK_URL nem abre o banco."""
+    import datetime
+    import os
+
+    webhook_url = os.environ.get("DISCORD_WEBHOOK_URL", "")
+    if not webhook_url:
+        print("avisar-discord: sem DISCORD_WEBHOOK_URL, nada a fazer")
+        return 0
+    app_url = os.environ.get("APP_URL", "")
+    agora = agora or datetime.datetime.now(datetime.timezone.utc)
+    conn = None
+    try:
+        conn = (conectar or dbmod.connect)(config.database_url)
+        clipes = discord.avisar_clipes(conn, webhook_url, app_url)
+        resenha = discord.avisar_resenha_semanal(conn, webhook_url, app_url, agora)
+        print(f"avisar-discord: {clipes} post(s) de Clipe; Resenha da semana {'postada' if resenha else 'não postada'}")
+    except Exception as e:  # noqa: BLE001
+        # Só o tipo: a mensagem de erro de rede pode carregar a URL do webhook (com token).
+        if getattr(e, "sqlstate", None) in _SQLSTATE_SEM_0063:
+            print(f"avisar-discord: migration 0063 não aplicada ({type(e).__name__})")
+        else:
+            capturar_erro(e, "avisar-discord")
+            print(f"aviso: avisar-discord falhou ({type(e).__name__})")
+    finally:
+        if conn is not None:
+            conn.close()
+    return 0
+
+
 def cmd_sincronizar_faceit(config, conn, limite=10):
     """FACEIT: descoberta (com `from`), fila (Demo ou só estatísticas), re-tentativa
     espaçada da Demo e ELO. A lógica mora em faceit_sync.py."""
@@ -1345,6 +1380,10 @@ def main(argv=None):
         help="FACEIT Fase B: descobre e ingere partidas 5v5 de membros vinculados + ELO.",
     )
     sub.add_parser(
+        "avisar-discord",
+        help="Discord: Clipe pronto e Resenha da semana (segunda 10h de SP). Sempre sai 0.",
+    )
+    sub.add_parser(
         "inventario-r2",
         help="Só leitura: conta objetos e bytes por prefixo de topo no bucket R2, mais multipart incompletos.",
     )
@@ -1380,6 +1419,10 @@ def main(argv=None):
         if relatorio["falhas"]:
             sys.exit(1)
         return
+
+    # Abre o banco só se houver webhook; nunca derruba o job.
+    if args.cmd == "avisar-discord":
+        sys.exit(cmd_avisar_discord(Config()))
 
     config = Config()
     config.require("database_url")
