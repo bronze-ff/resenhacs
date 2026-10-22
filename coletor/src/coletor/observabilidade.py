@@ -7,7 +7,7 @@ A lista de palavras mora em palavras.py.
 
 import os
 import re
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import unquote, urlsplit, urlunsplit
 
 from .palavras import PALAVRA, chave_sensivel
 
@@ -85,15 +85,46 @@ def _cortar_url(url):
     return so_origem_caminho(limpa) + url[len(limpa):]
 
 
-def redigir_string(valor):
-    if not isinstance(valor, str):
-        return valor
-
+def _redigir(valor):
     texto = _URL.sub(lambda match: _cortar_url(match.group(0)), valor)
     texto = _REL.sub(lambda match: match.group(1) + _cortar_url(match.group(2)), texto)
     if PALAVRA.search(texto) or any(padrao.search(texto) for padrao in _PII):
         return REDACTED
     return texto
+
+
+_MAX_DECODIFICACOES = 3
+
+
+def redigir_string(valor):
+    """R119 v2: devolve S0 (o valor sanitizado sem decodificar) ou o marcador. Nunca texto
+    de camada decodificada. Mesma regra do scrub.js."""
+    if not isinstance(valor, str):
+        return valor
+    try:
+        return _s0_ou_marcador(valor)
+    except ValueError:
+        return REDACTED  # URL que o urlsplit não entende (ex.: http://[foo), em qualquer camada
+
+
+def _s0_ou_marcador(valor):
+    s0 = _redigir(valor)
+    if s0 == REDACTED or _redigir(s0) != s0:
+        return REDACTED
+    # Camadas de detecção a partir de S0, no modo tolerante: % sem dois hex fica literal e
+    # UTF-8 inválido vira U+FFFD (conta como mudança e não decodifica de novo). Camada que
+    # a sanitização mudaria (redação ou corte de URL/query) vira marcador.
+    camada = s0
+    for _ in range(_MAX_DECODIFICACOES):
+        decodificada = unquote(camada, errors="replace")
+        if decodificada == camada:
+            return s0
+        if _redigir(decodificada) != decodificada:
+            return REDACTED
+        camada = decodificada
+    if unquote(camada, errors="replace") != camada:
+        return REDACTED  # ainda muda depois de 3 decodificações: falha fechada
+    return s0
 
 
 def scrub_valor(valor, chave=None):

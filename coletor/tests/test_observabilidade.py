@@ -64,6 +64,9 @@ def test_casos_compartilhados_e_padrao_igual_ao_javascript():
         assert minimizar_evento({"message": amostra})["message"] == REDACTED
     for amostra in CASOS["intactos"]:
         assert redigir_string(amostra) == amostra
+    for caso in CASOS.get("sanitiza", []):
+        assert redigir_string(caso["entrada"]) == caso["saida"]
+        assert minimizar_evento({"message": caso["entrada"]})["message"] == caso["saida"]
     for chave in CASOS["chavesSensiveis"]:
         assert chave_sensivel(chave)
         tags = minimizar_evento({"tags": {chave: "valor-limpo"}})["tags"]
@@ -298,3 +301,108 @@ def test_monitor_discover_erro_inesperado_fecha_error_e_propaga(monkeypatch):
     with pytest.raises(ConnectionError):
         obs.em_monitor_discover(_discover)
     assert [c["status"] for c in checkins] == ["in_progress", "error"]
+
+
+def test_percent_encoding_e_redigido_depois_de_decodificar():
+    # Mesmos casos do casos-palavras.json (R119); o laço compartilhado cobre quando o JSON chegar.
+    assert redigir_string("/jogador/ana%40exemplo.com") == REDACTED
+    assert redigir_string("senha%3Dabc") == REDACTED
+    assert redigir_string("/partida/abc%20def") == "/partida/abc%20def"
+    assert redigir_string("erro pa%73sword=1") == REDACTED
+    assert minimizar_evento({"message": "liga%20(11)%203456-7890"})["message"] == REDACTED
+
+
+def test_percent_malformado_nao_lanca_e_para_de_decodificar():
+    assert redigir_string("100% certo") == "100% certo"
+    assert redigir_string("/partida/%E0%A4%A") == "/partida/%E0%A4%A"
+    assert redigir_string("/partida/abc%2520def") == "/partida/abc%2520def"
+
+
+def test_percent_encoding_em_camadas_e_redigido():
+    # Codex P0 no PR #110: duplo encoding escapava da decodificação única.
+    assert redigir_string("/jogador/ana%2540exemplo.com") == REDACTED
+    assert redigir_string("/jogador/ana%252540exemplo.com") == REDACTED
+    assert redigir_string("se%25256Eha%253Dabc") == REDACTED
+
+
+def test_utf8_invalido_em_outra_parte_nao_esconde_o_email():
+    # Sentinela P1 no a5e2d0c: o UnicodeDecodeError parava antes da 1a camada.
+    assert redigir_string("/jogador/ana%40exemplo.com?x=%E0%A4") == REDACTED
+    assert redigir_string("/jogador/ana%2540exemplo.com/%E0%A4") == REDACTED
+    assert redigir_string("/partida/abc%20def/%E0%A4") == "/partida/abc%20def/%E0%A4"
+
+
+def test_percent_encoding_que_ainda_muda_depois_de_3_camadas_falha_fechado():
+    assert redigir_string("/jogador/ana%25252540exemplo.com") == REDACTED
+    # Sem dado sensível em camada nenhuma; 7 dígitos seguidos não casam com telefone.
+    assert redigir_string("/partida/abc%2525252Fdef") == REDACTED
+
+
+# REGRA FINAL v2 (R119): a saída é S0 (o valor sanitizado sem decodificar) ou o marcador.
+# Nunca texto de camada decodificada. As camadas C1..C3 saem de S0 e só detectam.
+@pytest.mark.parametrize("mensagem", [
+    "/partida/abc%3Fx%3Dana%2540exemplo.com",
+    "/partida/abc%253Fx%253Dana%252540exemplo.com",
+    "/partida/abc%3Fx%3Dana%2540exemplo.com%E0%A4",
+    "/partida/abc%3Ftoken%3D%2520abc123xyz",
+    "/partida/abc%3Fx%3D1",  # query que só aparece depois de decodificar
+])
+def test_before_send_camada_decodificada_que_muda_vira_marcador(mensagem):
+    import coletor.observabilidade as obs
+
+    assert obs.before_send({"message": mensagem}, None)["message"] == REDACTED
+
+
+@pytest.mark.parametrize("entrada", [
+    "/partida/abc?token=%20abc123xyz",
+    "/partida/abc?token=%09abc123xyz",
+    "/partida/abc?token=%0Aabc123xyz",
+    "/partida/abc?token=%EF%BB%BFabc123xyz",
+    "/partida/abc?x=1",
+])
+def test_saida_e_s0_quando_nenhuma_camada_de_s0_muda_na_sanitizacao(entrada):
+    assert redigir_string(entrada) == "/partida/abc"
+
+
+def test_before_send_sequencia_com_byte_invalido_decodifica_o_resto():
+    # Sentinela P0 no 0a70eb6: a sequência inteira ficava crua por causa do %E0.
+    import coletor.observabilidade as obs
+
+    evento = obs.before_send({"message": "/jogador/x%E0%61%6E%61%25%34%30exemplo.com"}, None)
+    assert evento["message"] == REDACTED
+
+
+@pytest.mark.parametrize("valor", [
+    "/jogador/ana%2540exemplo.com/%ZZ",
+    "/jogador/ana%40exemplo.com/%E9%ZZ",
+    "/jogador/ana%40exemplo.com?x=%E0%A4",
+    "/jogador/ana%2540exemplo.com/%E0%A4",
+    "/jogador/ana%2540exemplo.com/x%E0%61",
+    "/p/%ZZ/ana%2540exemplo.com",
+])
+def test_sequencia_invalida_nao_esconde_o_resto(valor):
+    assert redigir_string(valor) == REDACTED
+
+
+def test_utf8_invalido_conta_como_mudanca_de_camada():
+    # 3 decodificações levam a %E0%A4; a 4a ainda mudaria (vira U+FFFD): falha fechada.
+    assert redigir_string("/x/%252525E0%252525A4") == REDACTED
+    assert redigir_string("/x/%E0%A4") == "/x/%E0%A4"
+    assert redigir_string("/p/abc%20def/%E0%A4") == "/p/abc%20def/%E0%A4"
+
+
+def test_camada_1_limpa_e_camada_2_sensivel_sai_redigida():
+    # camada 1: /jogador/ana%40exemplo.com (limpa); camada 2: e-mail.
+    assert redigir_string("/jogador/ana%2540exemplo.com") == REDACTED
+
+
+@pytest.mark.parametrize("mensagem", [
+    "http://[foo",
+    "falhou em http%3A%2F%2F%5Bfoo",
+    "falhou em http%253A%252F%252F%255Bfoo",
+])
+def test_before_send_url_malformada_em_qualquer_camada_vira_marcador(mensagem):
+    # Codex P2 no 07aee8a: urlsplit lançava ValueError (Invalid IPv6 URL) e quebrava o before_send.
+    import coletor.observabilidade as obs
+
+    assert obs.before_send({"message": mensagem}, None)["message"] == REDACTED

@@ -522,7 +522,7 @@ def test_processar_fila_pro_com_arquivo_r2_key_baixa_do_r2_e_nao_chama_urlopen(m
     def _urlopen_nao_deveria_ser_chamado(*a, **kw):
         raise AssertionError("urlopen não deveria ser chamado quando vem de arquivo_r2_key")
 
-    monkeypatch.setattr("urllib.request.urlopen", _urlopen_nao_deveria_ser_chamado)
+    monkeypatch.setattr(main.rede, "abrir_url", _urlopen_nao_deveria_ser_chamado)
 
     def _rar_extract_nao_deveria_ser_chamado(*a, **kw):
         raise AssertionError(".dem direto não deveria passar pelo rar_extract")
@@ -600,11 +600,14 @@ def test_processar_fila_pro_ainda_suporta_hltv_url_via_urlopen(monkeypatch):
 
     urls_abertos = []
 
-    def _urlopen_fake(url, timeout=None):
+    dominios_pedidos = []
+
+    def _urlopen_fake(url, timeout=None, dominios=None):
         urls_abertos.append(url)
+        dominios_pedidos.append(dominios)
         return _FakeResp(b"rar-bytes")
 
-    monkeypatch.setattr("urllib.request.urlopen", _urlopen_fake)
+    monkeypatch.setattr(main.rede, "abrir_url", _urlopen_fake)
 
     dem_paths_devolvidos = []
 
@@ -625,6 +628,7 @@ def test_processar_fila_pro_ainda_suporta_hltv_url_via_urlopen(monkeypatch):
 
     assert total == 1
     assert urls_abertos == ["https://hltv.org/download/demo/999"]
+    assert dominios_pedidos == [("hltv.org",)]
     assert deletes == []  # não veio de arquivo_r2_key -> nada pra apagar do R2
 
 
@@ -655,7 +659,7 @@ def test_processar_fila_pro_funde_partes_adjacentes_do_mesmo_mapa_num_so_match_i
             self._lido = True
             return self._dados
 
-    monkeypatch.setattr("urllib.request.urlopen", lambda url, timeout=None: _FakeResp(b"rar-bytes"))
+    monkeypatch.setattr(main.rede, "abrir_url", lambda url, timeout=None, dominios=None: _FakeResp(b"rar-bytes"))
 
     def _rar_extract_fake(rar_path, destino):
         destino.mkdir(parents=True, exist_ok=True)
@@ -1245,7 +1249,7 @@ class _FakeResp:
 
 
 def _patch_urlopen(monkeypatch, fake_resp):
-    monkeypatch.setattr(main.urllib.request, "urlopen", lambda *a, **k: fake_resp)
+    monkeypatch.setattr(main.rede, "abrir_url", lambda *a, **k: fake_resp)
 
 
 def test_baixar_e_descomprimir_completo_ok(tmp_path, monkeypatch):
@@ -1406,7 +1410,7 @@ def test_baixar_com_teto_aborta_durante_o_streaming_sem_ler_indefinidamente(monk
             return b"x" * (1 << 20)  # 1MB por chunk
 
     resp = _RespGigante()
-    monkeypatch.setattr(main.urllib.request, "urlopen", lambda *a, **k: resp)
+    monkeypatch.setattr(main.rede, "abrir_url", lambda *a, **k: resp)
 
     with pytest.raises(RuntimeError, match="teto"):
         main._baixar_com_teto("http://x", max_bytes=2 << 20)  # teto de 2MB, chunks de 1MB
@@ -2348,3 +2352,64 @@ def test_config_r2_bucket_vazio_vira_o_default():
     assert Config({"R2_BUCKET": ""}).r2_bucket == "resenha-demos"
     assert Config({}).r2_bucket == "resenha-demos"
     assert Config({"R2_BUCKET": "outro"}).r2_bucket == "outro"
+
+
+
+# ---- R120: download pela rede.abrir_url (checagem de host em cada redirect) ----
+
+def test_baixar_e_descomprimir_usa_abrir_url_sem_lista_de_dominios(tmp_path, monkeypatch):
+    comprimido = bz2.compress(b"demo")
+    pedidos = []
+
+    def _abrir(url, timeout, dominios=None):
+        pedidos.append((url, dominios))
+        return _FakeResp(comprimido, content_length=len(comprimido))
+
+    monkeypatch.setattr(main.rede, "abrir_url", _abrir)
+    main._baixar_e_descomprimir("https://replay.valve.net/a.dem.bz2", tmp_path / "match.dem")
+    assert pedidos == [("https://replay.valve.net/a.dem.bz2", None)]
+
+
+def test_baixar_com_teto_restringe_a_url_inicial_a_hltv(monkeypatch):
+    pedidos = []
+
+    def _abrir(url, timeout, dominios=None):
+        pedidos.append(dominios)
+        return _FakeResp(b"rar")
+
+    monkeypatch.setattr(main.rede, "abrir_url", _abrir)
+    assert main._baixar_com_teto("https://www.hltv.org/download/demo/1", max_bytes=1000) == b"rar"
+    assert pedidos == [("hltv.org",)]
+
+
+def test_cmd_fetch_host_recusado_marca_failed_na_primeira_tentativa(monkeypatch):
+    config = Config(env={"DATABASE_URL": "x"})
+    conn = types.SimpleNamespace(rollback=lambda: None)
+    code = "CSGO-aaaaa-bbbbb-ccccc-ddddd-eeeee"
+    monkeypatch.setattr(main.dbmod, "list_pending_share_codes", lambda c, limit=None: [code])
+    monkeypatch.setattr(main.dbmod, "contar_pendentes", lambda c: 1)
+    monkeypatch.setattr(
+        main, "_resolver_demo_urls",
+        lambda codes, bot_dir, node_bin: [{"shareCode": codes[0], "demoUrl": "https://x", "matchTime": None}],
+    )
+
+    def _baixar_recusado(url, destino):
+        raise main.rede.HostNaoPermitidoError("host resolve para IP interno")
+
+    monkeypatch.setattr(main, "_baixar_e_descomprimir", _baixar_recusado)
+    retries = []
+    monkeypatch.setattr(
+        main.dbmod, "falhar_fetch_pendente",
+        lambda c, code, erro, **kw: retries.append((code, kw.get("max_tentativas"))),
+    )
+
+    assert main.cmd_fetch(config, conn) == 0
+    assert retries == [(code, 1)]
+
+
+def test_sincronizar_faceit_trata_host_recusado_como_erro_definitivo(monkeypatch):
+    # R06 + R120: Demo da FACEIT com host recusado não muda tentando de novo.
+    recebidos = []
+    monkeypatch.setattr(main.faceit_sync, "sincronizar", lambda *a, **kw: recebidos.append(kw) or 0)
+    main.cmd_sincronizar_faceit(Config(env={}), conn=object())
+    assert recebidos[0]["erros_definitivos"] == (main.DemoNaoConfereError, main.rede.HostNaoPermitidoError)

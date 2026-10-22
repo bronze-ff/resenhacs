@@ -38,6 +38,7 @@ from . import steam_api
 from . import faceit
 from . import faceit_sync
 from . import descompressao
+from . import rede
 from . import storage_r2
 from . import transform
 from .config import Config
@@ -144,7 +145,7 @@ def _baixar_e_descomprimir(url, destino_dem):
     if urllib.parse.urlsplit(url).scheme not in ("http", "https"):
         raise RuntimeError(f"URL de demo com esquema não permitido: {url[:40]}")
     dec = bz2.BZ2Decompressor()
-    with urllib.request.urlopen(url, timeout=120) as resp, open(destino_dem, "wb") as out:
+    with rede.abrir_url(url, timeout=120) as resp, open(destino_dem, "wb") as out:
         content_length = resp.headers.get("Content-Length")
         esperado = int(content_length) if content_length is not None else None
         recebido = 0
@@ -187,7 +188,8 @@ def _baixar_com_teto(url, max_bytes, timeout=120):
     """Baixa `url` em streaming (chunks de 1MB), abortando assim que o total lido
     ultrapassa `max_bytes` — em vez de só descobrir que era grande demais depois de
     um resp.read() completo já ter consumido a memória inteira."""
-    with urllib.request.urlopen(url, timeout=timeout) as resp:
+    # O server já restringe a hltv.org; o redirect segue só a regra de IP (R120).
+    with rede.abrir_url(url, timeout=timeout, dominios=("hltv.org",)) as resp:
         partes = []
         total = 0
         while True:
@@ -291,7 +293,11 @@ def cmd_fetch(config, conn, since=None, bot_dir=None, node_bin="node"):
             conn.rollback()
             capturar_erro(e, "fetch")
             print(f"  {_ref(code)}: FALHOU ({type(e).__name__})")
-            dbmod.falhar_fetch_pendente(conn, code, e, max_tentativas=_MAX_TENTATIVAS_FETCH)
+            # Host recusado (R120) não muda tentando de novo: failed na primeira.
+            definitivo = isinstance(e, rede.HostNaoPermitidoError)
+            dbmod.falhar_fetch_pendente(
+                conn, code, e, max_tentativas=1 if definitivo else _MAX_TENTATIVAS_FETCH,
+            )
 
     print(f"fetch: {total} Partida(s) ingerida(s)")
     return total
@@ -1238,7 +1244,7 @@ def cmd_sincronizar_faceit(config, conn, limite=10):
     espaçada da Demo e ELO. A lógica mora em faceit_sync.py."""
     return faceit_sync.sincronizar(
         config, conn, ingest_demo=ingest_demo, ref=_ref, limite=limite,
-        erros_definitivos=(DemoNaoConfereError,),
+        erros_definitivos=(DemoNaoConfereError, rede.HostNaoPermitidoError),
     )
 
 
