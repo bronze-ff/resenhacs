@@ -413,7 +413,8 @@ export default function ReplayViewer({
   // O frame salvo é o momento exato do highlight (ex.: o último kill do multi-kill) —
   // recua alguns segundos antes de tocar, senão a jogada já teria acabado de acontecer.
   // `seek.vitima` (Lições): o frame é a primeira morte dessa vítima no round, lida dos
-  // kills; no streaming espera o round sair do placeholder e aplica uma vez por key.
+  // kills, sem recuo (k.t é índice de frame, não tick); no streaming espera o round sair
+  // do placeholder e aplica uma vez por key.
   const seekAplicado = useRef(null)
   const idxSeek = seek ? replay.rounds.findIndex((r) => r.round === seek.round) : -1
   const seekPronto = idxSeek !== -1 && (!seek.vitima || replay.rounds[idxSeek].frames?.length > 0)
@@ -421,13 +422,14 @@ export default function ReplayViewer({
     if (!seekPronto || seekAplicado.current === seek.key) return
     seekAplicado.current = seek.key
     const idx = idxSeek
-    let frameAlvo = seek.frame ?? 0
+    const LOOKBACK_SEGUNDOS = 5
+    let frameInicial
     if (seek.vitima) {
       const morte = replay.rounds[idx].kills?.find((k) => k.victim === seek.vitima && k.t != null)
-      frameAlvo = morte ? morte.t : 0
+      frameInicial = morte ? morte.t : 0
+    } else {
+      frameInicial = Math.max(0, (seek.frame ?? 0) - LOOKBACK_SEGUNDOS * replay.tickRate)
     }
-    const LOOKBACK_SEGUNDOS = 5
-    const frameInicial = Math.max(0, frameAlvo - LOOKBACK_SEGUNDOS * replay.tickRate)
     setRoundIdx(idx)
     setFrameAtual(frameInicial)
     // Mesmo round já tocando: o loop não reinicia, então o pulo entra pelo inicioRef.

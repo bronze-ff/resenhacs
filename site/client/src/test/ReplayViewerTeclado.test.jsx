@@ -142,7 +142,7 @@ describe('Replay 2D — pulo para a morte (Lições)', () => {
     { round: 2, frames: frames(n), kills, hits: [] },
   ])
 
-  it('pula 5 s antes da primeira morte da vítima no round', () => {
+  it('pula para o frame exato da primeira morte da vítima no round, sem recuo', () => {
     const replay = comKills([
       { t: 50, victim: 'outro' },
       { t: null, victim: VITIMA },
@@ -151,7 +151,7 @@ describe('Replay 2D — pulo para a morte (Lições)', () => {
     ])
     const { tempo } = montar(replay, { round: 2, frame: null, vitima: VITIMA, key: 'l1' })
     expect(screen.getByRole('img', { name: /round 2/i })).toBeInTheDocument()
-    expect(tempo()).toBe('25 s de 40 s')
+    expect(tempo()).toBe('30 s de 40 s')
   })
 
   it('vítima sem kill no round começa no frame 0', () => {
@@ -171,7 +171,7 @@ describe('Replay 2D — pulo para a morte (Lições)', () => {
     const cheio = comKills([{ t: 300, victim: VITIMA }])
     rerender(<MemoryRouter><ReplayViewer replay={cheio} seek={seek} /></MemoryRouter>)
     expect(screen.getByRole('img', { name: /round 2/i })).toBeInTheDocument()
-    expect(tempo()).toBe('25 s de 40 s')
+    expect(tempo()).toBe('30 s de 40 s')
     // Pausa e anda; um novo objeto de replay (outro round chegando) não reaplica o pulo.
     fireEvent.keyDown(grupo, { key: ' ' })
     fireEvent.keyDown(grupo, { key: 'ArrowRight' })
