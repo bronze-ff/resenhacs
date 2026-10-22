@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { nomeMapa } from '../lib/format.js'
 import { CORES } from '../lib/colors.js'
-import { Select, Abas, Skeleton, EstadoVazio } from './ui'
+import { Button, Select, Abas, Skeleton, EstadoErro, EstadoVazio } from './ui'
 
 const TAM = 480
 
@@ -34,16 +34,21 @@ export default function PosicionamentoAgregado({ steamId }) {
   const [modo, setModo] = useState('mortes') // mortes | kills
   const [dados, setDados] = useState(null)
   const [mapaEscolhido, setMapaEscolhido] = useState('')
+  const [erro, setErro] = useState(false)
+  const [tentativa, setTentativa] = useState(0)
 
   useEffect(() => {
+    let vivo = true
     setDados(null)
+    setErro(false)
     const qs = new URLSearchParams({ modo })
     if (mapaEscolhido) qs.set('map', mapaEscolhido)
     fetch(`/api/profile/${steamId}/posicoes?${qs}`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then(setDados)
-      .catch(() => setDados(null))
-  }, [steamId, modo, mapaEscolhido])
+      .then((res) => { if (!res.ok) throw new Error(); return res.json() })
+      .then((dados) => { if (vivo) setDados(dados) })
+      .catch(() => { if (vivo) setErro(true) })
+    return () => { vivo = false }
+  }, [steamId, modo, mapaEscolhido, tentativa])
 
   useEffect(() => {
     if (!dados?.map) return
@@ -61,7 +66,10 @@ export default function PosicionamentoAgregado({ steamId }) {
     desenhar(ctx, radarRef.current, dados.pontos, cor)
   }, [dados, modo, radarPronto])
 
-  if (dados === null && !mapaEscolhido) {
+  if (erro) {
+    return <EstadoErro className="flex-wrap" mensagem="Não foi possível carregar o posicionamento." acao={<Button tamanho="sm" onClick={() => setTentativa((t) => t + 1)}>Tentar de novo</Button>} />
+  }
+  if (dados === null) {
     return (
       <div role="status" aria-label="Carregando posicionamento" className="space-y-3">
         <Skeleton className="h-10 w-56" />

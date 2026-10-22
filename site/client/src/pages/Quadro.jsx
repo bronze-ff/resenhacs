@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useState } from 'react'
+import { useEffect, useReducer, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
   Button, Card, CabecalhoPagina, Input, Textarea, Select, Modal, EstadoErro, EstadoVazio, SkeletonLista, Badge,
@@ -13,6 +13,44 @@ import { buscarRoundDoReplay, objetosDoFrame, paramsImportacao } from '../lib/qu
 function ModalTransicao({ onFechar, ...props }) {
   const { visivel, iniciarSaida } = useTransicaoModal()
   return <Modal visivel={visivel} onFechar={() => iniciarSaida(onFechar)} {...props} />
+}
+
+function ConfirmarSubstituicao({ onCancelar, onDescartar, onSalvar, salvando, erro }) {
+  const corpoRef = useRef(null)
+  useEffect(() => {
+    // shortcut: trava de Tab local, remover quando R103 corrigir Modal.jsx
+    function prenderTab(e) {
+      if (e.key !== 'Tab') return
+      const painel = corpoRef.current?.closest('[role="dialog"]')
+      if (!painel) return
+      const botoes = [...painel.querySelectorAll('button:not(:disabled)')]
+      const primeiro = botoes[0]
+      const ultimo = botoes.at(-1)
+      if (e.shiftKey && (document.activeElement === primeiro || !botoes.includes(document.activeElement))) {
+        e.preventDefault()
+        ultimo?.focus()
+      } else if (!e.shiftKey && (document.activeElement === ultimo || !botoes.includes(document.activeElement))) {
+        e.preventDefault()
+        primeiro?.focus()
+      }
+    }
+    document.addEventListener('keydown', prenderTab, true)
+    return () => document.removeEventListener('keydown', prenderTab, true)
+  }, [])
+  return (
+    <Modal visivel titulo="Alterações não salvas" tamanho="sm" onFechar={onCancelar}
+      rodape={<>
+        <Button variante="fantasma" onClick={onCancelar}>Cancelar</Button>
+        <Button disabled={salvando} onClick={onDescartar}>Descartar</Button>
+        <Button variante="primario" carregando={salvando} onClick={onSalvar}>Salvar</Button>
+      </>}
+    >
+      <div ref={corpoRef} className="space-y-3">
+        <p className="text-sm text-texto-fraco">Salve suas alterações ou descarte para continuar.</p>
+        {erro && <EstadoErro mensagem={erro} />}
+      </div>
+    </Modal>
+  )
 }
 
 function ListaQuadros({ onAbrir }) {
@@ -69,6 +107,7 @@ export default function Quadro() {
   const [salvando, setSalvando] = useState(false)
   const [erroSalvar, setErroSalvar] = useState(null)
   const [modal, setModal] = useState(null) // 'abrir' | 'importar' | 'excluir'
+  const acaoPendente = useRef(null)
   const idUrl = searchParams.get('id')
   const importacao = paramsImportacao(searchParams)
   const chaveImportacao = importacao ? `${importacao.partida}:${importacao.round}:${importacao.tick}` : null
@@ -128,9 +167,33 @@ export default function Quadro() {
     setErroCarga(null)
   }
 
+  function executarAcao(acao) {
+    acaoPendente.current = null
+    setModal(acao === 'abrir' ? 'abrir' : null)
+    if (acao === 'novo') novo()
+  }
+
+  function solicitarAcao(acao, origem) {
+    if (!estado.sujo) { executarAcao(acao); return }
+    origem.focus()
+    acaoPendente.current = { acao }
+    setErroSalvar(null)
+    setModal('confirmar')
+  }
+
+  function cancelarAcao() {
+    acaoPendente.current = null
+    setModal(null)
+  }
+
+  async function salvarAntesDeContinuar() {
+    const destino = acaoPendente.current
+    if (await salvar() && destino && acaoPendente.current === destino) executarAcao(destino.acao)
+  }
+
   async function salvar() {
     setErroSalvar(null)
-    if (!meta.nome.trim()) { setErroSalvar('Dê um nome à estratégia.'); return }
+    if (!meta.nome.trim()) { setErroSalvar('Dê um nome à estratégia.'); return false }
     setSalvando(true)
     try {
       const editar = meta.id && meta.meu
@@ -145,8 +208,10 @@ export default function Quadro() {
       dispatch({ tipo: 'salvo', id: corpo.id })
       setSearchParams({ id: corpo.id })
       setAviso('Estratégia salva.')
+      return true
     } catch (e) {
       setErroSalvar(e.message)
+      return false
     } finally {
       setSalvando(false)
     }
@@ -168,8 +233,8 @@ export default function Quadro() {
         acoes={
           <>
             <Button onClick={() => setModal('importar')}>Importar de um round</Button>
-            <Button onClick={() => setModal('abrir')}>Abrir salvo</Button>
-            <Button variante="fantasma" onClick={novo}>Novo</Button>
+            <Button disabled={salvando} onClick={(e) => solicitarAcao('abrir', e.currentTarget)}>Abrir salvo</Button>
+            <Button disabled={salvando} variante="fantasma" onClick={(e) => solicitarAcao('novo', e.currentTarget)}>Novo</Button>
             <Button variante="primario" carregando={salvando} onClick={salvar}>
               {ehCopia ? 'Salvar cópia' : 'Salvar estratégia'}
             </Button>
@@ -178,7 +243,7 @@ export default function Quadro() {
       />
 
       {aviso && <p role="status" className="mb-3 text-sm text-texto-fraco">{aviso}</p>}
-      {erroSalvar && <p role="alert" className="mb-3 text-sm text-perigo">{erroSalvar}</p>}
+      {erroSalvar && modal !== 'confirmar' && <p role="alert" className="mb-3 text-sm text-perigo">{erroSalvar}</p>}
       {erroCarga && <div className="mb-4"><EstadoErro mensagem={erroCarga} /></div>}
 
       {carregando ? (
@@ -269,6 +334,15 @@ export default function Quadro() {
         </div>
       )}
 
+      {modal === 'confirmar' && (
+        <ConfirmarSubstituicao
+          onCancelar={cancelarAcao}
+          onDescartar={() => { if (acaoPendente.current) executarAcao(acaoPendente.current.acao) }}
+          onSalvar={salvarAntesDeContinuar}
+          salvando={salvando}
+          erro={erroSalvar}
+        />
+      )}
       {modal === 'abrir' && (
         <ModalTransicao titulo="Abrir quadro salvo" onFechar={() => setModal(null)}>
           <ListaQuadros onAbrir={(id) => { setModal(null); setAviso(null); setSearchParams({ id }) }} />

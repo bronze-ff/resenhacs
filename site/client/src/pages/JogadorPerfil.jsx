@@ -230,6 +230,7 @@ export default function JogadorPerfil() {
   const [ate, setAte] = useState('')
 
   useEffect(() => {
+    let vivo = true
     setData(null)
     setErro(false)
     const qs = new URLSearchParams()
@@ -240,8 +241,9 @@ export default function JogadorPerfil() {
         if (!res.ok) throw new Error()
         return res.json()
       })
-      .then(setData)
-      .catch(() => setErro(true))
+      .then((dados) => { if (vivo) setData(dados) })
+      .catch(() => { if (vivo) setErro(true) })
+    return () => { vivo = false }
   }, [steamId, de, ate])
 
   if (erro) return <EstadoErro mensagem="Jogador não encontrado." />

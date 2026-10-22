@@ -29,11 +29,13 @@ export default function Clipes() {
   }
 
   useEffect(() => {
+    let vivo = true
     setDados(null)
     fetch(`/api/clipes?periodo=${periodo}`)
       .then((res) => (res.ok ? res.json() : { clipes: [] }))
-      .then(setDados)
-      .catch(() => setDados({ clipes: [] }))
+      .then((dados) => { if (vivo) setDados(dados) })
+      .catch(() => { if (vivo) setDados({ clipes: [] }) })
+    return () => { vivo = false }
   }, [periodo])
 
   // Opções do dropdown derivadas da lista carregada (a aba carrega tudo de uma vez, sem
