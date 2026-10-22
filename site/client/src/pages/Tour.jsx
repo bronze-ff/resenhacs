@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { matchPath, useNavigate, useSearchParams } from 'react-router-dom'
 import { Badge, Button, CabecalhoPagina, Card, Input, classesBotao } from '../components/ui'
 import { useAuth } from '../auth/AuthContext.jsx'
 import PassoAPassoSteam from '../components/PassoAPassoSteam.jsx'
@@ -6,23 +7,30 @@ import PassoAPassoSteam from '../components/PassoAPassoSteam.jsx'
 const NOMES_PASSOS = ['Boas-vindas', 'Steam', 'FACEIT', 'Menu']
 const TOTAL_PASSOS = NOMES_PASSOS.length
 
-// Só caminho interno: começa com "/", não tem caractere de controle (o navegador descarta
-// TAB/LF/CR e "/\t/x" vira "//x") e resolve na mesma origem. Voltar para o próprio tour
-// prenderia o Jogador nele. Qualquer outra coisa volta para o início.
-export function destinoAposTour(returnTo) {
+// Só caminho interno. O valor resolve sobre a origem da página e a regra olha o
+// resultado normalizado: "/.//x", "/a/..//x" e "/%2e//x" viram "//x", que o navegador lê
+// como outro host. Caractere de controle sai antes (o navegador descarta TAB/LF/CR).
+// Voltar ao próprio tour prenderia o Jogador nele. Qualquer outra coisa vai para "/".
+export function destinoAposTour(returnTo, origem = window.location.origin) {
   if (typeof returnTo !== 'string' || !returnTo.startsWith('/') || /[\u0000-\u001f\u007f]/.test(returnTo)) return '/'
   let u
+  let decodificado
   try {
-    u = new URL(returnTo, window.location.origin)
+    u = new URL(returnTo, origem)
+    decodificado = decodeURIComponent(u.pathname)
   } catch {
     return '/'
   }
-  if (u.origin !== window.location.origin || /^\/tour(\/|$)/.test(u.pathname)) return '/'
+  if (u.origin !== origem || u.pathname.startsWith('//') || u.pathname.includes('\\')) return '/'
+  const ehTour = (path) => matchPath({ path, caseSensitive: false, end: true }, decodificado)
+  if (ehTour('/tour') || ehTour('/tour/*')) return '/'
   return u.pathname + u.search + u.hash
 }
 
 export default function Tour() {
-  const { jogador } = useAuth()
+  const { jogador, marcarTourConcluido } = useAuth()
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [passo, setPasso] = useState(0)
   const [matchAuthCode, setMatchAuthCode] = useState('')
   const [lastShareCode, setLastShareCode] = useState('')
@@ -34,7 +42,8 @@ export default function Tour() {
       setMensagem('Erro ao concluir o tour. Tente novamente.')
       return
     }
-    window.location.href = destinoAposTour(new URLSearchParams(window.location.search).get('returnTo'))
+    marcarTourConcluido()
+    navigate(destinoAposTour(searchParams.get('returnTo')), { replace: true })
   }
 
   async function salvarSteam(e) {
