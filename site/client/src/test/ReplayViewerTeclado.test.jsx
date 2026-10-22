@@ -134,3 +134,50 @@ describe('Replay 2D — reprodução', () => {
     expect(screen.getByRole('button', { name: 'Pausar' })).toBeInTheDocument()
   })
 })
+
+describe('Replay 2D — pulo para a morte (Lições)', () => {
+  const VITIMA = '765'
+  const comKills = (kills, n = 400) => replayCom([
+    { round: 1, frames: frames(n), kills: [], hits: [] },
+    { round: 2, frames: frames(n), kills, hits: [] },
+  ])
+
+  it('pula 5 s antes da primeira morte da vítima no round', () => {
+    const replay = comKills([
+      { t: 50, victim: 'outro' },
+      { t: null, victim: VITIMA },
+      { t: 300, victim: VITIMA },
+      { t: 350, victim: VITIMA },
+    ])
+    const { tempo } = montar(replay, { round: 2, frame: null, vitima: VITIMA, key: 'l1' })
+    expect(screen.getByRole('img', { name: /round 2/i })).toBeInTheDocument()
+    expect(tempo()).toBe('25 s de 40 s')
+  })
+
+  it('vítima sem kill no round começa no frame 0', () => {
+    const { tempo } = montar(comKills([{ t: 300, victim: 'outro' }]), { round: 2, frame: null, vitima: VITIMA, key: 'l2' })
+    expect(screen.getByRole('img', { name: /round 2/i })).toBeInTheDocument()
+    expect(tempo()).toBe('0 s de 40 s')
+  })
+
+  it('round em streaming: aplica depois de carregar, uma vez por key', () => {
+    const vazio = replayCom([
+      { round: 1, frames: frames(400), kills: [], hits: [] },
+      { round: 2, frames: [], kills: [], hits: [] },
+    ])
+    const seek = { round: 2, frame: null, vitima: VITIMA, key: 'l3' }
+    const { tempo, grupo, rerender } = montar(vazio, seek)
+    expect(screen.getByRole('img', { name: /round 1/i })).toBeInTheDocument()
+    const cheio = comKills([{ t: 300, victim: VITIMA }])
+    rerender(<MemoryRouter><ReplayViewer replay={cheio} seek={seek} /></MemoryRouter>)
+    expect(screen.getByRole('img', { name: /round 2/i })).toBeInTheDocument()
+    expect(tempo()).toBe('25 s de 40 s')
+    // Pausa e anda; um novo objeto de replay (outro round chegando) não reaplica o pulo.
+    fireEvent.keyDown(grupo, { key: ' ' })
+    fireEvent.keyDown(grupo, { key: 'ArrowRight' })
+    const depois = tempo()
+    rerender(<MemoryRouter><ReplayViewer replay={{ ...cheio, rounds: [...cheio.rounds] }} seek={seek} /></MemoryRouter>)
+    expect(tempo()).toBe(depois)
+  })
+})
+

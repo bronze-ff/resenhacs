@@ -31,7 +31,7 @@ function LinkRound({ matchId, r, onVerRound, semReplay }) {
   function aoClicar(e) {
     if (!onVerRound || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
     e.preventDefault()
-    onVerRound(r.round)
+    onVerRound({ round: r.round, tick: r.tick })
   }
   return (
     <li>

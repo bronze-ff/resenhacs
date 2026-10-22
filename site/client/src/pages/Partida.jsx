@@ -905,7 +905,9 @@ export default function Partida() {
         jogadores={m.players}
         jogadorLogado={jogador}
         temDemo={m.temDemo}
-        onVerRound={m.replayUrl ? (rn) => irParaMomento(rn, 0) : null}
+        onVerRound={m.replayUrl && jogador?.steamId
+          ? ({ round }) => setSeek({ round, frame: null, vitima: jogador.steamId, key: `licao-${round}-${Date.now()}` })
+          : null}
         semReplay={!m.replayUrl}
       />
 

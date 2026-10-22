@@ -95,13 +95,13 @@ describe('SecaoLicoes', () => {
     expect(within(primeira).getByRole('link')).toHaveAttribute('href', '/partida/m1?round=3&tick=2500')
   })
 
-  it('clique no link chama onVerRound com o round, sem sair da página', async () => {
+  it('clique no link chama onVerRound com { round, tick }, sem sair da página', async () => {
     mockI8(() => ok(LICOES))
     const onVerRound = vi.fn()
     renderSecao({ onVerRound })
     const semTrade = await screen.findByRole('region', { name: /morte sem trade/i })
     fireEvent.click(within(semTrade).getAllByRole('link')[1])
-    expect(onVerRound).toHaveBeenCalledWith(5)
+    expect(onVerRound).toHaveBeenCalledWith({ round: 5, tick: 9800 })
   })
 
   it('erro tem "Tentar de novo" e recupera', async () => {
