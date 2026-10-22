@@ -309,8 +309,20 @@ def test_percent_encoding_e_redigido_depois_de_decodificar():
     assert minimizar_evento({"message": "liga%20(11)%203456-7890"})["message"] == REDACTED
 
 
-def test_percent_malformado_nao_lanca_e_decodifica_uma_vez():
+def test_percent_malformado_nao_lanca_e_para_de_decodificar():
     assert redigir_string("100% certo") == "100% certo"
     assert redigir_string("/partida/%E0%A4%A") == "/partida/%E0%A4%A"
-    # %2540 vira %40 numa decodificação só; o e-mail só apareceria na segunda.
-    assert redigir_string("/jogador/ana%2540exemplo.com") == "/jogador/ana%2540exemplo.com"
+    assert redigir_string("/partida/abc%2520def") == "/partida/abc%2520def"
+
+
+def test_percent_encoding_em_camadas_e_redigido():
+    # Codex P0 no PR #110: duplo encoding escapava da decodificação única.
+    assert redigir_string("/jogador/ana%2540exemplo.com") == REDACTED
+    assert redigir_string("/jogador/ana%252540exemplo.com") == REDACTED
+    assert redigir_string("se%25256Eha%253Dabc") == REDACTED
+
+
+def test_percent_encoding_que_ainda_muda_depois_de_3_camadas_falha_fechado():
+    assert redigir_string("/jogador/ana%25252540exemplo.com") == REDACTED
+    # Sem dado sensível em camada nenhuma; 7 dígitos seguidos não casam com telefone.
+    assert redigir_string("/partida/abc%2525252Fdef") == REDACTED

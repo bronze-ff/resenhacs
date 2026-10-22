@@ -93,19 +93,29 @@ def _redigir(valor):
     return texto
 
 
+_MAX_DECODIFICACOES = 3
+
+
 def redigir_string(valor):
     if not isinstance(valor, str):
         return valor
 
-    texto = _redigir(valor)
-    # unquote não lança: % malformado fica como está.
-    # shortcut: decodifica uma vez só; %2540 escapa. Decodificar em laço se aparecer no Sentry.
-    decodificado = unquote(valor)
-    if decodificado != valor:
-        redigido = _redigir(decodificado)
-        if redigido != decodificado:
-            return redigido
-    return texto
+    # Decodifica em camadas (%2540 -> %40 -> @) até estabilizar, no máximo 3 vezes, e
+    # aplica os padrões em cada camada. % malformado para a decodificação ali.
+    camadas = [valor]
+    while True:
+        try:
+            decodificado = unquote(camadas[-1], errors="strict")
+        except UnicodeDecodeError:
+            break
+        if decodificado == camadas[-1]:
+            break
+        if len(camadas) > _MAX_DECODIFICACOES:
+            return REDACTED  # ainda muda depois de 3 decodificações: falha fechada
+        camadas.append(decodificado)
+    if any(_redigir(camada) == REDACTED for camada in camadas):
+        return REDACTED
+    return _redigir(valor)
 
 
 def scrub_valor(valor, chave=None):

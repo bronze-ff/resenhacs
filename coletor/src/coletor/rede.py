@@ -24,14 +24,32 @@ def _resolver(host):
 _TRANSPORTE = ()
 
 
+# is_global ainda deixa passar estas faixas; os prefixos de tradução levam IPv4 embutido.
+_FAIXAS_RECUSADAS = (ipaddress.ip_network("100.64.0.0/10"), ipaddress.ip_network("fec0::/10"))
+_NAT64 = ipaddress.ip_network("64:ff9b::/96")
+
+
+def _ipv4_embutido(endereco):
+    if endereco.version != 6:
+        return None
+    if endereco.ipv4_mapped:
+        return endereco.ipv4_mapped
+    if endereco in _NAT64:
+        return ipaddress.IPv4Address(int(endereco) & 0xFFFFFFFF)
+    return endereco.sixtofour
+
+
 def _ip_recusado(ip):
+    """Aceita só IP global. IPv4 embutido (::ffff:0:0/96, 64:ff9b::/96, 2002::/16)
+    passa pela mesma regra."""
     endereco = ipaddress.ip_address(ip.split("%", 1)[0])
-    if endereco.version == 6 and endereco.ipv4_mapped:
-        endereco = endereco.ipv4_mapped
-    return (
-        endereco.is_private or endereco.is_loopback or endereco.is_link_local
-        or endereco.is_multicast or endereco.is_reserved or endereco.is_unspecified
-    )
+    embutido = _ipv4_embutido(endereco)
+    if embutido is not None:
+        endereco = embutido
+    # Multicast conta como global no ipaddress; continua recusado.
+    if not endereco.is_global or endereco.is_multicast:
+        return True
+    return any(endereco in faixa for faixa in _FAIXAS_RECUSADAS if faixa.version == endereco.version)
 
 
 def _checar(url, dominios=None):

@@ -124,3 +124,24 @@ def test_5_redirects_passam(transporte):
         transporte.rotas[f"https://outro.com/{i}"] = f"https://outro.com/{i + 1}"
     with rede.abrir_url("https://outro.com/0", timeout=5) as resp:
         assert resp.read() == b"ok"
+
+
+# Codex P1 no PR #110: só IP global; IPv4 embutido em IPv6 passa pela mesma regra.
+@pytest.mark.parametrize("ip", [
+    "100.64.0.1", "100.127.255.254",          # 100.64.0.0/10 (RFC 6598)
+    "fec0::1",                                # site-local
+    "::ffff:10.0.0.1", "::ffff:169.254.169.254",  # ::ffff:0:0/96
+    "64:ff9b::a9fe:a9fe", "64:ff9b::7f00:1",  # 64:ff9b::/96 (169.254.169.254, 127.0.0.1)
+    "2002:a9fe:a9fe::1", "2002:0a00:0001::1",  # 2002::/16 (169.254.169.254, 10.0.0.1)
+    "192.0.0.8", "198.18.0.1", "fc00::1",    # não globais
+])
+def test_ip_fora_do_global_e_recusado(ip):
+    assert rede._ip_recusado(ip)
+
+
+@pytest.mark.parametrize("ip", [
+    "155.133.226.1", "2606:4700::1111",
+    "::ffff:155.133.226.1", "64:ff9b::9b85:e201", "2002:9b85:e201::1",
+])
+def test_ip_global_e_aceito(ip):
+    assert not rede._ip_recusado(ip)
