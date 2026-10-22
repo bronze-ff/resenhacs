@@ -399,6 +399,10 @@ export default function ReplayViewer({
   const [tocando, setTocando] = useState(false)
   const [velocidade, setVelocidade] = useState(1)
   const [frameAtual, setFrameAtual] = useState(0)
+  // Frame mais recente, lido pelo loop ao iniciar: o seek grava aqui no mesmo passo do
+  // setFrameAtual, e o loop que reinicia no mesmo commit não parte do frame do render anterior.
+  const frameRef = useRef(0)
+  frameRef.current = frameAtual
   const [radarPronto, setRadarPronto] = useState(false)
   const [iconesVersao, setIconesVersao] = useState(0)
   const [focado, setFocado] = useState(null)
@@ -412,19 +416,38 @@ export default function ReplayViewer({
   // a cada clique (mesmo mirando o mesmo round/frame de novo) pra sempre re-disparar.
   // O frame salvo é o momento exato do highlight (ex.: o último kill do multi-kill) —
   // recua alguns segundos antes de tocar, senão a jogada já teria acabado de acontecer.
+  // `seek.vitima` (Lições): o frame é a primeira morte dessa vítima no round, lida dos
+  // kills, com o mesmo recuo (tickRate é a taxa de frames do replay); no streaming o round alvo já fica
+  // selecionado (o erro e o "Tentar de novo" dele aparecem), e o pulo espera o round sair
+  // do placeholder e aplica uma vez por key.
+  const seekAplicado = useRef(null)
+  const idxSeek = seek ? replay.rounds.findIndex((r) => r.round === seek.round) : -1
+  const seekPronto = idxSeek !== -1 && (!seek.vitima || replay.rounds[idxSeek].frames?.length > 0)
   useEffect(() => {
-    if (!seek) return
-    const idx = replay.rounds.findIndex((r) => r.round === seek.round)
-    if (idx === -1) return
+    if (idxSeek === -1 || seekPronto || seekAplicado.current === seek.key) return
+    setRoundIdx(idxSeek)
+    setFrameAtual(0)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seek?.key, idxSeek])
+  useEffect(() => {
+    if (!seekPronto || seekAplicado.current === seek.key) return
+    seekAplicado.current = seek.key
+    const idx = idxSeek
+    let frameAlvo = seek.frame ?? 0
+    if (seek.vitima) {
+      const morte = replay.rounds[idx].kills?.find((k) => k.victim === seek.vitima && k.t != null)
+      frameAlvo = morte ? morte.t : 0
+    }
     const LOOKBACK_SEGUNDOS = 5
-    const frameInicial = Math.max(0, (seek.frame ?? 0) - LOOKBACK_SEGUNDOS * replay.tickRate)
+    const frameInicial = Math.max(0, frameAlvo - LOOKBACK_SEGUNDOS * replay.tickRate)
     setRoundIdx(idx)
+    frameRef.current = frameInicial
     setFrameAtual(frameInicial)
     // Mesmo round já tocando: o loop não reinicia, então o pulo entra pelo inicioRef.
     inicioRef.current = performance.now() - (frameInicial / replay.tickRate) * 1000 / velocidade
     setTocando(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [seek?.key])
+  }, [seek?.key, seekPronto])
 
   const round = replay.rounds[roundIdx]
   const frames = round?.frames ?? []
@@ -449,7 +472,7 @@ export default function ReplayViewer({
   // (streaming por round), o loop reinicia. Sem frames ainda, o play espera em vez de parar.
   useEffect(() => {
     if (!tocando || total === 0) return
-    inicioRef.current = performance.now() - (frameAtual / replay.tickRate) * 1000 / velocidade
+    inicioRef.current = performance.now() - (frameRef.current / replay.tickRate) * 1000 / velocidade
     function passo(agora) {
       const elapsed = ((agora - inicioRef.current) / 1000) * velocidade
       const idx = frameIndexAt(elapsed, replay.tickRate, total)
