@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Demo FACEIT — ResenhaCS</title>
+    <link rel="stylesheet" href="popup.css">
+    <script type="module" src="popup.js"></script>
+  </head>
+  <body>
+    <header><h1>ResenhaCS</h1><p>Suas Demos FACEIT, junto das suas Partidas.</p></header>
+    <main id="conteudo" aria-busy="true">
+      <section aria-labelledby="titulo-conexao">
+        <h2 id="titulo-conexao">Conexão</h2>
+        <p id="conexao" role="status">Carregando conexão…</p>
+        <a id="conectar" class="principal" href="https://resenha-phi.vercel.app/conta" target="_blank" rel="noopener noreferrer">Conectar no site</a>
+        <button id="desconectar" type="button" hidden>Desconectar</button>
+        <p id="feedback" role="alert" hidden></p>
+      </section>
+      <p id="preparacao" class="aviso">O reconhecimento de Demos ainda está em preparação. Nenhum download será enviado por enquanto.</p>
+      <section aria-labelledby="titulo-historico">
+        <h2 id="titulo-historico">Últimos envios</h2>
+        <p id="vazio">Ainda não há envios neste navegador. Quando estiver pronta, a extensão reconhecerá as Demos que você baixar pelo Watch Demo.</p>
+        <ol id="historico" aria-live="polite"></ol>
+      </section>
+    </main>
+    <footer><a href="https://resenha-phi.vercel.app/privacidade#extensao" target="_blank" rel="noopener noreferrer">Privacidade</a></footer>
+  </body>
+</html>
