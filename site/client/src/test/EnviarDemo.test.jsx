@@ -51,6 +51,22 @@ describe('EnviarDemo', () => {
     expect(pedido.tamanho).toBe(arquivo.size)
     expect(global.fetch.mock.calls[1][1].body).toBe(arquivo)
   })
+  it.each(['seleção', 'arrastar'])('aceita .dem.gz por %s e envia o arquivo intacto', async (modo) => {
+    mockFetchSucesso()
+    const { container } = render(<EnviarDemo />)
+    const file = arquivoFalso('partida.dem.gz')
+    if (modo === 'seleção') {
+      fireEvent.change(container.querySelector('input[type="file"]'), { target: { files: [file] } })
+    } else {
+      fireEvent.drop(container.querySelector('label[for="arquivo"]'), { dataTransfer: { files: [file] } })
+    }
+    expect(screen.getByRole('button', { name: /^enviar$/i })).toBeEnabled()
+    fireEvent.click(screen.getByRole('button', { name: /^enviar$/i }))
+    await screen.findByText(/envio recebido/i)
+    expect(JSON.parse(global.fetch.mock.calls[0][1].body)).toMatchObject({ filename: file.name, tamanho: file.size })
+    expect(global.fetch.mock.calls[1][1].body).toBe(file)
+  })
+
   it('bloqueia envio com data no futuro', async () => {
     global.fetch = vi.fn()
     const { container } = render(<EnviarDemo />)

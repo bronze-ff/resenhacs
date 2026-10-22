@@ -21,6 +21,23 @@ beforeEach(() => {
 })
 
 describe('EnviarDemoDaPartida', () => {
+  it('envia .dem.gz intacto e deixa a validação do conteúdo para o Coletor', async () => {
+    global.fetch
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'u1', uploadUrl: 'https://r2/put' }) })
+      .mockResolvedValueOnce({ ok: true })
+    const comprimido = arquivo('partida.DEM.GZ', 'bytes comprimidos de_mirage')
+    render(<EnviarDemoDaPartida partida={partidaBase} euSteamId="765" />)
+    await userEvent.click(screen.getByRole('button', { name: /enviar demo desta partida/i }))
+    await userEvent.upload(screen.getByLabelText(/arquivo/i), comprimido)
+    await waitFor(() => expect(screen.getByRole('button', { name: /^enviar$/i })).toBeEnabled())
+    await userEvent.click(screen.getByRole('button', { name: /^enviar$/i }))
+    await screen.findByText(/envio recebido/i)
+    expect(JSON.parse(global.fetch.mock.calls[0][1].body)).toEqual({
+      filename: comprimido.name, tamanho: comprimido.size, matchId: partidaBase.id,
+    })
+    expect(global.fetch.mock.calls[1][1].body).toBe(comprimido)
+  })
+
   it('não aparece pra quem não jogou a partida', () => {
     const { container } = render(<EnviarDemoDaPartida partida={partidaBase} euSteamId="000" />)
     expect(container).toBeEmptyDOMElement()
@@ -144,7 +161,7 @@ describe('EnviarDemoDaPartida', () => {
     await user.click(screen.getByRole('button', { name: /enviar demo desta partida/i }))
     const input = screen.getByLabelText(/arquivo/i)
     await user.upload(input, arquivo('demo.txt', 'não é uma demo'))
-    await waitFor(() => expect(screen.getByText(/só arquivos \.dem são aceitos/i)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/só arquivos \.dem ou \.dem\.gz são aceitos/i)).toBeInTheDocument())
     expect(input.value).toBe('')
   })
 

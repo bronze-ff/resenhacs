@@ -30,8 +30,8 @@ export function createUploadRouter({ db, requireAuth, r2Client, r2Bucket }) {
     if (!r2Client) return res.status(503).json({ erro: 'Arquivamento (R2) não configurado' })
 
     const filename = String(req.body?.filename ?? '').trim()
-    if (!filename.toLowerCase().endsWith('.dem')) {
-      return res.status(400).json({ erro: 'Só arquivos .dem são aceitos (demos comprimidos .bz2/.gz ainda não)' })
+    if (!/\.dem(?:\.gz)?$/i.test(filename)) {
+      return res.status(400).json({ erro: 'Só arquivos .dem ou .dem.gz são aceitos' })
     }
     const tamanho = req.body?.tamanho
     if (!Number.isInteger(tamanho) || tamanho <= 0) {
@@ -111,7 +111,8 @@ export function createUploadRouter({ db, requireAuth, r2Client, r2Bucket }) {
       if (existente.rows.length) return res.status(409).json({ erro: 'Essa Partida já está registrada.' })
     }
 
-    const key = `uploads-pendentes/${crypto.randomUUID()}.dem`
+    const extensao = filename.toLowerCase().endsWith('.dem.gz') ? '.dem.gz' : '.dem'
+    const key = `uploads-pendentes/${crypto.randomUUID()}${extensao}`
     // Com alvo, os metadados vêm da própria Partida — nada de share code, data ou
     // plataforma digitados pelo cliente (menos superfície pra dado mentiroso).
     const params = matchId

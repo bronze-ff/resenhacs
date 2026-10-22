@@ -223,7 +223,7 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
     const { id } = req.params
     const matchQ = await db.query(
       `select mt.id, mt.map, mt.played_at, mt.score_a, mt.score_b, mt.source, mt.status, mt.demo_url, mt.replay_url,
-              mt.ended_early, mt.abandoned_by_steam_id64, mt.plataforma_manual, mt.tem_demo,
+              mt.ended_early, mt.abandoned_by_steam_id64, mt.plataforma_manual, mt.tem_demo, mt.faceit_match_id,
               coalesce(ap.nick, amp.nick) as abandoned_by_nick,
               mvp.mvp
        from matches mt
@@ -336,6 +336,7 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
       scoreB: m.score_b,
       source: m.source,
       temDemo: m.tem_demo,
+      faceitMatchId: m.faceit_match_id ?? null,
       plataformaManual: m.plataforma_manual,
       status: m.status,
       // Mesmo MVP que o card dessa Partida mostra no Feed (mesmo lateral, ver lateralMvp).

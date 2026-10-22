@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { SectionHeader, EstadoVazio, EstadoErro, Button, Badge, SkeletonLista } from '../ui'
 import SeletorKills from './SeletorKills.jsx'
+import AvisoPartidaSemDemo from '../AvisoPartidaSemDemo.jsx'
 import { dataHora } from '../../lib/format.js'
 
 // Aba Clipes da Partida: clipe REAL (vídeo do CS2) das kills que o Jogador escolhe.
@@ -159,7 +160,8 @@ function ItemClipe({ clipe }) {
   )
 }
 
-export default function SecaoClipeReal({ matchId, jogadores, viewerSteamId }) {
+export default function SecaoClipeReal({ matchId, jogadores, viewerSteamId, partida, onDemoEnviada }) {
+  const semDemo = partida?.temDemo === false
   const [modoId, setModoId] = useState('clipe')
   const [kills, setKills] = useState([])
   const [pov, setPov] = useState('killer')
@@ -201,7 +203,7 @@ export default function SecaoClipeReal({ matchId, jogadores, viewerSteamId }) {
 
   // Custo antes de pedir: a DEMO-SLAP calcula sem gastar crédito. Espera a seleção
   // parar de mudar pra não chamar a cada clique.
-  const podeEstimar = Boolean(dados?.permitido) && kills.length > 0
+  const podeEstimar = !semDemo && Boolean(dados?.permitido) && kills.length > 0
   useEffect(() => {
     if (!podeEstimar) { setEstimativa(null); return undefined }
     let vivo = true
@@ -249,30 +251,33 @@ export default function SecaoClipeReal({ matchId, jogadores, viewerSteamId }) {
   return (
     <div>
       <SectionHeader titulo="Clipe das kills que você escolher" margem="pequena" />
-      <p className="mb-3 text-sm text-texto-fraco">
+      {!semDemo && <p className="mb-3 text-sm text-texto-fraco">
         Vídeo do próprio CS2, gravado a partir da Demo. Marque uma kill pra um clipe ou várias
         pra uma montagem. Leva alguns minutos com esta aba aberta; se sair, ele continua na
         próxima visita. A montagem só aparece depois de juntada num vídeo só, uns minutos
         depois de gravada.
-      </p>
+      </p>}
+      {semDemo && (partida.source === 'faceit'
+        ? <AvisoPartidaSemDemo partida={partida} euSteamId={viewerSteamId} onEnviado={onDemoEnviada} />
+        : <EstadoVazio titulo="Partida sem Demo: kills, mortes por round e clipes precisam do arquivo .dem" />)}
 
       {/* O seletor só aparece depois de saber que o recurso está ligado: antes disso
           o Jogador podia marcar kills e só descobrir no clique que não ia funcionar. */}
       {!dados && !erroLista && <SkeletonLista linhas={3} altura="h-10" rotulo="Carregando clipes" />}
       {erroLista && <EstadoErro mensagem="Não foi possível carregar os clipes dessa Partida." />}
-      {dados && !dados.disponivel && (
+      {!semDemo && dados && !dados.disponivel && (
         <EstadoVazio
           titulo="Clipe de vídeo ainda não configurado"
           descricao="Falta a chave da DEMO-SLAP no servidor. Enquanto isso, use o clipe do jogo da Allstar acima."
         />
       )}
-      {dados?.disponivel && !dados.permitido && (
+      {!semDemo && dados?.disponivel && !dados.permitido && (
         <EstadoVazio
           titulo="Clipe de vídeo é para Jogador Premium"
           descricao="Cada clipe gasta crédito pago. Fale com o admin do grupo pra liberar. Os clipes já gerados continuam aqui embaixo."
         />
       )}
-      {dados?.disponivel && dados.permitido && (
+      {!semDemo && dados?.disponivel && dados.permitido && (
         <div className="space-y-4">
           <fieldset>
             <legend className="mb-2 text-sm text-texto-fraco">Modo</legend>

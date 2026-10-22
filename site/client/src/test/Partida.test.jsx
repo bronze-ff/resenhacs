@@ -93,6 +93,16 @@ async function abrirClipeDoJogador(partida) {
 }
 
 describe('Partida — clipe sem demo arquivada', () => {
+  it('FACEIT sem Demo integra um único aviso na seção de Clipes sem seletor de eventos', async () => {
+    montar({ ...PARTIDA_BASE, source: 'faceit', temDemo: false, faceitMatchId: '1-4a9a2655-8247-4f0b-b532-9b710fc6eb87' })
+    const clipes = await screen.findByRole('region', { name: 'Clipes' })
+    expect(within(clipes).getByText('Partida FACEIT sem Demo: kills, mortes por round e clipes precisam do arquivo .dem')).toBeInTheDocument()
+    expect(screen.getAllByRole('region', { name: 'Partida sem demo' })).toHaveLength(1)
+    expect(within(clipes).getByRole('link', { name: /sala da FACEIT/i })).toHaveAttribute('href', 'https://www.faceit.com/en/cs2/room/1-4a9a2655-8247-4f0b-b532-9b710fc6eb87')
+    expect(within(clipes).queryByRole('radio', { name: 'Clipe' })).not.toBeInTheDocument()
+    expect(fetch.mock.calls.some(([url]) => url.includes('/kills?'))).toBe(false)
+  })
+
   it('esconde gerar clipe quando demoUrl é nulo', async () => {
     await abrirClipeDoJogador({ ...PARTIDA_BASE, demoUrl: null })
     expect(screen.queryByRole('button', { name: /gerar melhor clipe/i })).toBeNull()

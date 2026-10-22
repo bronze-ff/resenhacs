@@ -11,7 +11,6 @@ import ReplayViewer, { useReplayPorRound } from '../components/ReplayViewer.jsx'
 import MapaCalor from '../components/MapaCalor.jsx'
 import SeletorClipesCompeticao from '../components/SeletorClipesCompeticao.jsx'
 import SecaoClipeReal from '../components/clipes/SecaoClipeReal.jsx'
-import AvisoPartidaSemDemo from '../components/AvisoPartidaSemDemo.jsx'
 import Espelho from '../components/partida/Espelho.jsx'
 import FaixaRounds from '../components/partida/FaixaRounds.jsx'
 import { useAuth } from '../auth/AuthContext.jsx'
@@ -839,8 +838,6 @@ export default function Partida() {
         />
       )}
 
-      <AvisoPartidaSemDemo partida={m} euSteamId={jogador?.steamId} onEnviado={carregar} />
-
       <Espelho
         matchId={m.id}
         timeA={timeA}
@@ -981,6 +978,8 @@ export default function Partida() {
             matchId={m.id}
             jogadores={m.players}
             viewerSteamId={jogador?.steamId}
+            partida={m}
+            onDemoEnviada={carregar}
           />
 
           <div>
