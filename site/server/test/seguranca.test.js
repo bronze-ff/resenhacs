@@ -3,6 +3,7 @@ import { describe, it, expect, vi } from 'vitest'
 import request from 'supertest'
 import { createApp } from '../src/app.js'
 import { signToken } from '../src/auth/jwt.js'
+import { bancoTransacional } from './bancoTransacional.js'
 
 const config = { jwtSecret: 's', appUrl: 'http://localhost:5173', isProduction: false, r2Bucket: 'resenha-demos' }
 const token = (steamId, isSuperAdmin = false) => `resenha_token=${signToken({ steamId, isSuperAdmin }, config.jwtSecret)}`
@@ -14,7 +15,7 @@ function appWith(handlers, extra = {}) {
       return Promise.resolve({ rows: [], rowCount: 0 })
     }),
   }
-  return { app: createApp({ config, db, r2Client: { send: vi.fn() }, ...extra }), db }
+  return { app: createApp({ config, db: bancoTransacional(db.query).db, r2Client: { send: vi.fn() }, ...extra }), db }
 }
 
 describe('cabeçalhos', () => {
@@ -62,7 +63,7 @@ describe('competições', () => {
 describe('POST /api/upload/upload-url', () => {
   it('com 5 uploads pendentes, o 6º pedido recebe 429 sem gerar URL', async () => {
     const send = vi.fn()
-    const { app } = appWith([['from uploads_pendentes where adicionado_por', [{ n: 5 }]]], { r2Client: { send } })
+    const { app } = appWith([['from uploads_pendentes', [{ n: 5 }]]], { r2Client: { send } })
     const res = await request(app).post('/api/upload/upload-url').set('Cookie', token('765'))
       .send({ filename: 'x.dem', tamanho: 1000 })
     expect(res.status).toBe(429)

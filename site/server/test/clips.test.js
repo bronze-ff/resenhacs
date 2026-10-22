@@ -16,6 +16,29 @@ function appWith() {
 }
 
 describe('POST /api/clips', () => {
+  it.each(['https://exemplo.com/x', 'https://allstar.gg.evil.com/x'])('recusa host fora da lista: %s', async (url) => {
+    const { app } = appWith()
+    const res = await request(app).post('/api/clips').set('Cookie', cookie)
+      .send({ matchId: MATCH, url, steamId: '76561198000000009' })
+    expect(res.status).toBe(400)
+    expect(res.body.erro).toBe('URL do clipe não permitida')
+  })
+
+  it.each(['x'.repeat(121), 123, {}])('recusa título inválido: %s', async (title) => {
+    const { app } = appWith()
+    const res = await request(app).post('/api/clips').set('Cookie', cookie)
+      .send({ matchId: MATCH, url: 'https://allstar.gg/x', steamId: '76561198000000009', title })
+    expect(res.status).toBe(400)
+    expect(res.body.erro).toBe('Título muito longo')
+  })
+
+  it('remove espaços do título antes de gravar', async () => {
+    const { app, db } = appWith()
+    const res = await request(app).post('/api/clips').set('Cookie', cookie)
+      .send({ matchId: MATCH, url: 'https://allstar.gg/x', steamId: '76561198000000009', title: '  Jogada  ' })
+    expect(res.status).toBe(201)
+    expect(db.query.mock.calls.find(([sql]) => sql.includes('insert into clips'))[1][5]).toBe('Jogada')
+  })
   it('sem login: 401', async () => {
     const { app } = appWith()
     const res = await request(app).post('/api/clips').send({ matchId: MATCH, url: 'https://allstar.gg/x', steamId: '76561198000000009' })

@@ -34,8 +34,11 @@ export function keyFromR2Url(url, bucket) {
 // URL assinada de PUT direto pro R2: o cliente sobe o arquivo sem os bytes passarem
 // pela função serverless do Express (limite de corpo ~4.5MB / 15s da Vercel não
 // aguentaria um .rar/.dem de 50-300MB).
-export async function presignUpload(client, bucket, key, contentType, expiresInSeconds = 900) {
-  const cmd = new PutObjectCommand({ Bucket: bucket, Key: key, ContentType: contentType })
+export async function presignUpload(client, bucket, key, contentType, expiresInSeconds = 900, tamanho) {
+  const cmd = new PutObjectCommand({
+    Bucket: bucket, Key: key, ContentType: contentType,
+    ...(typeof tamanho === 'number' ? { ContentLength: tamanho } : {}),
+  })
   return getSignedUrl(client, cmd, { expiresIn: expiresInSeconds })
 }
 

@@ -535,7 +535,8 @@ describe('POST /api/matches/:id/jogador/:steamId/clipe', () => {
           return Promise.resolve({ rows: [{ steam_id64: STEAM_ID, nick: 'bronze', demo_url: 'https://acc.r2.cloudflarestorage.com/resenha-demos/demos/x.dem.bz2' }] })
         }
         if (sql.includes('from allstar_clips where match_id')) return Promise.resolve({ rows: [] })
-        if (sql.includes('insert into allstar_clips')) { gravados.push(params); return Promise.resolve({ rows: [] }) }
+        if (sql.includes('insert into allstar_clips')) return Promise.resolve({ rows: [{ id: 'reserva' }] })
+        if (sql.includes('update allstar_clips set request_id')) { gravados.push(params.slice(0, 3)); return Promise.resolve({ rows: [] }) }
         return Promise.resolve({ rows: [] })
       }),
     }
@@ -570,7 +571,8 @@ describe('POST /api/matches/:id/jogador/:steamId/clipe', () => {
           return Promise.resolve({ rows: [{ steam_id64: '999', nick: 'outro', demo_url: 'https://acc.r2.cloudflarestorage.com/resenha-demos/demos/x.dem.bz2' }] })
         }
         if (sql.includes('from allstar_clips where match_id')) return Promise.resolve({ rows: [] })
-        if (sql.includes('insert into allstar_clips')) { gravados.push(params); return Promise.resolve({ rows: [] }) }
+        if (sql.includes('insert into allstar_clips')) return Promise.resolve({ rows: [{ id: 'reserva' }] })
+        if (sql.includes('update allstar_clips set request_id')) { gravados.push(params.slice(0, 3)); return Promise.resolve({ rows: [] }) }
         return Promise.resolve({ rows: [] })
       }),
     }
@@ -612,7 +614,8 @@ describe('POST /api/matches/:id/jogador/:steamId/clipe', () => {
         // O delete também contém "from allstar_clips where match_id" — checar antes do select.
         if (sql.includes('delete from allstar_clips')) { deletados.push(params); return Promise.resolve({ rows: [] }) }
         if (sql.includes('from allstar_clips where match_id')) return Promise.resolve({ rows: [{ status: 'Error', clip_url: null }] })
-        if (sql.includes('insert into allstar_clips')) { gravados.push(params); return Promise.resolve({ rows: [] }) }
+        if (sql.includes('insert into allstar_clips')) return Promise.resolve({ rows: [{ id: 'reserva' }] })
+        if (sql.includes('update allstar_clips set request_id')) { gravados.push(params.slice(0, 3)); return Promise.resolve({ rows: [] }) }
         return Promise.resolve({ rows: [] })
       }),
     }
@@ -623,7 +626,8 @@ describe('POST /api/matches/:id/jogador/:steamId/clipe', () => {
       const res = await request(app).post('/api/matches/m1/jogador/765/clipe').set('Cookie', cookie)
       expect(res.status).toBe(200)
       expect(res.body).toEqual({ status: 'Submitted' })
-      expect(deletados).toEqual([['m1', '765']])
+      expect(deletados).toEqual([])
+      expect(db.query.mock.calls.find(([sql]) => sql.includes('insert into allstar_clips'))[0]).toContain("where allstar_clips.status = 'Error'")
       expect(gravados).toEqual([['m1', '765', 'req-2']])
     } finally {
       globalThis.fetch = originalFetch
@@ -638,7 +642,8 @@ describe('POST /api/matches/:id/jogador/:steamId/clipe', () => {
           return Promise.resolve({ rows: [{ steam_id64: '765', nick: 'bronze', demo_url: 'https://acc.r2.cloudflarestorage.com/resenha-demos/demos/x.dem.bz2' }] })
         }
         if (sql.includes('from allstar_clips where match_id')) return Promise.resolve({ rows: [] })
-        if (sql.includes('insert into allstar_clips')) { gravados.push(params); return Promise.resolve({ rows: [] }) }
+        if (sql.includes('insert into allstar_clips')) return Promise.resolve({ rows: [{ id: 'reserva' }] })
+        if (sql.includes('update allstar_clips set request_id')) { gravados.push(params.slice(0, 3)); return Promise.resolve({ rows: [] }) }
         return Promise.resolve({ rows: [] })
       }),
     }

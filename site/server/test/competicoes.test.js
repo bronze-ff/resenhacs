@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import request from 'supertest'
 import { createApp } from '../src/app.js'
 import { signToken } from '../src/auth/jwt.js'
+import { bancoTransacional } from './bancoTransacional.js'
 
 const config = { jwtSecret: 's', appUrl: 'http://localhost:5173', isProduction: false }
 const cookieJogador = `resenha_token=${signToken({ steamId: '765', isSuperAdmin: false }, config.jwtSecret)}`
@@ -15,7 +16,7 @@ function appWith(handlers) {
       return Promise.resolve({ rows: [] })
     }),
   }
-  return { app: createApp({ config, db }), db }
+  return { app: createApp({ config, db: bancoTransacional(db.query).db }), db }
 }
 
 describe('GET /api/competicoes', () => {
@@ -505,7 +506,7 @@ describe('POST /api/competicoes/:id/submissoes', () => {
         return Promise.resolve({ rows: [] })
       }),
     }
-    const app = createApp({ config, db })
+    const app = createApp({ config, db: bancoTransacional(db.query).db })
     const res = await request(app).post(`/api/competicoes/${COMP_ID}/submissoes`).set('Cookie', cookieJogador).send({ allstarClipId: CLIP_ID })
     expect(res.status).toBe(200)
     expect(gravados).toHaveLength(1)
@@ -529,7 +530,7 @@ describe('POST /api/competicoes/:id/submissoes', () => {
         return Promise.resolve({ rows: [] })
       }),
     }
-    const app = createApp({ config, db })
+    const app = createApp({ config, db: bancoTransacional(db.query).db })
     const res = await request(app).post(`/api/competicoes/${COMP_ID}/submissoes`).set('Cookie', cookieJogador).send({ allstarClipId: CLIP_ID })
     expect(res.status).toBe(400)
     expect(res.body.erro).toMatch(/limite di[áa]rio/i)
@@ -549,7 +550,7 @@ describe('POST /api/competicoes/:id/submissoes', () => {
         return Promise.resolve({ rows: [] })
       }),
     }
-    const app = createApp({ config, db })
+    const app = createApp({ config, db: bancoTransacional(db.query).db })
     const res = await request(app).post(`/api/competicoes/${COMP_ID}/submissoes`).set('Cookie', cookieJogador).send({ allstarClipId: CLIP_ID })
     expect(res.status).toBe(400)
     expect(res.body.erro).toMatch(/per[íi]odo/i)

@@ -38,6 +38,13 @@ describe('resumirStatusRender', () => {
 })
 
 describe('criarClienteDemoSlap', () => {
+  it('encaminha o signal para cancelar a análise no fetch', async () => {
+    const controller = new AbortController()
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ jobId: 'an1' }) })
+    vi.stubGlobal('fetch', fetchMock)
+    expect(await criarClienteDemoSlap('k').analisar('https://x/demo.dem', { signal: controller.signal })).toBe('an1')
+    expect(fetchMock.mock.calls[0][1].signal).toBe(controller.signal)
+  })
   it('manda a chave no header x-api-key e o corpo do render-custom', async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ jobIds: ['v1'] }) })
     vi.stubGlobal('fetch', fetchMock)

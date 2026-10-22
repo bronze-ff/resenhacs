@@ -1,7 +1,21 @@
 import { describe, it, expect } from 'vitest'
 import { Readable, PassThrough } from 'node:stream'
 import { gzipSync, gunzipSync } from 'node:zlib'
-import { streamObject } from '../src/r2.js'
+import { S3Client } from '@aws-sdk/client-s3'
+import { streamObject, presignUpload } from '../src/r2.js'
+
+it('assina o Content-Length do PUT quando o tamanho é informado', async () => {
+  const client = new S3Client({
+    region: 'auto', endpoint: 'https://r2.example',
+    credentials: { accessKeyId: 'teste', secretAccessKey: 'teste' },
+  })
+  try {
+    const url = new URL(await presignUpload(client, 'demos', 'teste.dem', 'application/octet-stream', 900, 123))
+    expect(url.searchParams.get('X-Amz-SignedHeaders').split(';')).toContain('content-length')
+  } finally {
+    client.destroy()
+  }
+})
 
 function respostaCaptura() {
   const out = new PassThrough()

@@ -76,7 +76,7 @@ export default function EnviarDemo() {
       const resUrl = await fetch('/api/upload/upload-url', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename: arquivo.name, tamanho: arquivo.size, shareCode, playedAt, plataformaManual: plataforma }),
+        body: JSON.stringify({ filename: arquivo.name, tamanho: arquivo.size, shareCode, playedAt: playedAt ? new Date(playedAt).toISOString() : '', plataformaManual: plataforma }),
       })
       const bodyUrl = await resUrl.json().catch(() => ({}))
       if (!resUrl.ok) {

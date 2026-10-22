@@ -1,12 +1,12 @@
 import { Router } from 'express'
-import { partidaVisivelExpr } from '../friendships.js'
+import { partidaVisivelExpr, noCirculoExpr } from '../friendships.js'
 
 export function createLadoPorMapaRouter({ db, requireAuth }) {
   const router = Router()
 
   // "A gente é muito pior de T na Mirage?" (FIL-51) — winrate por lado (CT/T) em cada
   // mapa, nas Partidas visíveis ao viewer (eu + amigos accepted). Só conta rounds de
-  // partidas onde todos os Jogadores rastreados estavam no MESMO time fixo (A ou B)
+  // partidas onde todos os Jogadores do círculo estavam no MESMO time fixo (A ou B)
   // naquela partida — time dividido em lados opostos não tem "o lado" bem definido,
   // fica de fora (mesmo critério de "misto" usado em Feed.jsx/sessions.js). side_a só
   // existe em partidas reprocessadas depois do FIL-51 (coletor/src/coletor/parse.py) —
@@ -24,8 +24,8 @@ export function createLadoPorMapaRouter({ db, requireAuth }) {
        join rounds r on r.match_id = m.id
        join (
          select match_id, min(team) as time_do_grupo
-         from match_players
-         where is_tracked
+         from match_players mp
+         where ${noCirculoExpr('mp.steam_id64', '$1')}
          group by match_id
          having count(distinct team) = 1
        ) grp on grp.match_id = m.id

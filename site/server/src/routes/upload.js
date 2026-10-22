@@ -4,7 +4,7 @@ import { presignUpload } from '../r2.js'
 import { limiteEstrito } from '../rateLimit.js'
 
 const SHARE_CODE_RE = /^CSGO(-\S{5}){5}$/
-// aceita datetime-local do browser ("2026-07-09T20:15") ou ISO completo com timezone/milissegundos
+// Valida o formato; o fuso é obrigatório antes de aceitar a data.
 const PLAYED_AT_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?(\.\d+)?([+-]\d{2}:\d{2}|Z)?$/
 // Sem integração oficial com essas plataformas (diferente de valve_mm/faceit, que a
 // gente puxa automático) — é só um rótulo informativo que o próprio jogador escolhe.
@@ -12,15 +12,6 @@ const PLATAFORMAS_MANUAIS = new Set(['faceit', 'gamers_club', 'xplay_gg'])
 const TOLERANCIA_DIAS = 3
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-// Auditoria finding #2: nenhuma camada media o tamanho do .dem antes do upload. O PUT
-// presignado atual (PutObjectCommand simples) não dá pra travar com uma condição real de
-// Content-Length na assinatura — isso exigiria trocar pra createPresignedPost (upload via
-// multipart/form-data), uma mudança de estratégia bem maior no cliente, que hoje faz um
-// PUT binário direto do arquivo. `tamanho` aqui é só defesa em profundidade (feedback
-// rápido pro usuário, fácil de burlar por quem edita o body manualmente); a barreira REAL
-// fica no Coletor, que faz um head_object no R2 e recusa baixar acima do teto ANTES de
-// carregar o arquivo inteiro pra memória (ver coletor/src/coletor/storage_r2.download_bytes
-// e cmd_processar_uploads_pendentes em main.py).
 const MAX_UPLOAD_BYTES = 400 * 1024 * 1024
 
 // Upload manual de demo: o arquivo (100-300MB) sobe DIRETO pro R2 via URL
@@ -38,32 +29,16 @@ export function createUploadRouter({ db, requireAuth, r2Client, r2Bucket }) {
   router.post('/upload-url', limiteEstrito, requireAuth, async (req, res) => {
     if (!r2Client) return res.status(503).json({ erro: 'Arquivamento (R2) não configurado' })
 
-    // Login é aberto a qualquer conta Steam: sem teto, uma conta descartável pedia URLs
-    // em laço e enchia o R2 (cada PUT aceita até o limite do presign). Poucos uploads
-    // pendentes por jogador cobrem o uso real (o Coletor processa de hora em hora).
-    const pendentesQ = await db.query(
-      "select count(*)::int as n from uploads_pendentes where adicionado_por = $1 and status = 'pendente'",
-      [req.player.steamId],
-    )
-    if ((pendentesQ.rows[0]?.n ?? 0) >= MAX_UPLOADS_PENDENTES) {
-      return res.status(429).json({ erro: `Você já tem ${MAX_UPLOADS_PENDENTES} demos esperando processamento. Aguarde o Coletor processar antes de enviar mais.` })
-    }
-
     const filename = String(req.body?.filename ?? '').trim()
     if (!filename.toLowerCase().endsWith('.dem')) {
       return res.status(400).json({ erro: 'Só arquivos .dem são aceitos (demos comprimidos .bz2/.gz ainda não)' })
     }
-    // `tamanho` é opcional (compat com clientes antigos que não mandam) — quando vier,
-    // barra cedo o caso óbvio; ver comentário de MAX_UPLOAD_BYTES acima sobre por que
-    // isso não é a barreira de segurança de verdade.
-    if (req.body?.tamanho !== undefined) {
-      const tamanho = Number(req.body.tamanho)
-      if (!Number.isFinite(tamanho) || tamanho <= 0) {
-        return res.status(400).json({ erro: 'Tamanho de arquivo inválido' })
-      }
-      if (tamanho > MAX_UPLOAD_BYTES) {
-        return res.status(400).json({ erro: `Arquivo excede o limite de ${MAX_UPLOAD_BYTES / (1024 * 1024)}MB` })
-      }
+    const tamanho = req.body?.tamanho
+    if (!Number.isInteger(tamanho) || tamanho <= 0) {
+      return res.status(400).json({ erro: 'Tamanho de arquivo inválido' })
+    }
+    if (tamanho > MAX_UPLOAD_BYTES) {
+      return res.status(400).json({ erro: `Arquivo excede o limite de ${MAX_UPLOAD_BYTES / (1024 * 1024)}MB` })
     }
     const shareCode = String(req.body?.shareCode ?? '').trim()
     if (shareCode && !SHARE_CODE_RE.test(shareCode)) {
@@ -82,6 +57,9 @@ export function createUploadRouter({ db, requireAuth, r2Client, r2Bucket }) {
       const dataInformada = new Date(playedAt)
       if (Number.isNaN(dataInformada.getTime())) {
         return res.status(400).json({ erro: 'Data/hora inválida' })
+      }
+      if (!/(Z|[+-]\d{2}:\d{2})$/.test(playedAt)) {
+        return res.status(400).json({ erro: 'Data sem fuso' })
       }
       const agora = new Date()
       const limiteAntigo = new Date(agora.getTime() - TOLERANCIA_DIAS * 24 * 60 * 60 * 1000)
@@ -125,6 +103,14 @@ export function createUploadRouter({ db, requireAuth, r2Client, r2Bucket }) {
       }
     }
 
+    if (shareCode && !matchId) {
+      const existente = await db.query(
+        "select 1 from matches where share_code = $1 and status = 'parsed' limit 1",
+        [shareCode],
+      )
+      if (existente.rows.length) return res.status(409).json({ erro: 'Essa Partida já está registrada.' })
+    }
+
     const key = `uploads-pendentes/${crypto.randomUUID()}.dem`
     // Com alvo, os metadados vêm da própria Partida — nada de share code, data ou
     // plataforma digitados pelo cliente (menos superfície pra dado mentiroso).
@@ -132,13 +118,31 @@ export function createUploadRouter({ db, requireAuth, r2Client, r2Bucket }) {
       ? [req.player.steamId, key, null, null, null, matchId]
       : [req.player.steamId, key, shareCode || null, playedAt || null, plataformaManual || null, null]
     let rows
+    const client = await db.connect()
     try {
-      ;({ rows } = await db.query(
+      await client.query('begin')
+      // A cota impede que uma conta Steam descartável encha o R2 com pedidos paralelos.
+      await client.query('select pg_advisory_xact_lock(hashtext($1))', [`uploads:${req.player.steamId}`])
+      const pendentesQ = await client.query(
+        `select count(*)::int as n from uploads_pendentes
+         where adicionado_por = $1 and (
+           status in ('pendente', 'processando')
+           or (status = 'falhou' and adicionado_em > now() - interval '24 hours')
+         )`,
+        [req.player.steamId],
+      )
+      if ((pendentesQ.rows[0]?.n ?? 0) >= MAX_UPLOADS_PENDENTES) {
+        await client.query('rollback')
+        return res.status(429).json({ erro: `Você já tem ${MAX_UPLOADS_PENDENTES} demos esperando processamento. Aguarde o Coletor processar antes de enviar mais.` })
+      }
+      ;({ rows } = await client.query(
         `insert into uploads_pendentes (adicionado_por, arquivo_r2_key, share_code, played_at, plataforma_manual, match_alvo_id)
          values ($1, $2, $3, $4, $5, $6) returning id`,
         params,
       ))
+      await client.query('commit')
     } catch (e) {
+      await client.query('rollback').catch(() => {})
       // uploads_pendentes_alvo_ativo_idx: um envio ativo por Partida (a trava é do
       // banco, não do aplicativo — dois cliques simultâneos não passam pelos dois).
       // Escopado a matchId porque é a única unicidade que esse índice parcial descreve
@@ -148,8 +152,10 @@ export function createUploadRouter({ db, requireAuth, r2Client, r2Bucket }) {
         return res.status(409).json({ erro: 'Já existe um envio em andamento pra esta partida' })
       }
       throw e
+    } finally {
+      client.release()
     }
-    const uploadUrl = await presignUpload(r2Client, r2Bucket, key, 'application/octet-stream')
+    const uploadUrl = await presignUpload(r2Client, r2Bucket, key, 'application/octet-stream', 900, tamanho)
     res.json({ id: rows[0].id, uploadUrl, key })
   })
 

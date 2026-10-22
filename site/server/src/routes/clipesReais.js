@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import { randomUUID } from 'node:crypto'
 import { limiteEstrito } from '../rateLimit.js'
 import { keyFromR2Url, presignDownload } from '../r2.js'
 import { partidaVisivelExpr } from '../friendships.js'
@@ -116,9 +117,12 @@ export function createClipesReaisRouter({ db, requireAuth, r2Client, r2Bucket, c
     return { modo, semMarca, partida, trechos }
   }
 
-  async function precisaAnalisar(matchId) {
-    const { rows } = await db.query('select status from demoslap_analises where match_id = $1', [matchId])
-    return rows.length === 0 || rows[0].status === 'error'
+  async function precisaAnalisar(matchId, executor = db) {
+    const { rows } = await executor.query('select status, job_id, updated_at from demoslap_analises where match_id = $1', [matchId])
+    const a = rows[0]
+    return !a || a.status === 'error' || (
+      a.job_id.startsWith('reserva:') && Date.now() - new Date(a.updated_at).getTime() > RESERVA_EXPIRADA_MS
+    )
   }
 
   async function marcarErro(id, erro) {
@@ -131,11 +135,21 @@ export function createClipesReaisRouter({ db, requireAuth, r2Client, r2Bucket, c
   // Atualiza a análise da Partida (working → done/error) e devolve a linha atual.
   async function analiseAtual(matchId) {
     const { rows } = await db.query(
-      'select job_id, status, tick_rate, erro from demoslap_analises where match_id = $1',
+      'select job_id, status, tick_rate, erro, updated_at from demoslap_analises where match_id = $1',
       [matchId],
     )
     const a = rows[0]
     if (!a || a.status !== 'working') return a ?? null
+    if (a.job_id.startsWith('reserva:')) {
+      const expirada = await db.query(
+        `update demoslap_analises set status = 'error', erro = $2, updated_at = now()
+         where match_id = $1 and job_id = $3 and status = 'working'
+           and updated_at < now() - interval '5 minutes'
+         returning job_id, status, tick_rate, erro`,
+        [matchId, 'O pedido foi interrompido. Peça o clipe de novo.', a.job_id],
+      )
+      return expirada.rows[0] ?? a
+    }
     const st = await cliente.statusAnalise(a.job_id)
     if (st?.status === 'done') {
       const dados = await cliente.dadosAnalise(a.job_id)
@@ -322,41 +336,72 @@ export function createClipesReaisRouter({ db, requireAuth, r2Client, r2Bucket, c
     const p = await prepararPedido(req, res)
     if (!p) return
     const { partida } = p
-
-    const { rows: [{ total }] } = await db.query(
-      "select count(*)::int as total from clipes_reais where pedido_por = $1 and created_at > now() - interval '1 day'",
-      [req.player.steamId],
-    )
-    if (total >= MAX_POR_DIA) {
-      return res.status(429).json({ erro: `Limite de ${MAX_POR_DIA} clipes por dia. Tente amanhã.` })
-    }
-
-    if (await precisaAnalisar(partida.id)) {
-      if (!r2Client || !partida.demo_url) {
-        return res.status(404).json({ erro: 'A Demo dessa Partida não está mais guardada' })
+    let reservaAnalise = null
+    let clipeId
+    const demoKey = keyFromR2Url(partida.demo_url, r2Bucket)
+    const client = await db.connect()
+    try {
+      await client.query('begin')
+      // Uma trava protege a cota do Jogador; a outra, a análise compartilhada da Partida.
+      await client.query('select pg_advisory_xact_lock(hashtext($1))', [`demoslap:jogador:${req.player.steamId}`])
+      await client.query('select pg_advisory_xact_lock(hashtext($1))', [`demoslap:partida:${partida.id}`])
+      const { rows: [{ total }] } = await client.query(
+        "select count(*)::int as total from clipes_reais where pedido_por = $1 and created_at > now() - interval '1 day'",
+        [req.player.steamId],
+      )
+      if (total >= MAX_POR_DIA) {
+        await client.query('rollback')
+        return res.status(429).json({ erro: `Limite de ${MAX_POR_DIA} clipes por dia. Tente amanhã.` })
       }
-      const demoKey = keyFromR2Url(partida.demo_url, r2Bucket)
-      if (!demoKey) return res.status(404).json({ erro: 'A Demo dessa Partida não está mais guardada' })
-      try {
-        // 24h: a fila da DEMO-SLAP pode demorar pra baixar a Demo.
-        const url = await presignDownload(r2Client, r2Bucket, demoKey, 86400)
-        const jobId = await cliente.analisar(url)
-        await db.query(
+      const analisar = await precisaAnalisar(partida.id, client)
+      if (analisar) {
+        if (!r2Client || !demoKey) {
+          await client.query('rollback')
+          return res.status(404).json({ erro: 'A Demo dessa Partida não está mais guardada' })
+        }
+        reservaAnalise = `reserva:${randomUUID()}`
+        await client.query(
           `insert into demoslap_analises (match_id, job_id) values ($1, $2)
            on conflict (match_id) do update
              set job_id = excluded.job_id, status = 'working', erro = null, tick_rate = null, updated_at = now()`,
-          [partida.id, jobId],
+          [partida.id, reservaAnalise],
         )
+      }
+      const { rows: clipes } = await client.query(
+        'insert into clipes_reais (match_id, pedido_por, modo, kills, sem_marca) values ($1, $2, $3, $4::jsonb, $5) returning id',
+        [partida.id, req.player.steamId, p.modo, JSON.stringify(p.trechos), p.semMarca],
+      )
+      clipeId = clipes[0].id
+      await client.query('commit')
+    } catch (e) {
+      await client.query('rollback').catch(() => {})
+      throw e
+    } finally {
+      client.release()
+    }
+    if (reservaAnalise) {
+      try {
+        // 24h: a fila da DEMO-SLAP pode demorar pra baixar a Demo.
+        const url = await presignDownload(r2Client, r2Bucket, demoKey, 86400)
+        const jobId = await cliente.analisar(url, { signal: AbortSignal.timeout(10000) })
+        const atualizada = await db.query(
+          `update demoslap_analises set job_id = $2, updated_at = now()
+           where match_id = $1 and job_id = $3 and status = 'working' returning match_id`,
+          [partida.id, jobId, reservaAnalise],
+        )
+        if (!atualizada.rows.length) throw new Error('Reserva de análise encerrada')
       } catch (e) {
-        console.error(`demoslap: falha ao analisar a partida ${partida.id}: ${e.message}`)
-        return res.status(502).json({ erro: mensagemErro(e) })
+        const erro = mensagemErro(e)
+        await db.query(
+          `update demoslap_analises set status = 'error', erro = $2, updated_at = now()
+           where match_id = $1 and job_id = $3 and status = 'working'`,
+          [partida.id, erro, reservaAnalise],
+        )
+        await marcarErro(clipeId, erro)
+        console.error('demoslap: falha ao analisar Demo')
+        return res.status(502).json({ erro })
       }
     }
-
-    await db.query(
-      'insert into clipes_reais (match_id, pedido_por, modo, kills, sem_marca) values ($1, $2, $3, $4::jsonb, $5)',
-      [partida.id, req.player.steamId, p.modo, JSON.stringify(p.trechos), p.semMarca],
-    )
     res.status(201).json({ clipes: await listar(partida) })
   })
 

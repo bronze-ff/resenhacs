@@ -78,10 +78,7 @@ export function createFaceitRouter({ config, db, fetchImpl = fetch }) {
       }),
     })
     if (!tokenRes.ok) {
-      const corpo = await tokenRes.text().catch(() => '')
-      // Status + começo do corpo de erro da FACEIT (a resposta de erro não tem segredo
-      // nenhum — é o suficiente pra distinguir "exige client_secret" de outra causa).
-      console.log(`faceit token exchange falhou: ${tokenRes.status} ${corpo.slice(0, 300)}`)
+      console.log('faceit: falha na autenticação', { status: tokenRes.status })
       return res.redirect(erroRedirect)
     }
     const tokenBody = await tokenRes.json()
@@ -101,11 +98,28 @@ export function createFaceitRouter({ config, db, fetchImpl = fetch }) {
       return res.redirect(erroRedirect)
     }
 
-    await db.query('update players set faceit_id = $2, faceit_nick = $3 where steam_id64 = $1', [
-      req.player.steamId,
-      faceitId,
-      faceitNick,
-    ])
+    const client = await db.connect()
+    try {
+      await client.query('begin')
+      await client.query('select pg_advisory_xact_lock(hashtext($1))', [`faceit:${faceitId}`])
+      const vinculo = await client.query(
+        'select steam_id64 from players where faceit_id = $1 and steam_id64 <> $2',
+        [faceitId, req.player.steamId],
+      )
+      if (vinculo.rows.length) {
+        await client.query('rollback')
+        return res.redirect(`${config.appUrl}/conta?erro=faceit-em-uso`)
+      }
+      await client.query('update players set faceit_id = $2, faceit_nick = $3 where steam_id64 = $1', [
+        req.player.steamId, faceitId, faceitNick,
+      ])
+      await client.query('commit')
+    } catch (e) {
+      await client.query('rollback').catch(() => {})
+      throw e
+    } finally {
+      client.release()
+    }
     res.redirect(`${config.appUrl}/conta?faceit=vinculado`)
   })
 

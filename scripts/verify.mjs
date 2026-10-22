@@ -5,13 +5,20 @@ import { fileURLToPath } from 'node:url'
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const pedidos = new Set(process.argv.slice(2))
 const todos = pedidos.size === 0
+const partes = new Set(['client', 'server', 'coletor', 'bot'])
+for (const pedido of pedidos) {
+  if (!partes.has(pedido)) {
+    console.error(`Parte desconhecida: ${pedido}. Use client, server, coletor ou bot.`)
+    process.exit(1)
+  }
+}
 
 function quer(nome) {
   return todos || pedidos.has(nome)
 }
 
 function run(cmd, args, cwd) {
-  const resultado = spawnSync(cmd, args, { cwd, stdio: 'inherit' })
+  const resultado = spawnSync(cmd, args, { cwd, stdio: 'inherit', shell: process.platform === 'win32' })
   if (resultado.error) {
     console.error(resultado.error.message)
     process.exit(1)
