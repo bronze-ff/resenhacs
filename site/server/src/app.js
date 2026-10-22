@@ -24,6 +24,7 @@ import { createPreFilaRouter } from './routes/preFila.js'
 import { createDuelosPerfilRouter, createDuelosPartidaRouter } from './routes/duelos.js'
 import { createAllstarRouter } from './routes/allstar.js'
 import { createUploadRouter } from './routes/upload.js'
+import { createExtensaoRouter } from './routes/extensao.js'
 import { createLineupsRouter } from './routes/lineups.js'
 import { createTaticasRouter } from './routes/taticas.js'
 import { createTaticasCuradasRouter } from './routes/taticasCuradas.js'
@@ -87,7 +88,10 @@ export function createApp({
   // derrubando a API inteira. "1" confia só no primeiro hop — não em qualquer proxy (evita
   // o outro erro deles, trust proxy permissivo, que abriria brecha pra spoofar IP e burlar o limite).
   app.set('trust proxy', 1)
-  app.use(express.json())
+  const jsonNormal = express.json()
+  // A extensão tem parser próprio de 4 KB; o parser global não pode consumi-lo antes.
+  app.use((req, res, next) => /^\/api\/extensao(?:\/|$)/i.test(req.path)
+    ? next() : jsonNormal(req, res, next))
   app.use(cookieParser())
   app.use(limiteGeral)
   app.use((req, res, next) => {
@@ -137,6 +141,7 @@ export function createApp({
   app.use('/api/quadros', createQuadrosRouter({ db, requireAuth }))
 
   app.use('/api/upload', createUploadRouter({ db, requireAuth, r2Client, r2Bucket: config.r2Bucket }))
+  app.use('/api/extensao', createExtensaoRouter({ db, requireAuth, jwtSecret: config.jwtSecret }))
 
   if (staticDir) {
     app.use(express.static(staticDir))
