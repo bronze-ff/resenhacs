@@ -14,7 +14,7 @@ class Config:
         self.r2_account_id = env.get("R2_ACCOUNT_ID")
         self.r2_access_key_id = env.get("R2_ACCESS_KEY_ID")
         self.r2_secret_access_key = env.get("R2_SECRET_ACCESS_KEY")
-        self.r2_bucket = env.get("R2_BUCKET", "resenha-demos")
+        self.r2_bucket = env.get("R2_BUCKET") or "resenha-demos"  # vazio no .env vira o default
 
     @property
     def r2_endpoint(self):

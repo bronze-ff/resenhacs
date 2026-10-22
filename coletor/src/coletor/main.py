@@ -989,9 +989,15 @@ def _finalizar_ingest(config, conn, parsed, replay_json, dem_path_upload, share_
     demo_url = replay_url = None
     if upload and config.r2_endpoint:
         client = storage_r2.make_client(config)
-        # Sem Share Code, uuid4: o hash de 32 bits do caminho colidia e regravava a
-        # Demo e o Replay 2D de outra Partida.
-        ids = sharecode.decode(share_code) if share_code else {"match_id": str(uuid.uuid4())}
+        # Sem Share Code, a chave sai da Partida que o banco vai deduplicar: a alvo ou a
+        # digital (mesmo fingerprint de store_parsed). O retry de uma série pro regrava os
+        # mesmos objetos em vez de deixar órfãos. O hash de 32 bits do caminho colidia.
+        if share_code:
+            ids = sharecode.decode(share_code)
+        elif match_id_alvo is not None:
+            ids = {"match_id": str(match_id_alvo)}
+        else:
+            ids = {"match_id": str(uuid.UUID(dbmod.match_fingerprint(parsed)))}
 
         key = storage_r2.demo_key(ids["match_id"])
         with open(dem_path_upload, "rb") as fh:

@@ -1731,11 +1731,9 @@ def test_store_parsed_com_match_id_alvo_nao_cria_linha_nova():
     assert any(s.startswith("update matches set") for s in executados)
 
 
-# ---- R04: sem Share Code, a chave do R2 usa uuid4 (não hash de 32 bits) ----
+# ---- R04: sem Share Code, a chave do R2 sai da Partida deduplicada (não hash de 32 bits) ----
 
-def test_finalizar_ingest_sem_share_code_usa_uuid_legivel_pela_url(monkeypatch, tmp_path):
-    import uuid
-
+def _finalizar_sem_share_code(monkeypatch, tmp_path, parseds, alvo=None):
     gravados = []
     monkeypatch.setattr(main.dbmod, "store_parsed", lambda conn, parsed, **kw: gravados.append(kw) or "m1")
     monkeypatch.setattr(main.storage_r2, "make_client", lambda cfg: "fake-client")
@@ -1744,20 +1742,50 @@ def test_finalizar_ingest_sem_share_code_usa_uuid_legivel_pela_url(monkeypatch, 
     dem = tmp_path / "demo.dem"
     dem.write_bytes(b"x")
     config = _config_com_r2()
-
-    for _ in range(2):
+    for parsed in parseds:
         main._finalizar_ingest(
-            config, conn=None, parsed={"players": []}, replay_json={"rounds": []},
+            config, conn=None, parsed=parsed, replay_json={"rounds": []},
             dem_path_upload=dem, share_code=None, source="upload", upload=True, played_at=None,
+            match_id_alvo=alvo,
         )
+    return config, gravados, [k for k in chaves if k.startswith("demos/")]
 
-    demo_keys = [k for k in chaves if k.startswith("demos/")]
+
+def _parsed_mapa(mapa):
+    return {"map": mapa, "score_a": 13, "score_b": 7,
+            "players": [{"steam_id64": "76561198000000001", "kills": 20, "deaths": 10}]}
+
+
+def test_finalizar_ingest_sem_share_code_usa_uuid_legivel_pela_url(monkeypatch, tmp_path):
+    import uuid
+
+    config, gravados, demo_keys = _finalizar_sem_share_code(
+        monkeypatch, tmp_path, [_parsed_mapa("de_anubis"), _parsed_mapa("de_inferno")])
+
     assert len(demo_keys) == 2 and demo_keys[0] != demo_keys[1]
     for kw, key in zip(gravados, demo_keys):
         ident = key[len("demos/"):-len(".dem.bz2")]
         assert str(uuid.UUID(ident)) == ident
         assert main.storage_r2.key_from_url(kw["demo_url"], config.r2_bucket) == key
         assert main.storage_r2.key_from_url(kw["replay_url"], config.r2_bucket) == f"replays/{ident}.json"
+
+
+def test_retry_do_mesmo_mapa_sem_share_code_regrava_a_mesma_chave(monkeypatch, tmp_path):
+    # Retry da série pro: o banco deduplica pelo fingerprint, e o R2 tem que regravar
+    # os mesmos objetos em vez de deixar a Demo e o Replay 2D antigos órfãos.
+    _config, _gravados, demo_keys = _finalizar_sem_share_code(
+        monkeypatch, tmp_path, [_parsed_mapa("de_anubis"), _parsed_mapa("de_anubis")])
+
+    assert len(demo_keys) == 2 and demo_keys[0] == demo_keys[1]
+
+
+def test_finalizar_ingest_com_alvo_usa_a_chave_da_partida_alvo(monkeypatch, tmp_path):
+    alvo = "0b3f5c1e-1111-4222-8333-444455556666"
+    _config, gravados, demo_keys = _finalizar_sem_share_code(
+        monkeypatch, tmp_path, [_parsed_mapa("de_anubis")], alvo=alvo)
+
+    assert demo_keys == [f"demos/{alvo}.dem.bz2"]
+    assert gravados[0]["match_id_alvo"] == alvo
 
 
 def test_finalizar_ingest_com_share_code_mantem_a_chave_do_match_id_da_valve(monkeypatch, tmp_path):
@@ -2307,3 +2335,10 @@ def test_upload_em_pending_sem_discovered_by_segue_como_antes(monkeypatch, tmp_p
     main.ingest_demo(_config_com_r2(), conn=None, path=dem_path, share_code="CSGO-antigo",
                      source="upload", enviado_por="765EU")
     assert len(gravado["store"]) == 1
+
+
+def test_config_r2_bucket_vazio_vira_o_default():
+    # .env.example traz R2_BUCKET= vazio; Bucket="" quebraria todo acesso ao R2.
+    assert Config({"R2_BUCKET": ""}).r2_bucket == "resenha-demos"
+    assert Config({}).r2_bucket == "resenha-demos"
+    assert Config({"R2_BUCKET": "outro"}).r2_bucket == "outro"

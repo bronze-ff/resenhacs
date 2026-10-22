@@ -579,6 +579,21 @@ def test_atualizar_fila_pro_com_match_ids():
     assert conn.commits == 1
 
 
+def test_atualizar_fila_pro_faz_merge_com_os_match_ids_ja_gravados():
+    # Retry de série parcial: o mapa que entrou na primeira execução continua na lista,
+    # e a troca de status sem ids (baixando, falhou) não zera match_ids nem match_id.
+    conn = FakeConn()
+    db.atualizar_fila_pro(conn, "f1", "baixando")
+    db.atualizar_fila_pro(conn, "f1", "concluida", match_id="m2", match_ids=["m2"])
+    baixando, concluida = [c for c in conn.calls if c[0].startswith("update partidas_pro_fila")]
+    for sql, _params in (baixando, concluida):
+        assert "match_ids || %s::uuid[]" in sql
+        assert "match_id = coalesce(%s, match_id)" in sql
+        assert "order by min(n)" in sql
+    assert baixando[1] == ("baixando", None, None, [], "f1")
+    assert concluida[1] == ("concluida", "m2", None, ["m2"], "f1")
+
+
 # ---- uploads pendentes ----
 
 def test_listar_uploads_pendentes_devolve_so_status_pendente():

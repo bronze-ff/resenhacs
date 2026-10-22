@@ -597,8 +597,12 @@ def interromper_fila_pro(conn):
 def atualizar_fila_pro(conn, fila_id, status, match_id=None, erro=None, match_ids=None):
     with conn.cursor() as cur:
         cur.execute(
-            "update partidas_pro_fila set status = %s, match_id = %s, erro = %s, match_ids = %s where id = %s",
-            (status, match_id, erro, match_ids if match_ids is not None else [], fila_id),
+            # Merge com os ids já gravados: o retry de uma série parcial não perde o mapa
+            # que entrou antes, e a troca de status (baixando, falhou) não zera a lista.
+            "update partidas_pro_fila set status = %s, match_id = coalesce(%s, match_id), erro = %s, "
+            "match_ids = array(select x from unnest(match_ids || %s::uuid[]) with ordinality as t(x, n) "
+            "group by x order by min(n)) where id = %s",
+            (status, match_id, erro, match_ids or [], fila_id),
         )
     conn.commit()
 
