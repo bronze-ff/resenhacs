@@ -587,7 +587,8 @@ def cmd_processar_uploads_pendentes(config, conn):
     client = storage_r2.make_client(config)
     total = 0
     for (upload_id, adicionado_por, arquivo_r2_key, share_code, played_at,
-         plataforma_manual, match_alvo_id, adicionado_em) in pendentes:
+         plataforma_manual, match_alvo_id, adicionado_em, *resto) in pendentes:
+        origem_url = resto[0] if resto else None  # link da extensão FACEIT (X-COL)
         dbmod.atualizar_upload_pendente(conn, upload_id, "processando")
         concluido = False
         try:
@@ -611,15 +612,21 @@ def cmd_processar_uploads_pendentes(config, conn):
 
             with tempfile.TemporaryDirectory() as tmp:
                 tmp = Path(tmp)
-                print(f"  {upload_id}: baixando do R2 ({arquivo_r2_key})")
-                dados_dem = storage_r2.download_bytes(
-                    client, config.r2_bucket, arquivo_r2_key, max_bytes=_MAX_UPLOAD_BYTES,
-                )
-                dem_path = tmp / "demo.dem"
-                if arquivo_r2_key.endswith(".dem.gz"):
-                    descompressao.descomprimir_gzip(
-                        dados_dem, dem_path, max_bytes=_MAX_UPLOAD_BYTES,
+                if origem_url:
+                    # Extensão FACEIT: baixa do CDN pelo link assinado, sem staging no R2.
+                    # O link nunca vai para log, Sentry nem uploads_pendentes.erro.
+                    print(f"  {upload_id}: baixando a Demo da FACEIT (link da extensão)")
+                    dados_dem = faceit.baixar_demo_origem(origem_url)
+                    teto_descomprimido = faceit.MAX_DEMO_BYTES
+                else:
+                    print(f"  {upload_id}: baixando do R2 ({arquivo_r2_key})")
+                    dados_dem = storage_r2.download_bytes(
+                        client, config.r2_bucket, arquivo_r2_key, max_bytes=_MAX_UPLOAD_BYTES,
                     )
+                    teto_descomprimido = _MAX_UPLOAD_BYTES
+                dem_path = tmp / "demo.dem"
+                if origem_url or arquivo_r2_key.endswith(".dem.gz"):
+                    descompressao.descomprimir_gzip(dados_dem, dem_path, max_bytes=teto_descomprimido)
                 else:
                     dem_path.write_bytes(dados_dem)
 
@@ -633,9 +640,10 @@ def cmd_processar_uploads_pendentes(config, conn):
                 print(f"  {upload_id}: concluido ({match_id})")
                 total += 1
                 concluido = True
-        except (DemoNaoConfereError, storage_r2.ArquivoGrandeDemaisError, descompressao.GzipInvalidoError) as e:
-            # Falha DEFINITIVA (validação, tamanho ou gzip inválido): nenhum
-            # retry muda o resultado, então o staging sai na hora.
+        except (DemoNaoConfereError, storage_r2.ArquivoGrandeDemaisError, descompressao.GzipInvalidoError,
+                faceit.LinkExpiradoError, rede.HostNaoPermitidoError) as e:
+            # Falha DEFINITIVA (validação, tamanho, gzip inválido, link da FACEIT expirado
+            # ou host recusado): nenhum retry muda o resultado, então o staging sai na hora.
             conn.rollback()
             dbmod.atualizar_upload_pendente(conn, upload_id, "falhou", erro=str(e)[:500])
             _apagar_staging_upload(client, config, upload_id, arquivo_r2_key)

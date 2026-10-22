@@ -613,7 +613,7 @@ def listar_uploads_pendentes(conn):
     with conn.cursor() as cur:
         cur.execute(
             "select id, adicionado_por, arquivo_r2_key, share_code, played_at, "
-            "plataforma_manual, match_alvo_id, adicionado_em "
+            "plataforma_manual, match_alvo_id, adicionado_em, origem_url "
             "from uploads_pendentes where status = 'pendente' order by adicionado_em"
         )
         return cur.fetchall()
@@ -659,6 +659,13 @@ def atualizar_upload_pendente(conn, upload_id, status, match_id=None, erro=None)
                 "processando_desde = now() where id = %s",
                 (status, match_id, erro, upload_id),
             )
+        elif status in ("concluido", "falhou"):
+            # O link assinado da extensão (origem_url) não fica guardado depois de terminar.
+            cur.execute(
+                "update uploads_pendentes set status = %s, match_id = %s, erro = %s, "
+                "origem_url = null where id = %s",
+                (status, match_id, erro, upload_id),
+            )
         else:
             cur.execute(
                 "update uploads_pendentes set status = %s, match_id = %s, erro = %s where id = %s",
@@ -676,9 +683,10 @@ def falhar_upload_pendente(conn, upload_id, erro, max_tentativas=3):
         cur.execute(
             "update uploads_pendentes set "
             "status = case when tentativas + 1 >= %s then 'falhou' else 'pendente' end, "
-            "tentativas = tentativas + 1, erro = %s, processando_desde = null "
+            "tentativas = tentativas + 1, erro = %s, processando_desde = null, "
+            "origem_url = case when tentativas + 1 >= %s then null else origem_url end "
             "where id = %s returning status",
-            (max_tentativas, str(erro)[:500], upload_id),
+            (max_tentativas, str(erro)[:500], max_tentativas, upload_id),
         )
         row = cur.fetchone()
     conn.commit()
@@ -700,10 +708,11 @@ def reverter_uploads_travados(conn, minutos=30, max_tentativas=3):
             "status = case when tentativas + 1 >= %s then 'falhou' else 'pendente' end, "
             "tentativas = tentativas + 1, "
             "erro = case when tentativas + 1 >= %s then %s else erro end, "
-            "processando_desde = null "
+            "processando_desde = null, "
+            "origem_url = case when tentativas + 1 >= %s then null else origem_url end "
             "where status = 'processando' and processando_desde < now() - (%s || ' minutes')::interval "
             "returning id",
-            (max_tentativas, max_tentativas, mensagem_erro, minutos),
+            (max_tentativas, max_tentativas, mensagem_erro, max_tentativas, minutos),
         )
         ids = [r[0] for r in cur.fetchall()]
     conn.commit()

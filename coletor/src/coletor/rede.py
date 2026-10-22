@@ -53,7 +53,7 @@ def _ip_recusado(ip):
     return any(endereco in faixa for faixa in _FAIXAS_RECUSADAS if faixa.version == endereco.version)
 
 
-def _checar(url, dominios=None):
+def _checar(url, dominios=None, hosts_exatos=None):
     # shortcut: DNS rebinding entre esta checagem e a conexão não está coberto; fixar o IP
     # resolvido na conexão se a origem das URLs deixar de ser Valve/HLTV/FACEIT.
     partes = urllib.parse.urlsplit(url)
@@ -64,6 +64,9 @@ def _checar(url, dominios=None):
         raise HostNaoPermitidoError("URL sem host")
     if dominios and not any(host == d or host.endswith("." + d) for d in dominios):
         raise HostNaoPermitidoError("domínio fora da lista")
+    # Allowlist exata (CDN da FACEIT): só https e host igual, sem sufixo. Vazia recusa tudo.
+    if hosts_exatos is not None and (partes.scheme != "https" or host not in hosts_exatos):
+        raise HostNaoPermitidoError("host fora da allowlist")
     # Falha de DNS propaga como OSError: é transitória, não recusa.
     if any(_ip_recusado(ip) for ip in _resolver(host)):
         raise HostNaoPermitidoError("host resolve para IP interno")
@@ -72,13 +75,18 @@ def _checar(url, dominios=None):
 class _Redirects(urllib.request.HTTPRedirectHandler):
     max_redirections = MAX_REDIRECTS
 
+    def __init__(self, hosts_exatos=None):
+        super().__init__()
+        self.hosts_exatos = hosts_exatos
+
     def redirect_request(self, req, fp, code, msg, headers, newurl):
-        _checar(newurl)
+        _checar(newurl, hosts_exatos=self.hosts_exatos)
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
-def abrir_url(url, timeout, dominios=None):
-    """urlopen com a checagem de host. `dominios` vale só para a URL inicial."""
-    _checar(url, dominios)
-    opener = urllib.request.build_opener(_Redirects, *_TRANSPORTE)
+def abrir_url(url, timeout, dominios=None, hosts_exatos=None):
+    """urlopen com a checagem de host. `dominios` vale só para a URL inicial;
+    `hosts_exatos` vale em todo salto."""
+    _checar(url, dominios, hosts_exatos)
+    opener = urllib.request.build_opener(_Redirects(hosts_exatos), *_TRANSPORTE)
     return opener.open(url, timeout=timeout)
