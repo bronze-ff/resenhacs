@@ -21,6 +21,29 @@ describe('calcularLicoes', () => {
     expect(calcular()).toEqual(vazio)
   })
 
+  it('suicídio sem flag de team kill não conta como morte sem trade nem primeira morte', () => {
+    expect(calcular([kill(1, 100, 'eu', 'eu')])).toEqual(vazio)
+  })
+
+  it('suicídio anterior de outro Jogador não esconde a primeira morte por inimigo', () => {
+    const resultado = calcular([
+      kill(1, 100, 'colega', 'colega'),
+      kill(1, 200, 'inimigo', 'eu'),
+    ])
+    expect(resultado.primeirasMortes).toEqual({ quantidade: 1, rounds: [{ round: 1, tick: 200 }] })
+  })
+
+  it.each([
+    ['colega', 'eu'], ['ausente', 'eu'], ['inimigo', 'ausente'], ['semTime', 'eu'], ['inimigo', 'semTime'],
+  ])('ignora kill de %s em %s sem times opostos conhecidos', (killer, victim) => {
+    const resultado = calcularLicoes({
+      steamId: 'eu', jogadores: [...jogadores, { steamId: 'semTime', team: null }],
+      kills: [kill(1, 100, killer, victim), kill(1, 200, 'inimigo', 'eu')], flashes: [],
+    })
+    expect(resultado.mortesSemTrade).toEqual({ quantidade: 1, rounds: [{ round: 1, tick: 200 }] })
+    expect(resultado.primeirasMortes).toEqual({ quantidade: 1, rounds: [{ round: 1, tick: 200 }] })
+  })
+
   it.each([[0, 0], [320, 0], [321, 1]])('trade de outro colega em %i ticks deixa %i mortes sem trade', (delta, quantidade) => {
     const resultado = calcular([
       kill(1, 1000 + delta, 'outroColega', 'inimigo'),

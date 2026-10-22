@@ -10,7 +10,12 @@ function resumir(mortes) {
 
 export function calcularLicoes({ steamId, jogadores, kills, flashes }) {
   const times = new Map(jogadores.map((j) => [j.steamId, j.team]))
-  const validas = kills.filter((k) => k.killer != null && !k.isTeamKill)
+  const validas = kills.filter((k) => {
+    if (!k || !k.killer || !k.victim || k.isTeamKill) return false
+    const tk = times.get(k.killer)
+    const tv = times.get(k.victim)
+    return tk != null && tv != null && tk !== tv
+  })
   const mortes = validas.filter((k) => k.victim === steamId)
   const primeiraTick = new Map()
   for (const k of validas) {
