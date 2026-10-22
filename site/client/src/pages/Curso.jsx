@@ -15,7 +15,7 @@ export default function Curso() {
   const [erroLista, setErroLista] = useState(false)
   const ultimoEnvio = useRef(0)
   const aberturaAtual = useRef(0)
-  const revisoes = useRef({})
+  const gravacoes = useRef(new Map())
   const [progressoLocal, setProgressoLocal] = useState({})
 
   useEffect(() => {
@@ -51,30 +51,41 @@ export default function Curso() {
   }
 
   async function salvarProgresso(slug, posicaoSegundos, concluido) {
-    const revisao = (revisoes.current[slug] ?? 0) + 1
-    revisoes.current[slug] = revisao
     const progresso = { posicaoSegundos, concluido }
     setProgressoLocal((atual) => ({ ...atual, [slug]: { ...progresso, erro: false } }))
-    try {
-      const res = await fetch(`/api/curso/${slug}/progresso`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(progresso),
-      })
-      if (!res.ok) throw new Error()
-      if (revisoes.current[slug] !== revisao) return
-      setVideos((atual) =>
-        atual?.map((v) => (v.slug === slug ? { ...v, posicaoSegundos, concluido } : v)),
-      )
-      setProgressoLocal((atual) => {
-        const proximo = { ...atual }
-        delete proximo[slug]
-        return proximo
-      })
-    } catch {
-      if (revisoes.current[slug] !== revisao) return
-      setProgressoLocal((atual) => ({ ...atual, [slug]: { ...progresso, erro: true } }))
+    const emVoo = gravacoes.current.get(slug)
+    if (emVoo) {
+      emVoo.pendente = progresso
+      return
     }
+    // Um PUT por aula; eventos intermediários cedem lugar ao progresso mais recente.
+    const fila = { pendente: progresso }
+    gravacoes.current.set(slug, fila)
+    while (fila.pendente) {
+      const progresso = fila.pendente
+      fila.pendente = null
+      try {
+        const res = await fetch(`/api/curso/${slug}/progresso`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(progresso),
+        })
+        if (!res.ok) throw new Error()
+        if (fila.pendente) continue
+        setVideos((atual) =>
+          atual?.map((v) => (v.slug === slug ? { ...v, ...progresso } : v)),
+        )
+        setProgressoLocal((atual) => {
+          const proximo = { ...atual }
+          delete proximo[slug]
+          return proximo
+        })
+      } catch {
+        if (fila.pendente) continue
+        setProgressoLocal((atual) => ({ ...atual, [slug]: { ...progresso, erro: true } }))
+      }
+    }
+    gravacoes.current.delete(slug)
   }
 
   function onTimeUpdate(e) {
