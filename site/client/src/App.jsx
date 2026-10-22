@@ -28,6 +28,7 @@ import Curso from './pages/Curso.jsx'
 import Privacidade from './pages/Privacidade.jsx'
 import Resenha from './pages/Resenha.jsx'
 import NaoEncontrada from './pages/NaoEncontrada.jsx'
+import PreFila from './pages/PreFila.jsx'
 
 // Tela de espera enquanto /api/auth/me responde: marca pulsando no centro, em vez de
 // um "Carregando…" solto no canto.
@@ -96,6 +97,7 @@ export default function App() {
           <Route path="/partida/:id" element={<RotaProtegida><Partida /></RotaProtegida>} />
           <Route path="/ranking" element={<RotaProtegida><Ranking /></RotaProtegida>} />
           <Route path="/mapas" element={<RotaProtegida><Mapas /></RotaProtegida>} />
+          <Route path="/pre-fila" element={<RotaProtegida><PreFila /></RotaProtegida>} />
           <Route path="/enviar-demo" element={<RotaProtegida><EnviarDemo /></RotaProtegida>} />
           <Route path="/clipes" element={<RotaProtegida><Clipes /></RotaProtegida>} />
           <Route path="/jogadores" element={<RotaProtegida><Amigos /></RotaProtegida>} />
