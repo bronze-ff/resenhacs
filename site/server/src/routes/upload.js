@@ -23,6 +23,29 @@ const MAX_UPLOAD_BYTES = 400 * 1024 * 1024
 // não só super admin.
 const MAX_UPLOADS_PENDENTES = 5
 
+export function validarAlvoUpload(alvo) {
+  if (!alvo || !alvo.participou) return { status: 403, erro: 'Só quem jogou esta partida pode enviar a demo dela' }
+  if (alvo.tem_demo) return { status: 409, erro: 'Esta partida já tem demo processada' }
+  if (alvo.source !== 'faceit') return { status: 409, erro: 'Esta partida não aceita envio de demo' }
+  return null
+}
+
+export async function checarCotaUpload(client, steamId) {
+  // A cota impede que uma conta Steam descartável encha o R2 com pedidos paralelos.
+  await client.query('select pg_advisory_xact_lock(hashtext($1))', [`uploads:${steamId}`])
+  const pendentesQ = await client.query(
+    `select count(*)::int as n from uploads_pendentes
+     where adicionado_por = $1 and (
+       status in ('pendente', 'processando')
+       or (status = 'falhou' and adicionado_em > now() - interval '24 hours')
+     )`,
+    [steamId],
+  )
+  return (pendentesQ.rows[0]?.n ?? 0) >= MAX_UPLOADS_PENDENTES
+    ? { status: 429, erro: `Você já tem ${MAX_UPLOADS_PENDENTES} demos esperando processamento. Aguarde o Coletor processar antes de enviar mais.` }
+    : null
+}
+
 export function createUploadRouter({ db, requireAuth, r2Client, r2Bucket }) {
   const router = Router()
 
@@ -89,18 +112,10 @@ export function createUploadRouter({ db, requireAuth, r2Client, r2Bucket }) {
          from matches m where m.id = $1`,
         [matchId, req.player.steamId],
       )
-      const alvo = rows[0]
       // Partida inexistente e partida onde ele não jogou dão a MESMA resposta —
       // senão o 404/403 vira um oráculo de "esta partida existe".
-      if (!alvo || !alvo.participou) {
-        return res.status(403).json({ erro: 'Só quem jogou esta partida pode enviar a demo dela' })
-      }
-      if (alvo.tem_demo) {
-        return res.status(409).json({ erro: 'Esta partida já tem demo processada' })
-      }
-      if (alvo.source !== 'faceit') {
-        return res.status(409).json({ erro: 'Esta partida não aceita envio de demo' })
-      }
+      const erro = validarAlvoUpload(rows[0])
+      if (erro) return res.status(erro.status).json({ erro: erro.erro })
     }
 
     if (shareCode && !matchId) {
@@ -122,19 +137,10 @@ export function createUploadRouter({ db, requireAuth, r2Client, r2Bucket }) {
     const client = await db.connect()
     try {
       await client.query('begin')
-      // A cota impede que uma conta Steam descartável encha o R2 com pedidos paralelos.
-      await client.query('select pg_advisory_xact_lock(hashtext($1))', [`uploads:${req.player.steamId}`])
-      const pendentesQ = await client.query(
-        `select count(*)::int as n from uploads_pendentes
-         where adicionado_por = $1 and (
-           status in ('pendente', 'processando')
-           or (status = 'falhou' and adicionado_em > now() - interval '24 hours')
-         )`,
-        [req.player.steamId],
-      )
-      if ((pendentesQ.rows[0]?.n ?? 0) >= MAX_UPLOADS_PENDENTES) {
+      const cota = await checarCotaUpload(client, req.player.steamId)
+      if (cota) {
         await client.query('rollback')
-        return res.status(429).json({ erro: `Você já tem ${MAX_UPLOADS_PENDENTES} demos esperando processamento. Aguarde o Coletor processar antes de enviar mais.` })
+        return res.status(cota.status).json({ erro: cota.erro })
       }
       ;({ rows } = await client.query(
         `insert into uploads_pendentes (adicionado_por, arquivo_r2_key, share_code, played_at, plataforma_manual, match_alvo_id)
