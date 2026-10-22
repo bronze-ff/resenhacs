@@ -44,8 +44,16 @@ import { createR2Client } from './r2.js'
 // e mataria a função serverless (FUNCTION_INVOCATION_FAILED). No Express 4 os métodos de
 // rota vivem como propriedades da função Router exportada (que é o prototype dos routers
 // via setPrototypeOf) — embrulhamos cada um pra capturar a promise e chamar next(err).
-function assetComHash(arquivo) {
-  return /-[A-Za-z0-9_-]{8,}\.(?:js|mjs|css|map|woff2?|ttf|png|jpe?g|gif|svg|webp|ico)$/i.test(path.basename(arquivo))
+// Vite grava o hash de 8 caracteres no fim do nome, só dentro de assets/.
+// Workbox deixa workbox-<8 hex>.js na raiz do dist. Ícone de public/ com hífen
+// no nome (apple-touch-icon.png, icon-maskable-512.png) não entra aqui.
+function assetComHash(raiz, arquivo) {
+  const relativo = path.relative(raiz, arquivo)
+  if (relativo.startsWith('..') || path.isAbsolute(relativo)) return false
+  const normalizado = relativo.split(path.sep).join('/')
+  const base = normalizado.slice(normalizado.lastIndexOf('/') + 1)
+  if (normalizado.startsWith('assets/') && /-[A-Za-z0-9_-]{8}\.[A-Za-z0-9]+$/.test(base)) return true
+  return /^workbox-[0-9a-f]{8}\.js$/i.test(normalizado)
 }
 
 function patchRouterAsync() {
@@ -168,9 +176,7 @@ export function createApp({
   if (staticDir) {
     app.use(express.static(staticDir, {
       setHeaders(res, arquivo) {
-        // Vite e o Workbox gravam o hash no nome (assets/index-DyU7E96u.js,
-        // workbox-9c191d2f.js). index.html, sw.js e favicon.ico ficam de fora.
-        if (assetComHash(arquivo)) res.set('Cache-Control', 'public, max-age=31536000, immutable')
+        if (assetComHash(staticDir, arquivo)) res.set('Cache-Control', 'public, max-age=31536000, immutable')
       },
     }))
     app.get(/^\/(?!api\/).*/, (req, res) => {

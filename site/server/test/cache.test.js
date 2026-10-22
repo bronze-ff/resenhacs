@@ -110,6 +110,10 @@ describe('Cache-Control', () => {
     writeFileSync(path.join(dir, 'assets', 'workbox-window.prod.es5-Bd17z0YL.js'), 'wb')
     writeFileSync(path.join(dir, 'sw.js'), 'sw')
     writeFileSync(path.join(dir, 'favicon.ico'), 'x')
+    writeFileSync(path.join(dir, 'apple-touch-icon.png'), 'png')
+    writeFileSync(path.join(dir, 'icon-maskable-512.png'), 'png')
+    writeFileSync(path.join(dir, 'icon-192.png'), 'png')
+    writeFileSync(path.join(dir, 'icon-512.png'), 'png')
     const app = createApp({ config, staticDir: dir })
     const imutavel = 'public, max-age=31536000, immutable'
 
@@ -125,7 +129,7 @@ describe('Cache-Control', () => {
     const workboxJanela = await request(app).get('/assets/workbox-window.prod.es5-Bd17z0YL.js')
     expect(workboxJanela.headers['cache-control']).toBe(imutavel)
 
-    for (const url of ['/sw.js', '/favicon.ico', '/', '/jogadores']) {
+    for (const url of ['/sw.js', '/favicon.ico', '/apple-touch-icon.png', '/icon-maskable-512.png', '/icon-192.png', '/icon-512.png', '/', '/jogadores']) {
       const res = await request(app).get(url)
       expect(res.status, url).toBe(200)
       expect(res.headers['cache-control'], url).toBe('public, max-age=0')
