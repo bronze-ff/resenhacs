@@ -78,7 +78,7 @@ describe('Competicoes', () => {
 
   it('expandir um Jogador do leaderboard busca e mostra os clipes dele', async () => {
     global.fetch = mockCompeticaoComClipesDoJogador([{
-      id: 'c1', clipUrl: 'https://allstar/c1', clipSnapshotUrl: null,
+      id: 'c1', clipUrl: 'https://allstar.gg/c1', clipSnapshotUrl: null,
       map: 'de_mirage', playedAt: '2026-07-25T03:37:00Z', roundNumber: 7, kind: 'quad',
       pontuacao: { kills: 4, pontosKills: 80, total: 80 },
     }])
@@ -109,7 +109,7 @@ describe('Competicoes', () => {
     // sempre está no feed e na expansão da linha dele) — abrir no feed não pode
     // montar o <PlayerClipe> do card do leaderboard também.
     const clipe = {
-      id: 'c1', clipUrl: 'https://allstar/c1', clipSnapshotUrl: null,
+      id: 'c1', clipUrl: 'https://allstar.gg/c1', clipSnapshotUrl: null,
       map: 'de_mirage', playedAt: '2026-07-25T03:37:00Z', roundNumber: 7, kind: 'quad',
       pontuacao: { kills: 4, pontosKills: 80, total: 80 },
     }
@@ -197,7 +197,7 @@ describe('Competicoes', () => {
           ok: true,
           json: async () => ({
             clipes: [{
-              id: 'c1', clipUrl: 'https://allstar/c1', clipSnapshotUrl: null,
+              id: 'c1', clipUrl: 'https://allstar.gg/c1', clipSnapshotUrl: null,
               map: 'de_mirage', playedAt: '2026-07-25T03:37:00Z', roundNumber: 7, kind: 'quad',
               pontuacao: { kills: 4, pontosKills: 80, total: 80 },
             }],
@@ -400,7 +400,7 @@ describe('Competicoes', () => {
           limiteDiario: 2, limiteTotal: 10, minimoParaRankear: 3, leaderboard: [],
           clipesRecentes: [{
             id: 'c1', nick: 'adversario', avatarUrl: null,
-            clipUrl: 'https://allstar/c1', clipSnapshotUrl: 'https://allstar/c1.jpg',
+            clipUrl: 'https://allstar.gg/c1', clipSnapshotUrl: 'https://allstar/c1.jpg',
             map: 'de_inferno', playedAt: '2026-07-25T03:37:00Z', roundNumber: 18, kind: 'ace',
             pontuacao: { kills: 5, pontosKills: 120, total: 120 },
           }],

@@ -1,4 +1,6 @@
-import { Card, Badge, RatingBadge, ResultChip, MapIcon, Avatar, SteamIcon, Button } from '../components/ui'
+import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { Card, Badge, RatingBadge, ResultChip, MapIcon, Avatar, SteamIcon, Button, EstadoErro } from '../components/ui'
 import { nomeArma } from '../lib/format.js'
 
 // --- Dados fictícios das seções (mockups estilizados, não screenshots reais). ---------
@@ -303,6 +305,17 @@ function Secao({ numero, eyebrow, titulo, corpo, mockup, inverter = false, class
 }
 
 export default function Landing() {
+  // O server volta para /?erro=login-invalido quando o retorno da Steam falha. O aviso
+  // fica no estado e o parâmetro sai da URL, para não reaparecer ao recarregar.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [loginFalhou] = useState(() => searchParams.get('erro') === 'login-invalido')
+  useEffect(() => {
+    if (!searchParams.has('erro')) return
+    const resto = new URLSearchParams(searchParams)
+    resto.delete('erro')
+    setSearchParams(resto, { replace: true })
+  }, [searchParams, setSearchParams])
+
   return (
     <div className="relative min-h-screen overflow-x-hidden">
 
@@ -325,6 +338,12 @@ export default function Landing() {
           </div>
         </div>
       </header>
+
+      {loginFalhou && (
+        <div className="mx-auto max-w-6xl px-6 pt-6">
+          <EstadoErro mensagem="Login não concluído. Tente de novo." />
+        </div>
+      )}
 
       {/* Hero: copy à esquerda, prévia real do produto à direita. */}
       <div className="relative">

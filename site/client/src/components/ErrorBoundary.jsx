@@ -25,8 +25,12 @@ export default class ErrorBoundary extends Component {
 
   render() {
     if (!this.state.erro) return this.props.children
+    // Dentro do Shell o card fica no lugar da página; no topo ele ocupa a tela toda.
+    const moldura = this.props.dentroDoShell
+      ? 'flex justify-center py-10'
+      : 'flex min-h-screen items-center justify-center bg-fundo p-4'
     return (
-      <div className="flex min-h-screen items-center justify-center bg-fundo p-4">
+      <div className={moldura}>
         <Card className="max-w-md space-y-3 p-5">
           <h2 className="font-display text-lg font-semibold text-perigo">
             Essa página quebrou

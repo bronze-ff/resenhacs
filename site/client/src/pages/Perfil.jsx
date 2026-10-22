@@ -28,9 +28,11 @@ export default function Perfil() {
   // sem isso a falha era silenciosa: o callback redirecionava de volta pra cá e nada
   // na tela dizia se deu certo ou errado.
   const [searchParams] = useSearchParams()
+  const erroFaceit = searchParams.get('erro')
   const faceitResultado = searchParams.get('faceit') === 'vinculado'
     ? 'ok'
-    : searchParams.get('erro') === 'faceit-invalido' ? 'erro' : null
+    : erroFaceit === 'faceit-invalido' ? 'erro'
+      : erroFaceit === 'faceit-em-uso' ? 'em-uso' : null
 
   async function salvar(e) {
     e.preventDefault()
@@ -128,6 +130,9 @@ export default function Perfil() {
           <EstadoErro
             mensagem="Não deu pra concluir o vínculo com a FACEIT — a autenticação passou, mas a troca de credenciais falhou do nosso lado. Tenta de novo; se persistir, avisa o admin."
           />
+        )}
+        {faceitResultado === 'em-uso' && (
+          <EstadoErro mensagem="Essa conta FACEIT já está vinculada a outro Jogador." />
         )}
         {faceitResultado === 'ok' && !jogador?.faceitNick && (
           <p className="text-sm text-texto-fraco">

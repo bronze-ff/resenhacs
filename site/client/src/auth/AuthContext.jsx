@@ -36,7 +36,13 @@ export function AuthProvider({ children }) {
     }
   }, [])
 
-  return <AuthContext.Provider value={estado}>{children}</AuthContext.Provider>
+  // Tour concluído no servidor: atualiza a sessão em memória para a rota protegida não
+  // mandar de volta ao tour (o Tour navega pelo router, sem recarregar a página).
+  function marcarTourConcluido() {
+    setEstado((e) => (e.jogador ? { ...e, jogador: { ...e.jogador, tourConcluido: true } } : e))
+  }
+
+  return <AuthContext.Provider value={{ ...estado, marcarTourConcluido }}>{children}</AuthContext.Provider>
 }
 
 export function useAuth() {

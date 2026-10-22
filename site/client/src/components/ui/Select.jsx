@@ -1,4 +1,4 @@
-import { Children, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Children, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
 // Dropdown customizado — NÃO usa <select> nativo. O popup de um <select> é desenhado
@@ -7,7 +7,14 @@ import { createPortal } from 'react-dom'
 // aceitando <option value>Label</option> como filhos e chamando onChange com um
 // evento { target: { value } } igual ao nativo — API idêntica, nenhum consumidor
 // (13 usos no site) precisou mudar uma linha.
-export default function Select({ value, onChange, children, className = '', selectClassName = '', disabled = false }) {
+// id, aria-label e aria-labelledby vão no botão (é ele que o leitor de tela anuncia e
+// que um <label htmlFor> aponta); o listbox herda o mesmo nome.
+export default function Select({
+  value, onChange, children, className = '', selectClassName = '', disabled = false,
+  id, 'aria-label': ariaLabel, 'aria-labelledby': ariaLabelledby,
+}) {
+  const idBase = useId()
+  const idPainel = `${idBase}-lista`
   const opcoes = useMemo(
     () =>
       // Só <option> de verdade — Children.toArray não abre um <> passado como filho
@@ -110,11 +117,15 @@ export default function Select({ value, onChange, children, className = '', sele
       <button
         type="button"
         ref={triggerRef}
+        id={id}
         disabled={disabled}
         onClick={() => (aberto ? fechar() : abrir())}
         onKeyDown={aoTeclarTrigger}
         aria-haspopup="listbox"
         aria-expanded={aberto}
+        aria-controls={aberto ? idPainel : undefined}
+        aria-label={ariaLabel}
+        aria-labelledby={ariaLabelledby}
         // focus:outline-none só tira o outline nativo — precisa do substituto em
         // focus-visible (não em `aberto`, que é o estado de dropdown aberto e não
         // reflete navegação por teclado) senão quem navega via Tab perde a referência
@@ -140,8 +151,12 @@ export default function Select({ value, onChange, children, className = '', sele
         createPortal(
           <ul
             ref={panelRef}
+            id={idPainel}
             role="listbox"
             tabIndex={-1}
+            aria-label={ariaLabel}
+            aria-labelledby={ariaLabelledby}
+            aria-activedescendant={opcoes[ativo] ? `${idBase}-opcao-${ativo}` : undefined}
             onKeyDown={aoTeclarPainel}
             style={{ position: 'fixed', top: posicao.top, left: posicao.left, minWidth: posicao.width, maxWidth: 'calc(100vw - 1rem)', zIndex: 60 }}
             // animate-surgir-painel só roda na entrada (o painel some do DOM direto ao
@@ -152,6 +167,7 @@ export default function Select({ value, onChange, children, className = '', sele
             {opcoes.map((o, i) => (
               <li
                 key={o.value}
+                id={`${idBase}-opcao-${i}`}
                 role="option"
                 aria-selected={o.value === selecionada?.value}
                 onMouseEnter={() => setAtivo(i)}
@@ -160,7 +176,7 @@ export default function Select({ value, onChange, children, className = '', sele
               >
                 <span className="min-w-0 truncate">{o.label}</span>
                 {o.value === selecionada?.value && (
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="h-3.5 w-3.5 shrink-0">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="h-3.5 w-3.5 shrink-0" aria-hidden="true">
                     <path d="M5 13l4 4L19 7" />
                   </svg>
                 )}

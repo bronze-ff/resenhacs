@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
+import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
 import { AuthProvider } from '../auth/AuthContext.jsx'
-import Tour from '../pages/Tour.jsx'
+import Tour, { destinoAposTour } from '../pages/Tour.jsx'
 
 // jogador autenticado, tour ainda não concluído — é o estado em que a página
 // Tour normalmente é montada.
@@ -12,18 +13,6 @@ const JOGADOR = {
   isSuperAdmin: false,
   tourConcluido: false,
   faceitNick: null,
-}
-
-// concluir() troca window.location.href por uma navegação real (não usa react-router),
-// então window.location precisa ser substituível pra o teste conseguir observar o
-// destino sem navegar de verdade (o que quebraria o jsdom).
-function stubLocation() {
-  const original = window.location
-  Object.defineProperty(window, 'location', {
-    writable: true,
-    value: { ...original, href: '' },
-  })
-  return () => Object.defineProperty(window, 'location', { writable: true, value: original })
 }
 
 // `tourConcluidoResult` é uma factory (não uma Promise pronta): criar a Promise
@@ -45,6 +34,25 @@ function mockFetch(tourConcluidoResult) {
   )
 }
 
+// concluir() navega pelo router; a rota "*" mostra onde o Jogador caiu.
+function Destino() {
+  const { pathname, search, hash } = useLocation()
+  return <p data-testid="destino">{pathname + search + hash}</p>
+}
+
+function renderTour(entrada = '/tour') {
+  return render(
+    <AuthProvider>
+      <MemoryRouter initialEntries={[entrada]}>
+        <Routes>
+          <Route path="/tour" element={<Tour />} />
+          <Route path="*" element={<Destino />} />
+        </Routes>
+      </MemoryRouter>
+    </AuthProvider>,
+  )
+}
+
 beforeEach(() => {
   vi.unstubAllGlobals()
 })
@@ -52,13 +60,7 @@ beforeEach(() => {
 describe('Tour', () => {
   it('concluir com sucesso: navega pro passo final e redireciona pra "/" ao clicar em Concluir', async () => {
     mockFetch(() => Promise.resolve({ ok: true }))
-    const restoreLocation = stubLocation()
-
-    render(
-      <AuthProvider>
-        <Tour />
-      </AuthProvider>,
-    )
+    renderTour()
 
     expect(await screen.findByText('Bem-vindo ao Resenha')).toBeInTheDocument()
 
@@ -71,49 +73,66 @@ describe('Tour', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Concluir' }))
 
-    await vi.waitFor(() => expect(window.location.href).toBe('/'))
+    expect(await screen.findByTestId('destino')).toHaveTextContent(/^\/$/)
     expect(screen.queryByText(/erro ao concluir o tour/i)).not.toBeInTheDocument()
-
-    restoreLocation()
   })
 
   it('concluir com falha: mostra mensagem de erro e não redireciona (via "Pular tour")', async () => {
     mockFetch(() => Promise.resolve({ ok: false }))
-    const restoreLocation = stubLocation()
-
-    render(
-      <AuthProvider>
-        <Tour />
-      </AuthProvider>,
-    )
+    renderTour()
 
     expect(await screen.findByText('Bem-vindo ao Resenha')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /pular tour/i }))
 
     expect(await screen.findByText('Erro ao concluir o tour. Tente novamente.')).toBeInTheDocument()
-    expect(window.location.href).toBe('')
-
-    restoreLocation()
+    expect(screen.queryByTestId('destino')).not.toBeInTheDocument()
   })
 
   it('concluir com falha de rede (fetch rejeita): mostra a mesma mensagem de erro', async () => {
     mockFetch(() => Promise.reject(new Error('network down')))
-    const restoreLocation = stubLocation()
-
-    render(
-      <AuthProvider>
-        <Tour />
-      </AuthProvider>,
-    )
+    renderTour()
 
     expect(await screen.findByText('Bem-vindo ao Resenha')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /pular tour/i }))
 
     expect(await screen.findByText('Erro ao concluir o tour. Tente novamente.')).toBeInTheDocument()
-    expect(window.location.href).toBe('')
+    expect(screen.queryByTestId('destino')).not.toBeInTheDocument()
+  })
 
-    restoreLocation()
+  it('concluir volta para o returnTo interno que veio da rota protegida', async () => {
+    mockFetch(() => Promise.resolve({ ok: true }))
+    renderTour('/tour?returnTo=%2Fpartida%2Fp1%3Faba%3Drounds%23placar')
+
+    fireEvent.click(await screen.findByRole('button', { name: /pular tour/i }))
+    expect(await screen.findByTestId('destino')).toHaveTextContent('/partida/p1?aba=rounds#placar')
+  })
+})
+
+describe('destinoAposTour', () => {
+  const ORIGEM = 'http://localhost:3000'
+  const destino = (v) => destinoAposTour(v, ORIGEM)
+
+  it('aceita caminho interno com query e hash', () => {
+    expect(destino('/partida/p1')).toBe('/partida/p1')
+    expect(destino('/comparar?a=1&b=2#topo')).toBe('/comparar?a=1&b=2#topo')
+    expect(destino('/tourney')).toBe('/tourney')
+  })
+
+  it('recusa tudo que sai da origem ou volta ao tour', () => {
+    // Valor como chega de searchParams.get('returnTo'), já sem o percent-encoding da query.
+    const daQuery = (cru) => new URLSearchParams(`r=${cru}`).get('r')
+    const ruins = [
+      null, undefined, '', 'partida', 'https://evil.test', 'javascript:alert(1)',
+      '//evil.test', '/\\evil.test',
+      daQuery('%2F%09%2Fevil.test'), '/\n/evil.test', '/\r/evil.test',
+      daQuery('%2F.%2F%2Fevil.test'), '/.//evil.test', '/a/..//evil.test', '/%2e//evil.test',
+      '/tour', '/tour/', '/tour/x', '/Tour', '/TOUR/x', '/%74our', '/./tour',
+      '/%E0%A4%A',
+    ]
+    for (const ruim of ruins) {
+      expect(destino(ruim), JSON.stringify(ruim)).toBe('/')
+    }
   })
 })

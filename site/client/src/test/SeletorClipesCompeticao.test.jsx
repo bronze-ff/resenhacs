@@ -21,8 +21,8 @@ describe('SeletorClipesCompeticao', () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => respostaElegiveis([
-        { allstarClipId: 'c1', matchId: 'm1', roundNumber: 9, map: 'de_dust2', playedAt: '2026-07-25T00:37:00Z', kind: 'ace', clipUrl: 'https://a/c1', clipSnapshotUrl: null, pontuacao: { total: 100 }, jaEnviado: false },
-        { allstarClipId: 'c2', matchId: 'm2', roundNumber: 4, map: 'de_mirage', playedAt: '2026-07-25T00:37:00Z', kind: null, clipUrl: 'https://a/c2', clipSnapshotUrl: null, pontuacao: { total: 80 }, jaEnviado: true },
+        { allstarClipId: 'c1', matchId: 'm1', roundNumber: 9, map: 'de_dust2', playedAt: '2026-07-25T00:37:00Z', kind: 'ace', clipUrl: 'https://allstar.gg/c1', clipSnapshotUrl: null, pontuacao: { total: 100 }, jaEnviado: false },
+        { allstarClipId: 'c2', matchId: 'm2', roundNumber: 4, map: 'de_mirage', playedAt: '2026-07-25T00:37:00Z', kind: null, clipUrl: 'https://allstar.gg/c2', clipSnapshotUrl: null, pontuacao: { total: 80 }, jaEnviado: true },
       ]),
     })
     render(<SeletorClipesCompeticao competicaoId="comp1" onFechar={() => {}} onEnviado={() => {}} />)
@@ -35,7 +35,7 @@ describe('SeletorClipesCompeticao', () => {
     global.fetch = vi.fn().mockImplementation((url, opts) => {
       if (opts?.method === 'POST') return Promise.resolve({ ok: true, json: async () => ({ ok: true }) })
       return Promise.resolve({ ok: true, json: async () => respostaElegiveis([
-        { allstarClipId: 'c1', matchId: 'm1', roundNumber: 9, map: 'de_dust2', playedAt: '2026-07-25T00:37:00Z', kind: 'ace', clipUrl: 'https://a/c1', clipSnapshotUrl: null, pontuacao: { total: 100 }, jaEnviado: false },
+        { allstarClipId: 'c1', matchId: 'm1', roundNumber: 9, map: 'de_dust2', playedAt: '2026-07-25T00:37:00Z', kind: 'ace', clipUrl: 'https://allstar.gg/c1', clipSnapshotUrl: null, pontuacao: { total: 100 }, jaEnviado: false },
       ]) })
     })
     render(<SeletorClipesCompeticao competicaoId="comp1" onFechar={() => {}} onEnviado={onEnviado} />)
@@ -79,7 +79,7 @@ describe('SeletorClipesCompeticao', () => {
   const CLIPE_COMPLETO = {
     allstarClipId: 'c1', matchId: 'm1', roundNumber: 18, map: 'de_inferno',
     playedAt: '2026-07-25T03:37:00Z', kind: 'clutch_1v3',
-    clipUrl: 'https://allstar/c1?x=1', clipSnapshotUrl: 'https://allstar/c1.jpg',
+    clipUrl: 'https://allstar.gg/c1?x=1', clipSnapshotUrl: 'https://allstar/c1.jpg',
     pontuacao: { kills: 3, pontosKills: 50, headshots: 2, pontosHeadshots: 16, armas: 2, pontosArmas: 10, clutch: '1v3', pontosClutch: 35, total: 111 },
     jaEnviado: false,
   }
