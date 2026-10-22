@@ -197,4 +197,28 @@ describe('Replay 2D — pulo para a morte (Lições)', () => {
     expect(tempo()).toBe('25,1 s de 40 s')
     expect(screen.getByRole('button', { name: 'Pausar' })).toBeInTheDocument()
   })
+
+  it('Reproduzir apertado enquanto o round alvo carrega: o 1º RAF fica perto do alvo', () => {
+    const vazio = replayCom([
+      { round: 1, frames: frames(400), kills: [], hits: [] },
+      { round: 2, frames: [], kills: [], hits: [] },
+    ])
+    const seek = { round: 2, frame: null, vitima: VITIMA, key: 'l5' }
+    const { tempo, grupo, rerender } = montar(vazio, seek)
+    fireEvent.keyDown(grupo, { key: ' ' })
+    expect(screen.getByRole('button', { name: 'Pausar' })).toBeInTheDocument()
+    avancar(100)
+    const cheio = comKills([{ t: 300, victim: VITIMA }])
+    rerender(<MemoryRouter><ReplayViewer replay={cheio} seek={seek} /></MemoryRouter>)
+    avancar(100)
+    expect(tempo()).toBe('25,1 s de 40 s')
+    fireEvent.keyDown(grupo, { key: ' ' })
+    expect(screen.getByRole('button', { name: 'Reproduzir' })).toBeInTheDocument()
+    expect(tempo()).toBe('25,1 s de 40 s')
+    // Play de novo segue do ponto pausado.
+    fireEvent.keyDown(grupo, { key: ' ' })
+    avancar(0)
+    avancar(200)
+    expect(tempo()).toBe('25,3 s de 40 s')
+  })
 })

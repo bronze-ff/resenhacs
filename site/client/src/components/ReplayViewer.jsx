@@ -399,6 +399,10 @@ export default function ReplayViewer({
   const [tocando, setTocando] = useState(false)
   const [velocidade, setVelocidade] = useState(1)
   const [frameAtual, setFrameAtual] = useState(0)
+  // Frame mais recente, lido pelo loop ao iniciar: o seek grava aqui no mesmo passo do
+  // setFrameAtual, e o loop que reinicia no mesmo commit não parte do frame do render anterior.
+  const frameRef = useRef(0)
+  frameRef.current = frameAtual
   const [radarPronto, setRadarPronto] = useState(false)
   const [iconesVersao, setIconesVersao] = useState(0)
   const [focado, setFocado] = useState(null)
@@ -423,8 +427,6 @@ export default function ReplayViewer({
     if (idxSeek === -1 || seekPronto || seekAplicado.current === seek.key) return
     setRoundIdx(idxSeek)
     setFrameAtual(0)
-    // Pausa até o pulo: senão o loop, ao reiniciar com os frames, recomeça do frame 0.
-    setTocando(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seek?.key, idxSeek])
   useEffect(() => {
@@ -439,6 +441,7 @@ export default function ReplayViewer({
     const LOOKBACK_SEGUNDOS = 5
     const frameInicial = Math.max(0, frameAlvo - LOOKBACK_SEGUNDOS * replay.tickRate)
     setRoundIdx(idx)
+    frameRef.current = frameInicial
     setFrameAtual(frameInicial)
     // Mesmo round já tocando: o loop não reinicia, então o pulo entra pelo inicioRef.
     inicioRef.current = performance.now() - (frameInicial / replay.tickRate) * 1000 / velocidade
@@ -469,7 +472,7 @@ export default function ReplayViewer({
   // (streaming por round), o loop reinicia. Sem frames ainda, o play espera em vez de parar.
   useEffect(() => {
     if (!tocando || total === 0) return
-    inicioRef.current = performance.now() - (frameAtual / replay.tickRate) * 1000 / velocidade
+    inicioRef.current = performance.now() - (frameRef.current / replay.tickRate) * 1000 / velocidade
     function passo(agora) {
       const elapsed = ((agora - inicioRef.current) / 1000) * velocidade
       const idx = frameIndexAt(elapsed, replay.tickRate, total)
