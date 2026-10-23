@@ -7,9 +7,11 @@ Dois projetos Vercel no time do Filippe. Não mudar o Root Directory nesta onda.
 | Projeto Vercel | Root Directory | O que publica | Domínio de produção |
 |---|---|---|---|
 | `resenha` | `site/client` | SPA Vite | `https://resenha-phi.vercel.app` |
-| `resenhacs` | `site/server` | API Express (`api/index.js`, rewrite `/(.*)` → `/api`) | `https://resenhacs.vercel.app` |
+| `resenhacs` | `site/server` | API Express (`api/index.js`, rewrite `/api/(.*)` → `/api`; o resto é 404 da plataforma) | `https://resenhacs.vercel.app` |
 
 O client faz proxy de `/api/*` para `https://resenhacs.vercel.app` em produção (`PRODUCTION_API_URL` em `site/client/middleware.js`). Preview e Development só chamam a API se `PREVIEW_API_URL` existir no projeto `resenha`. Sem ela, o middleware responde 503.
+
+No projeto `resenhacs`, path que não começa com `/api/` não acorda `api/index.js`. O 404 é o da plataforma (`site/server/404.html`). `/api` sem segmento extra ainda cai no arquivo da função pelo filesystem e o Express responde 404.
 
 `APP_URL` no projeto `resenhacs` tem que ser a origem do client (`https://resenha-phi.vercel.app`). A Steam recusa o login se o `return_to` não bater.
 

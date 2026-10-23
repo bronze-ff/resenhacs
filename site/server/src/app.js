@@ -44,6 +44,18 @@ import { createR2Client } from './r2.js'
 // e mataria a função serverless (FUNCTION_INVOCATION_FAILED). No Express 4 os métodos de
 // rota vivem como propriedades da função Router exportada (que é o prototype dos routers
 // via setPrototypeOf) — embrulhamos cada um pra capturar a promise e chamar next(err).
+// Vite grava o hash de 8 caracteres no fim do nome, só dentro de assets/.
+// Workbox deixa workbox-<8 hex>.js na raiz do dist. Ícone de public/ com hífen
+// no nome (apple-touch-icon.png, icon-maskable-512.png) não entra aqui.
+function assetComHash(raiz, arquivo) {
+  const relativo = path.relative(raiz, arquivo)
+  if (relativo.startsWith('..') || path.isAbsolute(relativo)) return false
+  const normalizado = relativo.split(path.sep).join('/')
+  const base = normalizado.slice(normalizado.lastIndexOf('/') + 1)
+  if (normalizado.startsWith('assets/') && /-[A-Za-z0-9_-]{8}\.[A-Za-z0-9]+$/.test(base)) return true
+  return /^workbox-[0-9a-f]{8}\.js$/i.test(normalizado)
+}
+
 function patchRouterAsync() {
   const embrulha = (fn) =>
     typeof fn === 'function' && fn.length < 4
@@ -82,6 +94,15 @@ export function createApp({
   const app = express()
   // Não anunciar a stack (X-Powered-By: Express) pra quem varre o site atrás de alvo.
   app.disable('x-powered-by')
+  // Só a API. O static (site/client/dist, quando staticDir existe) não pode herdar
+  // no-store: o JS/CSS com hash do Vite é cacheável. O roteamento do Express não
+  // diferencia maiúsculas, então /API/auth/me é a mesma rota que /api/auth/me.
+  // /api/health (e /API/health) troca este valor no handler.
+  app.use((req, res, next) => {
+    const caminho = req.path.toLowerCase()
+    if (caminho === '/api' || caminho.startsWith('/api/')) res.set('Cache-Control', 'private, no-store')
+    next()
+  })
   // Em produção (Vercel) a função fica atrás de UM proxy (o edge deles), que sempre manda
   // X-Forwarded-For; sem confiar nesse hop o express-rate-limit não consegue identificar o
   // IP do cliente e lança erro de validação em TODA requisição (ERR_ERL_UNEXPECTED_X_FORWARDED_FOR),
@@ -103,7 +124,16 @@ export function createApp({
 
   patchRouterAsync()
 
-  app.get('/api/health', (req, res) => res.json({ ok: true }))
+  app.get('/api/health', (req, res) => {
+    // O limitador global grava RateLimit-* por IP. Se isso entrar no objeto da CDN,
+    // o próximo visitante recebe a cota de outro. Vale para /API/health: o Express
+    // entrega esta rota sem diferenciar maiúsculas.
+    for (const nome of Object.keys(res.getHeaders())) {
+      if (String(nome).toLowerCase().startsWith('ratelimit')) res.removeHeader(nome)
+    }
+    res.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300')
+    res.json({ ok: true })
+  })
 
   const requireAuth = createRequireAuth(config.jwtSecret, db)
   const r2Client = r2ClientOverride !== undefined ? r2ClientOverride : createR2Client(config)
@@ -144,7 +174,11 @@ export function createApp({
   app.use('/api/extensao', createExtensaoRouter({ db, requireAuth, jwtSecret: config.jwtSecret }))
 
   if (staticDir) {
-    app.use(express.static(staticDir))
+    app.use(express.static(staticDir, {
+      setHeaders(res, arquivo) {
+        if (assetComHash(staticDir, arquivo)) res.set('Cache-Control', 'public, max-age=31536000, immutable')
+      },
+    }))
     app.get(/^\/(?!api\/).*/, (req, res) => {
       res.sendFile(path.join(staticDir, 'index.html'))
     })
