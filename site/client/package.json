@@ -9,7 +9,6 @@
   },
   "dependencies": {
     "@sentry/react": "^11.7.0",
-    "@vercel/functions": "^3.9.11",
     "posthog-js": "^1.438.9",
     "qrcode": "^1.5.4",
     "react": "^19.3.0",

@@ -9,7 +9,7 @@ Dois projetos Vercel no time do Filippe. Não mudar o Root Directory nesta onda.
 | `resenha` | `site/client` | SPA Vite | `https://resenha-phi.vercel.app` |
 | `resenhacs` | `site/server` | API Express (`api/index.js`, rewrite `/(.*)` → `/api`) | `https://resenhacs.vercel.app` |
 
-O client faz proxy de `/api/*` para `https://resenhacs.vercel.app` em produção (`PRODUCTION_API_URL` em `site/client/middleware.js`). Preview e Development só chamam a API se `PREVIEW_API_URL` existir no projeto `resenha`. Sem ela, o middleware responde 503.
+O client reescreve `/api/*` para `https://resenhacs.vercel.app` em produção (`PRODUCTION_API_URL` em `site/client/vercel.mjs`, gerado no build). Preview e Development só chamam a API se `PREVIEW_API_URL` existir no projeto `resenha` na hora do build. Sem ela, `/api` responde 503. O valor é a origem https do staging; caminho na URL é ignorado. Mudou no painel: precisa de um deploy novo do `resenha`.
 
 `APP_URL` no projeto `resenhacs` tem que ser a origem do client (`https://resenha-phi.vercel.app`). A Steam recusa o login se o `return_to` não bater.
 
@@ -49,7 +49,7 @@ No painel do Sentry, em cada projeto: Data Scrubber ligado, Scrub IP addresses l
 
 API (`resenhacs`): `DATABASE_URL` (pooler, porta 6543 na Vercel), `STEAM_API_KEY`, `JWT_SECRET`, `APP_URL`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `FACEIT_CLIENT_ID`, `FACEIT_CLIENT_SECRET`, `ALLSTAR_API_KEY`, `ALLSTAR_STEAM_IDS`, `ALLSTAR_WEBHOOK_AUTH`.
 
-Client (`resenha`): `PREVIEW_API_URL` só em Preview/Development, se houver API de staging.
+Client (`resenha`): `PREVIEW_API_URL` só em Preview/Development, se houver API de staging. Origem https, lida no build por `site/client/vercel.mjs`. Não criar `VITE_API_URL`: o browser não chama a API em outro host.
 
 GitHub Actions (Coletor): `DATABASE_URL`, `STEAM_API_KEY`, `STEAM_BOT_USER`, `STEAM_BOT_PASS`, `R2_*`, `FACEIT_API_KEY`, `APP_URL`.
 

@@ -69,8 +69,8 @@ export default defineConfig(async ({ mode }) => {
         // SPA com react-router-dom: navegacao pra uma rota que nao existe em disco
         // (ex.: /partidas/123) precisa cair no index.html...
         navigateFallback: 'index.html',
-        // ...menos /api/*, que o middleware.js proxia pro backend. Sem esta lista o
-        // fallback engoliria chamada de API e devolveria HTML.
+        // ...menos /api/*, que o rewrite da Vercel (vercel.mjs) manda pro backend.
+        // Sem esta lista o fallback engoliria chamada de API e devolveria HTML.
         navigateFallbackDenylist: [/^\/api(\/|$)/],
         // Sem runtimeCaching de proposito: nenhuma resposta de /api/* entra em cache.
         // Stat de partida muda, e servir numero velho e pior que nao instalar.

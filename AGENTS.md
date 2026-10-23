@@ -56,7 +56,7 @@ Glossário: [docs/produto/CONTEXT.md](docs/produto/CONTEXT.md). Use Jogador, Par
 
 - Commitar `.env`, `.env.*` (exceto `.env.example`) ou `.mcp.json`.
 - Colocar DSN, token ou chave no código ou no README.
-- Renomear pastas ou mudar Root Directory / `vercel.json` / `site/client/middleware.js` sem pedido explícito.
+- Renomear pastas ou mudar Root Directory, `site/server/vercel.json` ou `site/client/vercel.mjs` sem pedido explícito.
 - Editar `supabase/migrations` já aplicada.
 - Mudar cron, secrets ou comandos de `.github/workflows/coletor.yml` e `r2-replays.yml` de um jeito que o job agendado deixe de rodar. Variável nova no `env` do job, com no-op se estiver vazia, pode.
 - Comentar `@codex review` num PR. O Codex ignora `cursor[bot]`; quem pede o review é o Filippe, quando o PR estiver estável.

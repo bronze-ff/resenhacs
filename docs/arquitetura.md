@@ -13,7 +13,7 @@ GitHub Actions ──▶ coletor/ (Python, demoparser2)
         demos, replays, curso          │
                 ▲                      │
                 └──── site/client (Vite, Vercel resenha)
-                      middleware /api/*  →  https://resenhacs.vercel.app
+                      rewrite /api/*  →  https://resenhacs.vercel.app
 ```
 
 O contrato entre o Coletor e o site é o schema em `supabase/migrations`, não um pacote compartilhado. Decisão original: [adr/0001-coletor-python-github-actions.md](adr/0001-coletor-python-github-actions.md).
@@ -32,9 +32,9 @@ Esta onda não move essas pastas. O layout `apps/` + `packages/` fica para uma d
 
 ## Request do site
 
-O browser fala só com a origem do client. `site/client/middleware.js` reescreve `/api/*` para a API de produção quando `VERCEL_ENV=production`. Preview sem `PREVIEW_API_URL` responde 503, de propósito, para não gravar no banco real.
+O browser fala só com a origem do client. `site/client/vercel.mjs` gera, no build, um rewrite externo de `/api/*` para a API de produção quando `VERCEL_ENV=production`. Preview sem `PREVIEW_API_URL` responde 503, de propósito, para não gravar no banco real. O rewrite é regra de CDN: o projeto `resenha` não invoca função nessa chamada. Cookie de sessão continua first-party na origem do site. Decisão: [0002](decisoes/0002-rewrite-api-sem-middleware.md).
 
-A API confia em um hop de proxy (`trust proxy` = 1), lê o JWT do cookie e isola por Jogador. O bucket R2 é privado: o server assina ou faz proxy. A URL crua do R2 não vai para o client.
+A API confia em um hop de proxy (`trust proxy` = 1). A borda do `resenhacs` substitui o `X-Forwarded-For`, então o limite de quem tem sessão usa o `steamId` do JWT, não o IP do rewrite. O bucket R2 é privado: o server assina ou faz proxy. A URL crua do R2 não vai para o client.
 
 ## Coletor
 
