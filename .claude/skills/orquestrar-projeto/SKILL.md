@@ -5,7 +5,7 @@ description: |
   cria uma worktree filha no Orca por ticket, sobe um agente Claude autonomo
   em cada uma, monitora ate o PR abrir, roda a review cruzada com o Codex,
   tria os achados, manda o worker aplicar os validos, e libera a proxima onda
-  quando o humano faz merge. Use quando o usuario disser "orquestre",
+  quando o gate de Revisao do AGENTS.md fecha e o PR e mergeado. Use quando o usuario disser "orquestre",
   "rode a onda", "toque esses tickets", ou colar IDs/URL de projeto do Linear
   com intencao de implementar tudo.
 ---
@@ -140,9 +140,26 @@ Regras aprendidas na pratica:
 
 ## Fase 5 — Portao de merge e proxima onda
 
-- Monitore merge com `gh pr view <n> --json state,mergedAt` (poll com
-  sleep; nao ha CI de testes neste repo — a verificacao real e a suite
-  local que o worker rodou + a review cruzada).
+O `codex review` local da Fase 4 e insumo de triagem. Ele nao gera o
+`codex-review-state` do GitHub, entao nao fecha o gate.
+
+1. Depois de cada push do worker, comente `@codex review` no PR (exceto PR
+   de `cursor[bot]`: ai o Filippe pede o review).
+2. Leia o estado do Codex no head atual:
+
+   ```bash
+   gh pr view <n> --json headRefOid -q .headRefOid
+   gh api repos/<dono>/<repo>/issues/<n>/comments --paginate \
+     -q '[.[]|select(.user.login|test("codex"))|.body|capture("codex-review-state:v1 (?<j>[{].*[}]) -->")|.j]|last'
+   ```
+
+   Precisa: `code_review.commit_sha` igual ao head, `status` `completed`,
+   `has_unresolved_findings` falso. Achado aberto volta pra triagem da Fase 4.
+3. Confira o CI: `gh pr checks <n>` todo verde (`ci`, `Site`, `Coletor`).
+4. Confira dependencias mergeadas e migration nova aplicada em producao.
+5. Gate inteiro verde: `gh pr merge <n> --merge`. Faltou um item: nao
+   mergeie.
+
 - A cada merge: `git fetch origin main`, recompute blockers, e despache
   (Fase 2) todo ticket que ficou livre. Repita ate acabar.
 - Ao final: tabela com ticket, PR, estado da review, e pendencias que so o
