@@ -1,14 +1,13 @@
 import { describe, it, expect, vi } from 'vitest'
-import { Readable } from 'node:stream'
 import http from 'node:http'
-import { gzipSync, gunzipSync } from 'node:zlib'
+import { gzipSync } from 'node:zlib'
 import request from 'supertest'
 
 vi.mock('../src/r2.js', async (importOriginal) => {
   const original = await importOriginal()
   return { ...original, presignDownload: vi.fn().mockResolvedValue('https://r2.example/presigned-get') }
 })
-import { presignDownload } from '../src/r2.js'
+import { presignDownload, EXPIRA_REDIRECT_MIDIA_S } from '../src/r2.js'
 import { createApp } from '../src/app.js'
 import { signToken } from '../src/auth/jwt.js'
 import { detectProvider } from '../src/routes/clips.js'
@@ -688,87 +687,93 @@ describe('GET /api/matches/:id/replay', () => {
   })
 
   it('partida sem replay: 404', async () => {
+    presignDownload.mockClear()
     const fakeR2 = { send: vi.fn() }
     const { app } = appWith([['select replay_url', [{ replay_url: null }]]], { r2Client: fakeR2 })
     const res = await request(app).get('/api/matches/m1/replay').set('Cookie', cookie)
     expect(res.status).toBe(404)
     expect(fakeR2.send).not.toHaveBeenCalled()
+    expect(presignDownload).not.toHaveBeenCalled()
   })
 
-  it('faz proxy autenticado do objeto no R2 (nunca expõe a URL crua)', async () => {
-    const corpo = Readable.from([Buffer.from('{"map":"de_anubis"}')])
-    const fakeR2 = {
-      send: vi.fn().mockResolvedValue({ ContentType: 'application/json', Body: corpo }),
-    }
+  it('redireciona 302 pra URL assinada, sem stream e sem a URL crua do banco', async () => {
+    presignDownload.mockClear()
+    const fakeR2 = { send: vi.fn() }
+    const bruta = 'https://acc.r2.cloudflarestorage.com/resenha-demos/replays/701c.json'
     const { app } = appWith(
-      [['select replay_url', [{ replay_url: 'https://acc.r2.cloudflarestorage.com/resenha-demos/replays/701c.json' }]]],
+      [['select replay_url', [{ replay_url: bruta }]]],
       { r2Client: fakeR2 },
     )
-    const res = await request(app).get('/api/matches/701c/replay').set('Cookie', cookie)
-    expect(res.status).toBe(200)
-    expect(res.text).toBe('{"map":"de_anubis"}')
-    const cmd = fakeR2.send.mock.calls[0][0]
-    expect(cmd.input).toMatchObject({ Bucket: 'resenha-demos', Key: 'replays/701c.json' })
+    const res = await request(app).get('/api/matches/701c/replay').set('Cookie', cookie).redirects(0)
+    expect(res.status).toBe(302)
+    expect(res.headers.location).toBe('https://r2.example/presigned-get')
+    expect(res.headers.location).not.toBe(bruta)
+    expect(res.headers['cache-control']).toBe('private, no-store')
+    expect(res.text).not.toContain('cloudflarestorage')
+    expect(fakeR2.send).not.toHaveBeenCalled()
+    expect(presignDownload).toHaveBeenCalledWith(fakeR2, 'resenha-demos', 'replays/701c.json', EXPIRA_REDIRECT_MIDIA_S)
   })
 
-  // O client (Partida.jsx / CardTaticaReplay) faz fetch(url).then(r => r.json()).
-  // Node fetch descomprime Content-Encoding gzip igual ao navegador. http.get não
-  // descomprime: confere que o back repassou o header e os bytes crus, sem recomprimir.
-  it('fetch().json() lê replay gzip e replay antigo cru', async () => {
+  it('falha ao assinar o replay: 502', async () => {
+    presignDownload.mockRejectedValueOnce(new Error('r2'))
+    const { app } = appWith(
+      [['select replay_url', [{ replay_url: 'https://acc.r2.cloudflarestorage.com/resenha-demos/replays/701c.json' }]]],
+      { r2Client: { send: vi.fn() } },
+    )
+    const res = await request(app).get('/api/matches/701c/replay').set('Cookie', cookie).redirects(0)
+    expect(res.status).toBe(502)
+  })
+
+  // O client (useReplayPorRound / buscarRoundDoReplay) faz fetch(url).then(r => r.json()).
+  // O padrão do fetch é seguir o 302. Node fetch descomprime Content-Encoding gzip
+  // igual ao navegador — o objeto no R2 continua gzip; quem descomprime é o browser.
+  it('fetch segue o 302 e lê JSON no destino, gzip ou cru', async () => {
     const payload = { map: 'de_mirage', rounds: [{ round: 1, frameCount: 2 }] }
     const cruAntigo = { map: 'de_dust2', rounds: [{ round: 1, frames: [] }] }
     const gz = gzipSync(Buffer.from(JSON.stringify(payload)))
     const cru = Buffer.from(JSON.stringify(cruAntigo))
     let modo = 'gzip'
-    const fakeR2 = {
-      send: vi.fn().mockImplementation(async () => (
-        modo === 'gzip'
-          ? { ContentType: 'application/json', ContentEncoding: 'gzip', Body: Readable.from([gz]) }
-          : { ContentType: 'application/json', Body: Readable.from([cru]) }
-      )),
-    }
+    const origem = http.createServer((_req, res) => {
+      if (modo === 'gzip') {
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Content-Encoding': 'gzip' })
+        res.end(gz)
+        return
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(cru)
+    })
+    await new Promise((resolve) => origem.listen(0, '127.0.0.1', resolve))
+    const origemUrl = `http://127.0.0.1:${origem.address().port}/replays/701c.json`
+    presignDownload.mockResolvedValue(origemUrl)
     const { app } = appWith(
       [['select replay_url', [{ replay_url: 'https://acc.r2.cloudflarestorage.com/resenha-demos/replays/701c.json' }]]],
-      { r2Client: fakeR2 },
+      { r2Client: { send: vi.fn() } },
     )
     const server = http.createServer(app)
     await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
     try {
-      const { port } = server.address()
-      const base = `http://127.0.0.1:${port}`
-      const lerFio = (path) => new Promise((resolve, reject) => {
-        const req = http.get(`${base}${path}`, { headers: { Cookie: cookie } }, (res) => {
-          const chunks = []
-          res.on('data', (c) => chunks.push(c))
-          res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks) }))
-        })
-        req.on('error', reject)
-      })
-
-      const fio = await lerFio('/api/matches/701c/replay')
-      expect(fio.status).toBe(200)
-      expect(fio.headers['content-encoding']).toBe('gzip')
-      expect(fio.body.equals(gz)).toBe(true)
-      expect(JSON.parse(gunzipSync(fio.body).toString())).toEqual(payload)
+      const base = `http://127.0.0.1:${server.address().port}`
       const viaFetch = await fetch(`${base}/api/matches/701c/replay`, { headers: { cookie } })
       expect(viaFetch.status).toBe(200)
+      expect(viaFetch.url).toBe(origemUrl)
       expect(await viaFetch.json()).toEqual(payload)
 
-      const roundFio = await lerFio('/api/matches/701c/replay/round/1')
-      expect(roundFio.headers['content-encoding']).toBe('gzip')
-      expect(roundFio.body.equals(gz)).toBe(true)
       const roundFetch = await fetch(`${base}/api/matches/701c/replay/round/1`, { headers: { cookie } })
+      expect(roundFetch.url).toBe(origemUrl)
       expect(await roundFetch.json()).toEqual(payload)
 
       modo = 'cru'
-      const antigo = await lerFio('/api/matches/701c/replay')
-      expect(antigo.headers['content-encoding']).toBeUndefined()
-      expect(antigo.body.equals(cru)).toBe(true)
-      expect(JSON.parse(antigo.body.toString())).toEqual(cruAntigo)
       const antigoFetch = await fetch(`${base}/api/matches/701c/replay`, { headers: { cookie } })
       expect(await antigoFetch.json()).toEqual(cruAntigo)
+
+      const semSeguir = await fetch(`${base}/api/matches/701c/replay`, { headers: { cookie }, redirect: 'manual' })
+      expect(semSeguir.status).toBe(302)
+      expect(semSeguir.headers.get('cache-control')).toBe('private, no-store')
+      expect(semSeguir.headers.get('location')).toBe(origemUrl)
     } finally {
+      presignDownload.mockResolvedValue('https://r2.example/presigned-get')
       await new Promise((resolve) => server.close(resolve))
+      await new Promise((resolve) => origem.close(resolve))
     }
   })
 })
@@ -785,27 +790,78 @@ describe('GET /api/matches/:id/replay/round/:n', () => {
     expect(res.status).toBe(400)
   })
 
-  it('busca a chave do round trocando .json pelo prefixo /round-N.json do índice', async () => {
-    const fakeR2 = {
-      send: vi.fn().mockResolvedValue({ ContentType: 'application/json', Body: Readable.from([Buffer.from('{"round":2}')]) }),
-    }
+  it('redireciona pra chave do round, trocando .json pelo prefixo /round-N.json do índice', async () => {
+    presignDownload.mockClear()
+    const fakeR2 = { send: vi.fn() }
     const { app } = appWith(
       [['select replay_url', [{ replay_url: 'https://acc.r2.cloudflarestorage.com/resenha-demos/replays/701c.json' }]]],
       { r2Client: fakeR2 },
     )
-    const res = await request(app).get('/api/matches/701c/replay/round/2').set('Cookie', cookie)
-    expect(res.status).toBe(200)
-    expect(res.text).toBe('{"round":2}')
-    const cmd = fakeR2.send.mock.calls[0][0]
-    expect(cmd.input).toMatchObject({ Bucket: 'resenha-demos', Key: 'replays/701c/round-2.json' })
+    const res = await request(app).get('/api/matches/701c/replay/round/2').set('Cookie', cookie).redirects(0)
+    expect(res.status).toBe(302)
+    expect(res.headers.location).toBe('https://r2.example/presigned-get')
+    expect(res.headers['cache-control']).toBe('private, no-store')
+    expect(fakeR2.send).not.toHaveBeenCalled()
+    expect(presignDownload).toHaveBeenCalledWith(
+      fakeR2, 'resenha-demos', 'replays/701c/round-2.json', EXPIRA_REDIRECT_MIDIA_S,
+    )
+  })
+
+  it('falha ao assinar o round: 404', async () => {
+    presignDownload.mockRejectedValueOnce(new Error('r2'))
+    const { app } = appWith(
+      [['select replay_url', [{ replay_url: 'https://acc.r2.cloudflarestorage.com/resenha-demos/replays/701c.json' }]]],
+      { r2Client: { send: vi.fn() } },
+    )
+    const res = await request(app).get('/api/matches/701c/replay/round/2').set('Cookie', cookie).redirects(0)
+    expect(res.status).toBe(404)
   })
 
   it('partida sem replay: 404', async () => {
+    presignDownload.mockClear()
     const fakeR2 = { send: vi.fn() }
     const { app } = appWith([['select replay_url', [{ replay_url: null }]]], { r2Client: fakeR2 })
     const res = await request(app).get('/api/matches/m1/replay/round/1').set('Cookie', cookie)
     expect(res.status).toBe(404)
     expect(fakeR2.send).not.toHaveBeenCalled()
+    expect(presignDownload).not.toHaveBeenCalled()
+  })
+})
+
+describe('GET /api/matches/:id/demo', () => {
+  it('sem login: 401', async () => {
+    const { app } = appWith([])
+    expect((await request(app).get('/api/matches/m1/demo')).status).toBe(401)
+  })
+
+  it('partida sem demo: 404', async () => {
+    presignDownload.mockClear()
+    const fakeR2 = { send: vi.fn() }
+    const { app } = appWith([['select demo_url', [{ demo_url: null }]]], { r2Client: fakeR2 })
+    const res = await request(app).get('/api/matches/m1/demo').set('Cookie', cookie).redirects(0)
+    expect(res.status).toBe(404)
+    expect(fakeR2.send).not.toHaveBeenCalled()
+    expect(presignDownload).not.toHaveBeenCalled()
+  })
+
+  it('redireciona com anexo octet-stream e o nome do objeto', async () => {
+    presignDownload.mockClear()
+    const fakeR2 = { send: vi.fn() }
+    const { app } = appWith(
+      [['select demo_url', [{ demo_url: 'https://acc.r2.cloudflarestorage.com/resenha-demos/demos/m1.dem.bz2' }]]],
+      { r2Client: fakeR2 },
+    )
+    const res = await request(app).get('/api/matches/m1/demo').set('Cookie', cookie).redirects(0)
+    expect(res.status).toBe(302)
+    expect(res.headers['cache-control']).toBe('private, no-store')
+    expect(fakeR2.send).not.toHaveBeenCalled()
+    expect(presignDownload).toHaveBeenCalledWith(
+      fakeR2, 'resenha-demos', 'demos/m1.dem.bz2', EXPIRA_REDIRECT_MIDIA_S,
+      {
+        responseContentType: 'application/octet-stream',
+        responseContentDisposition: 'attachment; filename="m1.dem.bz2"',
+      },
+    )
   })
 })
 

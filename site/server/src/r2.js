@@ -7,8 +7,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { pipeline } from 'node:stream/promises'
 
 // O bucket é privado (dados reais dos participantes, sem consentimento pra ficar
-// público). Este cliente é usado só no servidor, pra fazer proxy autenticado —
-// as credenciais nunca chegam ao browser.
+// público). Credenciais ficam no servidor. O browser só recebe URL pré-assinada.
 export function createR2Client(config) {
   if (!config.r2AccountId || !config.r2AccessKeyId || !config.r2SecretAccessKey) return null
   return new S3Client({
@@ -42,18 +41,32 @@ export async function presignUpload(client, bucket, key, contentType, expiresInS
   return getSignedUrl(client, cmd, { expiresIn: expiresInSeconds })
 }
 
-// URL assinada de GET direto do R2 pro navegador: usada pro player de vídeo do Curso de Mira
-// assistir sem os bytes passarem pela função serverless (arquivos de ~2GB esbarrariam no
-// limite de tempo/tamanho da Vercel) — o R2 já entende os pedidos parciais (Range) que o
-// <video> usa sozinho pra avançar/retroceder.
-export async function presignDownload(client, bucket, key, expiresInSeconds = 7200) {
-  const cmd = new GetObjectCommand({ Bucket: bucket, Key: key })
+// Vida da URL no 302 de replay/demo. A assinatura é checada quando o GET começa;
+// 10 min cobre relógio torto e um retry sem deixar um link vazado aberto por horas.
+export const EXPIRA_REDIRECT_MIDIA_S = 600
+
+// URL assinada de GET direto do R2. Curso de Mira usa o padrão de 2h (vídeo grande;
+// o <video> pede Range sozinho). Replay e Demo passam EXPIRA_REDIRECT_MIDIA_S.
+// responseContentType / responseContentDisposition entram na assinatura: a demo
+// força octet-stream + attachment, então o ContentType gravado no objeto não vale
+// na resposta (um text/html ali não vira página).
+export async function presignDownload(client, bucket, key, expiresInSeconds = 7200, {
+  responseContentType,
+  responseContentDisposition,
+} = {}) {
+  const cmd = new GetObjectCommand({
+    Bucket: bucket,
+    Key: key,
+    ...(responseContentType ? { ResponseContentType: responseContentType } : {}),
+    ...(responseContentDisposition ? { ResponseContentDisposition: responseContentDisposition } : {}),
+  })
   return getSignedUrl(client, cmd, { expiresIn: expiresInSeconds })
 }
 
-// `baixarComo`: nome do arquivo pra objetos que vêm de upload de usuário (demo). Força
-// octet-stream + attachment em vez de repassar o ContentType gravado no R2 — servido na
-// MESMA origem do site, um tipo text/html ali viraria página executável.
+// Proxy do objeto pela função. As rotas de replay/demo não usam mais isto (302 pra
+// URL assinada). `baixarComo` força octet-stream + attachment em vez de repassar o
+// ContentType gravado no R2 — servido na MESMA origem do site, um tipo text/html
+// ali viraria página executável.
 export async function streamObject(client, bucket, key, res, { baixarComo = null } = {}) {
   const obj = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }))
   if (baixarComo) {

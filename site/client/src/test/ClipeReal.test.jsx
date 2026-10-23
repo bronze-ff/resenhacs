@@ -196,6 +196,8 @@ describe('SecaoClipeReal', () => {
     await screen.findByText('Gravando no CS2…')
     const antes = fetchMock.mock.calls.filter(([u]) => u.endsWith('/clipes-reais')).length
     await vi.advanceTimersByTimeAsync(10000)
+    expect(fetchMock.mock.calls.filter(([u]) => u.endsWith('/clipes-reais')).length).toBe(antes)
+    await vi.advanceTimersByTimeAsync(20000)
     const depois = fetchMock.mock.calls.filter(([u]) => u.endsWith('/clipes-reais')).length
     expect(depois).toBeGreaterThan(antes)
   })
@@ -218,7 +220,7 @@ describe('SecaoClipeReal', () => {
     const { container } = render(<SecaoClipeReal matchId="m1" jogadores={JOGADORES} viewerSteamId="eu" />)
     await screen.findByText('Juntando os trechos…')
     expect(container.querySelector('video')).toHaveAttribute('src', 'https://r2/c1.mp4?sig=1')
-    await vi.advanceTimersByTimeAsync(10000)
+    await vi.advanceTimersByTimeAsync(30000)
     await waitFor(() => expect(chamada).toBeGreaterThan(1))
     expect(container.querySelector('video')).toHaveAttribute('src', 'https://r2/c1.mp4?sig=1')
   })

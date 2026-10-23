@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { esquecerJogador } from '../observabilidade/posthog.js'
@@ -6,6 +6,9 @@ import { Avatar, PremiumBadge, classesBotao } from './ui'
 import BuscaRapida from './BuscaRapida.jsx'
 import ErrorBoundary from './ErrorBoundary.jsx'
 import { usePrimeirosPassos } from './inicio/PrimeirosPassos.jsx'
+import { useRepetirQuandoVisivel } from '../lib/useRepetirQuandoVisivel.js'
+
+const INTERVALO_COMPETICOES_MS = 5 * 60 * 1000
 
 const CHAVE_SIDEBAR_COLAPSADA = 'resenha_sidebar_colapsada'
 
@@ -304,21 +307,17 @@ export default function Shell({ children }) {
 
   // Descobre se existe competição ativa OU agendada pra acender o indicador (sidebar +
   // barra inferior mobile) — agendada conta porque o "em breve" é exatamente o momento
-  // de puxar o clique pra aba (ver regras/prêmio antes de começar). Mesmo padrão de
-  // polling já usado em Feed.jsx pro aviso de sincronização, intervalo maior (60s)
-  // porque início/fim de competição não muda a cada segundo.
-  useEffect(() => {
-    let vivo = true
-    function carregar() {
-      fetch('/api/competicoes/status')
-        .then((res) => (res.ok ? res.json() : null))
-        .then((s) => { if (vivo && s) setTemCompeticaoAtiva(Boolean(s.temAtiva || s.temAgendada)) })
-        .catch(() => {})
-    }
-    carregar()
-    const t = setInterval(carregar, 60000)
-    return () => { vivo = false; clearInterval(t) }
+  // de puxar o clique pra aba (ver regras/prêmio antes de começar). Início/fim de
+  // competição não muda a cada minuto: 5 min, e a aba escondida não consulta.
+  const vivo = useRef(true)
+  useEffect(() => () => { vivo.current = false }, [])
+  const carregarCompeticoes = useCallback(() => {
+    fetch('/api/competicoes/status')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((s) => { if (vivo.current && s) setTemCompeticaoAtiva(Boolean(s.temAtiva || s.temAgendada)) })
+      .catch(() => {})
   }, [])
+  useRepetirQuandoVisivel(carregarCompeticoes, INTERVALO_COMPETICOES_MS)
 
   async function sair() {
     await fetch('/api/auth/logout', { method: 'POST' })

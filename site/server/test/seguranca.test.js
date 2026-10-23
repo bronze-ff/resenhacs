@@ -71,16 +71,30 @@ describe('POST /api/upload/upload-url', () => {
 })
 
 describe('GET /api/matches/:id/demo', () => {
-  it('serve como anexo octet-stream com o nome real do objeto (.dem.bz2)', async () => {
-    const { Readable } = await import('node:stream')
-    const send = vi.fn().mockResolvedValue({ ContentType: 'text/html', Body: Readable.from([Buffer.from('BZh')]) })
-    const { app } = appWith(
-      [['select demo_url from matches', [{ demo_url: 'https://pub.r2.dev/resenha-demos/demos/m1.dem.bz2' }]]],
-      { r2Client: { send } },
-    )
-    const res = await request(app).get('/api/matches/00000000-0000-4000-8000-000000000001/demo').set('Cookie', token('765'))
-    expect(res.status).toBe(200)
-    expect(res.headers['content-type']).toContain('application/octet-stream')
-    expect(res.headers['content-disposition']).toMatch(/^attachment; filename="?m1.dem.bz2"?$/)
+  it('redireciona pra URL assinada com anexo octet-stream e o nome real do objeto', async () => {
+    const { S3Client } = await import('@aws-sdk/client-s3')
+    const client = new S3Client({
+      region: 'auto', endpoint: 'https://r2.example',
+      credentials: { accessKeyId: 'teste', secretAccessKey: 'teste' },
+    })
+    try {
+      const { app } = appWith(
+        [['select demo_url from matches', [{ demo_url: 'https://pub.r2.dev/resenha-demos/demos/m1.dem.bz2' }]]],
+        { r2Client: client },
+      )
+      const res = await request(app)
+        .get('/api/matches/00000000-0000-4000-8000-000000000001/demo')
+        .set('Cookie', token('765'))
+        .redirects(0)
+      expect(res.status).toBe(302)
+      expect(res.headers['cache-control']).toBe('private, no-store')
+      expect(res.headers['content-type'] ?? '').not.toContain('text/html')
+      const url = new URL(res.headers.location)
+      expect(url.searchParams.get('response-content-type')).toBe('application/octet-stream')
+      expect(url.searchParams.get('response-content-disposition')).toMatch(/^attachment; filename="?m1\.dem\.bz2"?$/)
+      expect(url.searchParams.get('X-Amz-Expires')).toBe('600')
+    } finally {
+      client.destroy()
+    }
   })
 })

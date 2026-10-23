@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { Readable, PassThrough } from 'node:stream'
 import { gzipSync, gunzipSync } from 'node:zlib'
 import { S3Client } from '@aws-sdk/client-s3'
-import { streamObject, presignUpload } from '../src/r2.js'
+import { streamObject, presignUpload, presignDownload } from '../src/r2.js'
 
 it('assina o Content-Length do PUT quando o tamanho é informado', async () => {
   const client = new S3Client({
@@ -12,6 +12,25 @@ it('assina o Content-Length do PUT quando o tamanho é informado', async () => {
   try {
     const url = new URL(await presignUpload(client, 'demos', 'teste.dem', 'application/octet-stream', 900, 123))
     expect(url.searchParams.get('X-Amz-SignedHeaders').split(';')).toContain('content-length')
+  } finally {
+    client.destroy()
+  }
+})
+
+it('assina o GET com tipo e disposição quando a mídia é anexo', async () => {
+  const client = new S3Client({
+    region: 'auto', endpoint: 'https://r2.example',
+    credentials: { accessKeyId: 'teste', secretAccessKey: 'teste' },
+  })
+  try {
+    const url = new URL(await presignDownload(client, 'demos', 'demos/m1.dem.bz2', 600, {
+      responseContentType: 'application/octet-stream',
+      responseContentDisposition: 'attachment; filename="m1.dem.bz2"',
+    }))
+    expect(url.searchParams.get('X-Amz-Expires')).toBe('600')
+    expect(url.searchParams.get('response-content-type')).toBe('application/octet-stream')
+    expect(url.searchParams.get('response-content-disposition')).toContain('attachment')
+    expect(url.searchParams.get('response-content-disposition')).toContain('m1.dem.bz2')
   } finally {
     client.destroy()
   }

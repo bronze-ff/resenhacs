@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useRepetirQuandoVisivel } from '../../lib/useRepetirQuandoVisivel.js'
 import { SectionHeader, EstadoVazio, EstadoErro, Button, Badge, SkeletonLista } from '../ui'
 import SeletorKills from './SeletorKills.jsx'
 import AvisoPartidaSemDemo from '../AvisoPartidaSemDemo.jsx'
@@ -6,9 +7,10 @@ import { dataHora } from '../../lib/format.js'
 
 // Aba Clipes da Partida: clipe REAL (vídeo do CS2) das kills que o Jogador escolhe.
 // Uma kill = um clipe; várias = montagem num vídeo só. Quem grava é a DEMO-SLAP
-// (site/server/src/demoSlap.js); a lista é consultada de tempos em tempos enquanto
-// algum clipe estiver em andamento, e cada consulta faz o servidor avançar o pedido.
-const INTERVALO_MS = 10000
+// (site/server/src/demoSlap.js); a lista é consultada de 30 em 30 s enquanto
+// algum clipe estiver em andamento (a aba escondida não consulta), e cada
+// consulta faz o servidor avançar o pedido.
+const INTERVALO_MS = 30000
 
 const ROTULO_STATUS = {
   analisando: 'Lendo a Demo…',
@@ -220,11 +222,9 @@ export default function SecaoClipeReal({ matchId, jogadores, viewerSteamId, part
   useEffect(() => { carregar() }, [carregar])
 
   const emAndamento = (dados?.clipes ?? []).some((c) => c.status !== 'pronto' && c.status !== 'erro')
-  useEffect(() => {
-    if (!emAndamento) return undefined
-    const id = setInterval(carregar, INTERVALO_MS)
-    return () => clearInterval(id)
-  }, [emAndamento, carregar])
+  // A carga inicial fica no efeito acima. Aqui só a repetição, sem um segundo
+  // fetch no instante em que o clipe entra em andamento. Voltar pra aba dispara na hora.
+  useRepetirQuandoVisivel(carregar, INTERVALO_MS, { ligado: emAndamento, imediato: false })
 
   async function gerar() {
     setEnviando(true)

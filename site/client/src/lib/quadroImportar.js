@@ -39,6 +39,7 @@ export function objetosDoFrame(replay, numeroRound, frameIdx) {
 // Mesmos endpoints da SecaoReplay da Partida.
 export async function buscarRoundDoReplay(matchId, numeroRound, fetchImpl = fetch) {
   const base = `/api/matches/${encodeURIComponent(matchId)}/replay`
+  // fetch segue o 302 da API até a URL pré-assinada do R2 (redirect padrão).
   const resIndice = await fetchImpl(base)
   if (!resIndice.ok) throw new Error('replay indisponível')
   const indice = await resIndice.json()
