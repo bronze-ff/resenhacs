@@ -583,7 +583,7 @@ while true; do
           if grep -Fqx "review:$key:done" "$STATE"; then
             grep -Fqx "ci:$key:PASS" "$STATE" || { echo "CI + REVIEW OK: $branch #$num @$sha"; echo "ci:$key:PASS" >> "$STATE"; }
           else
-            echo "CI VERDE (falta triagem de review): $branch #$num @$sha"
+            echo "CI VERDE (falta triagem de review): $branch #$num @$sha key=$key"
           fi ;;
       esac
     done
@@ -608,8 +608,10 @@ precisar alargar o regex.
 - **REVIEW MUDOU** — leia e raciocine sobre o estado **completo** do feedback
   imediatamente, mesmo com o CI rodando. Não espere o CI pra aplicar um fix de
   correção válido.
-- **CI VERDE (falta triagem)** — verde não é o gate inteiro. Repete até a
-  fingerprint exata ser triada.
+- **CI VERDE (falta triagem)** — verde não é o gate inteiro. Trie o feedback
+  dessa fingerprint e registre: `echo "review:<key>:done" >> "$STATE"`, com o
+  `key=` do evento. No ciclo seguinte sai `CI + REVIEW OK`. Feedback novo muda
+  a fingerprint e pede triagem de novo.
 - **CI + REVIEW OK** — confira o gate de Revisão do `AGENTS.md` no head atual.
   Fechou: mergeie. Feedback novo revoga esse estado.
 - **PR MERGEADO** — avance pra Fase 5.
