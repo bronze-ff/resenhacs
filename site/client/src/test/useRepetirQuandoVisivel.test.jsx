@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { renderHook, cleanup } from '@testing-library/react'
+import { StrictMode, useState } from 'react'
+import { renderHook, cleanup, waitFor } from '@testing-library/react'
 import { useRepetirQuandoVisivel } from '../lib/useRepetirQuandoVisivel.js'
 
 let hidden = false
@@ -95,5 +96,24 @@ describe('useRepetirQuandoVisivel', () => {
 
     rerender({ ligado: true })
     expect(consultar).toHaveBeenCalledTimes(1)
+  })
+
+  it('StrictMode: o ciclo anterior não engole o resultado do segundo mount', async () => {
+    const seguidores = []
+    const { result } = renderHook(() => {
+      const [valor, setValor] = useState('vazio')
+      useRepetirQuandoVisivel((seguir) => {
+        seguidores.push(seguir)
+        Promise.resolve().then(() => {
+          if (seguir()) setValor('vivo')
+        })
+      }, 60_000)
+      return valor
+    }, { wrapper: StrictMode })
+
+    await waitFor(() => expect(seguidores.length).toBeGreaterThanOrEqual(2))
+    expect(seguidores[0]()).toBe(false)
+    expect(seguidores.at(-1)()).toBe(true)
+    await waitFor(() => expect(result.current).toBe('vivo'))
   })
 })

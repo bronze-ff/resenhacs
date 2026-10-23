@@ -45,13 +45,11 @@ function resultadoDoGrupo(m) {
 // fila ainda tiver pendência.
 function SincStatus() {
   const [status, setStatus] = useState(null)
-  const vivo = useRef(true)
-  useEffect(() => () => { vivo.current = false }, [])
 
-  const carregar = useCallback(() => {
+  const carregar = useCallback((seguir) => {
     fetch('/api/matches/sync-status')
       .then((res) => (res.ok ? res.json() : null))
-      .then((s) => { if (vivo.current) setStatus(s) })
+      .then((s) => { if (seguir()) setStatus(s) })
       .catch(() => {})
   }, [])
 

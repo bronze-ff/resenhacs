@@ -1,6 +1,7 @@
 // site/client/src/test/Shell.test.jsx
+import { StrictMode } from 'react'
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen, waitFor, within, cleanup } from '@testing-library/react'
+import { render, screen, waitFor, within, cleanup, act } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { AuthProvider } from '../auth/AuthContext.jsx'
 import Shell from '../components/Shell.jsx'
@@ -109,5 +110,32 @@ describe('Shell — indicador de competição', () => {
     hidden = false
     document.dispatchEvent(new Event('visibilitychange'))
     await waitFor(() => expect(chamadas()).toBe(3))
+  })
+
+  it('StrictMode aplica o status do segundo mount', async () => {
+    const resolver = []
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((url) => {
+      if (typeof url === 'string' && url.includes('/api/auth/me')) {
+        return Promise.resolve({ ok: true, json: async () => ({ steamId: '765', nick: 'bronze', avatarUrl: null, isSuperAdmin: false }) })
+      }
+      if (typeof url === 'string' && url.includes('/api/competicoes/status')) {
+        return new Promise((resolve) => {
+          resolver.push(() => resolve({ ok: true, json: async () => ({ temAtiva: true, temAgendada: false }) }))
+        })
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) })
+    }))
+    render(
+      <StrictMode>
+        <AuthProvider>
+          <MemoryRouter initialEntries={['/']}>
+            <Shell>conteudo</Shell>
+          </MemoryRouter>
+        </AuthProvider>
+      </StrictMode>,
+    )
+    await waitFor(() => expect(resolver.length).toBeGreaterThanOrEqual(2))
+    await act(async () => { resolver.forEach((concluir) => concluir()) })
+    await waitFor(() => expect(screen.getAllByText(/competi[çc][ãa]o ativa/i).length).toBeGreaterThan(0))
   })
 })

@@ -1,8 +1,9 @@
 // site/client/src/test/Feed.test.jsx
 // Escopo mínimo: o filtro por jogador (era "MVP", virou participação — a semântica e o
 // rótulo confundiam quem escolhia o próprio nick esperando ver as partidas em que jogou).
+import { StrictMode } from 'react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, cleanup, act } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import Feed from '../pages/Feed.jsx'
 
@@ -121,5 +122,25 @@ describe('Feed — sync-status', () => {
     hidden = false
     document.dispatchEvent(new Event('visibilitychange'))
     await waitFor(() => expect(chamadasSync()).toBe(2))
+  })
+
+  it('StrictMode mostra a fila do segundo mount', async () => {
+    const resolver = []
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((url) => {
+      if (String(url).includes('sync-status')) {
+        return new Promise((resolve) => {
+          resolver.push(() => resolve({ ok: true, json: async () => ({ pending: 2, failed: 0, parsed: 1 }) }))
+        })
+      }
+      return Promise.resolve({ ok: true, json: async () => [] })
+    }))
+    render(
+      <StrictMode>
+        <MemoryRouter><Feed /></MemoryRouter>
+      </StrictMode>,
+    )
+    await waitFor(() => expect(resolver.length).toBeGreaterThanOrEqual(2))
+    await act(async () => { resolver.forEach((concluir) => concluir()) })
+    expect(await screen.findByText(/pra sincronizar/i)).toBeInTheDocument()
   })
 })

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext.jsx'
 import { esquecerJogador } from '../observabilidade/posthog.js'
@@ -309,12 +309,10 @@ export default function Shell({ children }) {
   // barra inferior mobile) — agendada conta porque o "em breve" é exatamente o momento
   // de puxar o clique pra aba (ver regras/prêmio antes de começar). Início/fim de
   // competição não muda a cada minuto: 5 min, e a aba escondida não consulta.
-  const vivo = useRef(true)
-  useEffect(() => () => { vivo.current = false }, [])
-  const carregarCompeticoes = useCallback(() => {
+  const carregarCompeticoes = useCallback((seguir) => {
     fetch('/api/competicoes/status')
       .then((res) => (res.ok ? res.json() : null))
-      .then((s) => { if (vivo.current && s) setTemCompeticaoAtiva(Boolean(s.temAtiva || s.temAgendada)) })
+      .then((s) => { if (seguir() && s) setTemCompeticaoAtiva(Boolean(s.temAtiva || s.temAgendada)) })
       .catch(() => {})
   }, [])
   useRepetirQuandoVisivel(carregarCompeticoes, INTERVALO_COMPETICOES_MS)
