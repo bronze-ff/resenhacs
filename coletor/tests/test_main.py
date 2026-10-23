@@ -5,6 +5,7 @@ import json
 import subprocess
 import sys
 import types
+import urllib.error
 from pathlib import Path
 
 import pytest
@@ -2413,3 +2414,136 @@ def test_sincronizar_faceit_trata_host_recusado_como_erro_definitivo(monkeypatch
     monkeypatch.setattr(main.faceit_sync, "sincronizar", lambda *a, **kw: recebidos.append(kw) or 0)
     main.cmd_sincronizar_faceit(Config(env={}), conn=object())
     assert recebidos[0]["erros_definitivos"] == (main.DemoNaoConfereError, main.rede.HostNaoPermitidoError)
+
+
+# ---- F3: avisar-discord nunca derruba o job ----
+
+class _ErroSql(Exception):
+    def __init__(self, sqlstate):
+        super().__init__("detalhe que não pode ir pro log")
+        self.sqlstate = sqlstate
+
+
+class _ConnAviso:
+    def __init__(self):
+        self.fechada = False
+
+    def rollback(self):
+        pass
+
+    def close(self):
+        self.fechada = True
+
+
+def test_avisar_discord_sem_webhook_nao_abre_conexao(monkeypatch):
+    monkeypatch.delenv("DISCORD_WEBHOOK_URL", raising=False)
+
+    def _conectar(url):
+        raise AssertionError("não devia conectar")
+
+    assert main.cmd_avisar_discord(Config(env={}), conectar=_conectar) == 0
+
+
+def test_avisar_discord_main_sem_webhook_nao_exige_database_url(monkeypatch):
+    monkeypatch.delenv("DISCORD_WEBHOOK_URL", raising=False)
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setattr(main.dbmod, "connect", lambda url: (_ for _ in ()).throw(AssertionError("conectou")))
+    with pytest.raises(SystemExit) as saida:
+        main.main(["avisar-discord"])
+    assert saida.value.code == 0
+
+
+@pytest.mark.parametrize("sqlstate", ["42703", "42P01"])
+def test_avisar_discord_sem_migration_0063_sai_0_sem_sentry(monkeypatch, capsys, sqlstate):
+    monkeypatch.setenv("DISCORD_WEBHOOK_URL", "https://discord.com/api/webhooks/1/tok")
+    conn = _ConnAviso()
+    capturados = []
+    monkeypatch.setattr(main, "capturar_erro", lambda e, etapa: capturados.append(etapa))
+
+    def _clipes(c, w, a):
+        raise _ErroSql(sqlstate)
+
+    monkeypatch.setattr(main.discord, "avisar_clipes", _clipes)
+    assert main.cmd_avisar_discord(Config(env={"DATABASE_URL": "x"}), conectar=lambda url: conn) == 0
+    saida = capsys.readouterr().out
+    assert "_ErroSql" in saida
+    assert "detalhe" not in saida
+    assert capturados == []
+    assert conn.fechada
+
+
+def test_avisar_discord_outra_falha_vai_pro_sentry_e_sai_0(monkeypatch, capsys):
+    monkeypatch.setenv("DISCORD_WEBHOOK_URL", "https://discord.com/api/webhooks/1/tok")
+    conn = _ConnAviso()
+    capturados = []
+    monkeypatch.setattr(main, "capturar_erro", lambda e, etapa: capturados.append(etapa))
+    monkeypatch.setattr(main.discord, "avisar_clipes", lambda c, w, a: 0)
+
+    def _resenha(c, w, a, agora):
+        raise OSError("falhou https://discord.com/api/webhooks/1/tok")
+
+    monkeypatch.setattr(main.discord, "avisar_resenha_semanal", _resenha)
+    assert main.cmd_avisar_discord(Config(env={"DATABASE_URL": "x"}), conectar=lambda url: conn) == 0
+    saida = capsys.readouterr().out
+    assert capturados == ["avisar-discord"]
+    assert "tok" not in saida
+    assert conn.fechada
+
+
+@pytest.mark.parametrize("erro", [
+    OSError("falhou https://discord.com/api/webhooks/123/tok-secreto"),
+    urllib.error.HTTPError("https://discord.com/api/webhooks/123/tok-secreto", 429, "Too Many", {}, None),
+])
+def test_avisar_discord_sentry_recebe_erro_neutro_sem_o_webhook(monkeypatch, erro):
+    # Codex P0 no bdfec22: o scrub mantém o caminho, e o token do webhook está nele.
+    from sentry_sdk.utils import event_from_exception
+
+    from coletor.observabilidade import before_send
+
+    monkeypatch.setenv("DISCORD_WEBHOOK_URL", "https://discord.com/api/webhooks/123/tok-secreto")
+    eventos = []
+
+    def _capturar(e, etapa):
+        evento, hint = event_from_exception(e)
+        eventos.append(before_send(evento, hint))
+
+    monkeypatch.setattr(main, "capturar_erro", _capturar)
+    monkeypatch.setattr(main.discord, "avisar_clipes", lambda c, w, a: (_ for _ in ()).throw(erro))
+    monkeypatch.setattr(main.discord, "avisar_resenha_semanal", lambda c, w, a, agora: False)
+    main.cmd_avisar_discord(Config(env={"DATABASE_URL": "x"}), conectar=lambda url: _ConnAviso())
+
+    final = json.dumps(eventos)
+    assert len(eventos) == 1
+    assert "webhooks" not in final and "tok-secreto" not in final and "discord.com" not in final
+    valor = eventos[0]["exception"]["values"][-1]
+    assert valor["type"] == "AvisoDiscordError"
+    assert valor["value"] == type(erro).__name__ + (" 429" if isinstance(erro, urllib.error.HTTPError) else "")
+
+
+def test_avisar_discord_chama_clipes_e_resenha(monkeypatch):
+    monkeypatch.setenv("DISCORD_WEBHOOK_URL", "https://discord.com/api/webhooks/1/tok")
+    monkeypatch.setenv("APP_URL", "https://resenha.app")
+    chamadas = []
+    monkeypatch.setattr(main.discord, "avisar_clipes", lambda c, w, a: chamadas.append(("clipes", a)) or 2)
+    monkeypatch.setattr(
+        main.discord, "avisar_resenha_semanal",
+        lambda c, w, a, agora: chamadas.append(("resenha", agora.tzinfo is not None)) or False,
+    )
+    assert main.cmd_avisar_discord(Config(env={"DATABASE_URL": "x"}), conectar=lambda url: _ConnAviso()) == 0
+    assert chamadas == [("clipes", "https://resenha.app"), ("resenha", True)]
+
+
+def test_avisar_discord_falha_nos_clipes_nao_impede_a_resenha(monkeypatch):
+    monkeypatch.setenv("DISCORD_WEBHOOK_URL", "https://discord.com/api/webhooks/1/tok")
+    capturados = []
+    monkeypatch.setattr(main, "capturar_erro", lambda e, etapa: capturados.append(etapa))
+
+    def _clipes(c, w, a):
+        raise OSError("rede")
+
+    resenhas = []
+    monkeypatch.setattr(main.discord, "avisar_clipes", _clipes)
+    monkeypatch.setattr(main.discord, "avisar_resenha_semanal", lambda c, w, a, agora: resenhas.append(1) or True)
+    assert main.cmd_avisar_discord(Config(env={"DATABASE_URL": "x"}), conectar=lambda url: _ConnAviso()) == 0
+    assert resenhas == [1]
+    assert capturados == ["avisar-discord"]

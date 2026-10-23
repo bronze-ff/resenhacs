@@ -203,6 +203,16 @@ jobs:
           APP_URL: ${{ secrets.APP_URL }}
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: python -m coletor.main sincronizar-faceit
+      # Clipe pronto e Resenha da semana (segunda a partir das 10h de SP, uma vez). Sem
+      # webhook não faz nada; sem a migration 0063 só avisa no log. Sempre sai 0.
+      - name: Avisar no Discord (Clipe pronto e Resenha da semana)
+        working-directory: coletor
+        env:
+          PYTHONPATH: src
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          APP_URL: ${{ secrets.APP_URL }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: python -m coletor.main avisar-discord
       # Só roda quando disparado manualmente com o input marcado — reprocessa TODAS as
       # Partidas com demo ainda no R2 (janela de 14 dias, ADR-0006) com o parser ATUAL, pra corrigir
       # stats já gravadas depois de um bug de parser ser corrigido (ex.: kill de USP-S
