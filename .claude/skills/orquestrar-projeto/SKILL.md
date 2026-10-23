@@ -157,8 +157,9 @@ O `codex review` local da Fase 4 e insumo de triagem. Ele nao gera o
    `has_unresolved_findings` falso. Achado aberto volta pra triagem da Fase 4.
 3. Confira o CI: `gh pr checks <n>` todo verde (`ci`, `Site`, `Coletor`).
 4. Confira dependencias mergeadas e migration nova aplicada em producao.
-5. Gate inteiro verde: `gh pr merge <n> --merge`. Faltou um item: nao
-   mergeie.
+5. Gate inteiro verde: `gh pr merge <n> --merge --match-head-commit <head>`,
+   com o head lido no passo 2. Push no meio aborta o merge. Faltou um item:
+   nao mergeie.
 
 - A cada merge: `git fetch origin main`, recompute blockers, e despache
   (Fase 2) todo ticket que ficou livre. Repita ate acabar.
