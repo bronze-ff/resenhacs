@@ -53,6 +53,8 @@ const PII = [
 ]
 
 const URL_RE = /https?:\/\/[^\s<>"']+/gi
+// Preservar BOM mantém os limites de palavra iguais aos do unquote do Python.
+const DECODIFICADOR_UTF8 = new TextDecoder('utf-8', { ignoreBOM: true })
 
 export function soOrigemCaminho(valor) {
   if (typeof valor !== 'string' || valor === '') return valor
@@ -65,23 +67,44 @@ export function soOrigemCaminho(valor) {
     if (u.protocol !== 'http:' && u.protocol !== 'https:') return valor
     return `${u.origin}${u.pathname}`
   } catch {
-    return valor
+    return REDACTED
   }
 }
 
 function cortarUrl(url) {
   const limpa = url.replace(/[),.;]+$/, '')
-  return soOrigemCaminho(limpa) + url.slice(limpa.length)
+  const caminho = soOrigemCaminho(limpa)
+  return caminho === REDACTED ? REDACTED : caminho + url.slice(limpa.length)
 }
 
-export function redigirString(valor) {
-  if (typeof valor !== 'string') return valor
+function redigirCamada(valor) {
   URL_RE.lastIndex = 0
-  let texto = valor.replace(URL_RE, cortarUrl)
+  let urlInvalida = false
+  let texto = valor.replace(URL_RE, (url) => {
+    const limpa = cortarUrl(url)
+    if (limpa === REDACTED) urlInvalida = true
+    return limpa
+  })
+  if (urlInvalida) return REDACTED
   // Caminho relativo: a string inteira ou depois de espaço/aspas. // fica de fora.
   texto = texto.replace(/(^|[\s"'`(])(\/(?!\/)[^\s"'`<>)]*)/g, (trecho, pre, path) => pre + cortarUrl(path))
   if (PALAVRA.test(texto) || PII.some((re) => re.test(texto))) return REDACTED
   return texto
+}
+
+export function redigirString(valor) {
+  if (typeof valor !== 'string') return valor
+  const saida = redigirCamada(valor)
+  if (redigirCamada(saida) !== saida) return REDACTED
+  let camada = saida
+  for (let decodificacoes = 0; ; decodificacoes++) {
+    const decodificado = camada.replace(/(?:%[0-9A-Fa-f]{2})+/g, (trecho) =>
+      DECODIFICADOR_UTF8.decode(Uint8Array.from(trecho.slice(1).split('%'), (byte) => Number.parseInt(byte, 16))))
+    if (decodificado === camada) return saida
+    // Camadas decodificadas só detectam mudanças; nunca viram a saída.
+    if (decodificacoes === 3 || redigirCamada(decodificado) !== decodificado) return REDACTED
+    camada = decodificado
+  }
 }
 
 export function scrubValor(valor, chave) {

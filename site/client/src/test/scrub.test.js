@@ -7,6 +7,33 @@ const casos = JSON.parse(readFileSync(join(process.cwd(), '../../shared/observab
 const STEAM = '76561198000000000'
 
 describe('scrub de observabilidade', () => {
+  it.each([
+    'http://[foo',
+    'http%3A%2F%2F%5Bfoo',
+    'http%253A%252F%252F%255Bfoo',
+    'http%25253A%25252F%25252F%25255Bfoo',
+  ])('redige o valor inteiro se a URL for inválida em qualquer camada: %s', (url) => {
+    const message = `falha em ${url}, tente de novo`
+    expect(redigirString(message)).toBe(REDACTED)
+    expect(minimizarEvento({ message, request: { url } })).toEqual({
+      message: REDACTED,
+      request: { url: REDACTED },
+    })
+  })
+
+  it.each(casos.sanitiza)('sanitiza apenas a camada original: $entrada', ({ entrada, saida }) => {
+    expect(redigirString(entrada)).toBe(saida)
+    expect(minimizarEvento({ message: entrada }).message).toBe(saida)
+  })
+
+  it.each(casos.redige)('redige o caso compartilhado: %s', (valor) => {
+    expect(redigirString(valor)).toBe(REDACTED)
+    expect(minimizarEvento({ message: valor }).message).toBe(REDACTED)
+  })
+
+  it.each(['/partida/abc%20def', '/partida/%ZZ', '/partida/%E0%A4%A', '/p/abc%20def/%E0%A4'])('preserva o original sem dado sensível: %s', (valor) => {
+    expect(redigirString(valor)).toBe(valor)
+  })
   it('allowlist do request: sem header, cookie, body ou query', () => {
     const evento = minimizarEvento({
       request: {
@@ -117,10 +144,6 @@ describe('scrub de observabilidade', () => {
   })
 
   it('aplica os casos compartilhados de palavra sensível', () => {
-    for (const amostra of casos.redige) {
-      expect(redigirString(amostra)).toBe(REDACTED)
-      expect(minimizarEvento({ message: amostra }).message).toBe(REDACTED)
-    }
     for (const amostra of casos.intactos) {
       expect(redigirString(amostra)).toBe(amostra)
       expect(minimizarEvento({ message: amostra }).message).toBe(amostra)

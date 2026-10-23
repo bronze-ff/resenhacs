@@ -1,5 +1,25 @@
 {
   "redige": [
+    "http%3A%2F%2F%5Bfoo",
+    "/jogador/ana%40exemplo.com",
+    "/jogador/ana%2540exemplo.com",
+    "/jogador/ana%252540exemplo.com",
+    "/jogador/ana%25252540exemplo.com",
+    "/partida/abc%2525252Fdef",
+    "/x/%252525E0%252525A4",
+    "se%25256Eha%253Dabc",
+    "/jogador/ana%2540exemplo.com/%ZZ",
+    "/jogador/ana%40exemplo.com/%E9%ZZ",
+    "/jogador/ana%40exemplo.com?x=%E0%A4",
+    "/jogador/ana%2540exemplo.com/%E0%A4",
+    "/jogador/x%E0%61%6E%61%25%34%30exemplo.com",
+    "/p/a%EF%BB%BFsenha",
+    "/partida/pa%2573sword%3Fx%3D1",
+    "/partida/abc%3Fx%3Dana%2540exemplo.com",
+    "/partida/abc%253Fx%253Dana%252540exemplo.com",
+    "/partida/abc%3Ftoken%3D%2520abc123xyz",
+    "/jogador/ana%2540exemplo.com/x%E0%61",
+    "senha%3Dabc",
     "password",
     "PASSWORD",
     "passwd",
@@ -44,6 +64,14 @@
     "access_token vazou"
   ],
   "intactos": [
+    "/partida/abc",
+    "/x/%E0%A4",
+    "/partida/abc%20def",
+    "/partida/abc%2520def",
+    "/partida/abc%25252Fdef",
+    "/p/abc%20def/%E0%A4",
+    "/partida/%E0%A4%A",
+    "/partida/%ZZ",
     "resenha",
     "Resenha",
     "resenhas",
@@ -56,6 +84,28 @@
     "sessão inválida",
     "de_dust2",
     "ok"
+  ],
+  "sanitiza": [
+    {
+      "entrada": "/partida/abc?token=%20abc123xyz",
+      "saida": "/partida/abc"
+    },
+    {
+      "entrada": "/partida/abc?token=%09abc123xyz",
+      "saida": "/partida/abc"
+    },
+    {
+      "entrada": "/partida/abc?token=%0Aabc123xyz",
+      "saida": "/partida/abc"
+    },
+    {
+      "entrada": "/partida/abc?token=%EF%BB%BFabc123xyz",
+      "saida": "/partida/abc"
+    },
+    {
+      "entrada": "/partida/abc?x=1",
+      "saida": "/partida/abc"
+    }
   ],
   "chavesSensiveis": [
     "password",

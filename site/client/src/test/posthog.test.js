@@ -7,6 +7,18 @@ const URL = 'https://resenha-phi.vercel.app/partida/abc?token=segredo&x=1#frag'
 const LIMPA = 'https://resenha-phi.vercel.app/partida/abc'
 
 describe('evento do PostHog', () => {
+  it.each(['%40', '%2540', '%252540', '%25252540'])('redige e-mail codificado com %s no pathname e no referrer', (arroba) => {
+    const evento = limparEventoPosthog({
+      event: '$pageview',
+      properties: {
+        $pathname: `/jogador/ana${arroba}exemplo.com`,
+        $current_url: `https://resenha.app/jogador/ana${arroba}exemplo.com`,
+        $referrer: `https://externo.example/jogador/ana${arroba}exemplo.com`,
+        $initial_referrer: `https://externo.example/jogador/ana${arroba}exemplo.com`,
+      },
+    })
+    for (const valor of Object.values(evento.properties)) expect(valor).toBe(REDACTED)
+  })
   it('tira query e fragment de URL, pathname, referrer e campos $initial_ / $prev_pageview_', () => {
     const evento = limparEventoPosthog({
       event: '$pageview',
@@ -218,6 +230,9 @@ describe('evento do PostHog', () => {
     }
     for (const amostra of casos.intactos) {
       expect(limparEventoPosthog({ properties: { nota: amostra } }).properties.nota).toBe(amostra)
+    }
+    for (const { entrada, saida } of casos.sanitiza) {
+      expect(limparEventoPosthog({ properties: { nota: entrada } }).properties.nota).toBe(saida)
     }
     for (const chave of casos.chavesSensiveis) {
       expect(limparEventoPosthog({ properties: { [chave]: 'valor-limpo' } }).properties[chave]).toBe(REDACTED)
