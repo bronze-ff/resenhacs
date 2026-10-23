@@ -1,6 +1,7 @@
 // site/client/src/test/Shell.test.jsx
+import { StrictMode } from 'react'
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { render, screen, waitFor, within, cleanup, act } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { AuthProvider } from '../auth/AuthContext.jsx'
 import Shell from '../components/Shell.jsx'
@@ -77,5 +78,64 @@ describe('Shell — indicador de competicao ativa (sidebar)', () => {
     const barra = screen.getByRole('navigation', { name: 'Navegação principal' })
     expect(within(barra).getByRole('link', { name: /competi[çc][õo]es/i })).toBeInTheDocument()
     expect(within(barra).queryByRole('link', { name: /comparar/i })).not.toBeInTheDocument()
+  })
+})
+
+describe('Shell — indicador de competição', () => {
+  afterEach(() => {
+    cleanup()
+    delete document.hidden
+    vi.useRealTimers()
+  })
+
+  function chamadas() {
+    return fetch.mock.calls.filter(([u]) => String(u).includes('/api/competicoes/status')).length
+  }
+
+  it('consulta de novo depois de 5 min, não depois de 1 min, e na hora ao voltar pra aba', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    let hidden = false
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden })
+    renderShell({ temAtiva: false })
+    await waitFor(() => expect(chamadas()).toBe(1))
+    await vi.advanceTimersByTimeAsync(60 * 1000)
+    expect(chamadas()).toBe(1)
+    await vi.advanceTimersByTimeAsync(4 * 60 * 1000)
+    await waitFor(() => expect(chamadas()).toBe(2))
+
+    hidden = true
+    document.dispatchEvent(new Event('visibilitychange'))
+    await vi.advanceTimersByTimeAsync(5 * 60 * 1000)
+    expect(chamadas()).toBe(2)
+    hidden = false
+    document.dispatchEvent(new Event('visibilitychange'))
+    await waitFor(() => expect(chamadas()).toBe(3))
+  })
+
+  it('StrictMode aplica o status do segundo mount', async () => {
+    const resolver = []
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((url) => {
+      if (typeof url === 'string' && url.includes('/api/auth/me')) {
+        return Promise.resolve({ ok: true, json: async () => ({ steamId: '765', nick: 'bronze', avatarUrl: null, isSuperAdmin: false }) })
+      }
+      if (typeof url === 'string' && url.includes('/api/competicoes/status')) {
+        return new Promise((resolve) => {
+          resolver.push(() => resolve({ ok: true, json: async () => ({ temAtiva: true, temAgendada: false }) }))
+        })
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) })
+    }))
+    render(
+      <StrictMode>
+        <AuthProvider>
+          <MemoryRouter initialEntries={['/']}>
+            <Shell>conteudo</Shell>
+          </MemoryRouter>
+        </AuthProvider>
+      </StrictMode>,
+    )
+    await waitFor(() => expect(resolver.length).toBeGreaterThanOrEqual(2))
+    await act(async () => { resolver.forEach((concluir) => concluir()) })
+    await waitFor(() => expect(screen.getAllByText(/competi[çc][ãa]o ativa/i).length).toBeGreaterThan(0))
   })
 })

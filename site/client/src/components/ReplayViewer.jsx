@@ -327,6 +327,8 @@ export function useReplayPorRound(url) {
       return novo
     })
     marcar(false)
+    // fetch segue o 302 até a URL pré-assinada do R2 (redirect padrão: follow).
+    // credentials segue same-origin: o cookie vai na rota da API e não no R2.
     return fetch(`${url}/round/${numero}`)
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -348,7 +350,7 @@ export function useReplayPorRound(url) {
     setReplay(null)
     setErro(false)
     setRoundsComErro(new Set())
-    fetch(url)
+    fetch(url) // 302 do índice: o fetch segue sozinho até o JSON no R2
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         return res.json()

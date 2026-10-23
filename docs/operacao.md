@@ -129,10 +129,18 @@ Como funciona:
 - A primeira vez que alguém pede clipe de uma Partida, a API manda a Demo para análise (1 crédito). As próximas reaproveitam a mesma análise.
 - Cada trecho custa por segundo (cerca de 0,1 crédito/s, com mínimo de 1 crédito por trecho). O pedido sai em 1080p (`highResolution`) com a marca d'água da DEMO-SLAP. Sem alta resolução sai 720p. O Jogador pode marcar "Sem a marca d'água" (`hideWatermark`), que encarece; a aba mostra quanto a mais antes de pedir. Montagem de 7 trechos de 5 s: 16 créditos em 1080p com marca d'água (11 em 720p) + 1 da análise. Kill sozinha: 4 s antes e 3 s depois. Montagem: 3 s antes e 2 s depois de cada kill.
 - Vídeo único da montagem: o `render-fragmovie` recusa trechos do `render-custom`, então quem junta é o Coletor. Com os trechos gravados, a montagem fica em "Juntando os trechos…" (status `juntando`) e não mostra vídeo. O comando `juntar-clipes` roda no cron do Coletor, baixa os trechos, junta com ffmpeg, grava `clipes/<id>.mp4` no R2 e marca a montagem como pronta. Se ele não juntar em 1 hora, o site marca pronta assim mesmo e a aba toca os trechos em sequência; o Coletor ainda tenta por 1 dia.
-- Não há worker. O pedido avança quando alguém está com a aba Clipes aberta (ela consulta a cada 10 s). Se ninguém olhar, o clipe fica parado e continua de onde parou na próxima visita.
+- Não há worker. O pedido avança quando alguém está com a aba Clipes aberta (ela consulta a cada 30 s, e pausa com a aba em segundo plano). Se ninguém olhar, o clipe fica parado e continua de onde parou na próxima visita.
 - Tetos: 10 kills por pedido e 10 pedidos por Jogador por dia.
 - Só dá para pedir enquanto a Demo está no R2 (14 dias, ADR-0006). A DEMO-SLAP apaga os vídeos dela em 90 dias.
 - A recusa da DEMO-SLAP (por exemplo, "Not enough credits") aparece no próprio clipe, com a mensagem deles.
+
+## Mídia direto do R2
+
+`GET /api/matches/:id/replay`, `.../replay/round/:n` e `.../demo` autenticam como antes e respondem **302** para uma URL pré-assinada do bucket (10 minutos, `Cache-Control: private, no-store`). O browser baixa o objeto direto do R2; os bytes não passam pela função da Vercel. O `fetch` do Replay 2D (e o do quadro tático) segue esse redirect — o padrão é `follow` — e lê o JSON. Objeto com `Content-Encoding: gzip` continua sendo descomprimido pelo browser.
+
+O bucket precisa aceitar `GET` a partir de `https://resenha-phi.vercel.app` (e `http://localhost:5173` no dev). A regra do comando `configurar-cors` do Coletor já lista `GET` para essas origens, com `AllowedHeaders: content-type`. Sem `GET` na regra que está viva, o Replay 2D quebra: o `fetch` não consegue ler a resposta do R2. Conferir no painel da Cloudflare. Não rodar `configurar-cors` para "garantir" — esse comando **substitui** a configuração inteira do bucket. Preview da Vercel (`*.vercel.app` da branch) não está na lista; o Replay 2D nesse preview só abre se a origem entrar na regra.
+
+A URL assinada é um segredo de curta duração: quem a vir no painel de rede consegue baixar o objeto até ela expirar. A checagem de quem pode ver a Partida continua na rota, antes do redirect.
 
 ## Rollback
 

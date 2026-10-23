@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { nomeMapa, dataHora, corRating } from '../lib/format.js'
 import FiltroPeriodo from '../components/FiltroPeriodo.jsx'
@@ -9,6 +9,9 @@ import PrimeirosPassos from '../components/inicio/PrimeirosPassos.jsx'
 import {
   Abas, Avatar, Button, CabecalhoPagina, Card, EstadoErro, EstadoVazio, Select, SkeletonLista,
 } from '../components/ui'
+import { useRepetirQuandoVisivel } from '../lib/useRepetirQuandoVisivel.js'
+
+const INTERVALO_SYNC_MS = 2 * 60 * 1000
 
 const MAPAS = ['de_anubis', 'de_ancient', 'de_cache', 'de_dust2', 'de_inferno', 'de_mirage', 'de_nuke', 'de_overpass', 'de_train', 'de_vertigo']
 
@@ -36,23 +39,22 @@ function resultadoDoGrupo(m) {
 }
 
 // Quantas Partidas descobertas ainda faltam baixar/parsear (o Coletor roda de hora
-// em hora sozinho — isto é só visibilidade, não dispara nada). Atualiza a cada 30s
-// enquanto a aba estiver aberta, pra acompanhar um backfill grande em andamento.
+// em hora sozinho — isto é só visibilidade, não dispara nada). A primeira leitura
+// sempre acontece. O intervalo de 2 min só continua enquanto pending > 0, e a aba
+// escondida não consulta. Ao voltar, uma leitura na hora reabre o intervalo se a
+// fila ainda tiver pendência.
 function SincStatus() {
   const [status, setStatus] = useState(null)
 
-  useEffect(() => {
-    let vivo = true
-    function carregar() {
-      fetch('/api/matches/sync-status')
-        .then((res) => (res.ok ? res.json() : null))
-        .then((s) => { if (vivo) setStatus(s) })
-        .catch(() => {})
-    }
-    carregar()
-    const t = setInterval(carregar, 30000)
-    return () => { vivo = false; clearInterval(t) }
+  const carregar = useCallback((seguir) => {
+    fetch('/api/matches/sync-status')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((s) => { if (seguir()) setStatus(s) })
+      .catch(() => {})
   }, [])
+
+  const filaPendente = status == null || (status.pending ?? 0) > 0
+  useRepetirQuandoVisivel(carregar, INTERVALO_SYNC_MS, { ligado: filaPendente })
 
   if (!status || (status.pending === 0 && status.failed === 0)) return null
   return (

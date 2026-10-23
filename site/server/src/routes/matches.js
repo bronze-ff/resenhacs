@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { randomUUID } from 'node:crypto'
 import { limiteEstrito } from '../rateLimit.js'
-import { keyFromR2Url, streamObject, presignDownload } from '../r2.js'
+import { keyFromR2Url, presignDownload, EXPIRA_REDIRECT_MIDIA_S } from '../r2.js'
 import { partidaVisivelExpr, noCirculoExpr } from '../friendships.js'
 import { calcularStatsPorLado } from '../statsLado.js'
 import { inicioDoDiaSql, fimDoDiaSql } from '../fuso.js'
@@ -94,6 +94,17 @@ const PLATAFORMA_COND = {
   faceit: "(m.source = 'faceit' or m.plataforma_manual = 'faceit')",
   gamers_club: "m.plataforma_manual = 'gamers_club'",
   xplay_gg: "m.plataforma_manual = 'xplay_gg'",
+}
+
+// 302 pra URL pré-assinada. private, no-store: a resposta carrega a assinatura
+// e não pode ficar em cache (compartilhado ou do browser) depois que expira.
+function redirecionarMidia(res, url) {
+  res.set('Cache-Control', 'private, no-store')
+  res.redirect(302, url)
+}
+
+function nomeAnexo(key) {
+  return (key.split('/').pop() || 'demo').replace(/["\r\n\\]/g, '')
 }
 
 export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, config }) {
@@ -344,8 +355,8 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
       // null quando ninguém do grupo (is_tracked) jogou — a página não mostra o destaque.
       mvp: mvpDaLinha(m.mvp),
       // O R2 é privado de propósito (dados reais dos participantes) — nunca expor a
-      // URL bruta do bucket. O client busca via esses paths, autenticados e
-      // proxiados pelo próprio servidor (ver rotas /:id/demo e /:id/replay abaixo).
+      // URL bruta do bucket. O client busca via esses paths; as rotas autenticam
+      // e respondem 302 pra uma URL pré-assinada de curta duração.
       demoUrl: m.demo_url ? `/api/matches/${m.id}/demo` : null,
       replayUrl: m.replay_url ? `/api/matches/${m.id}/replay` : null,
       // Placar sem nenhum time batendo 13 (MR12) só é possível por abandono/forfeit
@@ -789,11 +800,11 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
     }
   })
 
-  // Proxy autenticado pro replay 2D — nunca expõe a URL/credenciais do R2 ao client.
-  // Partidas novas: esse objeto é só o ÍNDICE (streaming por round, ver FIL-54b) — sem
+  // Replay 2D: autentica e redireciona pro objeto no R2. Os bytes não passam pela
+  // função. Partidas novas: o objeto é só o ÍNDICE (streaming por round) — sem
   // `frames` por round, só a contagem; o client busca cada round em /replay/round/:n.
-  // Partidas antigas (arquivadas antes dessa mudança): o objeto já é o replay INTEIRO
-  // (com `frames`), e o client detecta isso pela ausência de `frameCount` no round.
+  // Partidas antigas: o objeto já é o replay inteiro (com `frames`); o client detecta
+  // isso pela ausência de `frameCount` no round. fetch() segue o 302 (padrão follow).
   router.get('/:id/replay', requireAuth, async (req, res) => {
     if (!r2Client) return res.status(503).json({ erro: 'Arquivamento (R2) não configurado' })
     const { rows } = await db.query(
@@ -803,15 +814,16 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
     const key = keyFromR2Url(rows[0]?.replay_url, r2Bucket)
     if (!key) return res.status(404).json({ erro: 'Replay não disponível' })
     try {
-      await streamObject(r2Client, r2Bucket, key, res)
+      redirecionarMidia(res, await presignDownload(r2Client, r2Bucket, key, EXPIRA_REDIRECT_MIDIA_S))
     } catch {
       res.status(502).json({ erro: 'Falha ao buscar o replay no R2' })
     }
   })
 
-  // Um round do replay sob demanda (streaming por round) — só existe pro formato novo
-  // (índice); a chave é o mesmo prefixo do índice, trocando ".json" por "/round-{n}.json"
-  // (mesma convenção do coletor em `_upload_replay`, main.py).
+  // Um round do replay sob demanda — só existe pro formato novo (índice). A chave é
+  // o mesmo prefixo do índice, trocando ".json" por "/round-{n}.json" (mesma
+  // convenção do coletor em `_upload_replay`, main.py). Objeto ausente não falha
+  // aqui: o 302 aponta pra chave, e o client trata o 404 do R2 como round com erro.
   router.get('/:id/replay/round/:n', requireAuth, async (req, res) => {
     if (!/^\d+$/.test(req.params.n)) return res.status(400).json({ erro: 'Round inválido' })
     if (!r2Client) return res.status(503).json({ erro: 'Arquivamento (R2) não configurado' })
@@ -824,7 +836,7 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
     const base = indexKey.endsWith('.json') ? indexKey.slice(0, -'.json'.length) : indexKey
     const key = `${base}/round-${req.params.n}.json`
     try {
-      await streamObject(r2Client, r2Bucket, key, res)
+      redirecionarMidia(res, await presignDownload(r2Client, r2Bucket, key, EXPIRA_REDIRECT_MIDIA_S))
     } catch {
       res.status(404).json({ erro: 'Round não disponível' })
     }
@@ -832,6 +844,8 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
 
   // .dem bruto. Some do R2 depois da janela de retenção (ADR-0006): demo_url nulo → 404.
   // A UI não tem botão de download; a aba Clipes esconde "gerar clipe" nesse caso.
+  // O nome é o do objeto (hoje demos/<id>.dem.bz2); um ".dem" fixo entregaria bytes
+  // bz2 com extensão de demo crua. octet-stream + attachment vão na URL assinada.
   router.get('/:id/demo', requireAuth, async (req, res) => {
     if (!r2Client) return res.status(503).json({ erro: 'Arquivamento (R2) não configurado' })
     const { rows } = await db.query(
@@ -840,10 +854,12 @@ export function createMatchesRouter({ db, requireAuth, r2Client, r2Bucket, confi
     )
     const key = keyFromR2Url(rows[0]?.demo_url, r2Bucket)
     if (!key) return res.status(404).json({ erro: 'Demo não disponível' })
+    const nome = nomeAnexo(key)
     try {
-      // Nome do arquivo = nome do objeto no R2 (hoje demos/<id>.dem.bz2, comprimido); um
-      // ".dem" fixo entregaria bytes bz2 com extensão de demo crua.
-      await streamObject(r2Client, r2Bucket, key, res, { baixarComo: key.split('/').pop() })
+      redirecionarMidia(res, await presignDownload(r2Client, r2Bucket, key, EXPIRA_REDIRECT_MIDIA_S, {
+        responseContentType: 'application/octet-stream',
+        responseContentDisposition: `attachment; filename="${nome}"`,
+      }))
     } catch {
       res.status(502).json({ erro: 'Falha ao buscar o demo no R2' })
     }
