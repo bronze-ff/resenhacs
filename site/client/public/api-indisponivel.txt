@@ -1,0 +1,1 @@
+API indisponivel neste ambiente de preview. Configure PREVIEW_API_URL nas Environment Variables do projeto na Vercel (escopo Preview/Development) com a origem https do backend de staging.

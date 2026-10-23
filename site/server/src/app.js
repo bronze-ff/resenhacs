@@ -108,6 +108,9 @@ export function createApp({
   // IP do cliente e lança erro de validação em TODA requisição (ERR_ERL_UNEXPECTED_X_FORWARDED_FOR),
   // derrubando a API inteira. "1" confia só no primeiro hop — não em qualquer proxy (evita
   // o outro erro deles, trust proxy permissivo, que abriria brecha pra spoofar IP e burlar o limite).
+  // O rewrite do projeto resenha é outro hop na frente, mas a borda DESTE projeto substitui
+  // X-Forwarded-For pelo IP de quem conectou aqui. Não subir pra 2. Quem tem sessão é
+  // limitado pelo steamId em rateLimit.js, porque esse IP deixa de ser o do visitante.
   app.set('trust proxy', 1)
   const jsonNormal = express.json()
   // A extensão tem parser próprio de 4 KB; o parser global não pode consumi-lo antes.
