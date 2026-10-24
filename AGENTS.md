@@ -59,8 +59,8 @@ Glossário: [docs/produto/CONTEXT.md](docs/produto/CONTEXT.md). Use Jogador, Par
 - Renomear pastas ou mudar Root Directory, `site/server/vercel.json` ou `site/client/vercel.mjs` sem pedido explícito.
 - Editar `supabase/migrations` já aplicada.
 - Mudar cron, secrets ou comandos de `.github/workflows/coletor.yml` e `r2-replays.yml` de um jeito que o job agendado deixe de rodar. Variável nova no `env` do job, com no-op se estiver vazia, pode.
-- Comentar `@codex review` num PR. O Codex ignora `cursor[bot]`; quem pede o review é o Filippe, quando o PR estiver estável.
-- Mergear. O merge é humano, com review limpa e CI verde.
+- Comentar `@codex review` num PR aberto por `cursor[bot]`. O Codex ignora esse autor.
+- Mergear fora do gate de [Revisão](#revisão). Só o Maestro (agente coordenador do time) mergeia, e só com o gate inteiro verde.
 - Abrir issue no Linear ou usar `FIL-xxx` em branch, PR ou doc novo. Issues são GitHub Issues deste repo (`Fixes #n`). `FIL-xxx` que já está no código é id antigo; não traduzir para `#n` sem mapa.
 
 Fluxo de branch e worktree: [docs/WORKFLOW.md](docs/WORKFLOW.md).
@@ -108,4 +108,13 @@ Nunca logar dado pessoal. O scrub está em `site/client/src/observabilidade/scru
 
 ## Revisão
 
-Todo PR passa por Codex Review. Só mergeia com review limpa e CI verde (`ci`, e os workflows que a PR disparar: `Site`, `Coletor`). Não peça o review por comentário se quem abriu o PR foi um agente Cursor.
+Todo PR passa por Codex Review. O Codex revisa sozinho ao abrir o PR; depois de cada push, o Maestro comenta `@codex review` para ele revisar o head novo. Em PR aberto por `cursor[bot]`, o Maestro não comenta: o Filippe pede o review do head novo, e sem esse review o PR não mergeia.
+
+Gate de merge. O Maestro só mergeia quando tudo isto vale para o head atual:
+
+1. O comentário de resumo do Codex (`codex-review-state`) tem `code_review.commit_sha` igual ao head, `status` concluído e `has_unresolved_findings` falso. Review de commit anterior não vale.
+2. Todo achado do Codex foi corrigido ou respondido no próprio comentário com a decisão registrada, e o Codex revisou de novo depois disso.
+3. CI verde: `ci` e os workflows que a PR disparar (`Site`, `Coletor`).
+4. PRs de que ele depende já entraram, e a migration nova que ele exige já foi aplicada em produção.
+
+Faltou um item: não mergeia. Corrige, faz push, pede `@codex review` de novo.

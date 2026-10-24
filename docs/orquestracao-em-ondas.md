@@ -8,7 +8,7 @@ name: orquestrar-projeto
 description: >-
   Orquestra um projeto inteiro do Linear em ondas travadas por merge, um agente
   autônomo por ticket em worktree isolado, monitorando PR, CI e reviews até
-  entregar pro humano mergear. Use quando o usuário disser "orquestra esse
+  mergear com o gate de Revisão do AGENTS.md verde. Use quando o usuário disser "orquestra esse
   projeto", "roda o projeto inteiro", "sobe worktree pra cada ticket", "executa
   essas issues do Linear", ou colar uma URL de projeto do Linear com intenção de
   construir tudo. Aceita seletor de modelo do worker (--agent sonnet | opus |
@@ -35,8 +35,8 @@ Linear, calcular a ordem das ondas, criar um worker por ticket, monitorar PRs e
 liberar a próxima onda quando os blockers forem mergeados.
 
 O julgamento de código mora dentro de cada worker. Você nunca escreve o código
-do ticket, e **nunca mergeia** — o merge é o quality gate humano, e é ele que
-destrava a onda seguinte.
+do ticket. Você mergeia só quando o gate de Revisão do `AGENTS.md` fecha no
+head atual, e é o merge que destrava a onda seguinte.
 
 Três frases que resumem por que isso funciona:
 
@@ -583,7 +583,7 @@ while true; do
           if grep -Fqx "review:$key:done" "$STATE"; then
             grep -Fqx "ci:$key:PASS" "$STATE" || { echo "CI + REVIEW OK: $branch #$num @$sha"; echo "ci:$key:PASS" >> "$STATE"; }
           else
-            echo "CI VERDE (falta triagem de review): $branch #$num @$sha"
+            echo "CI VERDE (falta triagem de review): $branch #$num @$sha key=$key"
           fi ;;
       esac
     done
@@ -608,10 +608,12 @@ precisar alargar o regex.
 - **REVIEW MUDOU** — leia e raciocine sobre o estado **completo** do feedback
   imediatamente, mesmo com o CI rodando. Não espere o CI pra aplicar um fix de
   correção válido.
-- **CI VERDE (falta triagem)** — verde não é o gate inteiro. Repete até a
-  fingerprint exata ser triada.
-- **CI + REVIEW OK** — PR pronto pra revisão humana. Feedback novo revoga esse
-  estado. **Não mergeie.**
+- **CI VERDE (falta triagem)** — verde não é o gate inteiro. Trie o feedback
+  dessa fingerprint e registre: `echo "review:<key>:done" >> "$STATE"`, com o
+  `key=` do evento. No ciclo seguinte sai `CI + REVIEW OK`. Feedback novo muda
+  a fingerprint e pede triagem de novo.
+- **CI + REVIEW OK** — confira o gate de Revisão do `AGENTS.md` no head atual.
+  Fechou: mergeie. Feedback novo revoga esse estado.
 - **PR MERGEADO** — avance pra Fase 5.
 
 ### Triagem de review
@@ -683,7 +685,8 @@ Algumas coisas são gatilho do humano. Mostre na hora certa; nunca execute:
 - **Rollout de feature flag** (conta de teste → coorte → 100%) — decisão de
   founder, atrás do ticket de regressão verde.
 - **Sync de documentação** — depois de PR que mexeu em docs.
-- **O merge.** Sempre.
+- **O merge fora do gate.** Com o gate de Revisão do `AGENTS.md` verde, o
+  orquestrador mergeia; sem ele, ninguém mergeia.
 
 ---
 

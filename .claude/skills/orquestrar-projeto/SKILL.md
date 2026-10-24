@@ -5,7 +5,7 @@ description: |
   cria uma worktree filha no Orca por ticket, sobe um agente Claude autonomo
   em cada uma, monitora ate o PR abrir, roda a review cruzada com o Codex,
   tria os achados, manda o worker aplicar os validos, e libera a proxima onda
-  quando o humano faz merge. Use quando o usuario disser "orquestre",
+  quando o gate de Revisao do AGENTS.md fecha e o PR e mergeado. Use quando o usuario disser "orquestre",
   "rode a onda", "toque esses tickets", ou colar IDs/URL de projeto do Linear
   com intencao de implementar tudo.
 ---
@@ -15,7 +15,8 @@ description: |
 Voce e o **orquestrador**, nao o implementador. Nao escreva codigo de
 producao. Seu trabalho: ler os tickets, montar o grafo, criar worktrees,
 despachar agentes, monitorar, rodar a review cruzada, triar achados e
-relatar. Quem faz merge e o humano — o merge dele e o portao da proxima onda.
+relatar. O merge e o portao da proxima onda, e so sai pelo gate de Revisao
+do `AGENTS.md`.
 
 Argumentos: IDs de tickets (`FIL-56 FIL-57`) ou nome/URL de projeto do
 Linear. Se nao vier nada, pergunte.
@@ -29,8 +30,11 @@ Linear. Se nao vier nada, pergunte.
   implementa; entra uma vez por ticket, depois do PR aberto, como segunda
   opiniao de outra familia. Escale um ticket dificil mudando o modelo do
   Claude, nunca trocando de fornecedor.
-- **Voce nunca faz merge.** Resultado de uma onda = PRs abertos + achados
-  triados + relatorio.
+- **Merge so com o gate verde.** Voce mergeia quando o gate de Revisao do
+  `AGENTS.md` fecha no head atual (resumo do Codex sem achado aberto, CI
+  verde, dependencias no `main`). Faltou um item: nao mergeie. Resultado de
+  uma onda = PRs mergeados ou com o motivo do bloqueio + achados triados +
+  relatorio.
 - **Toda worktree filha nasce de `origin/main` fresca** — `git fetch origin
   main` antes de cortar qualquer onda.
 
@@ -136,9 +140,27 @@ Regras aprendidas na pratica:
 
 ## Fase 5 — Portao de merge e proxima onda
 
-- Monitore merge com `gh pr view <n> --json state,mergedAt` (poll com
-  sleep; nao ha CI de testes neste repo — a verificacao real e a suite
-  local que o worker rodou + a review cruzada).
+O `codex review` local da Fase 4 e insumo de triagem. Ele nao gera o
+`codex-review-state` do GitHub, entao nao fecha o gate.
+
+1. Depois de cada push do worker, comente `@codex review` no PR (exceto PR
+   de `cursor[bot]`: ai o Filippe pede o review).
+2. Leia o estado do Codex no head atual:
+
+   ```bash
+   gh pr view <n> --json headRefOid -q .headRefOid
+   gh api repos/<dono>/<repo>/issues/<n>/comments --paginate \
+     -q '[.[]|select(.user.login|test("codex"))|.body|capture("codex-review-state:v1 (?<j>[{].*[}]) -->")|.j]|last'
+   ```
+
+   Precisa: `code_review.commit_sha` igual ao head, `status` `completed`,
+   `has_unresolved_findings` falso. Achado aberto volta pra triagem da Fase 4.
+3. Confira o CI: `gh pr checks <n>` todo verde (`ci`, `Site`, `Coletor`).
+4. Confira dependencias mergeadas e migration nova aplicada em producao.
+5. Gate inteiro verde: `gh pr merge <n> --merge --match-head-commit <head>`,
+   com o head lido no passo 2. Push no meio aborta o merge. Faltou um item:
+   nao mergeie.
+
 - A cada merge: `git fetch origin main`, recompute blockers, e despache
   (Fase 2) todo ticket que ficou livre. Repita ate acabar.
 - Ao final: tabela com ticket, PR, estado da review, e pendencias que so o
