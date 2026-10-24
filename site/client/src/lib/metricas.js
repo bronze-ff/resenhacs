@@ -98,21 +98,21 @@ export const METRICAS_PREMIO = {
   carregou: { nome: 'Carregou', texto: 'Maior rating médio do período, entre quem jogou o mínimo de partidas.', unidade: 'rating médio', sentido: 'mais' },
   clutch: {
     nome: 'Rei do clutch',
-    texto: 'Média de rounds vencidos por partida ficando sozinho contra 1 ou mais adversários. 0,50 = um clutch a cada duas partidas. Só entra quem jogou o mínimo de partidas.',
-    unidade: 'clutches por partida',
+    texto: 'Total de rounds vencidos no período ficando sozinho contra 1 ou mais adversários. Embaixo, em quantas partidas.',
+    unidade: 'clutches no período',
     sentido: 'mais',
   },
   granadeiro: { nome: 'Granadeiro', texto: 'Maior dano médio de HE e molotov em inimigos por partida.', unidade: 'dano por partida', sentido: 'mais' },
   'fogo-amigo': {
     nome: 'Fogo amigo',
-    texto: 'Média de vida tirada do próprio time por partida. Cada colega morto conta como 100 de dano. Só entra quem jogou o mínimo de partidas.',
-    unidade: 'dano por partida',
+    texto: 'Total de vida tirada do próprio time no período. Cada colega morto conta como 100 de dano. Só partidas com Demo têm esse dado.',
+    unidade: 'dano no período',
     sentido: 'menos',
   },
   flashador: {
     nome: 'Flashador amigo',
-    texto: 'Média, por partida, dos segundos em que as flashes dele cegaram o próprio time. Soma cada colega cegado (uma flash em 3 colegas por 2 s = 6 s) e inclui cegar a si mesmo.',
-    unidade: 'segundos de cegueira por partida',
+    texto: 'Total de tempo em que as flashes dele cegaram o próprio time no período. Soma cada colega cegado (uma flash em 3 colegas por 2 s = 6 s) e inclui cegar a si mesmo. Só partidas com Demo têm esse dado.',
+    unidade: 'de cegueira no período',
     sentido: 'menos',
   },
   baiter: {

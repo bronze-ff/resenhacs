@@ -38,7 +38,7 @@ describe('calcularPremios', () => {
   it('calcula prêmios, dupla, mapa maldito e números do período', () => {
     const linhas = [
       // m1 Nuke: derrota do grupo
-      r('m1', 'a', 'toguro', { won: false, rating: 1.4, clutch_wins: 2, team: 'A' }),
+      r('m1', 'a', 'toguro', { won: false, rating: 1.4, clutch_wins: 2, clutch_attempts: 5, team: 'A' }),
       r('m1', 'b', 'zezinho', { won: false, rating: 0.8, he_team_damage: 80, team_kills: 1, team: 'A' }),
       // m2 Nuke: derrota
       r('m2', 'a', 'toguro', { won: false, rating: 1.2, team: 'A' }),
@@ -53,12 +53,15 @@ describe('calcularPremios', () => {
     const { numeros, premios } = calcularPremios(linhas, 'semana')
     expect(numeros).toEqual({ partidas: 4, horas: 2, vitorias: 2, derrotas: 2, winrate: 50, clutches: 2 })
     const p = Object.fromEntries(premios.map((x) => [x.id, x]))
-    expect(p.carregou).toMatchObject({ valor: 1.25, jogadores: [{ steamId: 'a', nick: 'toguro' }] })
-    // Por partida (4 cada): 2 clutches / 4; (80 de dano + 1 TK × 100) / 4; 6,5 s / 4.
-    expect(p.clutch).toMatchObject({ valor: 0.5, jogadores: [{ steamId: 'a' }] })
+    expect(p.carregou).toMatchObject({ valor: 1.25, descricao: 'Rating médio em 4 partidas (mín. 2)', jogadores: [{ steamId: 'a', nick: 'toguro' }] })
+    // Total do período, com o nº de Partidas na descrição: 2 clutches; 80 de dano + 1 TK × 100; 6,5 s.
+    expect(p.clutch).toMatchObject({ valor: 2, descricao: 'Venceu 2 de 5 tentativas, em 4 partidas', jogadores: [{ steamId: 'a' }] })
     expect(p.granadeiro).toMatchObject({ valor: 175, jogadores: [{ steamId: 'a' }] })
-    expect(p['fogo-amigo']).toMatchObject({ valor: 45, jogadores: [{ steamId: 'b' }], tom: 'ruim' })
-    expect(p.flashador).toMatchObject({ valor: 1.6, jogadores: [{ steamId: 'b' }] })
+    expect(p['fogo-amigo']).toMatchObject({ valor: 180, jogadores: [{ steamId: 'b' }], tom: 'ruim' })
+    expect(p['fogo-amigo'].descricao).toBe('80 de dano + 1 TK × 100, em 4 partidas com Demo')
+    expect(p.granadeiro.descricao).toBe('Média em 4 partidas (700 de dano no total)')
+    expect(p.alface.descricao).toBe('32 HS em 72 kills (mín. 30 kills)')
+    expect(p.flashador).toMatchObject({ valor: 6.5, jogadores: [{ steamId: 'b' }] })
     expect(p.baiter.jogadores[0].steamId).toBe('b')
     expect(p.alface).toMatchObject({ jogadores: [{ steamId: 'b' }] })
     expect(p.dupla).toMatchObject({ valor: 50, jogadores: [{ steamId: 'a' }, { steamId: 'b' }] })
@@ -86,7 +89,18 @@ describe('calcularPremios', () => {
       r('m4', 'a', 'toguro', { deaths: 20, traded_deaths: 0, tem_demo: false }),
     ]
     const baiter = calcularPremios(linhas, 'semana').premios.find((p) => p.id === 'baiter')
-    expect(baiter.valor).toBe(10)
+    expect(baiter).toMatchObject({ valor: 10, descricao: '20 de 30 mortes sem trade, em 2 partidas com Demo' })
+  })
+
+  it('Fogo amigo e Flashador contam na escala só as Partidas com Demo', () => {
+    const linhas = [
+      r('m1', 'a', 'toguro', { he_team_damage: 50, teammates_flashed: 1, teammate_flash_duration: 2 }),
+      r('m2', 'a', 'toguro', { tem_demo: false }),
+      r('m3', 'a', 'toguro', { tem_demo: false }),
+    ]
+    const p = Object.fromEntries(calcularPremios(linhas, 'semana').premios.map((x) => [x.id, x]))
+    expect(p['fogo-amigo']).toMatchObject({ valor: 50, descricao: '50 de dano + 0 TK × 100, em 1 partida com Demo' })
+    expect(p.flashador).toMatchObject({ valor: 2, descricao: 'Cegou colegas 1 vez, em 1 partida com Demo' })
   })
 
   it('Carregou exige o mínimo de Partidas COM rating', () => {
